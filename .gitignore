@@ -416,3 +416,13 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+node_modules/
+target/
+__pycache__/
+venv/
+.env
+.DS_Store
+vscode-extension/out/
+datasets/*.csv
+temp_repo_storage/

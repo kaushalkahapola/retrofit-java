@@ -1,0 +1,27 @@
+services:
+  # 1. The Brain (Python Agents)
+  agents-backend:
+    build: ./agents-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANALYSIS_ENGINE_URL=http://analysis-engine:8080
+    depends_on:
+      - analysis-engine
+      - vector-db
+
+  # 2. The Hands (Java Tools)
+  analysis-engine:
+    build: ./analysis-engine
+    ports:
+      - "8080:8080"
+    volumes:
+      # Windows path syntax for volume mounting
+      - ./temp_repo_storage:/tmp/repos 
+
+  # 3. Vector DB (For Code Clone Detection - Phase 2)
+  vector-db:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"

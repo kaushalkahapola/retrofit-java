@@ -1,0 +1,7 @@
+langgraph
+langchain
+langchain-openai
+mcp                
+qdrant-client      
+fastapi            
+uvicorn
