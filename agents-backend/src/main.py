@@ -29,7 +29,14 @@ async def main():
                 print(f"Available tools: {[t.name for t in tools.tools]}")
                 
                 print("Running Orchestrator Graph...")
-                inputs = {"messages": ["Start"]}
+                
+                # Get patch file path from user
+                patch_path = input("Enter the absolute path to the patch file: ").strip()
+                
+                inputs = {
+                    "messages": ["Start"],
+                    "patch_path": patch_path
+                }
                 config = {"configurable": {"mcp_session": session}}
                 
                 async for output in app.astream(inputs, config=config):
