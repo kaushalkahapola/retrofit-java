@@ -5,3 +5,4 @@ mcp
 qdrant-client      
 fastapi            
 uvicorn
+unidiff
