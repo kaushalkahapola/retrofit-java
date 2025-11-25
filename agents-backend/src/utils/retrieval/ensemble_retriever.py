@@ -2,6 +2,7 @@ import os
 import re
 import concurrent.futures
 from typing import List, Dict, Set, Optional
+import pickle
 from git import Repo
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -62,7 +63,26 @@ class EnsembleRetriever:
         return " ".join(tokens)
 
     def build_index(self, commit_sha: str = "HEAD"):
-        """Builds both Symbol Index and TF-IDF Index for the commit."""
+        """
+        Builds the index for the target repository at the given commit.
+        Checks for cached index first.
+        """
+        cache_file = f"index_cache_{commit_sha}.pkl"
+        if os.path.exists(cache_file):
+            print(f"Loading index from cache: {cache_file}")
+            try:
+                with open(cache_file, "rb") as f:
+                    data = pickle.load(f)
+                    self.target_files = data["target_files"]
+                    self.symbol_index = data["symbol_index"]
+                    self.symbol_counts = data["symbol_counts"]
+                    self.vectorizer = data["vectorizer"]
+                    self.target_matrix = data["target_matrix"]
+                print("Index loaded from cache.")
+                return
+            except Exception as e:
+                print(f"Error loading cache: {e}. Rebuilding index...")
+
         print(f"Building index for {commit_sha}...")
         
         # Optimization: If commit is HEAD, read from disk directly (much faster than git show)
@@ -84,51 +104,64 @@ class EnsembleRetriever:
                 print(f"Error listing files: {e}")
                 self.target_files = []
                 return
-        
-        self.target_files = []
-        self.symbol_index = {}
-        self.symbol_counts = {}
-        tfidf_docs = []
 
+        self.target_files = [f[0] for f in java_files]
+        
+        documents = []
+        
         def process(item):
             rel_path, full_path = item
-            content = ""
             if full_path:
                 try:
                     with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                         content = f.read()
-                except: return None
+                except:
+                    content = ""
             else:
                 content = self._get_content(self.target_repo, commit_sha, rel_path)
             
-            if not content: return None
-            syms = self.extract_symbols(content)
-            text = self.preprocess_tfidf(content)
-            return (rel_path, syms, text)
+            symbols = self.extract_symbols(content)
+            processed_code = self.preprocess_tfidf(content)
+            return symbols, processed_code
 
-        # Use ProcessPoolExecutor for CPU-bound tasks (parsing/regex) if possible, 
-        # but ThreadPool is better for I/O. Since we are reading from disk now, I/O is fast.
-        # Parsing is CPU bound.
         with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
             results = list(executor.map(process, java_files))
-
-        for res in results:
-            if res:
-                path, syms, text = res
-                self.target_files.append(path)
-                tfidf_docs.append(text)
-
-                for s in syms:
-                    if s not in self.symbol_index:
-                        self.symbol_index[s] = set()
-                        self.symbol_counts[s] = 0
-                    self.symbol_index[s].add(path)
-                    self.symbol_counts[s] += 1
-
-        if tfidf_docs:
-            self.vectorizer = TfidfVectorizer(max_features=10000, sublinear_tf=True)
-            self.target_matrix = self.vectorizer.fit_transform(tfidf_docs)
+            
+        for i, (symbols, processed_code) in enumerate(results):
+            # Update Symbol Index
+            for sym in symbols:
+                if sym not in self.symbol_index:
+                    self.symbol_index[sym] = set()
+                    self.symbol_counts[sym] = 0
+                self.symbol_index[sym].add(i)
+                self.symbol_counts[sym] += 1
+            
+            documents.append(processed_code)
+            
+        # Build TF-IDF Matrix
+        print("Building TF-IDF matrix...")
+        self.vectorizer = TfidfVectorizer(max_features=5000)
+        try:
+            self.target_matrix = self.vectorizer.fit_transform(documents)
+        except ValueError:
+            print("Warning: Empty vocabulary; perhaps the documents contain only stop words")
+            self.target_matrix = None
+            
         print(f"Index built. {len(self.target_files)} Java files indexed.")
+        
+        # Save to cache
+        try:
+            with open(cache_file, "wb") as f:
+                pickle.dump({
+                    "target_files": self.target_files,
+                    "symbol_index": self.symbol_index,
+                    "symbol_counts": self.symbol_counts,
+                    "vectorizer": self.vectorizer,
+                    "target_matrix": self.target_matrix
+                }, f)
+            print(f"Index saved to {cache_file}")
+        except Exception as e:
+            print(f"Error saving cache: {e}")
 
     # --- SIGNAL 1: GIT ---
     def get_git_candidates(self, file_path, commit):

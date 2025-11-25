@@ -10,4 +10,6 @@ class AgentState(TypedDict):
     mainline_repo_path: str
     experiment_mode: bool
     backport_commit: str
+    original_commit: str
     retrieval_results: dict  # Map: source_file -> list of candidates
+    implementation_plan: dict # ImplementationPlan (as dict)
