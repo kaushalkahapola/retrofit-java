@@ -8,9 +8,10 @@ import re
 from utils.models import ImplementationPlan
 
 class ReasoningToolkit:
-    def __init__(self, retriever: EnsembleRetriever, target_repo_path: str, patch_analysis: List[FileChange]):
+    def __init__(self, retriever: EnsembleRetriever, target_repo_path: str, mainline_repo_path: str, patch_analysis: List[FileChange]):
         self.retriever = retriever
         self.target_repo_path = target_repo_path
+        self.mainline_repo_path = mainline_repo_path
         self.patch_analysis = patch_analysis
 
     def search_candidates(self, file_path: str) -> List[Dict]:
@@ -86,47 +87,26 @@ class ReasoningToolkit:
         """
         return "Plan submitted successfully."
 
-    def get_type_hierarchy(self, class_name: str) -> Dict:
+    def get_dependency_graph(self, file_paths: List[str], explore_neighbors: bool = False, use_mainline: bool = False) -> Dict:
         """
-        Returns the type hierarchy (superclass, interfaces) of a given class in the target repository.
-        Useful for checking inheritance and type compatibility.
+        Analyzes dependencies between a list of Java files.
+        Returns a graph where nodes are files and edges are dependencies (imports, inheritance, usage).
+        
+        Args:
+            file_paths: List of relative paths to Java files.
+            explore_neighbors: If True, also analyzes all other Java files in the same directory as the input files.
+            use_mainline: If True, analyzes the Mainline repository instead of the Target repository.
         """
         from utils.mcp_client import get_client
-        # Assuming the analysis engine is running on localhost:8080 or configured via env
-        client = get_client() 
-        return client.call_tool("get_type_hierarchy", {
-            "target_repo_path": self.target_repo_path,
-            "class_name": class_name
+        client = get_client()
+        
+        repo_path = self.mainline_repo_path if use_mainline else self.target_repo_path
+        
+        return client.call_tool("get_dependency_graph", {
+            "target_repo_path": repo_path,
+            "file_paths": file_paths,
+            "explore_neighbors": explore_neighbors
         })
-
-    def check_method_compatibility(self, class_name: str, method_signature: str) -> Dict:
-        """
-        Checks if a method exists in the target class or its hierarchy.
-        method_signature should be simple, e.g., "close()" or "write(byte[],int,int)".
-        Returns { "compatible": bool, "found_in": str, "reason": str }
-        """
-        hierarchy = self.get_type_hierarchy(class_name)
-        if not hierarchy.get("found"):
-            return {"compatible": False, "reason": f"Class {class_name} not found in target."}
-        
-        # This is a simplified check. A real check would need to parse the method signature 
-        # and check against the methods in the hierarchy.
-        # Since we don't have a "get_methods" tool yet, we will use read_file to check the content 
-        # of the class and its superclasses (if we can find them).
-        
-        # Strategy:
-        # 1. Check the class file itself.
-        # 2. If not found, check the superclass (if it's in the repo).
-        # 3. If not found, check interfaces.
-        
-        # For now, let's just return the hierarchy info so the agent can reason about it.
-        # The agent can use read_file on the superclass if needed.
-        
-        return {
-            "compatible": True, # Tentative, let the agent verify
-            "hierarchy": hierarchy,
-            "instruction": "Please use read_file to verify if the method exists in the class or its superclasses listed in 'hierarchy'."
-        }
 
     def get_tools(self):
         return [
@@ -151,14 +131,9 @@ class ReasoningToolkit:
                 description="Returns the analysis of the patch."
             ),
             StructuredTool.from_function(
-                func=self.get_type_hierarchy,
-                name="get_type_hierarchy",
-                description="Returns the type hierarchy (superclass, interfaces) of a given class."
-            ),
-            StructuredTool.from_function(
-                func=self.check_method_compatibility,
-                name="check_method_compatibility",
-                description="Checks if a method exists in the target class or its hierarchy."
+                func=self.get_dependency_graph,
+                name="get_dependency_graph",
+                description="Analyzes dependencies between a list of Java files."
             ),
             StructuredTool.from_function(
                 func=self.submit_plan,

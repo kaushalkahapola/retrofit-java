@@ -49,7 +49,7 @@ async def reasoning_agent(state: AgentState, config):
     retriever.build_index(commit_to_index)
     
     # 3. Setup Tools
-    toolkit = ReasoningToolkit(retriever, target_repo_path, changes)
+    toolkit = ReasoningToolkit(retriever, target_repo_path, mainline_repo_path, changes)
     tools = toolkit.get_tools()
     
     # 4. Setup LLM & Agent
@@ -60,16 +60,25 @@ Your goal is to create a detailed `ImplementationPlan` to backport a patch from 
 
 **Process**:
 1.  **Analyze**: Use `get_patch_analysis` to understand what changed.
-2.  **Explore**: For each modified file, use `search_candidates` to find the corresponding file in the target.
-3.  **Verify**: Use `read_file` to check the content of the target file.
+2.  **Explore**: For each modified file, use `search_candidates` to find potential matches in the Target.
+3.  **Reference Graph**: Use `get_dependency_graph` on the **Mainline Repository** for the modified files (set `use_mainline=True`). This gives you the "Ground Truth" of how these files interact.
+4.  **Target Graph**: Use `get_dependency_graph` on the **Target Repository** with ALL your candidate files.
+5.  **Match & Verify**: Compare the two graphs.
+    *   If `A` calls `B` in Mainline, look for `CandidateA` calling `CandidateB` in Target.
+    *   This structural match confirms you have the right files.
+    *   **CRITICAL**: Do this BEFORE reading file content. This filters out wrong candidates efficiently.
+6.  **Deep Verification**: Use `read_file` ONLY on the best-matching candidates found in step 5.
     *   Does the file exist?
     *   Does it already have the fix?
     *   Are there missing dependencies?
     *   Are there Java version differences (e.g., `var` vs explicit types)?
-4.  **Plan**: Once you have gathered enough information, call the `submit_plan` tool with the final `ImplementationPlan`.
+7.  **Plan**: Once you have gathered enough information, call the `submit_plan` tool with the final `ImplementationPlan`.
 
 **Crucial**:
-*   You MUST use `read_file` to inspect the target code before making a decision.
+*   **Structural Matching First**: Always compare dependency graphs to identify the correct files *before* reading their content. This saves tokens and time.
+*   **Mainline Path**: You have access to `mainline_repo_path` in your state/tools. Use it for the reference graph.
+*   **Testing**: You MUST verify the graph connectivity before submitting.
+*   You MUST use `read_file` to inspect the target code before making a decision, but only AFTER narrowing down candidates.
 *   If a file is missing, check if it was renamed or if it should be created.
 *   **DO NOT** output the JSON as text. You **MUST** call the `submit_plan` tool.
 *   **AVOID INFINITE LOOPS**: If you have checked the files and have a good idea, just submit the plan. Do not keep searching endlessly.
@@ -97,11 +106,44 @@ Please proceed with the backport planning:
     
     print("Reasoning Agent: Thinking...")
     try:
-        # Run the agent
-        result = await agent.ainvoke(inputs, config={"recursion_limit": 50})
+        # Run the agent with streaming for real-time feedback
+        print("\n--- Real-time Execution Log ---")
+        final_state = None
+        all_messages = []
         
-        # DEBUG: Print all messages
-        print("\n--- ReAct Trace ---")
+        async for chunk in agent.astream(inputs, config={"recursion_limit": 50}):
+            for node, values in chunk.items():
+                if "messages" in values:
+                    new_messages = values["messages"]
+                    # In LangGraph, values["messages"] might be just the new ones or all, 
+                    # but usually with create_react_agent it appends.
+                    # Let's print the last one if it's new.
+                    for msg in new_messages:
+                        if msg not in all_messages:
+                            all_messages.append(msg)
+                            
+                            if msg.type == "ai":
+                                print(f"\n[Agent Thought]:\n{msg.content}")
+                                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                                    for tc in msg.tool_calls:
+                                        print(f"  [Tool Call]: {tc['name']}")
+                                        print(f"  [Args]: {tc['args']}")
+                            elif msg.type == "tool":
+                                print(f"\n[Tool Output ({msg.name})]:")
+                                content = str(msg.content)
+                                if len(content) > 500:
+                                    print(f"  {content[:500]}... (truncated)")
+                                else:
+                                    print(f"  {content}")
+            
+            # Keep track of the final state
+            final_state = values
+        
+        # Reconstruct result for compatibility with existing code
+        result = {"messages": all_messages}
+        
+        # DEBUG: Print all messages (Summary)
+        print("\n--- ReAct Trace Summary ---")
         trace_content = "# Reasoning Agent Trace\n\n"
         
         for msg in result["messages"]:

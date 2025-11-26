@@ -25,7 +25,8 @@ class AnalysisEngineClient:
         
         try:
             # Using a synchronous client for simplicity in tool calls
-            with httpx.Client(timeout=30.0) as client:
+            # Increased timeout for Spoon analysis which can be slow
+            with httpx.Client(timeout=900.0) as client:
                 response = client.post(url, json=payload)
                 response.raise_for_status()
                 result = response.json()
