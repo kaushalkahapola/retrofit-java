@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.retrofit.analysis.tools.GetDependencyTool;
+import com.retrofit.analysis.tools.GetClassContextTool;
 import com.retrofit.analysis.tools.GetJavaVersionTool;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -23,14 +24,16 @@ public class McpServer {
 
     private final GetJavaVersionTool getJavaVersionTool;
     private final GetDependencyTool getDependencyTool;
+    private final GetClassContextTool getClassContextTool;
     private final ObjectMapper objectMapper;
     private final Map<String, SseEmitter> emitters = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     public McpServer(GetJavaVersionTool getJavaVersionTool, GetDependencyTool getDependencyTool,
-            ObjectMapper objectMapper) {
+            GetClassContextTool getClassContextTool, ObjectMapper objectMapper) {
         this.getJavaVersionTool = getJavaVersionTool;
         this.getDependencyTool = getDependencyTool;
+        this.getClassContextTool = getClassContextTool;
         this.objectMapper = objectMapper;
     }
 
@@ -158,6 +161,20 @@ public class McpServer {
         depRequired.add("target_repo_path");
         depRequired.add("file_paths");
 
+        // Tool: get_class_context
+        ObjectNode ctxTool = tools.addObject();
+        ctxTool.put("name", "get_class_context");
+        ctxTool.put("description", "Reads a Java file and returns a skeleton view with focused method body");
+        ObjectNode ctxSchema = ctxTool.putObject("inputSchema");
+        ctxSchema.put("type", "object");
+        ObjectNode ctxProps = ctxSchema.putObject("properties");
+        ctxProps.putObject("target_repo_path").put("type", "string");
+        ctxProps.putObject("file_path").put("type", "string");
+        ctxProps.putObject("focus_method").put("type", "string");
+        ArrayNode ctxRequired = ctxSchema.putArray("required");
+        ctxRequired.add("target_repo_path");
+        ctxRequired.add("file_path");
+
         return response;
     }
 
@@ -181,6 +198,13 @@ public class McpServer {
 
                 Map<String, Object> graph = getDependencyTool.execute(repoPath, filePaths, exploreNeighbors);
                 return createToolResponse(id, graph);
+            } else if ("get_class_context".equals(toolName)) {
+                String repoPath = arguments.get("target_repo_path").asText();
+                String filePath = arguments.get("file_path").asText();
+                String focusMethod = arguments.has("focus_method") ? arguments.get("focus_method").asText() : null;
+
+                Map<String, Object> context = getClassContextTool.execute(repoPath, filePath, focusMethod);
+                return createToolResponse(id, context);
             } else {
                 return createErrorResponse(id, -32601, "Tool not found: " + toolName);
             }

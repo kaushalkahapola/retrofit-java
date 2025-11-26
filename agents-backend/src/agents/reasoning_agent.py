@@ -61,24 +61,25 @@ Your goal is to create a detailed `ImplementationPlan` to backport a patch from 
 **Process**:
 1.  **Analyze**: Use `get_patch_analysis` to understand what changed.
 2.  **Explore**: For each modified file, use `search_candidates` to find potential matches in the Target.
-3.  **Reference Graph**: Use `get_dependency_graph` on the **Mainline Repository** for the modified files (set `use_mainline=True`). This gives you the "Ground Truth" of how these files interact.
+3.  **Reference Graph**: Use `get_dependency_graph` on the **Mainline Repository** for the modified files (set `use_mainline=True`).
+    *   **NEW**: The graph now includes **Method Calls**. Look at the `calls` list in the output to see which methods invoke which.
 4.  **Target Graph**: Use `get_dependency_graph` on the **Target Repository** with ALL your candidate files.
 5.  **Match & Verify**: Compare the two graphs.
-    *   If `A` calls `B` in Mainline, look for `CandidateA` calling `CandidateB` in Target.
-    *   This structural match confirms you have the right files.
-    *   **CRITICAL**: Do this BEFORE reading file content. This filters out wrong candidates efficiently.
-6.  **Deep Verification**: Use `read_file` ONLY on the best-matching candidates found in step 5.
-    *   Does the file exist?
-    *   Does it already have the fix?
-    *   Are there missing dependencies?
-    *   Are there Java version differences (e.g., `var` vs explicit types)?
+    *   **Class Level**: If `A` depends on `B` in Mainline, look for `CandidateA` depending on `CandidateB`.
+    *   **Method Level**: If `A.methodX()` calls `B.methodY()` in Mainline, look for that specific interaction in the Target.
+    *   **CRITICAL**: This "Structural Matching" is your primary filter. Do it BEFORE reading code.
+6.  **Deep Verification**: Use `get_class_context` (Smart Read) on the best-matching candidates.
+    *   **Usage**: `get_class_context(file_path, focus_method="methodName")`
+    *   This gives you the class skeleton + the FULL BODY of the method you are patching.
+    *   Verify: Does the method exist? Is the logic similar? Is the fix already present?
+    *   **Avoid `read_file`** unless you absolutely need to see the whole file (it wastes tokens).
 7.  **Plan**: Once you have gathered enough information, call the `submit_plan` tool with the final `ImplementationPlan`.
 
 **Crucial**:
-*   **Structural Matching First**: Always compare dependency graphs to identify the correct files *before* reading their content. This saves tokens and time.
+*   **Structural Matching First**: Compare dependency graphs (Classes AND Methods) to identify the correct files.
+*   **Smart Reading**: Use `get_class_context` to surgically inspect methods. Don't dump 2000 lines of code if you only need one function.
 *   **Mainline Path**: You have access to `mainline_repo_path` in your state/tools. Use it for the reference graph.
 *   **Testing**: You MUST verify the graph connectivity before submitting.
-*   You MUST use `read_file` to inspect the target code before making a decision, but only AFTER narrowing down candidates.
 *   If a file is missing, check if it was renamed or if it should be created.
 *   **DO NOT** output the JSON as text. You **MUST** call the `submit_plan` tool.
 *   **AVOID INFINITE LOOPS**: If you have checked the files and have a good idea, just submit the plan. Do not keep searching endlessly.
@@ -159,9 +160,51 @@ Please proceed with the backport planning:
                         trace_content += f"- **{tc['name']}**: `{tc['args']}`\n"
                     trace_content += "\n"
             elif msg.type == "tool":
-                trace_content += f"## Tool Output ({msg.name})\n```\n{msg.content}\n```\n\n"
+                # Pretty print JSON output
+                try:
+                    content_str = str(msg.content)
+                    # Try to parse as JSON if it looks like one
+                    if content_str.strip().startswith("{") or content_str.strip().startswith("["):
+                         import ast
+                         parsed = ast.literal_eval(content_str)
+                         
+                         # Special Handling for get_dependency_graph
+                         if msg.name == "get_dependency_graph" and isinstance(parsed, dict) and "edges" in parsed:
+                             trace_content += f"## Tool Output ({msg.name})\n"
+                             # Mermaid Graph
+                             trace_content += "```mermaid\ngraph TD\n"
+                             nodes = set()
+                             for edge in parsed.get("edges", []):
+                                 src = edge.get("source", "").split(".")[-1]
+                                 tgt = edge.get("target", "").split(".")[-1]
+                                 rel = edge.get("relation", "related")
+                                 nodes.add(src)
+                                 nodes.add(tgt)
+                                 trace_content += f"    {src} -->|{rel}| {tgt}\n"
+                             trace_content += "```\n\n"
+                             
+                             formatted_json = json.dumps(parsed, indent=2)
+                             trace_content += f"<details>\n<summary>Raw JSON Output</summary>\n\n```json\n{formatted_json}\n```\n</details>\n\n"
+                             
+                         # Special Handling for get_class_context
+                         elif msg.name == "get_class_context" and isinstance(parsed, dict) and "context" in parsed:
+                             trace_content += f"## Tool Output ({msg.name})\n"
+                             trace_content += f"```java\n{parsed['context']}\n```\n\n"
+                             
+                         else:
+                             formatted_json = json.dumps(parsed, indent=2)
+                             trace_content += f"## Tool Output ({msg.name})\n```json\n{formatted_json}\n```\n\n"
+                    else:
+                         trace_content += f"## Tool Output ({msg.name})\n```\n{msg.content}\n```\n\n"
+                except:
+                    trace_content += f"## Tool Output ({msg.name})\n```\n{msg.content}\n```\n\n"
                 
         print("-------------------\n")
+
+        # Save to file unconditionally
+        with open("reasoning_trace.md", "w", encoding="utf-8") as f:
+            f.write(trace_content)
+        print("Trace saved to reasoning_trace.md")
 
         # Extract the plan from the tool calls
         plan = None
@@ -179,45 +222,39 @@ Please proceed with the backport planning:
             if plan: break
             
         if not plan:
-            # ... (fallback logic) ...
-            pass
+             return {"messages": [HumanMessage(content="Error: Agent failed to generate plan")]}
 
         if plan:
             print("\n--- Implementation Plan (ReAct) ---")
-            # ... (print logic) ...
             
             # Append Plan to Trace
-            trace_content += "# Final Implementation Plan\n\n"
-            trace_content += f"**Intent**: {plan.patch_intent}\n\n"
-            
-            trace_content += "## Compatibility Analysis\n"
-            trace_content += f"- **Java Version**: {plan.compatibility_analysis.java_version_differences}\n"
-            trace_content += f"- **Refactoring**: {plan.compatibility_analysis.refactoring_notes}\n"
-            trace_content += f"- **Missing Deps**: {plan.compatibility_analysis.missing_dependencies}\n\n"
-            
-            trace_content += "## File Mappings\n"
-            for m in plan.file_mappings:
-                trace_content += f"- `{m.source_file}` -> `{m.target_file}` (Conf: {m.confidence})\n"
-            
-            trace_content += "\n## Steps\n"
-            for s in plan.steps:
-                trace_content += f"### Step {s.step_id}: {s.action} `{s.file_path}`\n"
-                trace_content += f"{s.description}\n"
-                if s.code_snippet:
-                    trace_content += f"```java\n{s.code_snippet}\n```\n"
-            
-            # Save to file
-            with open("reasoning_trace.md", "w", encoding="utf-8") as f:
-                f.write(trace_content)
-            print("Trace saved to reasoning_trace.md")
+            with open("reasoning_trace.md", "a", encoding="utf-8") as f:
+                f.write("# Final Implementation Plan\n\n")
+                f.write(f"**Intent**: {plan.patch_intent}\n\n")
+                
+                f.write("## Compatibility Analysis\n")
+                f.write(f"- **Java Version**: {plan.compatibility_analysis.java_version_differences}\n")
+                f.write(f"- **Refactoring**: {plan.compatibility_analysis.refactoring_notes}\n")
+                f.write(f"- **Missing Deps**: {plan.compatibility_analysis.missing_dependencies}\n\n")
+                
+                f.write("## File Mappings\n")
+                f.write("| Source File | Target File | Confidence | Reasoning |\n")
+                f.write("|---|---|---|---|\n")
+                for m in plan.file_mappings:
+                    f.write(f"| `{m.source_file}` | `{m.target_file}` | {m.confidence} | {m.reasoning} |\n")
+                
+                f.write("\n## Steps\n")
+                for s in plan.steps:
+                    f.write(f"### Step {s.step_id}: {s.action} `{s.file_path}`\n")
+                    f.write(f"{s.description}\n")
+                    if s.code_snippet:
+                        f.write(f"```java\n{s.code_snippet}\n```\n")
             
             return {
                 "messages": [HumanMessage(content="Plan Generated via ReAct")],
                 "patch_analysis": changes,
                 "implementation_plan": plan.dict()
             }
-        else:
-             return {"messages": [HumanMessage(content="Error: Agent failed to generate plan")]}
 
     except Exception as e:
         print(f"Error in ReAct Loop: {e}")

@@ -77,12 +77,39 @@ public class GetDependencyTool {
 
             String typeName = type.getQualifiedName();
 
-            // Extract methods
-            List<Map<String, String>> methods = new ArrayList<>();
+            // Extract methods and their calls
+            List<Map<String, Object>> methods = new ArrayList<>();
             for (spoon.reflect.declaration.CtMethod<?> method : type.getMethods()) {
+                List<String> calls = new ArrayList<>();
+                List<spoon.reflect.code.CtInvocation<?>> invocations = method
+                        .getElements(new TypeFilter<>(spoon.reflect.code.CtInvocation.class));
+
+                for (spoon.reflect.code.CtInvocation<?> invocation : invocations) {
+                    try {
+                        CtTypeReference<?> declaringType = invocation.getExecutable().getDeclaringType();
+                        if (declaringType != null) {
+                            String targetType = declaringType.getQualifiedName();
+                            String targetMethod = invocation.getExecutable().getSignature();
+                            calls.add(targetType + "." + targetMethod);
+
+                            // Add edge if target is in analyzed set
+                            if (analyzedTypes.contains(targetType) && !targetType.equals(typeName)) {
+                                edges.add(Map.of(
+                                        "source", typeName,
+                                        "target", targetType,
+                                        "relation", "calls",
+                                        "details", method.getSignature() + " -> " + targetMethod));
+                            }
+                        }
+                    } catch (Exception e) {
+                        // Ignore resolution errors
+                    }
+                }
+
                 methods.add(Map.of(
                         "signature", method.getSignature(),
-                        "simpleName", method.getSimpleName()));
+                        "simpleName", method.getSimpleName(),
+                        "calls", calls));
             }
 
             nodes.add(Map.of(
@@ -90,7 +117,7 @@ public class GetDependencyTool {
                     "simpleName", type.getSimpleName(),
                     "methods", methods));
 
-            // Dependencies
+            // Class-level Dependencies (Inheritance/Interfaces)
             Set<String> dependencies = new HashSet<>();
 
             if (type.getSuperclass() != null)
@@ -102,25 +129,6 @@ public class GetDependencyTool {
             for (String dep : dependencies) {
                 if (analyzedTypes.contains(dep) && !dep.equals(typeName)) {
                     edges.add(Map.of("source", typeName, "target", dep, "relation", "depends_on"));
-                }
-            }
-
-            // Method Call Analysis
-            for (spoon.reflect.declaration.CtMethod<?> method : type.getMethods()) {
-                List<spoon.reflect.code.CtInvocation<?>> calls = method
-                        .getElements(new TypeFilter<>(spoon.reflect.code.CtInvocation.class));
-                for (spoon.reflect.code.CtInvocation<?> call : calls) {
-                    CtTypeReference<?> declaringType = call.getExecutable().getDeclaringType();
-                    if (declaringType != null) {
-                        String targetType = declaringType.getQualifiedName();
-                        if (analyzedTypes.contains(targetType) && !targetType.equals(typeName)) {
-                            edges.add(Map.of(
-                                    "source", typeName,
-                                    "target", targetType,
-                                    "relation", "calls",
-                                    "details", method.getSimpleName() + " -> " + call.getExecutable().getSimpleName()));
-                        }
-                    }
                 }
             }
         }

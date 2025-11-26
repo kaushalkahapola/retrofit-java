@@ -108,37 +108,55 @@ class ReasoningToolkit:
             "explore_neighbors": explore_neighbors
         })
 
+    def get_class_context(self, file_path: str, focus_method: str = None):
+        """
+        Reads a Java file and returns a skeleton view with the full body of the focused method.
+        Useful for verifying specific methods without reading the entire file.
+        """
+        from utils.mcp_client import get_client
+        client = get_client()
+        return client.call_tool("get_class_context", {
+            "target_repo_path": self.target_repo_path,
+            "file_path": file_path,
+            "focus_method": focus_method
+        })
+
     def get_tools(self):
         return [
             StructuredTool.from_function(
-                func=self.search_candidates,
-                name="search_candidates",
-                description="Searches for potential candidate files in the target repository."
-            ),
-            StructuredTool.from_function(
-                func=self.read_file,
-                name="read_file",
-                description="Reads the content of a file in the target repository."
-            ),
-            StructuredTool.from_function(
-                func=self.list_files,
-                name="list_files",
-                description="Lists files in a directory of the target repository."
-            ),
-            StructuredTool.from_function(
                 func=self.get_patch_analysis,
                 name="get_patch_analysis",
-                description="Returns the analysis of the patch."
+                description="Returns the analysis of the patch file (what changed)."
+            ),
+            StructuredTool.from_function(
+                func=self.search_candidates,
+                name="search_candidates",
+                description="Finds candidate files in the target repo that match a modified file from the patch."
             ),
             StructuredTool.from_function(
                 func=self.get_dependency_graph,
                 name="get_dependency_graph",
-                description="Analyzes dependencies between a list of Java files."
+                description="Builds a dependency graph (classes + method calls) for a list of files."
+            ),
+            StructuredTool.from_function(
+                func=self.get_class_context,
+                name="get_class_context",
+                description="Reads a Java file intelligently. Returns class structure + full body of ONE focused method."
+            ),
+            StructuredTool.from_function(
+                func=self.read_file,
+                name="read_file",
+                description="Reads the FULL content of a file from the target repo. Use sparingly."
+            ),
+            StructuredTool.from_function(
+                func=self.list_files,
+                name="list_files",
+                description="Lists files in a directory of the target repo."
             ),
             StructuredTool.from_function(
                 func=self.submit_plan,
                 name="submit_plan",
-                description="Submits the final implementation plan. Use this to finish the task.",
+                description="Submits the final Implementation Plan.",
                 args_schema=ImplementationPlan
             )
         ]
