@@ -1,0 +1,29 @@
+{
+  "success": true,
+  "issues": [],
+  "compilation": {
+    "success": true,
+    "message": "Compilation Successful",
+    "output_path": "C:\\Users\\Anushanga\\AppData\\Local\\Temp\\validation_classes_oyxm4279",
+    "source_path": "C:\\Users\\Anushanga\\Desktop\\Projects\\jdk11u-dev\\test/jdk/javax/swing/JEditorPane"
+  },
+  "spotbugs": {
+    "success": true,
+    "report": "SLF4J(W): Class path contains multiple SLF4J providers.\nSLF4J(W): Found provider [ch.qos.logback.classic.spi.LogbackServiceProvider@32a1bec0]\nSLF4J(W): Found provider [org.slf4j.simple.SimpleServiceProvider@22927a81]\nSLF4J(W): See https://www.slf4j.org/codes.html#multiple_bindings for an explanation.\nSLF4J(I): Actual provider is of type [ch.qos.logback.classic.spi.LogbackServiceProvider@32a1bec0]\nL V MC: Overridable method setParent is called from constructor new javax.swing.JEditorPane$PlainEditorKit$PlainParagraph(Element).  At JEditorPane.java:[line 2164]\nL I Dm: Use of non-localized String.toUpperCase() or String.toLowerCase() in javax.swing.JEditorPane$HeaderParser.parse()  At JEditorPane.java:[line 2345]\nL I Dm: Use of non-localized String.toUpperCase() or String.toLowerCase() in javax.swing.JEditorPane$HeaderParser.findValue(String, String)  At JEditorPane.java:[line 2426]\nH P Dm: Invocation of java.net.URL.equals(Object), which blocks to do domain name resolution, in javax.swing.JEditorPane.setPage(URL)  At JEditorPane.java:[line 422]\nL I Dm: Use of non-localized String.toUpperCase() or String.toLowerCase() in javax.swing.JEditorPane.setContentType(String)  At JEditorPane.java:[line 976]\nM V EI: javax.swing.JEditorPane.getAccessibleContext() may expose internal representation by returning java.awt.Component.accessibleContext  At JEditorPane.java:[line 1643]\nM V EI2: javax.swing.JEditorPane.setEditorKit(EditorKit) may expose internal representation by storing an externally mutable object into JEditorPane.kit  At JEditorPane.java:[line 1056]\nM V EI: javax.swing.JEditorPane.getEditorKit() may expose internal representation by returning JEditorPane.kit  At JEditorPane.java:[line 922]\nM B Se: Class javax.swing.JEditorPane defines non-transient non-serializable instance field pageLoader  In JEditorPane.java\nM B Se: javax.swing.JEditorPane$PageLoader stored into non-transient field JEditorPane.pageLoader  At JEditorPane.java:[line 446]\nM B Se: javax.swing.JEditorPane$PageLoader stored into non-transient field JEditorPane.pageLoader  At JEditorPane.java:[line 463]\nM P WMI: javax.swing.JEditorPane.loadDefaultKitsIfNecessary() makes inefficient use of keySet iterator instead of entrySet iterator  At JEditorPane.java:[line 1322]\nM D DCN: Do not catch NullPointerException like in javax.swing.JEditorPane.setCharsetFromContentTypeParameters(String)  At JEditorPane.java:[line 1017]\nH I Dm: Found reliance on default encoding in javax.swing.JEditorPane.read(InputStream, Object): new java.io.InputStreamReader(InputStream)  At JEditorPane.java:[line 539]\nH I Dm: Found reliance on default encoding in javax.swing.JEditorPane.read(InputStream, Document): new java.io.InputStreamReader(InputStream)  At JEditorPane.java:[line 564]\nM B CT: Exception thrown in class javax.swing.JEditorPane at new javax.swing.JEditorPane(String, String) will leave the constructor. The object under construction remains partially initialized and may be vulnerable to Finalizer attacks.  At JEditorPane.java:[line 292]\nM B CT: Exception thrown in class javax.swing.JEditorPane at new javax.swing.JEditorPane(URL) will leave the constructor. The object under construction remains partially initialized and may be vulnerable to Finalizer attacks.  At JEditorPane.java:[line 263]\nM B CT: Exception thrown in class javax.swing.JEditorPane at new javax.swing.JEditorPane(String) will leave the constructor. The object under construction remains partially initialized and may be vulnerable to Finalizer attacks.  At JEditorPane.java:[line 276]\nH C NP: Null passed for non-null parameter of JEditorPane.read(InputStream, Document) in javax.swing.JEditorPane$PageLoader.doInBackground()  Method invoked at JEditorPane.java:[line 652]\nM V EI2: new javax.swing.JEditorPane$JEditorPaneAccessibleHypertextSupport$HTMLLink(JEditorPane$JEditorPaneAccessibleHypertextSupport, Element) may expose internal representation by storing an externally mutable object into JEditorPane$JEditorPaneAccessibleHypertextSupport$HTMLLink.this$1  At JEditorPane.java:[line 1817]\nM V EI2: new javax.swing.JEditorPane$JEditorPaneAccessibleHypertextSupport(JEditorPane) may expose internal representation by storing an externally mutable object into JEditorPane$JEditorPaneAccessibleHypertextSupport.this$0  At JEditorPane.java:[line 2006]\n"
+  },
+  "tests": [
+    {
+      "success": true,
+      "stage": "execution",
+      "message": "",
+      "file": "test/jdk/javax/swing/JEditorPane/EditorPaneCharset.java"
+    }
+  ],
+  "analysis": {
+    "acceptable": true,
+    "reason": "The patch addresses the issue of `JEditorPane.read` throwing `ChangedCharSetException` by properly handling charset changes during the reading of input streams. It includes a fix to reset the input stream and re-read the content with the updated charset. A new test case `EditorPaneCharset.java` is added to verify the fix. The test execution passed, indicating that the fix is working as expected. SpotBugs identified some potential issues, but they are mostly related to code style, localization, and serialization, and do not block the acceptance of this specific bug fix.",
+    "consistency_score": 0.9,
+    "changes_needed": "While the patch is acceptable, consider addressing the SpotBugs findings in future work, especially the reliance on default encoding and potential exposure of internal representation.",
+    "regenerate": false
+  }
+}
