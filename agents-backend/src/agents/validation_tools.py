@@ -163,8 +163,13 @@ class ValidationToolkit:
 
     def run_test_with_patch(self, test_file_path: str, patch_classes_path: str, patch_source_path: str) -> Dict:
         """
-        Compiles and runs a single test file against the patched classes.
-        Uses --patch-module to override the platform module with the patch.
+        Compiles and runs a single test file using the Universal Test Runner strategy.
+        Supports:
+          1. Standard Main Method
+          2. JUnit 5 (JUnit Platform)
+          3. TestNG
+        
+        Requires 'analysis-engine/target/dependency' to be populated with runners.
         """
         print(f"  [Smart Test] Running test: {test_file_path}")
         
@@ -172,26 +177,34 @@ class ValidationToolkit:
         test_output_dir = tempfile.mkdtemp(prefix="validation_test_")
         abs_test_path = os.path.join(self.target_repo_path, test_file_path)
         
-        # Determine module to patch (heuristic: same as patch compilation?)
-        # For now, we assume 'java.desktop' is the target if not specified.
-        # But a safer bet is to reuse the patch logic or just try.
-        # Ideally, we inspect the patch_classes_path to see what we compiled.
+        # Determine module to patch
         target_module = "java.desktop" 
         
+        # Locate Runners (Hardcoded relative to agent, assumes standard layout)
+        # Agents -> Backend -> Retrofit Root -> Analysis Engine -> ...
+        # self.target_repo_path is external to this tool structure.
+        # We assume 'analysis-engine' is a sibling of 'agents-backend' or similar.
+        # Let's try to find it relative to CWD first.
+        
+        # Assuming we run from agents-backend/
+        analysis_dep_dir = os.path.abspath(os.path.join("..", "analysis-engine", "target", "dependency"))
+        if not os.path.exists(analysis_dep_dir): 
+             # Fallback: maybe we are in root?
+             analysis_dep_dir = os.path.abspath(os.path.join("analysis-engine", "target", "dependency"))
+        
+        print(f"    Looking for runners in: {analysis_dep_dir}")
+        runner_cp = f"{analysis_dep_dir}/*" # Wildcard execution for libs
+        
         # Compile Command
-        # javac -d test_out --patch-module java.desktop=patch_out test_file ...
+        # We must add runner jars to classpath if this is a JUnit/TestNG test
         cmd_compile = [
             "javac", 
             "-d", test_output_dir,
             "--patch-module", f"{target_module}={patch_classes_path}",
             "--add-reads", f"{target_module}=ALL-UNNAMED",
+            "-cp", runner_cp, # Add runners to compile CP
             abs_test_path
         ]
-        
-        # Add sourcepath if needed for test dependencies?
-        # Tests might depend on other test library classes. 
-        # For simple jtreg tests, they are often self-contained or use library tags.
-        # We will try a simple compile first.
         
         print(f"    Compiling test: {' '.join(cmd_compile)}")
         res_compile = subprocess.run(cmd_compile, capture_output=True, text=True, cwd=self.target_repo_path, shell=True)
@@ -203,29 +216,75 @@ class ValidationToolkit:
                 "message": f"Test Compilation Failed:\n{res_compile.stderr}\n{res_compile.stdout}"
             }
             
-        # 2. Run Test
-        # java --patch-module ... -cp test_out TestClass
-        
-        # Find Test Class Name
-        # Heuristic: filename without extension?
-        test_class_name = os.path.basename(test_file_path).replace(".java", "")
-        # If package declared, we need full name.
+        # 2. Detect Test Type
+        test_type = "MAIN"
+        test_content = ""
         try:
-            with open(abs_test_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                match = re.search(r'^\s*package\s+([\w\.]+)\s*;', content, re.MULTILINE)
-                if match:
-                    test_class_name = f"{match.group(1)}.{test_class_name}"
+            with open(abs_test_path, 'r', encoding='utf-8', errors='ignore') as f:
+                test_content = f.read()
+                if "@Test" in test_content or "@org.junit.jupiter.api.Test" in test_content:
+                    test_type = "JUNIT"
+                elif "@org.testng.annotations.Test" in test_content:
+                    test_type = "TESTNG"
         except: pass
+        
+        print(f"    Detected Test Type: {test_type}")
 
-        cmd_run = [
+        # 3. Find Test Class Name
+        test_class_name = os.path.basename(test_file_path).replace(".java", "")
+        match = re.search(r'^\s*package\s+([\w\.]+)\s*;', test_content, re.MULTILINE)
+        if match:
+            test_class_name = f"{match.group(1)}.{test_class_name}"
+
+        # 4. Construct Run Command
+        base_cmd = [
             "java",
             "--patch-module", f"{target_module}={patch_classes_path}",
             "--add-reads", f"{target_module}=ALL-UNNAMED",
-            "--add-opens", f"{target_module}/javax.swing=ALL-UNNAMED", # Open internals if needed
-            "-cp", test_output_dir,
-            test_class_name
+            "--add-opens", f"{target_module}/javax.swing=ALL-UNNAMED",
         ]
+        
+        if test_type == "JUNIT":
+            # java ... -jar junit-platform-console-standalone.jar -cp <test_out> -c <TestClass>
+            # Find the specific jar name
+            junit_jar = None
+            if os.path.exists(analysis_dep_dir):
+                for f in os.listdir(analysis_dep_dir):
+                    if "junit-platform-console-standalone" in f:
+                        junit_jar = os.path.join(analysis_dep_dir, f)
+                        break
+            
+            if not junit_jar:
+                 return {"success": False, "stage": "execution", "message": "JUnit Runner JAR not found."}
+
+            # Note: When using -jar, -cp is ignored! 
+            # We must use -cp <junit_jar>;<test_out> and launch ConsoleLauncher manually
+            full_cp = f"{junit_jar}{os.pathsep}{test_output_dir}"
+            
+            cmd_run = base_cmd + [
+                "-cp", full_cp,
+                "org.junit.platform.console.ConsoleLauncher",
+                "--select-class", test_class_name,
+                "--disable-banner",
+                "--details=none" # Minimal output to parsing easier
+            ]
+            
+        elif test_type == "TESTNG":
+             # Similar logic for TestNG
+             testng_chars = [os.path.join(analysis_dep_dir, f) for f in os.listdir(analysis_dep_dir) if f.endswith(".jar")]
+             full_cp = os.pathsep.join(testng_chars) + os.pathsep + test_output_dir
+             
+             cmd_run = base_cmd + [
+                 "-cp", full_cp,
+                 "org.testng.TestNG",
+                 "-testclass", test_class_name
+             ]
+             
+        else: # MAIN
+            cmd_run = base_cmd + [
+                "-cp", test_output_dir,
+                test_class_name
+            ]
         
         print(f"    Running test: {' '.join(cmd_run)}")
         try:
@@ -234,21 +293,27 @@ class ValidationToolkit:
                 capture_output=True, 
                 text=True, 
                 cwd=self.target_repo_path,
-                timeout=30, # Timeout to prevent infinite loops
+                timeout=60, 
                 shell=True
             )
             
+            # Check success
+            # JUnit Console returns 0 on success
             success = (res_run.returncode == 0)
+            
+            output = (res_run.stdout + "\n" + res_run.stderr).strip()
+            
+            # Parse JUnit summary for better reporting? "Tests run: 1, Failures: 0"
             return {
                 "success": success,
                 "stage": "execution",
-                "message": (res_run.stdout + "\n" + res_run.stderr).strip()
+                "message": output
             }
         except subprocess.TimeoutExpired:
             return {
                 "success": False,
                 "stage": "execution",
-                "message": "Test Execution Timed Out (30s)"
+                "message": "Test Execution Timed Out (60s)"
             }
 
     def write_trace(self, trace_content: str, filename: str = "validation_trace.md"):
