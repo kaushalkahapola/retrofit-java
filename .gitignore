@@ -428,6 +428,7 @@ venv/
 vscode-extension/out/
 datasets/*.csv
 temp_repo_storage/
-instructions/
+instructions/specification.md
+PROJECT_OVERVIEW.md
 *.ipynb
 **/*.pkl

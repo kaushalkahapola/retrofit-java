@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.retrofit.analysis.tools.GetDependencyTool;
 import com.retrofit.analysis.tools.GetClassContextTool;
 import com.retrofit.analysis.tools.GetJavaVersionTool;
+import com.retrofit.analysis.tools.CompileTool;
+import com.retrofit.analysis.tools.SpotBugsTool;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -25,15 +27,19 @@ public class McpServer {
     private final GetJavaVersionTool getJavaVersionTool;
     private final GetDependencyTool getDependencyTool;
     private final GetClassContextTool getClassContextTool;
+    private final CompileTool compileTool;
+    private final SpotBugsTool spotBugsTool;
     private final ObjectMapper objectMapper;
     private final Map<String, SseEmitter> emitters = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     public McpServer(GetJavaVersionTool getJavaVersionTool, GetDependencyTool getDependencyTool,
-            GetClassContextTool getClassContextTool, ObjectMapper objectMapper) {
+            GetClassContextTool getClassContextTool, CompileTool compileTool, SpotBugsTool spotBugsTool, ObjectMapper objectMapper) {
         this.getJavaVersionTool = getJavaVersionTool;
         this.getDependencyTool = getDependencyTool;
         this.getClassContextTool = getClassContextTool;
+        this.compileTool = compileTool;
+        this.spotBugsTool = spotBugsTool;
         this.objectMapper = objectMapper;
     }
 
@@ -175,6 +181,31 @@ public class McpServer {
         ctxRequired.add("target_repo_path");
         ctxRequired.add("file_path");
 
+        // Tool: compile
+        ObjectNode compTool = tools.addObject();
+        compTool.put("name", "compile");
+        compTool.put("description", "Compiles Java files using javac -Xlint");
+        ObjectNode compSchema = compTool.putObject("inputSchema");
+        compSchema.put("type", "object");
+        ObjectNode compProps = compSchema.putObject("properties");
+        compProps.putObject("target_repo_path").put("type", "string");
+        compProps.putObject("file_paths").put("type", "array").putObject("items").put("type", "string");
+        ArrayNode compRequired = compSchema.putArray("required");
+        compRequired.add("target_repo_path");
+        compRequired.add("file_paths");
+
+        // Tool: spotbugs
+        ObjectNode sbTool = tools.addObject();
+        sbTool.put("name", "spotbugs");
+        sbTool.put("description", "Runs SpotBugs on compiled classes");
+        ObjectNode sbSchema = sbTool.putObject("inputSchema");
+        sbSchema.put("type", "object");
+        ObjectNode sbProps = sbSchema.putObject("properties");
+        sbProps.putObject("compiled_classes_path").put("type", "string");
+        sbProps.putObject("source_path").put("type", "string");
+        ArrayNode sbRequired = sbSchema.putArray("required");
+        sbRequired.add("compiled_classes_path");
+
         return response;
     }
 
@@ -205,6 +236,19 @@ public class McpServer {
 
                 Map<String, Object> context = getClassContextTool.execute(repoPath, filePath, focusMethod);
                 return createToolResponse(id, context);
+            } else if ("compile".equals(toolName)) {
+                String repoPath = arguments.get("target_repo_path").asText();
+                List<String> filePaths = new ArrayList<>();
+                if (arguments.has("file_paths")) {
+                    arguments.get("file_paths").forEach(node -> filePaths.add(node.asText()));
+                }
+                Map<String, Object> result = compileTool.execute(repoPath, filePaths);
+                return createToolResponse(id, result);
+            } else if ("spotbugs".equals(toolName)) {
+                String compiledClassesPath = arguments.get("compiled_classes_path").asText();
+                String sourcePath = arguments.has("source_path") ? arguments.get("source_path").asText() : null;
+                Map<String, Object> result = spotBugsTool.execute(compiledClassesPath, sourcePath);
+                return createToolResponse(id, result);
             } else {
                 return createErrorResponse(id, -32601, "Tool not found: " + toolName);
             }
