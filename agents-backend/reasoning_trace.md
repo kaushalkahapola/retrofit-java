@@ -1,7 +1,7 @@
 # Reasoning Agent Trace
 
 ## Agent Thought
-Okay, I will start by analyzing the patch changes using the `get_patch_analysis` tool to understand the modifications in `src/java.desktop/share/classes/javax/swing/JEditorPane.java` and the purpose of the new test file `test/jdk/javax/swing/JEditorPane/EditorPaneCharset.java`.
+Okay, I will start by analyzing the patch changes using the `get_patch_analysis` tool to understand the modifications in each file. Then, I will use `search_candidates` to find the corresponding files in the target repository. After that, I will use `get_class_context` to verify the content of the identified target files and ensure the changes are applicable. Finally, I will create an implementation plan and submit it using the `submit_plan` tool.
 
 ### Tool Calls
 - **get_patch_analysis**: `{}`
@@ -10,73 +10,184 @@ Okay, I will start by analyzing the patch changes using the `get_patch_analysis`
 ```json
 [
   {
-    "file_path": "src/java.desktop/share/classes/javax/swing/JEditorPane.java",
+    "file_path": "src/java.base/share/classes/java/util/zip/DeflaterOutputStream.java",
     "change_type": "MODIFIED",
     "added_lines": [
-      "* Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.",
-      "kit.read(r, doc, 0);",
-      "} catch (BadLocationException e) {",
-      "throw new IOException(e.getMessage());",
-      "} catch (ChangedCharSetException changedCharSetException) {",
-      "String charSetSpec = changedCharSetException.getCharSetSpec();",
-      "if (changedCharSetException.keyEqualsCharSet()) {",
-      "putClientProperty(\"charset\", charSetSpec);",
-      "setCharsetFromContentTypeParameters(charSetSpec);",
       "try {",
-      "in.reset();",
-      "} catch (IOException exception) {",
-      "//mark was invalidated",
-      "in.close();",
-      "URL url = (URL)doc.getProperty(Document.StreamDescriptionProperty);",
-      "if (url != null) {",
-      "URLConnection conn = url.openConnection();",
-      "in = conn.getInputStream();",
-      "} else {",
-      "//there is nothing we can do to recover stream",
-      "throw changedCharSetException;",
-      "}",
-      "}",
-      "try {",
-      "doc.remove(0, doc.getLength());",
-      "} catch (BadLocationException e) {}",
-      "doc.putProperty(\"IgnoreCharsetDirective\", Boolean.valueOf(true));",
-      "read(in, doc);"
+      "finish();",
+      "} finally {",
+      "if (usesDefaultDeflater)",
+      "def.end();",
+      "}"
     ],
     "removed_lines": [
-      "* Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.",
-      "kit.read(r, doc, 0);",
-      "} catch (BadLocationException e) {",
-      "throw new IOException(e.getMessage());",
-      "} catch (ChangedCharSetException changedCharSetException) {",
-      "String charSetSpec = changedCharSetException.getCharSetSpec();",
-      "if (changedCharSetException.keyEqualsCharSet()) {",
-      "putClientProperty(\"charset\", charSetSpec);",
-      "} else {",
-      "setCharsetFromContentTypeParameters(charSetSpec);",
-      "}",
-      "in.reset();",
-      "} catch (IOException exception) {",
-      "//mark was invalidated",
-      "in.close();",
-      "URL url = (URL)doc.getProperty(Document.StreamDescriptionProperty);",
-      "if (url != null) {",
-      "URLConnection conn = url.openConnection();",
-      "in = conn.getInputStream();",
-      "//there is nothing we can do to recover stream",
-      "throw changedCharSetException;",
-      "try {",
-      "doc.remove(0, doc.getLength());",
-      "} catch (BadLocationException e) {}",
-      "doc.putProperty(\"IgnoreCharsetDirective\", Boolean.valueOf(true));",
-      "read(in, doc);"
+      "finish();",
+      "if (usesDefaultDeflater)",
+      "def.end();"
     ]
   },
   {
-    "file_path": "test/jdk/javax/swing/JEditorPane/EditorPaneCharset.java",
+    "file_path": "src/java.base/share/classes/java/util/zip/GZIPOutputStream.java",
+    "change_type": "MODIFIED",
+    "added_lines": [
+      "try {",
+      "def.finish();",
+      "while (!def.finished()) {",
+      "int len = def.deflate(buf, 0, buf.length);",
+      "if (def.finished() && len <= buf.length - TRAILER_SIZE) {",
+      "// last deflater buffer. Fit trailer at the end",
+      "writeTrailer(buf, len);",
+      "len = len + TRAILER_SIZE;",
+      "out.write(buf, 0, len);",
+      "return;",
+      "}",
+      "if (len > 0)",
+      "out.write(buf, 0, len);",
+      "// if we can't fit the trailer at the end of the last",
+      "// deflater buffer, we write it separately",
+      "byte[] trailer = new byte[TRAILER_SIZE];",
+      "writeTrailer(trailer, 0);",
+      "out.write(trailer);",
+      "} catch (IOException e) {",
+      "if (usesDefaultDeflater)",
+      "def.end();",
+      "throw e;"
+    ],
+    "removed_lines": [
+      "def.finish();",
+      "while (!def.finished()) {",
+      "int len = def.deflate(buf, 0, buf.length);",
+      "if (def.finished() && len <= buf.length - TRAILER_SIZE) {",
+      "// last deflater buffer. Fit trailer at the end",
+      "writeTrailer(buf, len);",
+      "len = len + TRAILER_SIZE;",
+      "out.write(buf, 0, len);",
+      "return;",
+      "if (len > 0)",
+      "out.write(buf, 0, len);",
+      "// if we can't fit the trailer at the end of the last",
+      "// deflater buffer, we write it separately",
+      "byte[] trailer = new byte[TRAILER_SIZE];",
+      "writeTrailer(trailer, 0);",
+      "out.write(trailer);"
+    ]
+  },
+  {
+    "file_path": "src/java.base/share/classes/java/util/zip/ZipOutputStream.java",
+    "change_type": "MODIFIED",
+    "added_lines": [
+      "try {",
+      "ZipEntry e = current.entry;",
+      "switch (e.method) {",
+      "case DEFLATED -> {",
+      "def.finish();",
+      "while (!def.finished()) {",
+      "deflate();",
+      "}",
+      "if ((e.flag & 8) == 0) {",
+      "// verify size, compressed size, and crc-32 settings",
+      "if (e.size != def.getBytesRead()) {",
+      "throw new ZipException(",
+      "\"invalid entry size (expected \" + e.size +",
+      "\" but got \" + def.getBytesRead() + \" bytes)\");",
+      "}",
+      "if (e.csize != def.getBytesWritten()) {",
+      "throw new ZipException(",
+      "\"invalid entry compressed size (expected \" +",
+      "e.csize + \" but got \" + def.getBytesWritten() + \" bytes)\");",
+      "}",
+      "if (e.crc != crc.getValue()) {",
+      "throw new ZipException(",
+      "\"invalid entry CRC-32 (expected 0x\" +",
+      "Long.toHexString(e.crc) + \" but got 0x\" +",
+      "Long.toHexString(crc.getValue()) + \")\");",
+      "}",
+      "} else {",
+      "e.size = def.getBytesRead();",
+      "e.csize = def.getBytesWritten();",
+      "e.crc = crc.getValue();",
+      "writeEXT(e);",
+      "}",
+      "def.reset();",
+      "written += e.csize;",
+      "case STORED -> {",
+      "// we already know that both e.size and e.csize are the same",
+      "if (e.size != written - locoff) {",
+      "throw new ZipException(",
+      "\"invalid entry size (expected \" + e.size +",
+      "\" but got \" + (written - locoff) + \" bytes)\");",
+      "}",
+      "if (e.crc != crc.getValue()) {",
+      "throw new ZipException(",
+      "\"invalid entry crc-32 (expected 0x\" +",
+      "Long.toHexString(e.crc) + \" but got 0x\" +",
+      "Long.toHexString(crc.getValue()) + \")\");",
+      "}",
+      "default -> throw new ZipException(\"invalid compression method\");",
+      "crc.reset();",
+      "current = null;",
+      "} catch (IOException e) {",
+      "if (usesDefaultDeflater && !(e instanceof ZipException))",
+      "def.end();",
+      "throw e;"
+    ],
+    "removed_lines": [
+      "ZipEntry e = current.entry;",
+      "switch (e.method) {",
+      "case DEFLATED -> {",
+      "def.finish();",
+      "while (!def.finished()) {",
+      "deflate();",
+      "}",
+      "if ((e.flag & 8) == 0) {",
+      "// verify size, compressed size, and crc-32 settings",
+      "if (e.size != def.getBytesRead()) {",
+      "throw new ZipException(",
+      "\"invalid entry size (expected \" + e.size +",
+      "\" but got \" + def.getBytesRead() + \" bytes)\");",
+      "}",
+      "if (e.csize != def.getBytesWritten()) {",
+      "throw new ZipException(",
+      "\"invalid entry compressed size (expected \" +",
+      "e.csize + \" but got \" + def.getBytesWritten() + \" bytes)\");",
+      "if (e.crc != crc.getValue()) {",
+      "throw new ZipException(",
+      "\"invalid entry CRC-32 (expected 0x\" +",
+      "Long.toHexString(e.crc) + \" but got 0x\" +",
+      "Long.toHexString(crc.getValue()) + \")\");",
+      "} else {",
+      "e.size = def.getBytesRead();",
+      "e.csize = def.getBytesWritten();",
+      "e.crc = crc.getValue();",
+      "writeEXT(e);",
+      "def.reset();",
+      "written += e.csize;",
+      "}",
+      "case STORED -> {",
+      "// we already know that both e.size and e.csize are the same",
+      "if (e.size != written - locoff) {",
+      "throw new ZipException(",
+      "\"invalid entry size (expected \" + e.size +",
+      "\" but got \" + (written - locoff) + \" bytes)\");",
+      "}",
+      "if (e.crc != crc.getValue()) {",
+      "throw new ZipException(",
+      "\"invalid entry crc-32 (expected 0x\" +",
+      "Long.toHexString(e.crc) + \" but got 0x\" +",
+      "Long.toHexString(crc.getValue()) + \")\");",
+      "}",
+      "}",
+      "default -> throw new ZipException(\"invalid compression method\");",
+      "crc.reset();",
+      "current = null;"
+    ]
+  },
+  {
+    "file_path": "test/jdk/java/util/zip/CloseDeflaterTest.java",
     "change_type": "ADDED",
     "added_lines": [
       "/*",
-      "* Copyright (c) 2024, Oracle and/or its affiliates. All rights reserved.",
+      "* Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.",
       "* DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.",
       "*",
       "* This code is free software; you can redistribute it and/or modify it",
@@ -98,56 +209,129 @@ Okay, I will start by analyzing the patch changes using the `get_patch_analysis`
       "* questions.",
       "*/",
       "",
-      "import java.io.ByteArrayInputStream;",
-      "import java.io.IOException;",
-      "import java.nio.charset.Charset;",
-      "",
-      "import javax.swing.JEditorPane;",
-      "import javax.swing.text.BadLocationException;",
-      "import javax.swing.text.Document;",
-      "import javax.swing.text.Element;",
-      "",
-      "/*",
+      "/**",
       "* @test",
-      "* @bug 8328953",
-      "* @summary Verifies JEditorPane.read doesn't throw ChangedCharSetException",
-      "but handles it and reads HTML in the specified encoding",
-      "* @run main EditorPaneCharset",
+      "* @bug 8193682",
+      "* @summary Test Infinite loop while writing on closed GZipOutputStream , ZipOutputStream and JarOutputStream.",
+      "* @run testng CloseDeflaterTest",
       "*/",
+      "import java.io.*;",
+      "import java.util.Random;",
+      "import java.util.jar.JarOutputStream;",
+      "import java.util.zip.GZIPOutputStream;",
+      "import java.util.zip.ZipOutputStream;",
+      "import java.util.zip.ZipEntry;",
       "",
-      "public final class EditorPaneCharset {",
-      "private static final String CYRILLIC_TEXT =",
-      "\"\\u041F\\u0440\\u0438\\u0432\\u0435\\u0442, \\u043C\\u0438\\u0440!\";",
-      "private static final String HTML_CYRILLIC =",
-      "\"<html lang=\\\"ru\\\">\\n\" +",
-      "\"<head>\\n\" +",
-      "\"    <meta http-equiv=\\\"Content-Type\\\" \" +",
-      "\"          content=\\\"text/html; charset=windows-1251\\\">\\n\" +",
-      "\"</head><body>\\n\" +",
-      "\"<p>\" + CYRILLIC_TEXT + \"</p>\\n\" +",
-      "\"</body></html>\\n\";",
+      "import org.testng.annotations.BeforeTest;",
+      "import org.testng.annotations.DataProvider;",
+      "import org.testng.annotations.Test;",
+      "import static org.testng.Assert.fail;",
       "",
-      "public static void main(String[] args) throws IOException, BadLocationException {",
-      "JEditorPane editorPane = new JEditorPane();",
-      "editorPane.setContentType(\"text/html\");",
-      "Document document = editorPane.getDocument();",
       "",
-      "// Shouldn't throw ChangedCharSetException",
-      "editorPane.read(",
-      "new ByteArrayInputStream(",
-      "HTML_CYRILLIC.getBytes(",
-      "Charset.forName(\"windows-1251\"))),",
-      "document);",
+      "public class CloseDeflaterTest {",
       "",
-      "Element root = document.getDefaultRootElement();",
-      "Element body = root.getElement(1);",
-      "Element p = body.getElement(0);",
-      "String pText = document.getText(p.getStartOffset(),",
-      "p.getEndOffset() - p.getStartOffset() - 1);",
-      "if (!CYRILLIC_TEXT.equals(pText)) {",
-      "throw new RuntimeException(\"Text doesn't match\");",
+      "//number of bytes to write",
+      "private static final int INPUT_LENGTH= 512;",
+      "//OutputStream that will throw an exception during a write operation",
+      "private static OutputStream outStream = new OutputStream() {",
+      "@Override",
+      "public void write(byte[] b, int off, int len) throws IOException {",
+      "//throw exception during write",
+      "throw new IOException();",
+      "}",
+      "@Override",
+      "public void write(byte b[]) throws IOException {}",
+      "@Override",
+      "public void write(int b) throws IOException {}",
+      "};",
+      "private static byte[] inputBytes = new byte[INPUT_LENGTH];",
+      "private static Random rand = new Random();",
+      "",
+      "@DataProvider(name = \"testgzipinput\")",
+      "public Object[][] testGZipInput() {",
+      "//testGZip will close the GZipOutputStream using close() method when the boolean",
+      "//useCloseMethod is set to true and finish() method if the value is set to false",
+      "return new Object[][] {",
+      "{ GZIPOutputStream.class, true },",
+      "{ GZIPOutputStream.class, false },",
+      "};",
+      "}",
+      "",
+      "@DataProvider(name = \"testzipjarinput\")",
+      "public Object[][] testZipAndJarInput() {",
+      "//testZipAndJarInput will perfrom write/closeEntry operations on JarOutputStream when the boolean",
+      "//useJar is set to true and on ZipOutputStream if the value is set to false",
+      "return new Object[][] {",
+      "{ JarOutputStream.class, true },",
+      "{ ZipOutputStream.class, false },",
+      "};",
+      "}",
+      "",
+      "@BeforeTest",
+      "public void before_test()",
+      "{",
+      "//add inputBytes array with random bytes to write into Zip",
+      "rand.nextBytes(inputBytes);",
+      "}",
+      "",
+      "//Test for infinite loop by writing bytes to closed GZIPOutputStream",
+      "@Test(dataProvider = \"testgzipinput\")",
+      "public void testGZip(Class<?> type, boolean useCloseMethod) throws IOException {",
+      "GZIPOutputStream zip = new GZIPOutputStream(outStream);",
+      "try {",
+      "zip.write(inputBytes, 0, INPUT_LENGTH);",
+      "//close zip",
+      "if(useCloseMethod) {",
+      "zip.close();",
+      "} else {",
+      "zip.finish();",
+      "}",
+      "} catch (IOException e) {",
+      "//expected",
+      "}",
+      "for (int i = 0; i < 3; i++) {",
+      "try {",
+      "//write on a closed GZIPOutputStream",
+      "zip.write(inputBytes, 0, INPUT_LENGTH);",
+      "fail(\"Deflater closed exception not thrown\");",
+      "} catch (NullPointerException e) {",
+      "//expected , Deflater has been closed exception",
       "}",
       "}",
+      "}",
+      "",
+      "//Test for infinite loop by writing bytes to closed ZipOutputStream/JarOutputStream",
+      "@Test(dataProvider = \"testzipjarinput\")",
+      "public void testZipCloseEntry(Class<?> type,boolean useJar) throws IOException {",
+      "ZipOutputStream zip = null;",
+      "if(useJar) {",
+      "zip = new JarOutputStream(outStream);",
+      "} else {",
+      "zip = new ZipOutputStream(outStream);",
+      "}",
+      "try {",
+      "zip.putNextEntry(new ZipEntry(\"\"));",
+      "} catch (IOException e) {",
+      "//expected to throw IOException since putNextEntry calls write method",
+      "}",
+      "try {",
+      "zip.write(inputBytes, 0, INPUT_LENGTH);",
+      "//close zip entry",
+      "zip.closeEntry();",
+      "} catch (IOException e) {",
+      "//expected",
+      "}",
+      "for (int i = 0; i < 3; i++) {",
+      "try {",
+      "//write on a closed ZipOutputStream",
+      "zip.write(inputBytes, 0, INPUT_LENGTH);",
+      "fail(\"Deflater closed exception not thrown\");",
+      "} catch (NullPointerException e) {",
+      "//expected , Deflater has been closed exception",
+      "}",
+      "}",
+      "}",
+      "",
       "}"
     ],
     "removed_lines": []
@@ -156,22 +340,52 @@ Okay, I will start by analyzing the patch changes using the `get_patch_analysis`
 ```
 
 ## Agent Thought
-Okay, the patch modifies `src/java.desktop/share/classes/javax/swing/JEditorPane.java` and adds `test/jdk/javax/swing/JEditorPane/EditorPaneCharset.java`.
+Okay, the patch addresses a potential infinite loop issue when writing to closed `DeflaterOutputStream`, `GZIPOutputStream`, and `ZipOutputStream`. It also includes a new test case `CloseDeflaterTest.java` to verify this fix.
 
-Let's start by finding the corresponding file in the target repository for the modified file.
+Now, let's find the corresponding files in the target repository.
 
 ### Tool Calls
-- **search_candidates**: `{'file_path': 'src/java.desktop/share/classes/javax/swing/JEditorPane.java'}`
+- **search_candidates**: `{'file_path': 'src/java.base/share/classes/java/util/zip/DeflaterOutputStream.java'}`
+- **search_candidates**: `{'file_path': 'src/java.base/share/classes/java/util/zip/GZIPOutputStream.java'}`
+- **search_candidates**: `{'file_path': 'src/java.base/share/classes/java/util/zip/ZipOutputStream.java'}`
 
 ## Tool Output (search_candidates)
 ```json
 [
   {
-    "file": "src/java.desktop/share/classes/javax/swing/JEditorPane.java",
+    "file": "jdk/src/share/classes/java/util/zip/GZIPOutputStream.java",
     "reason": "GIT + TF-IDF"
   },
   {
-    "file": 4942,
+    "file": 12188,
+    "reason": "SYMBOL"
+  }
+]
+```
+
+## Tool Output (search_candidates)
+```json
+[
+  {
+    "file": "jdk/src/share/classes/java/util/zip/DeflaterOutputStream.java",
+    "reason": "GIT + TF-IDF"
+  },
+  {
+    "file": 12186,
+    "reason": "SYMBOL"
+  }
+]
+```
+
+## Tool Output (search_candidates)
+```json
+[
+  {
+    "file": "jdk/src/share/classes/java/util/zip/ZipOutputStream.java",
+    "reason": "GIT + TF-IDF"
+  },
+  {
+    "file": 12200,
     "reason": "SYMBOL"
   }
 ]
@@ -181,29 +395,18 @@ Let's start by finding the corresponding file in the target repository for the m
 
 
 ### Tool Calls
-- **get_dependency_graph**: `{'use_mainline': True, 'file_paths': ['src/java.desktop/share/classes/javax/swing/JEditorPane.java']}`
+- **get_dependency_graph**: `{'file_paths': ['src/java.base/share/classes/java/util/zip/DeflaterOutputStream.java', 'src/java.base/share/classes/java/util/zip/GZIPOutputStream.java', 'src/java.base/share/classes/java/util/zip/ZipOutputStream.java'], 'use_mainline': True}`
 
 ## Tool Output (get_dependency_graph)
 ```mermaid
 graph TD
-    JEditorPane -->|calls| JEditorPane$HeaderParser
-    JEditorPane -->|depends_on| JEditorPane$JEditorPaneAccessibleHypertextSupport
-    JEditorPane -->|depends_on| JEditorPane$JEditorPaneAccessibleHypertextSupport$1
-    JEditorPane -->|depends_on| JEditorPane$AccessibleJEditorPaneHTML
-    JEditorPane -->|depends_on| JEditorPane$PlainEditorKit$PlainParagraph$LogicalView
-    JEditorPane -->|depends_on| JEditorPane$PageLoader
-    JEditorPane -->|depends_on| JEditorPane$HeaderParser
-    JEditorPane -->|depends_on| JEditorPane$JEditorPaneAccessibleHypertextSupport$LinkVector
-    JEditorPane -->|depends_on| JEditorPane$PageLoader$1
-    JEditorPane -->|depends_on| JEditorPane$PageLoader$2
-    JEditorPane -->|depends_on| JEditorPane$AccessibleJEditorPane
-    JEditorPane -->|depends_on| JEditorPane$JEditorPaneAccessibleHypertextSupport$HTMLLink
-    JEditorPane -->|depends_on| JEditorPane$PageLoader$3
-    JEditorPane -->|depends_on| JEditorPane$PlainEditorKit
-    JEditorPane -->|depends_on| JEditorPane$1
-    JEditorPane -->|depends_on| JEditorPane$2
-    JEditorPane -->|depends_on| JEditorPane$3
-    JEditorPane -->|depends_on| JEditorPane$PlainEditorKit$PlainParagraph
+    GZIPOutputStream -->|calls| DeflaterOutputStream
+    GZIPOutputStream -->|depends_on| DeflaterOutputStream
+    ZipOutputStream -->|calls| DeflaterOutputStream
+    ZipOutputStream -->|calls| DeflaterOutputStream
+    ZipOutputStream -->|calls| DeflaterOutputStream
+    ZipOutputStream -->|depends_on| DeflaterOutputStream
+    ZipOutputStream -->|depends_on| ZipOutputStream$XEntry
 ```
 
 <details>
@@ -214,593 +417,489 @@ graph TD
   "edges": [
     {
       "relation": "calls",
-      "source": "javax.swing.JEditorPane",
-      "details": "setCharsetFromContentTypeParameters(java.lang.String) -> findValue(java.lang.String)",
-      "target": "javax.swing.JEditorPane$HeaderParser"
+      "source": "java.util.zip.GZIPOutputStream",
+      "details": "write(byte[],int,int) -> write(byte[],int,int)",
+      "target": "java.util.zip.DeflaterOutputStream"
     },
     {
-      "source": "javax.swing.JEditorPane",
+      "source": "java.util.zip.GZIPOutputStream",
       "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$JEditorPaneAccessibleHypertextSupport"
+      "target": "java.util.zip.DeflaterOutputStream"
     },
     {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$JEditorPaneAccessibleHypertextSupport$1"
+      "relation": "calls",
+      "source": "java.util.zip.ZipOutputStream",
+      "details": "close() -> close()",
+      "target": "java.util.zip.DeflaterOutputStream"
     },
     {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$AccessibleJEditorPaneHTML"
+      "relation": "calls",
+      "source": "java.util.zip.ZipOutputStream",
+      "details": "closeEntry() -> deflate()",
+      "target": "java.util.zip.DeflaterOutputStream"
     },
     {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PlainEditorKit$PlainParagraph$LogicalView"
+      "relation": "calls",
+      "source": "java.util.zip.ZipOutputStream",
+      "details": "write(byte[],int,int) -> write(byte[],int,int)",
+      "target": "java.util.zip.DeflaterOutputStream"
     },
     {
-      "source": "javax.swing.JEditorPane",
+      "source": "java.util.zip.ZipOutputStream",
       "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PageLoader"
+      "target": "java.util.zip.DeflaterOutputStream"
     },
     {
-      "source": "javax.swing.JEditorPane",
+      "source": "java.util.zip.ZipOutputStream",
       "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$HeaderParser"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$JEditorPaneAccessibleHypertextSupport$LinkVector"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PageLoader$1"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PageLoader$2"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$AccessibleJEditorPane"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$JEditorPaneAccessibleHypertextSupport$HTMLLink"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PageLoader$3"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PlainEditorKit"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$1"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$2"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$3"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PlainEditorKit$PlainParagraph"
+      "target": "java.util.zip.ZipOutputStream$XEntry"
     }
   ],
   "nodes": [
     {
-      "simpleName": "JEditorPane",
+      "simpleName": "DeflaterOutputStream",
       "methods": [
         {
-          "simpleName": "addHyperlinkListener",
-          "signature": "addHyperlinkListener(javax.swing.event.HyperlinkListener)",
           "calls": [
-            "javax.swing.event.EventListenerList.add(java.lang.Class,java.util.EventListener)"
-          ]
+            "java.util.zip.DeflaterOutputStream.finish()",
+            "java.util.zip.Deflater.end()",
+            "java.io.OutputStream.close()",
+            "java.io.OutputStream.close()",
+            "java.lang.Throwable.addSuppressed(java.lang.Throwable)"
+          ],
+          "simpleName": "close",
+          "signature": "close()"
         },
         {
-          "simpleName": "createDefaultEditorKit",
-          "signature": "createDefaultEditorKit()",
-          "calls": []
-        },
-        {
-          "simpleName": "createEditorKitForContentType",
-          "signature": "createEditorKitForContentType(java.lang.String)",
           "calls": [
-            "javax.swing.JEditorPane.getKitRegistry()",
-            "java.util.Hashtable.get(java.lang.Object)",
-            "java.util.Hashtable.get(java.lang.Object)",
-            "javax.swing.JEditorPane.getKitTypeRegistry()",
-            "java.util.Hashtable.get(java.lang.Object)",
-            "javax.swing.JEditorPane.getKitLoaderRegistry()",
-            "java.lang.ClassLoader.loadClass(java.lang.String)",
-            "javax.swing.SwingUtilities.loadSystemClass(java.lang.String)",
-            "java.lang.Class.newInstance()",
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)",
-            "javax.swing.text.EditorKit.clone()"
-          ]
+            "java.util.zip.Deflater.deflate(byte[],int,int)",
+            "java.io.OutputStream.write(byte[],int,int)"
+          ],
+          "simpleName": "deflate",
+          "signature": "deflate()"
         },
         {
-          "simpleName": "fireHyperlinkUpdate",
-          "signature": "fireHyperlinkUpdate(javax.swing.event.HyperlinkEvent)",
           "calls": [
-            "javax.swing.event.EventListenerList.getListenerList()",
-            "javax.swing.event.HyperlinkListener.hyperlinkUpdate(javax.swing.event.HyperlinkEvent)"
-          ]
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.Deflater.finish()",
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.DeflaterOutputStream.deflate()",
+            "java.util.zip.Deflater.end()"
+          ],
+          "simpleName": "finish",
+          "signature": "finish()"
         },
         {
-          "simpleName": "getAccessibleContext",
-          "signature": "getAccessibleContext()",
           "calls": [
-            "javax.swing.JEditorPane.getEditorKit()",
-            "java.lang.Object.getClass()",
-            "java.lang.Object.getClass()"
-          ]
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.Deflater.deflate(byte[],int,int)",
+            "java.io.OutputStream.write(byte[],int,int)",
+            "java.io.OutputStream.flush()"
+          ],
+          "simpleName": "flush",
+          "signature": "flush()"
         },
         {
-          "simpleName": "getAsynchronousLoadPriority",
-          "signature": "getAsynchronousLoadPriority(javax.swing.text.Document)",
           "calls": [
-            "javax.swing.text.AbstractDocument.getAsynchronousLoadPriority()"
-          ]
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.Deflater.setInput(byte[],int,int)",
+            "java.util.zip.Deflater.needsInput()",
+            "java.util.zip.DeflaterOutputStream.deflate()"
+          ],
+          "simpleName": "write",
+          "signature": "write(byte[],int,int)"
         },
         {
-          "simpleName": "getContentType",
-          "signature": "getContentType()",
           "calls": [
-            "javax.swing.text.EditorKit.getContentType()"
-          ]
-        },
-        {
-          "simpleName": "getEditorKit",
-          "signature": "getEditorKit()",
-          "calls": [
-            "javax.swing.JEditorPane.createDefaultEditorKit()"
-          ]
-        },
-        {
-          "simpleName": "getEditorKitClassNameForContentType",
-          "signature": "getEditorKitClassNameForContentType(java.lang.String)",
-          "calls": [
-            "java.util.Hashtable.get(java.lang.Object)",
-            "javax.swing.JEditorPane.getKitTypeRegistry()"
-          ]
-        },
-        {
-          "simpleName": "getEditorKitForContentType",
-          "signature": "getEditorKitForContentType(java.lang.String)",
-          "calls": [
-            "java.util.Hashtable.get(java.lang.Object)",
-            "javax.swing.JEditorPane.createEditorKitForContentType(java.lang.String)",
-            "javax.swing.JEditorPane.setEditorKitForContentType(java.lang.String,javax.swing.text.EditorKit)",
-            "javax.swing.JEditorPane.createDefaultEditorKit()"
-          ]
-        },
-        {
-          "simpleName": "getHyperlinkListeners",
-          "signature": "getHyperlinkListeners()",
-          "calls": [
-            "javax.swing.event.EventListenerList.getListeners(java.lang.Class)"
-          ]
-        },
-        {
-          "simpleName": "getKitLoaderRegistry",
-          "signature": "getKitLoaderRegistry()",
-          "calls": [
-            "javax.swing.JEditorPane.loadDefaultKitsIfNecessary()",
-            "javax.swing.SwingUtilities.appContextGet(java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "getKitRegistry",
-          "signature": "getKitRegistry()",
-          "calls": [
-            "javax.swing.SwingUtilities.appContextGet(java.lang.Object)",
-            "javax.swing.SwingUtilities.appContextPut(java.lang.Object,java.util.Hashtable)"
-          ]
-        },
-        {
-          "simpleName": "getKitTypeRegistry",
-          "signature": "getKitTypeRegistry()",
-          "calls": [
-            "javax.swing.JEditorPane.loadDefaultKitsIfNecessary()",
-            "javax.swing.SwingUtilities.appContextGet(java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "getPage",
-          "signature": "getPage()",
-          "calls": [
-            "javax.swing.text.Document.getProperty(java.lang.Object)",
-            "javax.swing.text.JTextComponent.getDocument()"
-          ]
-        },
-        {
-          "simpleName": "getPostData",
-          "signature": "getPostData()",
-          "calls": [
-            "javax.swing.text.Document.getProperty(java.lang.Object)",
-            "javax.swing.text.JTextComponent.getDocument()"
-          ]
-        },
-        {
-          "simpleName": "getPreferredSize",
-          "signature": "getPreferredSize()",
-          "calls": [
-            "javax.swing.JComponent.getPreferredSize()",
-            "javax.swing.SwingUtilities.getUnwrappedParent(javax.swing.JEditorPane)",
-            "javax.swing.text.JTextComponent.getUI()",
-            "javax.swing.JEditorPane.getScrollableTracksViewportWidth()",
-            "javax.swing.JViewport.getWidth()",
-            "javax.swing.plaf.ComponentUI.getMinimumSize(javax.swing.JComponent)",
-            "javax.swing.JEditorPane.getScrollableTracksViewportHeight()",
-            "javax.swing.JViewport.getHeight()",
-            "javax.swing.plaf.ComponentUI.getMinimumSize(javax.swing.JComponent)"
-          ]
-        },
-        {
-          "simpleName": "getScrollableTracksViewportHeight",
-          "signature": "getScrollableTracksViewportHeight()",
-          "calls": [
-            "javax.swing.SwingUtilities.getUnwrappedParent(javax.swing.JEditorPane)",
-            "javax.swing.text.JTextComponent.getUI()",
-            "javax.swing.JViewport.getHeight()",
-            "javax.swing.plaf.ComponentUI.getMinimumSize(javax.swing.JComponent)",
-            "javax.swing.plaf.ComponentUI.getMaximumSize(javax.swing.JComponent)"
-          ]
-        },
-        {
-          "simpleName": "getScrollableTracksViewportWidth",
-          "signature": "getScrollableTracksViewportWidth()",
-          "calls": [
-            "javax.swing.SwingUtilities.getUnwrappedParent(javax.swing.JEditorPane)",
-            "javax.swing.text.JTextComponent.getUI()",
-            "javax.swing.JViewport.getWidth()",
-            "javax.swing.plaf.ComponentUI.getMinimumSize(javax.swing.JComponent)",
-            "javax.swing.plaf.ComponentUI.getMaximumSize(javax.swing.JComponent)"
-          ]
-        },
-        {
-          "simpleName": "getStream",
-          "signature": "getStream(java.net.URL)",
-          "calls": [
-            "java.net.URL.openConnection()",
-            "java.net.HttpURLConnection.setInstanceFollowRedirects(boolean)",
-            "javax.swing.JEditorPane.getPostData()",
-            "javax.swing.JEditorPane.handlePostData(java.net.HttpURLConnection,java.lang.Object)",
-            "java.net.HttpURLConnection.getResponseCode()",
-            "java.net.URLConnection.getHeaderField(java.lang.String)",
-            "java.lang.String.startsWith(java.lang.String,int)",
-            "javax.swing.JEditorPane.getStream(java.net.URL)",
-            "javax.swing.SwingUtilities.isEventDispatchThread()",
-            "javax.swing.JEditorPane.handleConnectionProperties(java.net.URLConnection)",
-            "javax.swing.SwingUtilities.invokeAndWait(javax.swing.JEditorPane$3)",
-            "java.lang.Object.java.lang.Object()",
-            "javax.swing.JEditorPane.handleConnectionProperties(java.net.URLConnection)",
-            "java.net.URLConnection.getInputStream()"
-          ]
-        },
-        {
-          "simpleName": "getText",
-          "signature": "getText()",
-          "calls": [
-            "javax.swing.text.JTextComponent.write(java.io.Writer)",
-            "java.io.StringWriter.toString()"
-          ]
-        },
-        {
-          "simpleName": "getUIClassID",
-          "signature": "getUIClassID()",
-          "calls": []
-        },
-        {
-          "simpleName": "handleConnectionProperties",
-          "signature": "handleConnectionProperties(java.net.URLConnection)",
-          "calls": [
-            "java.net.URLConnection.getContentType()",
-            "javax.swing.JEditorPane.setContentType(java.lang.String)",
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)",
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)",
-            "java.net.URLConnection.getURL()",
-            "java.net.URLConnection.getContentEncoding()",
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "handlePostData",
-          "signature": "handlePostData(java.net.HttpURLConnection,java.lang.Object)",
-          "calls": [
-            "java.net.URLConnection.setDoOutput(boolean)",
-            "java.net.URLConnection.setRequestProperty(java.lang.String,java.lang.String)",
-            "java.net.URLConnection.getOutputStream()",
-            "java.io.DataOutputStream.writeBytes(java.lang.String)"
-          ]
-        },
-        {
-          "simpleName": "initializeModel",
-          "signature": "initializeModel(javax.swing.text.EditorKit,java.net.URL)",
-          "calls": [
-            "javax.swing.text.EditorKit.createDefaultDocument()",
-            "java.util.Hashtable.keys()",
-            "java.util.Enumeration.hasMoreElements()",
-            "java.util.Enumeration.nextElement()",
-            "javax.swing.text.Document.putProperty(java.lang.Object,java.lang.Object)",
-            "java.util.Hashtable.get(java.lang.Object)",
-            "java.util.Hashtable.clear()",
-            "javax.swing.text.Document.getProperty(java.lang.Object)",
-            "javax.swing.text.Document.putProperty(java.lang.Object,java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "loadDefaultKitsIfNecessary",
-          "signature": "loadDefaultKitsIfNecessary()",
-          "calls": [
-            "javax.swing.SwingUtilities.appContextGet(java.lang.Object)",
-            "java.util.Map.size()",
-            "java.util.Map.put(java.lang.Object,java.lang.Object)",
-            "java.util.Map.put(java.lang.Object,java.lang.Object)",
-            "java.util.Map.put(java.lang.Object,java.lang.Object)",
-            "java.util.Map.put(java.lang.Object,java.lang.Object)",
-            "javax.swing.SwingUtilities.appContextPut(java.lang.Object,java.util.Hashtable)",
-            "javax.swing.SwingUtilities.appContextPut(java.lang.Object,java.util.Hashtable)",
-            "java.util.Map.keySet()",
-            "javax.swing.JEditorPane.registerEditorKitForContentType(java.lang.String,java.lang.String)",
-            "java.util.Map.get(java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "paramString",
-          "signature": "paramString()",
-          "calls": [
-            "java.lang.Object.toString()",
-            "java.util.Hashtable.toString()",
-            "javax.swing.text.JTextComponent.paramString()"
-          ]
-        },
-        {
-          "simpleName": "read",
-          "signature": "read(java.io.InputStream,java.lang.Object)",
-          "calls": [
-            "javax.swing.text.JTextComponent.setDocument(javax.swing.text.Document)",
-            "javax.swing.JEditorPane.read(java.io.InputStream,javax.swing.text.Document)",
-            "javax.swing.JComponent.getClientProperty(java.lang.Object)",
-            "javax.swing.text.JTextComponent.read(java.io.Reader,java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "read",
-          "signature": "read(java.io.InputStream,javax.swing.text.Document)",
-          "calls": [
-            "java.lang.Boolean.equals(java.lang.Object)",
-            "javax.swing.text.Document.getProperty(java.lang.Object)",
-            "java.io.InputStream.mark(int)",
-            "javax.swing.JComponent.getClientProperty(java.lang.Object)",
-            "javax.swing.text.EditorKit.read(java.io.Reader,javax.swing.text.Document,int)",
-            "java.lang.Throwable.getMessage()",
-            "javax.swing.text.ChangedCharSetException.getCharSetSpec()",
-            "javax.swing.text.ChangedCharSetException.keyEqualsCharSet()",
-            "javax.swing.JComponent.putClientProperty(java.lang.Object,java.lang.Object)",
-            "javax.swing.JEditorPane.setCharsetFromContentTypeParameters(java.lang.String)",
-            "java.io.InputStream.reset()",
-            "java.io.InputStream.close()",
-            "javax.swing.text.Document.getProperty(java.lang.Object)",
-            "java.net.URL.openConnection()",
-            "java.net.URLConnection.getInputStream()",
-            "javax.swing.text.Document.remove(int,int)",
-            "javax.swing.text.Document.getLength()",
-            "javax.swing.text.Document.putProperty(java.lang.Object,java.lang.Object)",
-            "java.lang.Boolean.valueOf(boolean)",
-            "javax.swing.JEditorPane.read(java.io.InputStream,javax.swing.text.Document)"
-          ]
-        },
-        {
-          "simpleName": "registerEditorKitForContentType",
-          "signature": "registerEditorKitForContentType(java.lang.String,java.lang.String)",
-          "calls": [
-            "javax.swing.JEditorPane.registerEditorKitForContentType(java.lang.String,java.lang.String,java.lang.ClassLoader)",
-            "java.lang.Thread.getContextClassLoader()",
-            "java.lang.Thread.currentThread()"
-          ]
-        },
-        {
-          "simpleName": "registerEditorKitForContentType",
-          "signature": "registerEditorKitForContentType(java.lang.String,java.lang.String,java.lang.ClassLoader)",
-          "calls": [
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)",
-            "javax.swing.JEditorPane.getKitTypeRegistry()",
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)",
-            "javax.swing.JEditorPane.getKitLoaderRegistry()",
-            "java.util.Hashtable.remove(java.lang.Object)",
-            "javax.swing.JEditorPane.getKitLoaderRegistry()",
-            "java.util.Hashtable.remove(java.lang.Object)",
-            "javax.swing.JEditorPane.getKitRegistry()"
-          ]
-        },
-        {
-          "simpleName": "removeHyperlinkListener",
-          "signature": "removeHyperlinkListener(javax.swing.event.HyperlinkListener)",
-          "calls": [
-            "javax.swing.event.EventListenerList.remove(java.lang.Class,java.util.EventListener)"
-          ]
-        },
-        {
-          "simpleName": "replaceSelection",
-          "signature": "replaceSelection(java.lang.String)",
-          "calls": [
-            "javax.swing.text.JTextComponent.isEditable()",
-            "javax.swing.UIManager.getLookAndFeel()",
-            "javax.swing.JEditorPane.getEditorKit()",
-            "javax.swing.text.JTextComponent.getDocument()",
-            "javax.swing.text.JTextComponent.getCaret()",
-            "javax.swing.text.JTextComponent.saveComposedText(int)",
-            "javax.swing.text.Caret.getDot()",
-            "java.lang.Math.min(int,int)",
-            "javax.swing.text.Caret.getDot()",
-            "javax.swing.text.Caret.getMark()",
-            "java.lang.Math.max(int,int)",
-            "javax.swing.text.Caret.getDot()",
-            "javax.swing.text.Caret.getMark()",
-            "javax.swing.text.AbstractDocument.replace(int,int,java.lang.String,javax.swing.text.AttributeSet)",
-            "javax.swing.text.StyledEditorKit.getInputAttributes()",
-            "javax.swing.text.Document.remove(int,int)",
-            "java.lang.String.length()",
-            "javax.swing.text.Document.insertString(int,java.lang.String,javax.swing.text.AttributeSet)",
-            "javax.swing.text.StyledEditorKit.getInputAttributes()",
-            "javax.swing.text.JTextComponent.restoreComposedText()",
-            "javax.swing.UIManager.getLookAndFeel()",
-            "javax.swing.text.JTextComponent.replaceSelection(java.lang.String)"
-          ]
-        },
-        {
-          "simpleName": "scrollToReference",
-          "signature": "scrollToReference(java.lang.String)",
-          "calls": [
-            "javax.swing.text.JTextComponent.getDocument()",
-            "javax.swing.text.html.HTMLDocument.getIterator(javax.swing.text.html.HTML$Tag)",
-            "javax.swing.text.html.HTMLDocument$Iterator.isValid()",
-            "javax.swing.text.html.HTMLDocument$Iterator.next()",
-            "javax.swing.text.html.HTMLDocument$Iterator.getAttributes()",
-            "javax.swing.text.AttributeSet.getAttribute(java.lang.Object)",
-            "java.lang.String.equals(java.lang.Object)",
-            "javax.swing.text.html.HTMLDocument$Iterator.getStartOffset()",
-            "javax.swing.text.JTextComponent.modelToView(int)",
-            "javax.swing.JComponent.getVisibleRect()",
-            "javax.swing.JComponent.scrollRectToVisible(java.awt.Rectangle)",
-            "javax.swing.text.JTextComponent.setCaretPosition(int)",
-            "javax.swing.UIManager.getLookAndFeel()"
-          ]
-        },
-        {
-          "simpleName": "setCharsetFromContentTypeParameters",
-          "signature": "setCharsetFromContentTypeParameters(java.lang.String)",
-          "calls": [
-            "java.lang.String.indexOf(int)",
-            "java.lang.String.length()",
-            "java.lang.String.substring(int)",
-            "java.lang.String.length()",
-            "javax.swing.JEditorPane$HeaderParser.findValue(java.lang.String)",
-            "javax.swing.JComponent.putClientProperty(java.lang.Object,java.lang.Object)",
-            "java.io.PrintStream.println(java.lang.String)",
-            "java.lang.Throwable.printStackTrace()"
-          ]
-        },
-        {
-          "simpleName": "setContentType",
-          "signature": "setContentType(java.lang.String)",
-          "calls": [
-            "java.lang.String.indexOf(int)",
-            "java.lang.String.substring(int)",
-            "java.lang.String.trim()",
-            "java.lang.String.substring(int,int)",
-            "java.lang.String.startsWith(java.lang.String)",
-            "java.lang.String.toLowerCase()",
-            "javax.swing.JEditorPane.setCharsetFromContentTypeParameters(java.lang.String)",
-            "java.lang.String.equals(java.lang.Object)",
-            "javax.swing.text.EditorKit.getContentType()",
-            "javax.swing.JEditorPane.getEditorKitForContentType(java.lang.String)",
-            "javax.swing.JEditorPane.setEditorKit(javax.swing.text.EditorKit)"
-          ]
-        },
-        {
-          "simpleName": "setEditorKit",
-          "signature": "setEditorKit(javax.swing.text.EditorKit)",
-          "calls": [
-            "javax.swing.text.EditorKit.deinstall(javax.swing.JEditorPane)",
-            "javax.swing.text.EditorKit.install(javax.swing.JEditorPane)",
-            "javax.swing.text.JTextComponent.setDocument(javax.swing.text.Document)",
-            "javax.swing.text.EditorKit.createDefaultDocument()",
-            "java.awt.Component.firePropertyChange(java.lang.String,java.lang.Object,java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "setEditorKitForContentType",
-          "signature": "setEditorKitForContentType(java.lang.String,javax.swing.text.EditorKit)",
-          "calls": [
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "setPage",
-          "signature": "setPage(java.lang.String)",
-          "calls": [
-            "javax.swing.JEditorPane.setPage(java.net.URL)"
-          ]
-        },
-        {
-          "simpleName": "setPage",
-          "signature": "setPage(java.net.URL)",
-          "calls": [
-            "javax.swing.JEditorPane.getPage()",
-            "java.net.URL.equals(java.lang.Object)",
-            "java.net.URL.getRef()",
-            "javax.swing.JComponent.scrollRectToVisible(java.awt.Rectangle)",
-            "javax.swing.JEditorPane.getPostData()",
-            "java.net.URL.sameFile(java.net.URL)",
-            "javax.swing.JEditorPane.getAsynchronousLoadPriority(javax.swing.text.Document)",
-            "javax.swing.text.JTextComponent.getDocument()",
-            "javax.swing.JEditorPane.getStream(java.net.URL)",
-            "javax.swing.JEditorPane.initializeModel(javax.swing.text.EditorKit,java.net.URL)",
-            "javax.swing.JEditorPane.getAsynchronousLoadPriority(javax.swing.text.Document)",
-            "javax.swing.text.JTextComponent.setDocument(javax.swing.text.Document)",
-            "javax.swing.SwingWorker.execute()",
-            "javax.swing.JEditorPane.read(java.io.InputStream,javax.swing.text.Document)",
-            "javax.swing.text.JTextComponent.setDocument(javax.swing.text.Document)",
-            "javax.swing.SwingWorker.cancel(boolean)",
-            "javax.swing.SwingWorker.execute()",
-            "java.net.URL.getRef()",
-            "javax.swing.JEditorPane.scrollToReference(java.lang.String)",
-            "javax.swing.SwingUtilities.invokeLater(javax.swing.JEditorPane$2)",
-            "java.lang.Object.java.lang.Object()",
-            "javax.swing.JEditorPane.scrollToReference(java.lang.String)",
-            "javax.swing.text.Document.putProperty(java.lang.Object,java.lang.Object)",
-            "javax.swing.text.JTextComponent.getDocument()",
-            "java.awt.Component.firePropertyChange(java.lang.String,java.lang.Object,java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "setText",
-          "signature": "setText(java.lang.String)",
-          "calls": [
-            "javax.swing.text.JTextComponent.getDocument()",
-            "javax.swing.text.Document.remove(int,int)",
-            "javax.swing.text.Document.getLength()",
-            "java.lang.String.isEmpty()",
-            "javax.swing.JEditorPane.getEditorKit()",
-            "javax.swing.text.EditorKit.read(java.io.Reader,javax.swing.text.Document,int)",
-            "javax.swing.UIManager.getLookAndFeel()"
-          ]
-        },
-        {
-          "simpleName": "writeObject",
-          "signature": "writeObject(java.io.ObjectOutputStream)",
-          "calls": [
-            "java.io.ObjectOutputStream.defaultWriteObject()",
-            "java.lang.String.equals(java.lang.Object)",
-            "javax.swing.JEditorPane.getUIClassID()",
-            "javax.swing.JComponent.getWriteObjCounter(javax.swing.JEditorPane)",
-            "javax.swing.JComponent.setWriteObjCounter(javax.swing.JEditorPane,byte)",
-            "javax.swing.plaf.ComponentUI.installUI(javax.swing.JComponent)"
-          ]
+            "java.util.zip.DeflaterOutputStream.write(byte[],int,int)"
+          ],
+          "simpleName": "write",
+          "signature": "write(int)"
         }
       ],
-      "id": "javax.swing.JEditorPane"
+      "id": "java.util.zip.DeflaterOutputStream"
+    },
+    {
+      "simpleName": "GZIPOutputStream",
+      "methods": [
+        {
+          "calls": [
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.Deflater.finish()",
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.Deflater.deflate(byte[],int,int)",
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.GZIPOutputStream.writeTrailer(byte[],int)",
+            "java.io.OutputStream.write(byte[],int,int)",
+            "java.io.OutputStream.write(byte[],int,int)",
+            "java.util.zip.GZIPOutputStream.writeTrailer(byte[],int)",
+            "java.io.OutputStream.write(byte[])",
+            "java.util.zip.Deflater.end()"
+          ],
+          "simpleName": "finish",
+          "signature": "finish()"
+        },
+        {
+          "calls": [
+            "java.util.zip.DeflaterOutputStream.write(byte[],int,int)",
+            "java.util.zip.CRC32.update(byte[],int,int)"
+          ],
+          "simpleName": "write",
+          "signature": "write(byte[],int,int)"
+        },
+        {
+          "calls": [
+            "java.io.OutputStream.write(byte[])"
+          ],
+          "simpleName": "writeHeader",
+          "signature": "writeHeader()"
+        },
+        {
+          "calls": [
+            "java.util.zip.GZIPOutputStream.writeShort(int,byte[],int)",
+            "java.util.zip.GZIPOutputStream.writeShort(int,byte[],int)"
+          ],
+          "simpleName": "writeInt",
+          "signature": "writeInt(int,byte[],int)"
+        },
+        {
+          "calls": [],
+          "simpleName": "writeShort",
+          "signature": "writeShort(int,byte[],int)"
+        },
+        {
+          "calls": [
+            "java.util.zip.GZIPOutputStream.writeInt(int,byte[],int)",
+            "java.util.zip.CRC32.getValue()",
+            "java.util.zip.Deflater.getBytesRead()",
+            "java.util.zip.GZIPOutputStream.writeInt(int,byte[],int)"
+          ],
+          "simpleName": "writeTrailer",
+          "signature": "writeTrailer(byte[],int)"
+        }
+      ],
+      "id": "java.util.zip.GZIPOutputStream"
+    },
+    {
+      "simpleName": "ZipOutputStream",
+      "methods": [
+        {
+          "calls": [
+            "java.util.zip.DeflaterOutputStream.close()"
+          ],
+          "simpleName": "close",
+          "signature": "close()"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.ensureOpen()",
+            "java.util.zip.Deflater.finish()",
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.DeflaterOutputStream.deflate()",
+            "java.util.zip.Deflater.getBytesRead()",
+            "java.util.zip.Deflater.getBytesRead()",
+            "java.util.zip.Deflater.getBytesWritten()",
+            "java.util.zip.Deflater.getBytesWritten()",
+            "java.util.zip.CRC32.getValue()",
+            "java.lang.Long.toHexString(long)",
+            "java.lang.Long.toHexString(long)",
+            "java.util.zip.CRC32.getValue()",
+            "java.util.zip.Deflater.getBytesRead()",
+            "java.util.zip.Deflater.getBytesWritten()",
+            "java.util.zip.CRC32.getValue()",
+            "java.util.zip.ZipOutputStream.writeEXT(java.util.zip.ZipEntry)",
+            "java.util.zip.Deflater.reset()",
+            "java.util.zip.CRC32.getValue()",
+            "java.lang.Long.toHexString(long)",
+            "java.lang.Long.toHexString(long)",
+            "java.util.zip.CRC32.getValue()",
+            "java.util.zip.CRC32.reset()",
+            "java.util.zip.Deflater.shouldFinish()",
+            "java.util.zip.Deflater.end()"
+          ],
+          "simpleName": "closeEntry",
+          "signature": "closeEntry()"
+        },
+        {
+          "calls": [],
+          "simpleName": "ensureOpen",
+          "signature": "ensureOpen()"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.ensureOpen()",
+            "java.util.zip.ZipOutputStream.closeEntry()",
+            "java.util.zip.ZipOutputStream.writeCEN(java.util.zip.ZipOutputStream$XEntry)",
+            "java.util.zip.ZipOutputStream.writeEND(long,long)"
+          ],
+          "simpleName": "finish",
+          "signature": "finish()"
+        },
+        {
+          "calls": [],
+          "simpleName": "getExtraLen",
+          "signature": "getExtraLen(byte[])"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.ensureOpen()",
+            "java.util.zip.ZipOutputStream.closeEntry()",
+            "java.util.zip.ZipEntry.setTime(long)",
+            "java.lang.System.currentTimeMillis()",
+            "java.util.HashSet.add(java.lang.Object)",
+            "java.util.zip.ZipCoder.isUTF8()",
+            "java.util.zip.ZipEntry.isCENHeaderValid(<unknown>,<unknown>,<unknown>)",
+            "java.util.Vector.add(java.lang.Object)",
+            "java.util.zip.ZipOutputStream.writeLOC(java.util.zip.ZipOutputStream$XEntry)"
+          ],
+          "simpleName": "putNextEntry",
+          "signature": "putNextEntry(ZipEntry)"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipCoder.getBytes(java.lang.String)"
+          ],
+          "simpleName": "setComment",
+          "signature": "setComment(java.lang.String)"
+        },
+        {
+          "calls": [
+            "java.util.zip.Deflater.setLevel(int)"
+          ],
+          "simpleName": "setLevel",
+          "signature": "setLevel(int)"
+        },
+        {
+          "calls": [],
+          "simpleName": "setMethod",
+          "signature": "setMethod(int)"
+        },
+        {
+          "calls": [],
+          "simpleName": "version",
+          "signature": "version(ZipEntry)"
+        },
+        {
+          "calls": [],
+          "simpleName": "versionMadeBy",
+          "signature": "versionMadeBy(ZipEntry,int)"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.ensureOpen()",
+            "java.util.Objects.checkFromIndexSize(int,int,int)",
+            "java.util.zip.DeflaterOutputStream.write(byte[],int,int)",
+            "java.io.OutputStream.write(byte[],int,int)",
+            "java.util.zip.CRC32.update(byte[],int,int)"
+          ],
+          "simpleName": "write",
+          "signature": "write(byte[],int,int)"
+        },
+        {
+          "calls": [
+            "java.io.OutputStream.write(int)"
+          ],
+          "simpleName": "writeByte",
+          "signature": "writeByte(int)"
+        },
+        {
+          "calls": [
+            "java.io.OutputStream.write(byte[],int,int)"
+          ],
+          "simpleName": "writeBytes",
+          "signature": "writeBytes(byte[],int,int)"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.version(java.util.zip.ZipEntry)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.versionMadeBy(java.util.zip.ZipEntry,int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.versionMadeBy(java.util.zip.ZipEntry,int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipCoder.getBytes()",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.getExtraLen(byte[])",
+            "java.util.zip.ZipCoder.getBytes()",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeByte(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeByte(int)",
+            "java.util.zip.ZipOutputStream.writeExtra(byte[])",
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)"
+          ],
+          "simpleName": "writeCEN",
+          "signature": "writeCEN(java.util.zip.ZipOutputStream$XEntry)"
+        },
+        {
+          "calls": [
+            "java.util.Vector.size()",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.Vector.size()",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.Vector.size()",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)"
+          ],
+          "simpleName": "writeEND",
+          "signature": "writeEND(long,long)"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)"
+          ],
+          "simpleName": "writeEXT",
+          "signature": "writeEXT(ZipEntry)"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)",
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)",
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)"
+          ],
+          "simpleName": "writeExtra",
+          "signature": "writeExtra(byte[])"
+        },
+        {
+          "calls": [
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)"
+          ],
+          "simpleName": "writeInt",
+          "signature": "writeInt(long)"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.getExtraLen(byte[])",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.version(java.util.zip.ZipEntry)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.version(java.util.zip.ZipEntry)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipCoder.getBytes()",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeByte(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeExtra(byte[])"
+          ],
+          "simpleName": "writeLOC",
+          "signature": "writeLOC(java.util.zip.ZipOutputStream$XEntry)"
+        },
+        {
+          "calls": [
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)"
+          ],
+          "simpleName": "writeLong",
+          "signature": "writeLong(long)"
+        },
+        {
+          "calls": [
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)"
+          ],
+          "simpleName": "writeShort",
+          "signature": "writeShort(int)"
+        }
+      ],
+      "id": "java.util.zip.ZipOutputStream"
     }
   ]
 }
@@ -811,29 +910,18 @@ graph TD
 
 
 ### Tool Calls
-- **get_dependency_graph**: `{'file_paths': ['src/java.desktop/share/classes/javax/swing/JEditorPane.java']}`
+- **get_dependency_graph**: `{'file_paths': ['jdk/src/share/classes/java/util/zip/DeflaterOutputStream.java', 'jdk/src/share/classes/java/util/zip/GZIPOutputStream.java', 'jdk/src/share/classes/java/util/zip/ZipOutputStream.java']}`
 
 ## Tool Output (get_dependency_graph)
 ```mermaid
 graph TD
-    JEditorPane -->|calls| JEditorPane$HeaderParser
-    JEditorPane -->|depends_on| JEditorPane$JEditorPaneAccessibleHypertextSupport
-    JEditorPane -->|depends_on| JEditorPane$JEditorPaneAccessibleHypertextSupport$1
-    JEditorPane -->|depends_on| JEditorPane$AccessibleJEditorPaneHTML
-    JEditorPane -->|depends_on| JEditorPane$PlainEditorKit$PlainParagraph$LogicalView
-    JEditorPane -->|depends_on| JEditorPane$PageLoader
-    JEditorPane -->|depends_on| JEditorPane$HeaderParser
-    JEditorPane -->|depends_on| JEditorPane$JEditorPaneAccessibleHypertextSupport$LinkVector
-    JEditorPane -->|depends_on| JEditorPane$PageLoader$1
-    JEditorPane -->|depends_on| JEditorPane$PageLoader$2
-    JEditorPane -->|depends_on| JEditorPane$AccessibleJEditorPane
-    JEditorPane -->|depends_on| JEditorPane$JEditorPaneAccessibleHypertextSupport$HTMLLink
-    JEditorPane -->|depends_on| JEditorPane$PageLoader$3
-    JEditorPane -->|depends_on| JEditorPane$PlainEditorKit
-    JEditorPane -->|depends_on| JEditorPane$1
-    JEditorPane -->|depends_on| JEditorPane$2
-    JEditorPane -->|depends_on| JEditorPane$3
-    JEditorPane -->|depends_on| JEditorPane$PlainEditorKit$PlainParagraph
+    GZIPOutputStream -->|calls| DeflaterOutputStream
+    GZIPOutputStream -->|depends_on| DeflaterOutputStream
+    ZipOutputStream -->|calls| DeflaterOutputStream
+    ZipOutputStream -->|calls| DeflaterOutputStream
+    ZipOutputStream -->|calls| DeflaterOutputStream
+    ZipOutputStream -->|depends_on| DeflaterOutputStream
+    ZipOutputStream -->|depends_on| ZipOutputStream$XEntry
 ```
 
 <details>
@@ -844,596 +932,461 @@ graph TD
   "edges": [
     {
       "relation": "calls",
-      "source": "javax.swing.JEditorPane",
-      "details": "setCharsetFromContentTypeParameters(java.lang.String) -> findValue(java.lang.String)",
-      "target": "javax.swing.JEditorPane$HeaderParser"
+      "source": "java.util.zip.GZIPOutputStream",
+      "details": "write(byte[],int,int) -> write(byte[],int,int)",
+      "target": "java.util.zip.DeflaterOutputStream"
     },
     {
-      "source": "javax.swing.JEditorPane",
+      "source": "java.util.zip.GZIPOutputStream",
       "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$JEditorPaneAccessibleHypertextSupport"
+      "target": "java.util.zip.DeflaterOutputStream"
     },
     {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$JEditorPaneAccessibleHypertextSupport$1"
+      "relation": "calls",
+      "source": "java.util.zip.ZipOutputStream",
+      "details": "close() -> close()",
+      "target": "java.util.zip.DeflaterOutputStream"
     },
     {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$AccessibleJEditorPaneHTML"
+      "relation": "calls",
+      "source": "java.util.zip.ZipOutputStream",
+      "details": "closeEntry() -> deflate()",
+      "target": "java.util.zip.DeflaterOutputStream"
     },
     {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PlainEditorKit$PlainParagraph$LogicalView"
+      "relation": "calls",
+      "source": "java.util.zip.ZipOutputStream",
+      "details": "write(byte[],int,int) -> write(byte[],int,int)",
+      "target": "java.util.zip.DeflaterOutputStream"
     },
     {
-      "source": "javax.swing.JEditorPane",
+      "source": "java.util.zip.ZipOutputStream",
       "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PageLoader"
+      "target": "java.util.zip.DeflaterOutputStream"
     },
     {
-      "source": "javax.swing.JEditorPane",
+      "source": "java.util.zip.ZipOutputStream",
       "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$HeaderParser"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$JEditorPaneAccessibleHypertextSupport$LinkVector"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PageLoader$1"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PageLoader$2"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$AccessibleJEditorPane"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$JEditorPaneAccessibleHypertextSupport$HTMLLink"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PageLoader$3"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PlainEditorKit"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$1"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$2"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$3"
-    },
-    {
-      "source": "javax.swing.JEditorPane",
-      "relation": "depends_on",
-      "target": "javax.swing.JEditorPane$PlainEditorKit$PlainParagraph"
+      "target": "java.util.zip.ZipOutputStream$XEntry"
     }
   ],
   "nodes": [
     {
-      "simpleName": "JEditorPane",
+      "simpleName": "DeflaterOutputStream",
       "methods": [
         {
-          "simpleName": "addHyperlinkListener",
-          "signature": "addHyperlinkListener(javax.swing.event.HyperlinkListener)",
           "calls": [
-            "javax.swing.event.EventListenerList.add(java.lang.Class,java.util.EventListener)"
-          ]
+            "java.util.zip.DeflaterOutputStream.finish()",
+            "java.util.zip.Deflater.end()",
+            "java.io.OutputStream.close()"
+          ],
+          "simpleName": "close",
+          "signature": "close()"
         },
         {
-          "simpleName": "createDefaultEditorKit",
-          "signature": "createDefaultEditorKit()",
-          "calls": []
-        },
-        {
-          "simpleName": "createEditorKitForContentType",
-          "signature": "createEditorKitForContentType(java.lang.String)",
           "calls": [
-            "javax.swing.JEditorPane.getKitRegisty()",
-            "java.util.Hashtable.get(java.lang.Object)",
-            "java.util.Hashtable.get(java.lang.Object)",
-            "javax.swing.JEditorPane.getKitTypeRegistry()",
-            "java.util.Hashtable.get(java.lang.Object)",
-            "javax.swing.JEditorPane.getKitLoaderRegistry()",
-            "sun.reflect.misc.ReflectUtil.checkPackageAccess(java.lang.String)",
-            "java.lang.ClassLoader.loadClass(java.lang.String)",
-            "SwingUtilities.loadSystemClass(java.lang.String)",
-            "java.lang.Class.newInstance()",
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)",
-            "javax.swing.text.EditorKit.clone()"
-          ]
+            "java.util.zip.Deflater.deflate(byte[],int,int)",
+            "java.io.OutputStream.write(byte[],int,int)"
+          ],
+          "simpleName": "deflate",
+          "signature": "deflate()"
         },
         {
-          "simpleName": "fireHyperlinkUpdate",
-          "signature": "fireHyperlinkUpdate(javax.swing.event.HyperlinkEvent)",
           "calls": [
-            "javax.swing.event.EventListenerList.getListenerList()",
-            "javax.swing.event.HyperlinkListener.hyperlinkUpdate(javax.swing.event.HyperlinkEvent)"
-          ]
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.Deflater.finish()",
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.DeflaterOutputStream.deflate()"
+          ],
+          "simpleName": "finish",
+          "signature": "finish()"
         },
         {
-          "simpleName": "getAccessibleContext",
-          "signature": "getAccessibleContext()",
           "calls": [
-            "javax.swing.JEditorPane.getEditorKit()",
-            "java.lang.Object.getClass()",
-            "java.lang.Object.getClass()"
-          ]
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.Deflater.deflate(byte[],int,int)",
+            "java.io.OutputStream.write(byte[],int,int)",
+            "java.io.OutputStream.flush()"
+          ],
+          "simpleName": "flush",
+          "signature": "flush()"
         },
         {
-          "simpleName": "getAsynchronousLoadPriority",
-          "signature": "getAsynchronousLoadPriority(javax.swing.text.Document)",
           "calls": [
-            "javax.swing.text.AbstractDocument.getAsynchronousLoadPriority()"
-          ]
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.Deflater.setInput(byte[],int,int)",
+            "java.util.zip.Deflater.needsInput()",
+            "java.util.zip.DeflaterOutputStream.deflate()"
+          ],
+          "simpleName": "write",
+          "signature": "write(byte[],int,int)"
         },
         {
-          "simpleName": "getContentType",
-          "signature": "getContentType()",
           "calls": [
-            "javax.swing.text.EditorKit.getContentType()"
-          ]
-        },
-        {
-          "simpleName": "getEditorKit",
-          "signature": "getEditorKit()",
-          "calls": [
-            "javax.swing.JEditorPane.createDefaultEditorKit()"
-          ]
-        },
-        {
-          "simpleName": "getEditorKitClassNameForContentType",
-          "signature": "getEditorKitClassNameForContentType(java.lang.String)",
-          "calls": [
-            "java.util.Hashtable.get(java.lang.Object)",
-            "javax.swing.JEditorPane.getKitTypeRegistry()"
-          ]
-        },
-        {
-          "simpleName": "getEditorKitForContentType",
-          "signature": "getEditorKitForContentType(java.lang.String)",
-          "calls": [
-            "java.util.Hashtable.get(java.lang.Object)",
-            "javax.swing.JEditorPane.createEditorKitForContentType(java.lang.String)",
-            "javax.swing.JEditorPane.setEditorKitForContentType(java.lang.String,javax.swing.text.EditorKit)",
-            "javax.swing.JEditorPane.createDefaultEditorKit()"
-          ]
-        },
-        {
-          "simpleName": "getHyperlinkListeners",
-          "signature": "getHyperlinkListeners()",
-          "calls": [
-            "javax.swing.event.EventListenerList.getListeners(java.lang.Class)"
-          ]
-        },
-        {
-          "simpleName": "getKitLoaderRegistry",
-          "signature": "getKitLoaderRegistry()",
-          "calls": [
-            "javax.swing.JEditorPane.loadDefaultKitsIfNecessary()",
-            "SwingUtilities.appContextGet(java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "getKitRegisty",
-          "signature": "getKitRegisty()",
-          "calls": [
-            "SwingUtilities.appContextGet(java.lang.Object)",
-            "SwingUtilities.appContextPut(java.lang.Object,java.util.Hashtable)"
-          ]
-        },
-        {
-          "simpleName": "getKitTypeRegistry",
-          "signature": "getKitTypeRegistry()",
-          "calls": [
-            "javax.swing.JEditorPane.loadDefaultKitsIfNecessary()",
-            "SwingUtilities.appContextGet(java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "getPage",
-          "signature": "getPage()",
-          "calls": [
-            "javax.swing.text.Document.getProperty(java.lang.Object)",
-            "javax.swing.text.JTextComponent.getDocument()"
-          ]
-        },
-        {
-          "simpleName": "getPostData",
-          "signature": "getPostData()",
-          "calls": [
-            "javax.swing.text.Document.getProperty(java.lang.Object)",
-            "javax.swing.text.JTextComponent.getDocument()"
-          ]
-        },
-        {
-          "simpleName": "getPreferredSize",
-          "signature": "getPreferredSize()",
-          "calls": [
-            "javax.swing.JComponent.getPreferredSize()",
-            "SwingUtilities.getUnwrappedParent(javax.swing.JEditorPane)",
-            "javax.swing.text.JTextComponent.getUI()",
-            "javax.swing.JEditorPane.getScrollableTracksViewportWidth()",
-            "javax.swing.JViewport.getWidth()",
-            "javax.swing.plaf.ComponentUI.getMinimumSize(javax.swing.JComponent)",
-            "javax.swing.JEditorPane.getScrollableTracksViewportHeight()",
-            "javax.swing.JViewport.getHeight()",
-            "javax.swing.plaf.ComponentUI.getMinimumSize(javax.swing.JComponent)"
-          ]
-        },
-        {
-          "simpleName": "getScrollableTracksViewportHeight",
-          "signature": "getScrollableTracksViewportHeight()",
-          "calls": [
-            "SwingUtilities.getUnwrappedParent(javax.swing.JEditorPane)",
-            "javax.swing.text.JTextComponent.getUI()",
-            "javax.swing.JViewport.getHeight()",
-            "javax.swing.plaf.ComponentUI.getMinimumSize(javax.swing.JComponent)",
-            "javax.swing.plaf.ComponentUI.getMaximumSize(javax.swing.JComponent)"
-          ]
-        },
-        {
-          "simpleName": "getScrollableTracksViewportWidth",
-          "signature": "getScrollableTracksViewportWidth()",
-          "calls": [
-            "SwingUtilities.getUnwrappedParent(javax.swing.JEditorPane)",
-            "javax.swing.text.JTextComponent.getUI()",
-            "javax.swing.JViewport.getWidth()",
-            "javax.swing.plaf.ComponentUI.getMinimumSize(javax.swing.JComponent)",
-            "javax.swing.plaf.ComponentUI.getMaximumSize(javax.swing.JComponent)"
-          ]
-        },
-        {
-          "simpleName": "getStream",
-          "signature": "getStream(java.net.URL)",
-          "calls": [
-            "java.net.URL.openConnection()",
-            "java.net.HttpURLConnection.setInstanceFollowRedirects(boolean)",
-            "javax.swing.JEditorPane.getPostData()",
-            "javax.swing.JEditorPane.handlePostData(java.net.HttpURLConnection,java.lang.Object)",
-            "java.net.HttpURLConnection.getResponseCode()",
-            "java.net.URLConnection.getHeaderField(java.lang.String)",
-            "java.lang.String.startsWith(java.lang.String,int)",
-            "javax.swing.JEditorPane.getStream(java.net.URL)",
-            "SwingUtilities.isEventDispatchThread()",
-            "javax.swing.JEditorPane.handleConnectionProperties(java.net.URLConnection)",
-            "SwingUtilities.invokeAndWait(javax.swing.JEditorPane$3)",
-            "java.lang.Object.java.lang.Object()",
-            "javax.swing.JEditorPane.handleConnectionProperties(java.net.URLConnection)",
-            "java.net.URLConnection.getInputStream()"
-          ]
-        },
-        {
-          "simpleName": "getText",
-          "signature": "getText()",
-          "calls": [
-            "javax.swing.text.JTextComponent.write(java.io.Writer)",
-            "java.io.StringWriter.toString()"
-          ]
-        },
-        {
-          "simpleName": "getUIClassID",
-          "signature": "getUIClassID()",
-          "calls": []
-        },
-        {
-          "simpleName": "handleConnectionProperties",
-          "signature": "handleConnectionProperties(java.net.URLConnection)",
-          "calls": [
-            "java.net.URLConnection.getContentType()",
-            "javax.swing.JEditorPane.setContentType(java.lang.String)",
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)",
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)",
-            "java.net.URLConnection.getURL()",
-            "java.net.URLConnection.getContentEncoding()",
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "handlePostData",
-          "signature": "handlePostData(java.net.HttpURLConnection,java.lang.Object)",
-          "calls": [
-            "java.net.URLConnection.setDoOutput(boolean)",
-            "java.net.URLConnection.setRequestProperty(java.lang.String,java.lang.String)",
-            "java.net.URLConnection.getOutputStream()",
-            "java.io.DataOutputStream.writeBytes(java.lang.String)",
-            "java.io.FilterOutputStream.close()"
-          ]
-        },
-        {
-          "simpleName": "initializeModel",
-          "signature": "initializeModel(javax.swing.text.EditorKit,java.net.URL)",
-          "calls": [
-            "javax.swing.text.EditorKit.createDefaultDocument()",
-            "java.util.Hashtable.keys()",
-            "java.util.Enumeration.hasMoreElements()",
-            "java.util.Enumeration.nextElement()",
-            "javax.swing.text.Document.putProperty(java.lang.Object,java.lang.Object)",
-            "java.util.Hashtable.get(java.lang.Object)",
-            "java.util.Hashtable.clear()",
-            "javax.swing.text.Document.getProperty(java.lang.Object)",
-            "javax.swing.text.Document.putProperty(java.lang.Object,java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "loadDefaultKitsIfNecessary",
-          "signature": "loadDefaultKitsIfNecessary()",
-          "calls": [
-            "SwingUtilities.appContextGet(java.lang.Object)",
-            "java.util.Map.size()",
-            "java.util.Map.put(java.lang.Object,java.lang.Object)",
-            "java.util.Map.put(java.lang.Object,java.lang.Object)",
-            "java.util.Map.put(java.lang.Object,java.lang.Object)",
-            "java.util.Map.put(java.lang.Object,java.lang.Object)",
-            "SwingUtilities.appContextPut(java.lang.Object,java.util.Hashtable)",
-            "SwingUtilities.appContextPut(java.lang.Object,java.util.Hashtable)",
-            "java.util.Map.keySet()",
-            "javax.swing.JEditorPane.registerEditorKitForContentType(java.lang.String,java.lang.String)",
-            "java.util.Map.get(java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "paramString",
-          "signature": "paramString()",
-          "calls": [
-            "java.lang.Object.toString()",
-            "java.util.Hashtable.toString()",
-            "javax.swing.text.JTextComponent.paramString()"
-          ]
-        },
-        {
-          "simpleName": "read",
-          "signature": "read(java.io.InputStream,java.lang.Object)",
-          "calls": [
-            "javax.swing.text.JTextComponent.setDocument(javax.swing.text.Document)",
-            "javax.swing.JEditorPane.read(java.io.InputStream,javax.swing.text.Document)",
-            "javax.swing.JComponent.getClientProperty(java.lang.Object)",
-            "javax.swing.text.JTextComponent.read(java.io.Reader,java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "read",
-          "signature": "read(java.io.InputStream,javax.swing.text.Document)",
-          "calls": [
-            "java.lang.Boolean.equals(java.lang.Object)",
-            "javax.swing.text.Document.getProperty(java.lang.Object)",
-            "java.io.InputStream.mark(int)",
-            "javax.swing.JComponent.getClientProperty(java.lang.Object)",
-            "javax.swing.text.EditorKit.read(java.io.Reader,javax.swing.text.Document,int)",
-            "java.lang.Throwable.getMessage()",
-            "javax.swing.text.ChangedCharSetException.getCharSetSpec()",
-            "javax.swing.text.ChangedCharSetException.keyEqualsCharSet()",
-            "javax.swing.JComponent.putClientProperty(java.lang.Object,java.lang.Object)",
-            "javax.swing.JEditorPane.setCharsetFromContentTypeParameters(java.lang.String)",
-            "java.io.InputStream.reset()",
-            "java.io.InputStream.close()",
-            "javax.swing.text.Document.getProperty(java.lang.Object)",
-            "java.net.URL.openConnection()",
-            "java.net.URLConnection.getInputStream()",
-            "javax.swing.text.Document.remove(int,int)",
-            "javax.swing.text.Document.getLength()",
-            "javax.swing.text.Document.putProperty(java.lang.Object,java.lang.Object)",
-            "java.lang.Boolean.valueOf(boolean)",
-            "javax.swing.JEditorPane.read(java.io.InputStream,javax.swing.text.Document)"
-          ]
-        },
-        {
-          "simpleName": "registerEditorKitForContentType",
-          "signature": "registerEditorKitForContentType(java.lang.String,java.lang.String)",
-          "calls": [
-            "javax.swing.JEditorPane.registerEditorKitForContentType(java.lang.String,java.lang.String,java.lang.ClassLoader)",
-            "java.lang.Thread.getContextClassLoader()",
-            "java.lang.Thread.currentThread()"
-          ]
-        },
-        {
-          "simpleName": "registerEditorKitForContentType",
-          "signature": "registerEditorKitForContentType(java.lang.String,java.lang.String,java.lang.ClassLoader)",
-          "calls": [
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)",
-            "javax.swing.JEditorPane.getKitTypeRegistry()",
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)",
-            "javax.swing.JEditorPane.getKitLoaderRegistry()",
-            "java.util.Hashtable.remove(java.lang.Object)",
-            "javax.swing.JEditorPane.getKitLoaderRegistry()",
-            "java.util.Hashtable.remove(java.lang.Object)",
-            "javax.swing.JEditorPane.getKitRegisty()"
-          ]
-        },
-        {
-          "simpleName": "removeHyperlinkListener",
-          "signature": "removeHyperlinkListener(javax.swing.event.HyperlinkListener)",
-          "calls": [
-            "javax.swing.event.EventListenerList.remove(java.lang.Class,java.util.EventListener)"
-          ]
-        },
-        {
-          "simpleName": "replaceSelection",
-          "signature": "replaceSelection(java.lang.String)",
-          "calls": [
-            "javax.swing.text.JTextComponent.isEditable()",
-            "UIManager.getLookAndFeel()",
-            "javax.swing.JEditorPane.getEditorKit()",
-            "javax.swing.text.JTextComponent.getDocument()",
-            "javax.swing.text.JTextComponent.getCaret()",
-            "javax.swing.text.JTextComponent.saveComposedText(int)",
-            "javax.swing.text.Caret.getDot()",
-            "java.lang.Math.min(int,int)",
-            "javax.swing.text.Caret.getDot()",
-            "javax.swing.text.Caret.getMark()",
-            "java.lang.Math.max(int,int)",
-            "javax.swing.text.Caret.getDot()",
-            "javax.swing.text.Caret.getMark()",
-            "javax.swing.text.AbstractDocument.replace(int,int,java.lang.String,javax.swing.text.AttributeSet)",
-            "javax.swing.text.StyledEditorKit.getInputAttributes()",
-            "javax.swing.text.Document.remove(int,int)",
-            "java.lang.String.length()",
-            "javax.swing.text.Document.insertString(int,java.lang.String,javax.swing.text.AttributeSet)",
-            "javax.swing.text.StyledEditorKit.getInputAttributes()",
-            "javax.swing.text.JTextComponent.restoreComposedText()",
-            "UIManager.getLookAndFeel()",
-            "javax.swing.text.JTextComponent.replaceSelection(java.lang.String)"
-          ]
-        },
-        {
-          "simpleName": "scrollToReference",
-          "signature": "scrollToReference(java.lang.String)",
-          "calls": [
-            "javax.swing.text.JTextComponent.getDocument()",
-            "javax.swing.text.html.HTMLDocument.getIterator(javax.swing.text.html.HTML$Tag)",
-            "javax.swing.text.html.HTMLDocument$Iterator.isValid()",
-            "javax.swing.text.html.HTMLDocument$Iterator.next()",
-            "javax.swing.text.html.HTMLDocument$Iterator.getAttributes()",
-            "javax.swing.text.AttributeSet.getAttribute(java.lang.Object)",
-            "java.lang.String.equals(java.lang.Object)",
-            "javax.swing.text.html.HTMLDocument$Iterator.getStartOffset()",
-            "javax.swing.text.JTextComponent.modelToView(int)",
-            "javax.swing.JComponent.getVisibleRect()",
-            "javax.swing.JComponent.scrollRectToVisible(java.awt.Rectangle)",
-            "javax.swing.text.JTextComponent.setCaretPosition(int)",
-            "UIManager.getLookAndFeel()"
-          ]
-        },
-        {
-          "simpleName": "setCharsetFromContentTypeParameters",
-          "signature": "setCharsetFromContentTypeParameters(java.lang.String)",
-          "calls": [
-            "java.lang.String.indexOf(int)",
-            "java.lang.String.length()",
-            "java.lang.String.substring(int)",
-            "java.lang.String.length()",
-            "javax.swing.JEditorPane$HeaderParser.findValue(java.lang.String)",
-            "javax.swing.JComponent.putClientProperty(java.lang.Object,java.lang.Object)",
-            "java.io.PrintStream.println(java.lang.String)",
-            "java.lang.Throwable.printStackTrace()"
-          ]
-        },
-        {
-          "simpleName": "setContentType",
-          "signature": "setContentType(java.lang.String)",
-          "calls": [
-            "java.lang.String.indexOf(int)",
-            "java.lang.String.substring(int)",
-            "java.lang.String.trim()",
-            "java.lang.String.substring(int,int)",
-            "java.lang.String.startsWith(java.lang.String)",
-            "java.lang.String.toLowerCase()",
-            "javax.swing.JEditorPane.setCharsetFromContentTypeParameters(java.lang.String)",
-            "java.lang.String.equals(java.lang.Object)",
-            "javax.swing.text.EditorKit.getContentType()",
-            "javax.swing.JEditorPane.getEditorKitForContentType(java.lang.String)",
-            "javax.swing.JEditorPane.setEditorKit(javax.swing.text.EditorKit)"
-          ]
-        },
-        {
-          "simpleName": "setEditorKit",
-          "signature": "setEditorKit(javax.swing.text.EditorKit)",
-          "calls": [
-            "javax.swing.text.EditorKit.deinstall(javax.swing.JEditorPane)",
-            "javax.swing.text.EditorKit.install(javax.swing.JEditorPane)",
-            "javax.swing.text.JTextComponent.setDocument(javax.swing.text.Document)",
-            "javax.swing.text.EditorKit.createDefaultDocument()",
-            "java.awt.Component.firePropertyChange(java.lang.String,java.lang.Object,java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "setEditorKitForContentType",
-          "signature": "setEditorKitForContentType(java.lang.String,javax.swing.text.EditorKit)",
-          "calls": [
-            "java.util.Hashtable.put(java.lang.Object,java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "setPage",
-          "signature": "setPage(java.lang.String)",
-          "calls": [
-            "javax.swing.JEditorPane.setPage(java.net.URL)"
-          ]
-        },
-        {
-          "simpleName": "setPage",
-          "signature": "setPage(java.net.URL)",
-          "calls": [
-            "javax.swing.JEditorPane.getPage()",
-            "java.net.URL.equals(java.lang.Object)",
-            "java.net.URL.getRef()",
-            "javax.swing.JComponent.scrollRectToVisible(java.awt.Rectangle)",
-            "javax.swing.JEditorPane.getPostData()",
-            "java.net.URL.sameFile(java.net.URL)",
-            "javax.swing.JEditorPane.getAsynchronousLoadPriority(javax.swing.text.Document)",
-            "javax.swing.text.JTextComponent.getDocument()",
-            "javax.swing.JEditorPane.getStream(java.net.URL)",
-            "javax.swing.JEditorPane.initializeModel(javax.swing.text.EditorKit,java.net.URL)",
-            "javax.swing.JEditorPane.getAsynchronousLoadPriority(javax.swing.text.Document)",
-            "javax.swing.text.JTextComponent.setDocument(javax.swing.text.Document)",
-            "javax.swing.SwingWorker.execute()",
-            "javax.swing.JEditorPane.read(java.io.InputStream,javax.swing.text.Document)",
-            "javax.swing.text.JTextComponent.setDocument(javax.swing.text.Document)",
-            "javax.swing.SwingWorker.cancel(boolean)",
-            "javax.swing.SwingWorker.execute()",
-            "java.net.URL.getRef()",
-            "javax.swing.JEditorPane.scrollToReference(java.lang.String)",
-            "SwingUtilities.invokeLater(javax.swing.JEditorPane$2)",
-            "java.lang.Object.java.lang.Object()",
-            "javax.swing.JEditorPane.scrollToReference(java.lang.String)",
-            "javax.swing.text.Document.putProperty(java.lang.Object,java.lang.Object)",
-            "javax.swing.text.JTextComponent.getDocument()",
-            "java.awt.Component.firePropertyChange(java.lang.String,java.lang.Object,java.lang.Object)"
-          ]
-        },
-        {
-          "simpleName": "setText",
-          "signature": "setText(java.lang.String)",
-          "calls": [
-            "javax.swing.text.JTextComponent.getDocument()",
-            "javax.swing.text.Document.remove(int,int)",
-            "javax.swing.text.Document.getLength()",
-            "java.lang.String.equals(java.lang.Object)",
-            "javax.swing.JEditorPane.getEditorKit()",
-            "javax.swing.text.EditorKit.read(java.io.Reader,javax.swing.text.Document,int)",
-            "UIManager.getLookAndFeel()",
-            "UIManager.getLookAndFeel()"
-          ]
-        },
-        {
-          "simpleName": "writeObject",
-          "signature": "writeObject(java.io.ObjectOutputStream)",
-          "calls": [
-            "java.io.ObjectOutputStream.defaultWriteObject()",
-            "java.lang.String.equals(java.lang.Object)",
-            "javax.swing.JEditorPane.getUIClassID()",
-            "JComponent.getWriteObjCounter(javax.swing.JEditorPane)",
-            "JComponent.setWriteObjCounter(javax.swing.JEditorPane,byte)",
-            "javax.swing.plaf.ComponentUI.installUI(javax.swing.JComponent)"
-          ]
+            "java.util.zip.DeflaterOutputStream.write(byte[],int,int)"
+          ],
+          "simpleName": "write",
+          "signature": "write(int)"
         }
       ],
-      "id": "javax.swing.JEditorPane"
+      "id": "java.util.zip.DeflaterOutputStream"
+    },
+    {
+      "simpleName": "GZIPOutputStream",
+      "methods": [
+        {
+          "calls": [
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.Deflater.finish()",
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.Deflater.deflate(byte[],int,int)",
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.GZIPOutputStream.writeTrailer(byte[],int)",
+            "java.io.OutputStream.write(byte[],int,int)",
+            "java.io.OutputStream.write(byte[],int,int)",
+            "java.util.zip.GZIPOutputStream.writeTrailer(byte[],int)",
+            "java.io.OutputStream.write(byte[])"
+          ],
+          "simpleName": "finish",
+          "signature": "finish()"
+        },
+        {
+          "calls": [
+            "java.util.zip.DeflaterOutputStream.write(byte[],int,int)",
+            "java.util.zip.CRC32.update(byte[],int,int)"
+          ],
+          "simpleName": "write",
+          "signature": "write(byte[],int,int)"
+        },
+        {
+          "calls": [
+            "java.io.OutputStream.write(byte[])"
+          ],
+          "simpleName": "writeHeader",
+          "signature": "writeHeader()"
+        },
+        {
+          "calls": [
+            "java.util.zip.GZIPOutputStream.writeShort(int,byte[],int)",
+            "java.util.zip.GZIPOutputStream.writeShort(int,byte[],int)"
+          ],
+          "simpleName": "writeInt",
+          "signature": "writeInt(int,byte[],int)"
+        },
+        {
+          "calls": [],
+          "simpleName": "writeShort",
+          "signature": "writeShort(int,byte[],int)"
+        },
+        {
+          "calls": [
+            "java.util.zip.GZIPOutputStream.writeInt(int,byte[],int)",
+            "java.util.zip.CRC32.getValue()",
+            "java.util.zip.GZIPOutputStream.writeInt(int,byte[],int)",
+            "java.util.zip.Deflater.getTotalIn()"
+          ],
+          "simpleName": "writeTrailer",
+          "signature": "writeTrailer(byte[],int)"
+        }
+      ],
+      "id": "java.util.zip.GZIPOutputStream"
+    },
+    {
+      "simpleName": "ZipOutputStream",
+      "methods": [
+        {
+          "calls": [
+            "java.util.zip.DeflaterOutputStream.close()"
+          ],
+          "simpleName": "close",
+          "signature": "close()"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.ensureOpen()",
+            "java.util.zip.Deflater.finish()",
+            "java.util.zip.Deflater.finished()",
+            "java.util.zip.DeflaterOutputStream.deflate()",
+            "java.util.zip.Deflater.getBytesRead()",
+            "java.util.zip.Deflater.getBytesRead()",
+            "java.util.zip.Deflater.getBytesWritten()",
+            "java.util.zip.Deflater.getBytesWritten()",
+            "java.util.zip.CRC32.getValue()",
+            "java.lang.Long.toHexString(long)",
+            "java.lang.Long.toHexString(long)",
+            "java.util.zip.CRC32.getValue()",
+            "java.util.zip.Deflater.getBytesRead()",
+            "java.util.zip.Deflater.getBytesWritten()",
+            "java.util.zip.CRC32.getValue()",
+            "java.util.zip.ZipOutputStream.writeEXT(java.util.zip.ZipEntry)",
+            "java.util.zip.Deflater.reset()",
+            "java.util.zip.CRC32.getValue()",
+            "java.lang.Long.toHexString(long)",
+            "java.lang.Long.toHexString(long)",
+            "java.util.zip.CRC32.getValue()",
+            "java.util.zip.CRC32.reset()"
+          ],
+          "simpleName": "closeEntry",
+          "signature": "closeEntry()"
+        },
+        {
+          "calls": [],
+          "simpleName": "ensureOpen",
+          "signature": "ensureOpen()"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.ensureOpen()",
+            "java.util.zip.ZipOutputStream.closeEntry()",
+            "java.util.zip.ZipOutputStream.writeCEN(java.util.zip.ZipOutputStream$XEntry)",
+            "java.util.zip.ZipOutputStream.writeEND(long,long)"
+          ],
+          "simpleName": "finish",
+          "signature": "finish()"
+        },
+        {
+          "calls": [],
+          "simpleName": "getExtraLen",
+          "signature": "getExtraLen(byte[])"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.ensureOpen()",
+            "java.util.zip.ZipOutputStream.closeEntry()",
+            "java.util.zip.ZipEntry.setTime(long)",
+            "java.lang.System.currentTimeMillis()",
+            "java.util.HashSet.add(java.lang.Object)",
+            "java.util.zip.ZipCoder.isUTF8()",
+            "java.util.Vector.add(java.lang.Object)",
+            "java.util.zip.ZipOutputStream.writeLOC(java.util.zip.ZipOutputStream$XEntry)"
+          ],
+          "simpleName": "putNextEntry",
+          "signature": "putNextEntry(ZipEntry)"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipCoder.getBytes(java.lang.String)"
+          ],
+          "simpleName": "setComment",
+          "signature": "setComment(java.lang.String)"
+        },
+        {
+          "calls": [
+            "java.util.zip.Deflater.setLevel(int)"
+          ],
+          "simpleName": "setLevel",
+          "signature": "setLevel(int)"
+        },
+        {
+          "calls": [],
+          "simpleName": "setMethod",
+          "signature": "setMethod(int)"
+        },
+        {
+          "calls": [],
+          "simpleName": "version",
+          "signature": "version(ZipEntry)"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.ensureOpen()",
+            "java.util.zip.DeflaterOutputStream.write(byte[],int,int)",
+            "java.io.OutputStream.write(byte[],int,int)",
+            "java.util.zip.CRC32.update(byte[],int,int)"
+          ],
+          "simpleName": "write",
+          "signature": "write(byte[],int,int)"
+        },
+        {
+          "calls": [
+            "java.io.OutputStream.write(int)"
+          ],
+          "simpleName": "writeByte",
+          "signature": "writeByte(int)"
+        },
+        {
+          "calls": [
+            "java.io.OutputStream.write(byte[],int,int)"
+          ],
+          "simpleName": "writeBytes",
+          "signature": "writeBytes(byte[],int,int)"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.version(java.util.zip.ZipEntry)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipCoder.getBytes()",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.getExtraLen(byte[])",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipCoder.getBytes()",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.lang.Math.min(int,int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeByte(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeByte(int)",
+            "java.util.zip.ZipOutputStream.writeExtra(byte[])",
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)",
+            "java.lang.Math.min(int,int)"
+          ],
+          "simpleName": "writeCEN",
+          "signature": "writeCEN(java.util.zip.ZipOutputStream$XEntry)"
+        },
+        {
+          "calls": [
+            "java.util.Vector.size()",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.Vector.size()",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.Vector.size()",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)"
+          ],
+          "simpleName": "writeEND",
+          "signature": "writeEND(long,long)"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)"
+          ],
+          "simpleName": "writeEXT",
+          "signature": "writeEXT(ZipEntry)"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)",
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)",
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)"
+          ],
+          "simpleName": "writeExtra",
+          "signature": "writeExtra(byte[])"
+        },
+        {
+          "calls": [
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)"
+          ],
+          "simpleName": "writeInt",
+          "signature": "writeInt(long)"
+        },
+        {
+          "calls": [
+            "java.util.zip.ZipOutputStream.getExtraLen(byte[])",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.version(java.util.zip.ZipEntry)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.version(java.util.zip.ZipEntry)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipCoder.getBytes()",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeBytes(byte[],int,int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeLong(long)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeShort(int)",
+            "java.util.zip.ZipOutputStream.writeByte(int)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeInt(long)",
+            "java.util.zip.ZipOutputStream.writeExtra(byte[])"
+          ],
+          "simpleName": "writeLOC",
+          "signature": "writeLOC(java.util.zip.ZipOutputStream$XEntry)"
+        },
+        {
+          "calls": [
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)"
+          ],
+          "simpleName": "writeLong",
+          "signature": "writeLong(long)"
+        },
+        {
+          "calls": [
+            "java.io.OutputStream.write(int)",
+            "java.io.OutputStream.write(int)"
+          ],
+          "simpleName": "writeShort",
+          "signature": "writeShort(int)"
+        }
+      ],
+      "id": "java.util.zip.ZipOutputStream"
     }
   ]
 }
@@ -1441,353 +1394,512 @@ graph TD
 </details>
 
 ## Agent Thought
-The dependency graphs for both Mainline and Target are identical. This confirms that the class structure and method calls are the same.
+The dependency graphs for both Mainline and Target are identical. This confirms the file structure is the same.
 
-Now, let's examine the `read` method in detail using `get_class_context` to understand the specific changes required.
+Now, let's examine the specific code changes using `get_class_context`. I'll focus on the `finish()` methods in each of the modified classes, as that's where the core logic changes seem to be.
 
 ### Tool Calls
-- **get_class_context**: `{'file_path': 'src/java.desktop/share/classes/javax/swing/JEditorPane.java', 'focus_method': 'read'}`
+- **get_class_context**: `{'focus_method': 'finish', 'file_path': 'jdk/src/share/classes/java/util/zip/DeflaterOutputStream.java'}`
+- **get_class_context**: `{'focus_method': 'finish', 'file_path': 'jdk/src/share/classes/java/util/zip/GZIPOutputStream.java'}`
+- **get_class_context**: `{'focus_method': 'closeEntry', 'file_path': 'jdk/src/share/classes/java/util/zip/ZipOutputStream.java'}`
 
 ## Tool Output (get_class_context)
 ```java
-package javax.swing;
+package java.util.zip;
 
-@java.beans.JavaBean(defaultProperty = "UIClassID", description = "A text component to edit various types of content.")
-@javax.swing.SwingContainer(false)
-@java.lang.SuppressWarnings("serial")
-public class JEditorPane extends JTextComponent {
-    // --- variables ---------------------------------------
-private javax.swing.SwingWorker<java.net.URL, java.lang.Object> pageLoader;
+public class GZIPOutputStream extends DeflaterOutputStream {
     /**
- * Current content binding of the editor.
+ * CRC-32 of uncompressed data.
  */
-private javax.swing.text.EditorKit kit;
-    private boolean isUserSetEditorKit;
-    private java.util.Hashtable<java.lang.String, java.lang.Object> pageProperties;
-    /**
- * Should be kept in sync with javax.swing.text.html.FormView counterpart.
- */
-static final java.lang.String PostDataProperty = "javax.swing.JEditorPane.postdata";
-    /**
- * Table of registered type handlers for this editor.
- */
-private java.util.Hashtable<java.lang.String, javax.swing.text.EditorKit> typeHandlers;
-    /* Private AppContext keys for this class's static variables. */
-private static final java.lang.Object kitRegistryKey = new java.lang.StringBuffer("JEditorPane.kitRegistry");
-    private static final java.lang.Object kitTypeRegistryKey = new java.lang.StringBuffer("JEditorPane.kitTypeRegistry");
-    private static final java.lang.Object kitLoaderRegistryKey = new java.lang.StringBuffer("JEditorPane.kitLoaderRegistry");
-    /**
- *
- * @see #getUIClassID
- * @see #readObject
- */
-private static final java.lang.String uiClassID = "EditorPaneUI";
-    /**
- * Key for a client property used to indicate whether
- * <a href="http://www.w3.org/TR/CSS21/syndata.html#length-units">
- * w3c compliant</a> length units are used for html rendering.
- * <p>
- * By default this is not enabled; to enable
- * it set the client {@link #putClientProperty property} with this name
- * to <code>Boolean.TRUE</code>.
- *
- * @since 1.5
- */
-public static final java.lang.String W3C_LENGTH_UNITS = "JEditorPane.w3cLengthUnits";
-    /**
- * Key for a client property used to indicate whether
- * the default font and foreground color from the component are
- * used if a font or foreground color is not specified in the styled
- * text.
- * <p>
- * The default varies based on the look and feel;
- * to enable it set the client {@link #putClientProperty property} with
- * this name to <code>Boolean.TRUE</code>.
- *
- * @since 1.5
- */
-public static final java.lang.String HONOR_DISPLAY_PROPERTIES = "JEditorPane.honorDisplayProperties";
-    static final java.util.Map<java.lang.String, java.lang.String> defaultEditorKitMap = new java.util.HashMap<java.lang.String, java.lang.String>(0);
+protected java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+    /* GZIP header magic number. */
+private static final int GZIP_MAGIC = 0x8b1f;
+    /* Trailer size in bytes. */
+private static final int TRAILER_SIZE = 8;
 
-    public void addHyperlinkListener(HyperlinkListener listener) { /* ... */ }
-    protected EditorKit createDefaultEditorKit() { /* ... */ }
-    public static EditorKit createEditorKitForContentType(String type) { /* ... */ }
-    public void fireHyperlinkUpdate(HyperlinkEvent e) { /* ... */ }
-    public AccessibleContext getAccessibleContext() { /* ... */ }
-    private int getAsynchronousLoadPriority(Document doc) { /* ... */ }
-    public String getContentType() { /* ... */ }
-    public EditorKit getEditorKit() { /* ... */ }
-    public static String getEditorKitClassNameForContentType(String type) { /* ... */ }
-    public EditorKit getEditorKitForContentType(String type) { /* ... */ }
-    public HyperlinkListener[] getHyperlinkListeners() { /* ... */ }
-    private static Hashtable getKitLoaderRegistry() { /* ... */ }
-    private static Hashtable getKitRegisty() { /* ... */ }
-    private static Hashtable getKitTypeRegistry() { /* ... */ }
-    public URL getPage() { /* ... */ }
-    private Object getPostData() { /* ... */ }
-    public Dimension getPreferredSize() { /* ... */ }
-    public boolean getScrollableTracksViewportHeight() { /* ... */ }
-    public boolean getScrollableTracksViewportWidth() { /* ... */ }
-    protected InputStream getStream(URL page) { /* ... */ }
-    public String getText() { /* ... */ }
-    public String getUIClassID() { /* ... */ }
-    private void handleConnectionProperties(URLConnection conn) { /* ... */ }
-    private void handlePostData(HttpURLConnection conn, Object postData) { /* ... */ }
-    private Document initializeModel(EditorKit kit, URL page) { /* ... */ }
-    private static void loadDefaultKitsIfNecessary() { /* ... */ }
-    protected String paramString() { /* ... */ }
     // [FOCUS] Full Body
     /**
-     * This method initializes from a stream.  If the kit is
-     * set to be of type <code>HTMLEditorKit</code>, and the
-     * <code>desc</code> parameter is an <code>HTMLDocument</code>,
-     * then it invokes the <code>HTMLEditorKit</code> to initiate
-     * the read. Otherwise it calls the superclass
-     * method which loads the model as plain text.
+     * Finishes writing compressed data to the output stream without closing
+     * the underlying stream. Use this method when applying multiple filters
+     * in succession to the same output stream.
      *
-     * @param in
-     * 		the stream from which to read
-     * @param desc
-     * 		an object describing the stream
      * @exception IOException
-     * 		as thrown by the stream being
-     * 		used to initialize
-     * @see JTextComponent#read
-     * @see #setDocument
+     * 		if an I/O error has occurred
      */
-    public void read(java.io.InputStream in, java.lang.Object desc) throws java.io.IOException {
-        if ((desc instanceof javax.swing.text.html.HTMLDocument) && (kit instanceof javax.swing.text.html.HTMLEditorKit)) {
-            javax.swing.text.html.HTMLDocument hdoc = ((javax.swing.text.html.HTMLDocument) (desc));
-            setDocument(hdoc);
-            read(in, hdoc);
-        } else {
-            java.lang.String charset = ((java.lang.String) (getClientProperty("charset")));
-            java.io.Reader r = (charset != null) ? new java.io.InputStreamReader(in, charset) : new java.io.InputStreamReader(in);
-            super.read(r, desc);
+    public void finish() throws java.io.IOException {
+        if (!def.finished()) {
+            def.finish();
+            while (!def.finished()) {
+                int len = def.deflate(buf, 0, buf.length);
+                if (def.finished() && (len <= (buf.length - java.util.zip.GZIPOutputStream.TRAILER_SIZE))) {
+                    // last deflater buffer. Fit trailer at the end
+                    writeTrailer(buf, len);
+                    len = len + java.util.zip.GZIPOutputStream.TRAILER_SIZE;
+                    out.write(buf, 0, len);
+                    return;
+                }
+                if (len > 0) {
+                    out.write(buf, 0, len);
+                }
+            } 
+            // if we can't fit the trailer at the end of the last
+            // deflater buffer, we write it separately
+            byte[] trailer = new byte[java.util.zip.GZIPOutputStream.TRAILER_SIZE];
+            writeTrailer(trailer, 0);
+            out.write(trailer);
         }
     }
+    public void write(byte[] buf, int off, int len) { /* ... */ }
+    private void writeHeader() { /* ... */ }
+    private void writeInt(int i, byte[] buf, int offset) { /* ... */ }
+    private void writeShort(int s, byte[] buf, int offset) { /* ... */ }
+    private void writeTrailer(byte[] buf, int offset) { /* ... */ }
+}
+
+```
+
+## Tool Output (get_class_context)
+```java
+package java.util.zip;
+
+public class DeflaterOutputStream extends FilterOutputStream {
+    /**
+ * Compressor for this stream.
+ */
+protected java.util.zip.Deflater def;
+    /**
+ * Output buffer for writing compressed data.
+ */
+protected byte[] buf;
+    /**
+ * Indicates that the stream has been closed.
+ */
+private boolean closed = false;
+    private final boolean syncFlush;
+    boolean usesDefaultDeflater = false;
+
+    public void close() { /* ... */ }
+    protected void deflate() { /* ... */ }
     // [FOCUS] Full Body
     /**
-     * This method invokes the <code>EditorKit</code> to initiate a
-     * read.  In the case where a <code>ChangedCharSetException</code>
-     * is thrown this exception will contain the new CharSet.
-     * Therefore the <code>read</code> operation
-     * is then restarted after building a new Reader with the new charset.
+     * Finishes writing compressed data to the output stream without closing
+     * the underlying stream. Use this method when applying multiple filters
+     * in succession to the same output stream.
      *
-     * @param in
-     * 		the inputstream to use
-     * @param doc
-     * 		the document to load
+     * @exception IOException
+     * 		if an I/O error has occurred
      */
-    void read(java.io.InputStream in, javax.swing.text.Document doc) throws java.io.IOException {
-        if (!java.lang.Boolean.TRUE.equals(doc.getProperty("IgnoreCharsetDirective"))) {
-            final int READ_LIMIT = 1024 * 10;
-            in = new java.io.BufferedInputStream(in, READ_LIMIT);
-            in.mark(READ_LIMIT);
-        }
-        java.lang.String charset = ((java.lang.String) (getClientProperty("charset")));
-        try (java.io.Reader r = (charset != null) ? new java.io.InputStreamReader(in, charset) : new java.io.InputStreamReader(in)) {
-            kit.read(r, doc, 0);
-        } catch (javax.swing.text.BadLocationException e) {
-            throw new java.io.IOException(e.getMessage());
-        } catch (javax.swing.text.ChangedCharSetException changedCharSetException) {
-            java.lang.String charSetSpec = changedCharSetException.getCharSetSpec();
-            if (changedCharSetException.keyEqualsCharSet()) {
-                putClientProperty("charset", charSetSpec);
-            } else {
-                setCharsetFromContentTypeParameters(charSetSpec);
-            }
-            try {
-                in.reset();
-            } catch (java.io.IOException exception) {
-                // mark was invalidated
-                in.close();
-                java.net.URL url = ((java.net.URL) (doc.getProperty(javax.swing.text.Document.StreamDescriptionProperty)));
-                if (url != null) {
-                    java.net.URLConnection conn = url.openConnection();
-                    in = conn.getInputStream();
-                } else {
-                    // there is nothing we can do to recover stream
-                    throw changedCharSetException;
-                }
-            }
-            try {
-                doc.remove(0, doc.getLength());
-            } catch (javax.swing.text.BadLocationException e) {
-            }
-            doc.putProperty("IgnoreCharsetDirective", java.lang.Boolean.valueOf(true));
-            read(in, doc);
+    public void finish() throws java.io.IOException {
+        if (!def.finished()) {
+            def.finish();
+            while (!def.finished()) {
+                deflate();
+            } 
         }
     }
-    public static void registerEditorKitForContentType(String type, String classname) { /* ... */ }
-    public static void registerEditorKitForContentType(String type, String classname, ClassLoader loader) { /* ... */ }
-    public void removeHyperlinkListener(HyperlinkListener listener) { /* ... */ }
-    public void replaceSelection(String content) { /* ... */ }
-    public void scrollToReference(String reference) { /* ... */ }
-    private void setCharsetFromContentTypeParameters(String paramlist) { /* ... */ }
-    public void setContentType(String type) { /* ... */ }
-    public void setEditorKit(EditorKit kit) { /* ... */ }
-    public void setEditorKitForContentType(String type, EditorKit k) { /* ... */ }
-    public void setPage(String url) { /* ... */ }
-    public void setPage(URL page) { /* ... */ }
-    public void setText(String t) { /* ... */ }
-    private void writeObject(ObjectOutputStream s) { /* ... */ }
+    public void flush() { /* ... */ }
+    public void write(byte[] b, int off, int len) { /* ... */ }
+    public void write(int b) { /* ... */ }
+}
 
-    class PageLoader extends SwingWorker {
-        /**
- * The stream to load the document with
- */
-java.io.InputStream in;
-        /**
- * URL of the old page that was replaced (for the property change event)
- */
-java.net.URL old;
-        /**
- * URL of the page being loaded (for the property change event)
- */
-java.net.URL page;
-        /**
- * The Document instance to load into. This is cached in case a
- * new Document is created between the time the thread this is created
- * and run.
- */
-javax.swing.text.Document doc;
+```
 
-        protected URL doInBackground() { /* ... */ }
+## Tool Output (get_class_context)
+```java
+package java.util.zip;
+
+public class ZipOutputStream extends DeflaterOutputStream implements ZipConstants {
+    /**
+ * Whether to use ZIP64 for zip files with more than 64k entries.
+ * Until ZIP64 support in zip implementations is ubiquitous, this
+ * system property allows the creation of zip files which can be
+ * read by legacy zip implementations which tolerate "incorrect"
+ * total entry count fields, such as the ones in jdk6, and even
+ * some in jdk7.
+ */
+private static final boolean inhibitZip64 = java.lang.Boolean.parseBoolean(java.security.AccessController.doPrivileged(new GetPropertyAction("jdk.util.zip.inhibitZip64", "false")));
+    private java.util.zip.ZipOutputStream.XEntry current;
+    private java.util.Vector<java.util.zip.ZipOutputStream.XEntry> xentries = new java.util.Vector<>();
+    private java.util.HashSet<java.lang.String> names = new java.util.HashSet<>();
+    private java.util.zip.CRC32 crc = new CRC32();
+    private long written = 0;
+    private long locoff = 0;
+    private byte[] comment;
+    private int method = java.util.zip.ZipOutputStream.DEFLATED;
+    private boolean finished;
+    private boolean closed = false;
+    private final java.util.zip.ZipCoder zc;
+    /**
+ * Compression method for uncompressed (STORED) entries.
+ */
+public static final int STORED = ZipEntry.STORED;
+    /**
+ * Compression method for compressed (DEFLATED) entries.
+ */
+public static final int DEFLATED = ZipEntry.DEFLATED;
+
+    public void close() { /* ... */ }
+    // [FOCUS] Full Body
+    /**
+     * Closes the current ZIP entry and positions the stream for writing
+     * the next entry.
+     *
+     * @exception ZipException
+     * 		if a ZIP format error has occurred
+     * @exception IOException
+     * 		if an I/O error has occurred
+     */
+    public void closeEntry() throws java.io.IOException {
+        ensureOpen();
+        if (current != null) {
+            ZipEntry e = current.entry;
+            switch (e.method) {
+                case java.util.zip.ZipOutputStream.DEFLATED :
+                    def.finish();
+                    while (!def.finished()) {
+                        deflate();
+                    } 
+                    if ((e.flag & 8) == 0) {
+                        // verify size, compressed size, and crc-32 settings
+                        if (e.size != def.getBytesRead()) {
+                            throw new ZipException(((("invalid entry size (expected " + e.size) + " but got ") + def.getBytesRead()) + " bytes)");
+                        }
+                        if (e.csize != def.getBytesWritten()) {
+                            throw new ZipException(((("invalid entry compressed size (expected " + e.csize) + " but got ") + def.getBytesWritten()) + " bytes)");
+                        }
+                        if (e.crc != crc.getValue()) {
+                            throw new ZipException(((("invalid entry CRC-32 (expected 0x" + java.lang.Long.toHexString(e.crc)) + " but got 0x") + java.lang.Long.toHexString(crc.getValue())) + ")");
+                        }
+                    } else {
+                        e.size = def.getBytesRead();
+                        e.csize = def.getBytesWritten();
+                        e.crc = crc.getValue();
+                        writeEXT(e);
+                    }
+                    def.reset();
+                    written += e.csize;
+                    break;
+                case java.util.zip.ZipOutputStream.STORED :
+                    // we already know that both e.size and e.csize are the same
+                    if (e.size != (written - locoff)) {
+                        throw new ZipException(((("invalid entry size (expected " + e.size) + " but got ") + (written - locoff)) + " bytes)");
+                    }
+                    if (e.crc != crc.getValue()) {
+                        throw new ZipException(((("invalid entry crc-32 (expected 0x" + java.lang.Long.toHexString(e.crc)) + " but got 0x") + java.lang.Long.toHexString(crc.getValue())) + ")");
+                    }
+                    break;
+                default :
+                    throw new ZipException("invalid compression method");
+            }
+            crc.reset();
+            current = null;
+        }
     }
+    private void ensureOpen() { /* ... */ }
+    public void finish() { /* ... */ }
+    private int getExtraLen(byte[] extra) { /* ... */ }
+    public void putNextEntry(ZipEntry e) { /* ... */ }
+    public void setComment(String comment) { /* ... */ }
+    public void setLevel(int level) { /* ... */ }
+    public void setMethod(int method) { /* ... */ }
+    private static int version(ZipEntry e) { /* ... */ }
+    public void write(byte[] b, int off, int len) { /* ... */ }
+    private void writeByte(int v) { /* ... */ }
+    private void writeBytes(byte[] b, int off, int len) { /* ... */ }
+    private void writeCEN(XEntry xentry) { /* ... */ }
+    private void writeEND(long off, long len) { /* ... */ }
+    private void writeEXT(ZipEntry e) { /* ... */ }
+    private void writeExtra(byte[] extra) { /* ... */ }
+    private void writeInt(long v) { /* ... */ }
+    private void writeLOC(XEntry xentry) { /* ... */ }
+    private void writeLong(long v) { /* ... */ }
+    private void writeShort(int v) { /* ... */ }
 
-    @java.lang.SuppressWarnings("serial")
-    protected class AccessibleJEditorPane extends AccessibleJTextComponent {
-        public String getAccessibleDescription() { /* ... */ }
-        public AccessibleStateSet getAccessibleStateSet() { /* ... */ }
+    private static class XEntry {
+        final java.util.zip.ZipEntry entry;
+        final long offset;
+
     }
+}
 
-    @java.lang.SuppressWarnings("serial")
-    protected class AccessibleJEditorPaneHTML extends AccessibleJEditorPane {
-        private javax.accessibility.AccessibleContext accessibleContext;
+```
 
-        public Accessible getAccessibleAt(Point p) { /* ... */ }
-        public Accessible getAccessibleChild(int i) { /* ... */ }
-        public int getAccessibleChildrenCount() { /* ... */ }
-        public AccessibleText getAccessibleText() { /* ... */ }
-    }
+## Agent Thought
+Based on the analysis and verification, here's the implementation plan:
 
-    protected class JEditorPaneAccessibleHypertextSupport extends AccessibleJEditorPane implements AccessibleHypertext {
-        javax.swing.JEditorPane.JEditorPaneAccessibleHypertextSupport.LinkVector hyperlinks;
-        boolean linksValid = false;
+### Tool Calls
+- **submit_plan**: `{'compatibility_analysis': {'refactoring_notes': 'No major refactoring detected.', 'missing_dependencies': [], 'java_version_differences': 'No significant Java version differences.'}, 'steps': [{'description': 'Apply changes to DeflaterOutputStream.java: Add try-finally block to ensure def.end() is called.', 'code_snippet': 'try {\n            finish();\n        } finally {\n            if (usesDefaultDeflater)\n                def.end();\n        }', 'step_id': 1.0, 'file_path': 'jdk/src/share/classes/java/util/zip/DeflaterOutputStream.java', 'action': 'MODIFY'}, {'description': 'Apply changes to GZIPOutputStream.java: Add try-catch block to ensure def.end() is called in case of exception.', 'code_snippet': "try {\n            def.finish();\n            while (!def.finished()) {\n                int len = def.deflate(buf, 0, buf.length);\n                if (def.finished() && (len <= (buf.length - TRAILER_SIZE))) {\n                    // last deflater buffer. Fit trailer at the end\n                    writeTrailer(buf, len);\n                    len = len + TRAILER_SIZE;\n                    out.write(buf, 0, len);\n                    return;\n                }\n                if (len > 0)\n                    out.write(buf, 0, len);\n            }\n            // if we can't fit the trailer at the end of the last\n            // deflater buffer, we write it separately\n            byte[] trailer = new byte[TRAILER_SIZE];\n            writeTrailer(trailer, 0);\n            out.write(trailer);\n        } catch (IOException e) {\n            if (usesDefaultDeflater)\n                def.end();\n            throw e;\n        }", 'step_id': 2.0, 'file_path': 'jdk/src/share/classes/java/util/zip/GZIPOutputStream.java', 'action': 'MODIFY'}, {'description': 'Apply changes to ZipOutputStream.java: Add try-catch block to ensure def.end() is called in case of exception.', 'code_snippet': 'try {\n            ZipEntry e = current.entry;\n            switch (e.method) {\n                case DEFLATED -> {\n                    def.finish();\n                    while (!def.finished()) {\n                        deflate();\n                    }\n                    if ((e.flag & 8) == 0) {\n                        // verify size, compressed size, and crc-32 settings\n                        if (e.size != def.getBytesRead()) {\n                            throw new ZipException("invalid entry size (expected " + e.size +\n                                    " but got " + def.getBytesRead() + " bytes)");\n                        }\n                        if (e.csize != def.getBytesWritten()) {\n                            throw new ZipException("invalid entry compressed size (expected " +\n                                    e.csize + " but got " + def.getBytesWritten() + " bytes)");\n                        }\n                        if (e.crc != crc.getValue()) {\n                            throw new ZipException("invalid entry CRC-32 (expected 0x" +\n                                    Long.toHexString(e.crc) + " but got 0x" +\n                                    Long.toHexString(crc.getValue()) + ")");\n                        }\n                    } else {\n                        e.size = def.getBytesRead();\n                        e.csize = def.getBytesWritten();\n                        e.crc = crc.getValue();\n                        writeEXT(e);\n                    }\n                    def.reset();\n                    written += e.csize;\n                }\n                case STORED -> {\n                    // we already know that both e.size and e.csize are the same\n                    if (e.size != written - locoff) {\n                        throw new ZipException("invalid entry size (expected " + e.size +\n                                " but got " + (written - locoff) + " bytes)");\n                    }\n                    if (e.crc != crc.getValue()) {\n                        throw new ZipException("invalid entry crc-32 (expected 0x" +\n                                Long.toHexString(e.crc) + " but got 0x" +\n                                Long.toHexString(crc.getValue()) + ")");\n                    }\n                }\n                default -> throw new ZipException("invalid compression method");\n            }\n            crc.reset();\n            current = null;\n        } catch (IOException e) {\n            if (usesDefaultDeflater && !(e instanceof ZipException))\n                def.end();\n            throw e;\n        }', 'step_id': 3.0, 'file_path': 'jdk/src/share/classes/java/util/zip/ZipOutputStream.java', 'action': 'MODIFY'}, {'description': 'Add new test file CloseDeflaterTest.java.', 'code_snippet': '/*\n * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.\n * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.\n *\n * This code is free software; you can redistribute it and/or modify it\n * under the terms of the GNU General Public License version 2 only, as\n * published by the Free Software Foundation.\n *\n * This code is distributed in the hope that it will be useful, but WITHOUT\n * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or\n * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License\n * version 2 for more details (a copy is included in the LICENSE file that\n * accompanied this code).\n *\n * You should have received a copy of the GNU General Public License version\n * 2 along with this work; if not, write to the Free Software Foundation,\n * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.\n *\n * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA\n * or visit www.oracle.com if you need additional information or have any\n * questions.\n */\n\n/**\n * @test\n * @bug 8193682\n * @summary Test Infinite loop while writing on closed GZipOutputStream , ZipOutputStream and JarOutputStream.\n * @run testng CloseDeflaterTest\n */\nimport java.io.*;\nimport java.util.Random;\nimport java.util.jar.JarOutputStream;\nimport java.util.zip.GZIPOutputStream;\nimport java.util.zip.ZipOutputStream;\nimport java.util.zip.ZipEntry;\n\nimport org.testng.annotations.BeforeTest;\nimport org.testng.annotations.DataProvider;\nimport org.testng.annotations.Test;\nimport static org.testng.Assert.fail;\n\n\npublic class CloseDeflaterTest {\n\n    //number of bytes to write\n    private static final int INPUT_LENGTH= 512;\n    //OutputStream that will throw an exception during a write operation\n    private static OutputStream outStream = new OutputStream() {\n        @Override\n        public void write(byte[] b, int off, int len) throws IOException {\n            //throw exception during write\n            throw new IOException();\n        }\n        @Override\n        public void write(byte b[]) throws IOException {}\n        @Override\n        public void write(int b) throws IOException {}\n    };\n    private static byte[] inputBytes = new byte[INPUT_LENGTH];\n    private static Random rand = new Random();\n\n    @DataProvider(name = "testgzipinput")\n    public Object[][] testGZipInput() {\n        //testGZip will close the GZipOutputStream using close() method when the boolean\n        //useCloseMethod is set to true and finish() method if the value is set to false\n        return new Object[][] {\n                { GZIPOutputStream.class, true },\n                { GZIPOutputStream.class, false },\n        };\n    }\n\n    @DataProvider(name = "testzipjarinput")\n    public Object[][] testZipAndJarInput() {\n        //testZipAndJarInput will perfrom write/closeEntry operations on JarOutputStream when the boolean\n        //useJar is set to true and on ZipOutputStream if the value is set to false\n        return new Object[][] {\n                { JarOutputStream.class, true },\n                { ZipOutputStream.class, false },\n        };\n    }\n\n    @BeforeTest\n    public void before_test()\n    {\n        //add inputBytes array with random bytes to write into Zip\n        rand.nextBytes(inputBytes);\n    }\n\n    //Test for infinite loop by writing bytes to closed GZIPOutputStream\n    @Test(dataProvider = "testgzipinput")\n    public void testGZip(Class<?> type, boolean useCloseMethod) throws IOException {\n        GZIPOutputStream zip = new GZIPOutputStream(outStream);\n        try {\n            zip.write(inputBytes, 0, INPUT_LENGTH);\n            //close zip\n            if(useCloseMethod) {\n                zip.close();\n            } else {\n                zip.finish();\n            }\n        } catch (IOException e) {\n            //expected\n        }\n        for (int i = 0; i < 3; i++) {\n            try {\n                //write on a closed GZIPOutputStream\n                zip.write(inputBytes, 0, INPUT_LENGTH);\n                fail("Deflater closed exception not thrown");\n            } catch (NullPointerException e) {\n                //expected , Deflater has been closed exception\n            }\n        }\n    }\n\n    //Test for infinite loop by writing bytes to closed ZipOutputStream/JarOutputStream\n    @Test(dataProvider = "testzipjarinput")\n    public void testZipCloseEntry(Class<?> type,boolean useJar) throws IOException {\n        ZipOutputStream zip = null;\n        if(useJar) {\n            zip = new JarOutputStream(outStream);\n        } else {\n            zip = new ZipOutputStream(outStream);\n        }\n        try {\n            zip.putNextEntry(new ZipEntry(""));\n        } catch (IOException e) {\n            //expected to throw IOException since putNextEntry calls write method\n        }\n        try {\n            zip.write(inputBytes, 0, INPUT_LENGTH);\n            //close zip entry\n            zip.closeEntry();\n        } catch (IOException e) {\n            //expected\n        }\n        for (int i = 0; i < 3; i++) {\n            try {\n                //write on a closed ZipOutputStream\n                zip.write(inputBytes, 0, INPUT_LENGTH);\n                fail("Deflater closed exception not thrown");\n            } catch (NullPointerException e) {\n                //expected , Deflater has been closed exception\n            }\n        }\n    }\n\n}\n', 'step_id': 4.0, 'file_path': 'test/jdk/java/util/zip/CloseDeflaterTest.java', 'action': 'CREATE'}], 'file_mappings': [{'confidence': 0.95, 'source_file': 'src/java.base/share/classes/java/util/zip/DeflaterOutputStream.java', 'reasoning': 'File content and structure are highly similar.', 'target_file': 'jdk/src/share/classes/java/util/zip/DeflaterOutputStream.java'}, {'source_file': 'src/java.base/share/classes/java/util/zip/GZIPOutputStream.java', 'reasoning': 'File content and structure are highly similar.', 'confidence': 0.95, 'target_file': 'jdk/src/share/classes/java/util/zip/GZIPOutputStream.java'}, {'confidence': 0.95, 'reasoning': 'File content and structure are highly similar.', 'source_file': 'src/java.base/share/classes/java/util/zip/ZipOutputStream.java', 'target_file': 'jdk/src/share/classes/java/util/zip/ZipOutputStream.java'}, {'confidence': 0.95, 'source_file': 'test/jdk/java/util/zip/CloseDeflaterTest.java', 'reasoning': 'New test file, adding it to the target.', 'target_file': 'test/jdk/java/util/zip/CloseDeflaterTest.java'}], 'patch_intent': 'Backport fix for potential infinite loop when writing to closed DeflaterOutputStream, GZIPOutputStream, and ZipOutputStream.'}`
 
-        private void buildLinkTable() { /* ... */ }
-        public AccessibleHyperlink getLink(int linkIndex) { /* ... */ }
-        public int getLinkCount() { /* ... */ }
-        public int getLinkIndex(int charIndex) { /* ... */ }
-        public String getLinkText(int linkIndex) { /* ... */ }
+## Tool Output (submit_plan)
+```
+Plan submitted successfully.
+```
 
-        public class HTMLLink extends AccessibleHyperlink {
-            javax.swing.text.Element element;
+## Agent Thought
+OK. I have analyzed the patch, identified the corresponding target files, and created a plan to backport the changes. The plan includes modifications to `DeflaterOutputStream.java`, `GZIPOutputStream.java`, and `ZipOutputStream.java` to add try-finally/catch blocks that ensure `def.end()` is called to prevent potential infinite loops. It also includes the addition of the new test file `CloseDeflaterTest.java`. I have submitted the plan.
 
-            public boolean doAccessibleAction(int i) { /* ... */ }
-            public Object getAccessibleActionAnchor(int i) { /* ... */ }
-            public int getAccessibleActionCount() { /* ... */ }
-            public String getAccessibleActionDescription(int i) { /* ... */ }
-            public Object getAccessibleActionObject(int i) { /* ... */ }
-            public int getEndIndex() { /* ... */ }
-            public int getStartIndex() { /* ... */ }
-            public boolean isValid() { /* ... */ }
+# Final Implementation Plan
+
+**Intent**: Backport fix for potential infinite loop when writing to closed DeflaterOutputStream, GZIPOutputStream, and ZipOutputStream.
+
+## Compatibility Analysis
+- **Java Version**: No significant Java version differences.
+- **Refactoring**: No major refactoring detected.
+- **Missing Deps**: []
+
+## File Mappings
+| Source File | Target File | Confidence | Reasoning |
+|---|---|---|---|
+| `src/java.base/share/classes/java/util/zip/DeflaterOutputStream.java` | `jdk/src/share/classes/java/util/zip/DeflaterOutputStream.java` | 0.95 | File content and structure are highly similar. |
+| `src/java.base/share/classes/java/util/zip/GZIPOutputStream.java` | `jdk/src/share/classes/java/util/zip/GZIPOutputStream.java` | 0.95 | File content and structure are highly similar. |
+| `src/java.base/share/classes/java/util/zip/ZipOutputStream.java` | `jdk/src/share/classes/java/util/zip/ZipOutputStream.java` | 0.95 | File content and structure are highly similar. |
+| `test/jdk/java/util/zip/CloseDeflaterTest.java` | `test/jdk/java/util/zip/CloseDeflaterTest.java` | 0.95 | New test file, adding it to the target. |
+
+## Steps
+### Step 1: MODIFY `jdk/src/share/classes/java/util/zip/DeflaterOutputStream.java`
+Apply changes to DeflaterOutputStream.java: Add try-finally block to ensure def.end() is called.
+```java
+try {
+            finish();
+        } finally {
+            if (usesDefaultDeflater)
+                def.end();
         }
-
-        private class LinkVector extends Vector {
-            public int baseElementIndex(Element e) { /* ... */ }
+```
+### Step 2: MODIFY `jdk/src/share/classes/java/util/zip/GZIPOutputStream.java`
+Apply changes to GZIPOutputStream.java: Add try-catch block to ensure def.end() is called in case of exception.
+```java
+try {
+            def.finish();
+            while (!def.finished()) {
+                int len = def.deflate(buf, 0, buf.length);
+                if (def.finished() && (len <= (buf.length - TRAILER_SIZE))) {
+                    // last deflater buffer. Fit trailer at the end
+                    writeTrailer(buf, len);
+                    len = len + TRAILER_SIZE;
+                    out.write(buf, 0, len);
+                    return;
+                }
+                if (len > 0)
+                    out.write(buf, 0, len);
+            }
+            // if we can't fit the trailer at the end of the last
+            // deflater buffer, we write it separately
+            byte[] trailer = new byte[TRAILER_SIZE];
+            writeTrailer(trailer, 0);
+            out.write(trailer);
+        } catch (IOException e) {
+            if (usesDefaultDeflater)
+                def.end();
+            throw e;
         }
+```
+### Step 3: MODIFY `jdk/src/share/classes/java/util/zip/ZipOutputStream.java`
+Apply changes to ZipOutputStream.java: Add try-catch block to ensure def.end() is called in case of exception.
+```java
+try {
+            ZipEntry e = current.entry;
+            switch (e.method) {
+                case DEFLATED -> {
+                    def.finish();
+                    while (!def.finished()) {
+                        deflate();
+                    }
+                    if ((e.flag & 8) == 0) {
+                        // verify size, compressed size, and crc-32 settings
+                        if (e.size != def.getBytesRead()) {
+                            throw new ZipException("invalid entry size (expected " + e.size +
+                                    " but got " + def.getBytesRead() + " bytes)");
+                        }
+                        if (e.csize != def.getBytesWritten()) {
+                            throw new ZipException("invalid entry compressed size (expected " +
+                                    e.csize + " but got " + def.getBytesWritten() + " bytes)");
+                        }
+                        if (e.crc != crc.getValue()) {
+                            throw new ZipException("invalid entry CRC-32 (expected 0x" +
+                                    Long.toHexString(e.crc) + " but got 0x" +
+                                    Long.toHexString(crc.getValue()) + ")");
+                        }
+                    } else {
+                        e.size = def.getBytesRead();
+                        e.csize = def.getBytesWritten();
+                        e.crc = crc.getValue();
+                        writeEXT(e);
+                    }
+                    def.reset();
+                    written += e.csize;
+                }
+                case STORED -> {
+                    // we already know that both e.size and e.csize are the same
+                    if (e.size != written - locoff) {
+                        throw new ZipException("invalid entry size (expected " + e.size +
+                                " but got " + (written - locoff) + " bytes)");
+                    }
+                    if (e.crc != crc.getValue()) {
+                        throw new ZipException("invalid entry crc-32 (expected 0x" +
+                                Long.toHexString(e.crc) + " but got 0x" +
+                                Long.toHexString(crc.getValue()) + ")");
+                    }
+                }
+                default -> throw new ZipException("invalid compression method");
+            }
+            crc.reset();
+            current = null;
+        } catch (IOException e) {
+            if (usesDefaultDeflater && !(e instanceof ZipException))
+                def.end();
+            throw e;
+        }
+```
+### Step 4: CREATE `test/jdk/java/util/zip/CloseDeflaterTest.java`
+Add new test file CloseDeflaterTest.java.
+```java
+/*
+ * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+ */
+
+/**
+ * @test
+ * @bug 8193682
+ * @summary Test Infinite loop while writing on closed GZipOutputStream , ZipOutputStream and JarOutputStream.
+ * @run testng CloseDeflaterTest
+ */
+import java.io.*;
+import java.util.Random;
+import java.util.jar.JarOutputStream;
+import java.util.zip.GZIPOutputStream;
+import java.util.zip.ZipOutputStream;
+import java.util.zip.ZipEntry;
+
+import org.testng.annotations.BeforeTest;
+import org.testng.annotations.DataProvider;
+import org.testng.annotations.Test;
+import static org.testng.Assert.fail;
+
+
+public class CloseDeflaterTest {
+
+    //number of bytes to write
+    private static final int INPUT_LENGTH= 512;
+    //OutputStream that will throw an exception during a write operation
+    private static OutputStream outStream = new OutputStream() {
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            //throw exception during write
+            throw new IOException();
+        }
+        @Override
+        public void write(byte b[]) throws IOException {}
+        @Override
+        public void write(int b) throws IOException {}
+    };
+    private static byte[] inputBytes = new byte[INPUT_LENGTH];
+    private static Random rand = new Random();
+
+    @DataProvider(name = "testgzipinput")
+    public Object[][] testGZipInput() {
+        //testGZip will close the GZipOutputStream using close() method when the boolean
+        //useCloseMethod is set to true and finish() method if the value is set to false
+        return new Object[][] {
+                { GZIPOutputStream.class, true },
+                { GZIPOutputStream.class, false },
+        };
     }
 
-    static class PlainEditorKit extends DefaultEditorKit implements ViewFactory {
-        public View create(Element elem) { /* ... */ }
-        View createI18N(Element elem) { /* ... */ }
-        public ViewFactory getViewFactory() { /* ... */ }
+    @DataProvider(name = "testzipjarinput")
+    public Object[][] testZipAndJarInput() {
+        //testZipAndJarInput will perfrom write/closeEntry operations on JarOutputStream when the boolean
+        //useJar is set to true and on ZipOutputStream if the value is set to false
+        return new Object[][] {
+                { JarOutputStream.class, true },
+                { ZipOutputStream.class, false },
+        };
+    }
 
-        static class PlainParagraph extends ParagraphView {
-            protected SizeRequirements calculateMinorAxisRequirements(int axis, SizeRequirements r) { /* ... */ }
-            public int getFlowSpan(int index) { /* ... */ }
-            protected void setPropertiesFromAttributes() { /* ... */ }
+    @BeforeTest
+    public void before_test()
+    {
+        //add inputBytes array with random bytes to write into Zip
+        rand.nextBytes(inputBytes);
+    }
 
-            static class LogicalView extends CompositeView {
-                protected void childAllocation(int index, Rectangle a) { /* ... */ }
-                protected void forwardUpdateToView(View v, DocumentEvent e, Shape a, ViewFactory f) { /* ... */ }
-                public float getPreferredSpan(int axis) { /* ... */ }
-                protected View getViewAtPoint(int x, int y, Rectangle alloc) { /* ... */ }
-                protected int getViewIndexAtPosition(int pos) { /* ... */ }
-                protected boolean isAfter(int x, int y, Rectangle alloc) { /* ... */ }
-                protected boolean isBefore(int x, int y, Rectangle alloc) { /* ... */ }
-                protected void loadChildren(ViewFactory f) { /* ... */ }
-                public void paint(Graphics g, Shape allocation) { /* ... */ }
-                protected boolean updateChildren(ElementChange ec, DocumentEvent e, ViewFactory f) { /* ... */ }
+    //Test for infinite loop by writing bytes to closed GZIPOutputStream
+    @Test(dataProvider = "testgzipinput")
+    public void testGZip(Class<?> type, boolean useCloseMethod) throws IOException {
+        GZIPOutputStream zip = new GZIPOutputStream(outStream);
+        try {
+            zip.write(inputBytes, 0, INPUT_LENGTH);
+            //close zip
+            if(useCloseMethod) {
+                zip.close();
+            } else {
+                zip.finish();
+            }
+        } catch (IOException e) {
+            //expected
+        }
+        for (int i = 0; i < 3; i++) {
+            try {
+                //write on a closed GZIPOutputStream
+                zip.write(inputBytes, 0, INPUT_LENGTH);
+                fail("Deflater closed exception not thrown");
+            } catch (NullPointerException e) {
+                //expected , Deflater has been closed exception
             }
         }
     }
 
-    static class HeaderParser {
-        /* table of key/val pairs - maxes out at 10!!!! */
-java.lang.String raw;
-        java.lang.String[][] tab;
-
-        public int findInt(String k, int Default) { /* ... */ }
-        public String findKey(int i) { /* ... */ }
-        public String findValue(int i) { /* ... */ }
-        public String findValue(String key) { /* ... */ }
-        public String findValue(String k, String Default) { /* ... */ }
-        private void parse() { /* ... */ }
+    //Test for infinite loop by writing bytes to closed ZipOutputStream/JarOutputStream
+    @Test(dataProvider = "testzipjarinput")
+    public void testZipCloseEntry(Class<?> type,boolean useJar) throws IOException {
+        ZipOutputStream zip = null;
+        if(useJar) {
+            zip = new JarOutputStream(outStream);
+        } else {
+            zip = new ZipOutputStream(outStream);
+        }
+        try {
+            zip.putNextEntry(new ZipEntry(""));
+        } catch (IOException e) {
+            //expected to throw IOException since putNextEntry calls write method
+        }
+        try {
+            zip.write(inputBytes, 0, INPUT_LENGTH);
+            //close zip entry
+            zip.closeEntry();
+        } catch (IOException e) {
+            //expected
+        }
+        for (int i = 0; i < 3; i++) {
+            try {
+                //write on a closed ZipOutputStream
+                zip.write(inputBytes, 0, INPUT_LENGTH);
+                fail("Deflater closed exception not thrown");
+            } catch (NullPointerException e) {
+                //expected , Deflater has been closed exception
+            }
+        }
     }
+
 }
 
 ```
-
-## Agent Thought
-The patch modifies the `read(java.io.InputStream, javax.swing.text.Document)` method in `src/java.desktop/share/classes/javax/swing/JEditorPane.java` to handle `ChangedCharSetException` more robustly. Specifically, it addresses a potential issue where the input stream might not be properly reset after a `ChangedCharSetException`, leading to incorrect character encoding.
-
-The changes involve:
-
-1.  Adding a `try-catch` block to handle `IOException` during `in.reset()`.
-2.  Closing the input stream `in.close()` if `in.reset()` fails.
-3.  Re-obtaining the input stream from the URL if available.
-4.  Throwing the `changedCharSetException` if the stream cannot be recovered.
-5.  Adding `doc.remove` and `doc.putProperty` to handle charset changes.
-
-The target file is `src/java.desktop/share/classes/javax/swing/JEditorPane.java`.
-
-Here's the implementation plan:
-
-```json
-{
-  "patch_intent": "Handle ChangedCharSetException in JEditorPane.read more robustly by properly resetting or re-obtaining the input stream and handling charset changes.",
-  "compatibility_analysis": {
-    "java_version_differences": "No significant Java version differences are expected.",
-    "refactoring_notes": "No refactoring is needed.",
-    "missing_dependencies": []
-  },
-  "file_mappings": [
-    {
-      "source_file": "src/java.desktop/share/classes/javax/swing/JEditorPane.java",
-      "target_file": "src/java.desktop/share/classes/javax/swing/JEditorPane.java",
-      "confidence": 1.0,
-      "reasoning": "The file exists in the target repository and the changes are related to character set handling, which is likely to be present in the target version."
-    }
-  ],
-  "steps": [
-    {
-      "step_id": 1,
-      "description": "Modify the `read(java.io.InputStream, javax.swing.text.Document)` method in `src/java.desktop/share/classes/javax/swing/JEditorPane.java` to include the exception handling and stream reset logic from the patch.",
-      "file_path": "src/java.desktop/share/classes/javax/swing/JEditorPane.java",
-      "action": "MODIFY",
-      "code_snippet": "try {\n    in.reset();\n} catch (IOException exception) {\n    //mark was invalidated\n    in.close();\n    URL url = (URL)doc.getProperty(Document.StreamDescriptionProperty);\n    if (url != null) {\n        URLConnection conn = url.openConnection();\n        in = conn.getInputStream();\n    } else {\n        //there is nothing we can do to recover stream\n        throw changedCharSetException;\n    }\n}\ntry {\n    doc.remove(0, doc.getLength());\n} catch (BadLocationException e) {}\ndoc.putProperty(\"IgnoreCharsetDirective\", Boolean.valueOf(true));\nread(in, doc);"
-    },
-    {
-      "step_id": 2,
-      "description": "Add the test file `test/jdk/javax/swing/JEditorPane/EditorPaneCharset.java`.",
-      "file_path": "test/jdk/javax/swing/JEditorPane/EditorPaneCharset.java",
-      "action": "CREATE",
-      "code_snippet": "/*\n * Copyright (c) 2024, Oracle and/or its affiliates. All rights reserved.\n *\n * This code is free software; you can redistribute it and/or modify it\n * under the terms of the GNU General Public License version 2 only, as\n * published by the Free Software Foundation.\n *\n * This code is distributed in the hope that it will be useful, but WITHOUT\n * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or\n * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License\n * version 2 for more details (a copy is included in the LICENSE file that\n * accompanied this code).\n *\n * You should have received a copy of the GNU General Public License version\n * 2 along with this work; if not, write to the Free Software Foundation,\n * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.\n *\n * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA\n * or visit www.oracle.com if you need additional information or have any\n * questions.\n */\n\nimport java.io.ByteArrayInputStream;\nimport java.io.IOException;\nimport java.nio.charset.Charset;\n\nimport javax.swing.JEditorPane;\nimport javax.swing.text.BadLocationException;\nimport javax.swing.text.Document;\nimport javax.swing.text.Element;\n\n/*\n * @test\n * @bug 8328953\n * @summary Verifies JEditorPane.read doesn't throw ChangedCharSetException\n * but handles it and reads HTML in the specified encoding\n * @run main EditorPaneCharset\n */\n\npublic final class EditorPaneCharset {\n    private static final String CYRILLIC_TEXT =\n            \"\\u041F\\u0440\\u0438\\u0432\\u0435\\u0442, \\u043C\\u0438\\u0440!\";\n    private static final String HTML_CYRILLIC =\n            \"<html lang=\\\"ru\\\">\\n\" +\n            \"<head>\\n\" +\n            \"    <meta http-equiv=\\\"Content-Type\\\" \" +\n            \"          content=\\\"text/html; charset=windows-1251\\\">\\n\" +\n            \"</head><body>\\n\" +\n            \"<p>\" + CYRILLIC_TEXT + \"</p>\\n\" +\n            \"</body></html>\\n\";\n\n    public static void main(String[] args) throws IOException, BadLocationException {\n        JEditorPane editorPane = new JEditorPane();\n        editorPane.setContentType(\"text/html\");\n        Document document = editorPane.getDocument();\n\n        // Shouldn't throw ChangedCharSetException\n        editorPane.read(\n                new ByteArrayInputStream(\n                        HTML_CYRILLIC.getBytes(\n                                Charset.forName(\"windows-1251\"))),\n                document);\n\n        Element root = document.getDefaultRootElement();\n        Element body = root.getElement(1);\n        Element p = body.getElement(0);\n        String pText = document.getText(p.getStartOffset(),\n                p.getEndOffset() - p.getStartOffset() - 1);\n        if (!CYRILLIC_TEXT.equals(pText)) {\n            throw new RuntimeException(\"Text doesn't match\");\n        }\n    }\n}\n"
-    }
-  ]
-}
-```
-
