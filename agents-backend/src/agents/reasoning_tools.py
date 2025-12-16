@@ -124,6 +124,48 @@ class ReasoningToolkit:
             "focus_method": focus_method
         })
 
+    def find_method_match(self, target_file_path: str, old_method_name: str, old_signature: str, old_calls: List[str]) -> str:
+        """
+        Uses Method Fingerprinting to find a renamed method in a target file.
+        Returns a JSON string with the best match.
+        """
+        from utils.method_fingerprinter import MethodFingerprinter
+        from utils.mcp_client import get_client
+        
+        # 1. Get all methods from the target file using GetDependencyTool
+        # We need to analyze just this one file to get its method list
+        client = get_client()
+        graph = client.call_tool("get_dependency_graph", {
+            "target_repo_path": self.target_repo_path,
+            "file_paths": [target_file_path],
+            "explore_neighbors": False
+        })
+        
+        candidate_methods = []
+        for node in graph.get("nodes", []):
+            if node.get("id").endswith(target_file_path.replace("/", ".").replace(".java", "")): # Rough match
+                 candidate_methods = node.get("methods", [])
+                 break
+        
+        if not candidate_methods:
+             # Fallback: try to find any node that looks like the file
+             if graph.get("nodes"):
+                 candidate_methods = graph.get("nodes")[0].get("methods", [])
+
+        # 2. Run Fingerprinter
+        fingerprinter = MethodFingerprinter()
+        # Note: We don't have old_code here easily without reading mainline file, 
+        # but our current implementation mostly uses calls/signature/name.
+        result = fingerprinter.find_match(
+            old_method_name=old_method_name,
+            old_signature=old_signature,
+            old_code="", # Optional for now
+            old_calls=old_calls,
+            candidate_methods=candidate_methods
+        )
+        
+        return str(result)
+
     def get_tools(self):
         return [
             StructuredTool.from_function(
@@ -146,6 +188,12 @@ class ReasoningToolkit:
                 name="get_class_context",
                 description="Reads a Java file intelligently. Returns class structure + full body of ONE focused method."
             ),
+             StructuredTool.from_function(
+                func=self.find_method_match,
+                name="find_method_match",
+                description="Smartly finds a renamed method in a target file using Name, Signature, or Call Graph.",
+                args_schema=None # Let LangChain infer or define strict schema if needed
+            ),
             StructuredTool.from_function(
                 func=self.read_file,
                 name="read_file",
@@ -159,7 +207,7 @@ class ReasoningToolkit:
             StructuredTool.from_function(
                 func=self.submit_plan,
                 name="submit_plan",
-                description="Submits the final Implementation Plan.",
+                description="Submits the final implementation plan.",
                 args_schema=ImplementationPlan
             )
         ]

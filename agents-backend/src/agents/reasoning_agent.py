@@ -73,6 +73,10 @@ Your goal is to create a detailed `ImplementationPlan` to backport a patch from 
     *   **Tip**: You can also read the **Mainline** code by setting `use_mainline=True` if the patch diff is confusing and you need more context on the original logic.
     *   This gives you the class skeleton + the FULL BODY of the method you are patching.
     *   **Goal**: You MUST read the code to understand WHERE and HOW to apply the patch.
+    *   **Handling Renames**: If `focus_method="oldName"` returns nothing (method missing), DO NOT guess.
+        *   **Action**: Call `find_method_match(target_file, "oldName", "oldSignature", ["calledMethod1", "calledMethod2"])`.
+        *   Get `oldSignature` and `oldCalls` from the **Mainline Graph** (`get_dependency_graph(..., use_mainline=True)`).
+        *   This tool uses a smart heuristic (Exact -> Signature -> Call Graph Fingerprint) to find the renamed method.
     *   Verify: Does the method exist? Is the logic similar? Is the fix already present?
     *   **Avoid `read_file`** unless you absolutely need to see the whole file (it wastes tokens).
 7.  **Plan**: Once you have gathered enough information, call the `submit_plan` tool with the final `ImplementationPlan`.
