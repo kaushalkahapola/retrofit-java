@@ -1,7 +1,12 @@
 from langchain_core.messages import HumanMessage
 from state import AgentState
 from agents.validation_tools import ValidationToolkit
+from langchain_google_genai import ChatGoogleGenerativeAI
 import json
+
+
+def _get_llm():
+    return ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 
 async def validation_agent(state: AgentState, config):
     """
@@ -158,8 +163,7 @@ async def validation_agent(state: AgentState, config):
         # FAILURE ANALYSIS
         write_thought("Compilation failed. Using LLM to analyze the error log and suggest fixes.")
         try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+            llm = _get_llm()
             fail_prompt = f"""
 You are a Java Compiler Expert.
 ERROR LOG:
@@ -189,12 +193,49 @@ OUTPUT: Markdown.
         
         # 3. Test Execution (Smart Test)
         test_results = []
+        # 3. Test Execution (Smart Test)
+        test_results = []
         # Identify test files from the plan/patch list
         # We look for files in 'test/' dir or ending in 'Test.java'
-        candidate_tests = [f for f in files_to_validate if "test/" in f.replace("\\", "/") or f.endswith("Test.java")]
+        candidate_tests = set([f for f in files_to_validate if "test/" in f.replace("\\", "/") or f.endswith("Test.java")])
+        
+        # --- RTS (Regression Test Selection) ---
+        write_thought("Performing Regression Test Selection (RTS). Searching for existing tests attempting to use patched classes.")
+        try:
+            # 1. Identify changed class names (basename without extension)
+            changed_class_names = [os.path.basename(f).replace(".java", "") for f in files_to_validate if f.endswith(".java") and not f.endswith("Test.java")]
+            
+            if changed_class_names:
+                # 2. Walk repo to find *Test.java files that mention these classes
+                # This is a simple grep-like heuristic.
+                for root, dirs, files in os.walk(target_repo_path):
+                    if "target" in root.split(os.sep) or "build" in root.split(os.sep) or ".git" in root.split(os.sep): 
+                        continue
+                        
+                    for file in files:
+                        if file.endswith("Test.java") and file not in [os.path.basename(ct) for ct in candidate_tests]:
+                            full_path = os.path.join(root, file)
+                            # Check content
+                            try:
+                                with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                                    content = f.read()
+                                    # If file mentions any changed class
+                                    for cls in changed_class_names:
+                                        # Simple heuristic: "new ClassName" or "ClassName." or "import ...ClassName"
+                                        # Using a regex boundary \bClassName\b
+                                        if re.search(r"\b" + re.escape(cls) + r"\b", content):
+                                            rel_path = os.path.relpath(full_path, target_repo_path)
+                                            candidate_tests.add(rel_path)
+                                            # write_thought(f"RTS: Added {rel_path} because it uses {cls}")
+                                            break
+                            except: pass
+        except Exception as e:
+            write_thought(f"RTS Warning: {e}")
+
+        candidate_tests = list(candidate_tests)
         
         if candidate_tests:
-            write_thought(f"Detected {len(candidate_tests)} test files. Running Smart Test Execution.")
+            write_thought(f"Detected {len(candidate_tests)} test files (Plan + RTS). Running Smart Test Execution.")
             
             # Determine Module (Priority: Compilation Result > First Patch File > Fallback)
             target_module = "java.desktop" # Fallback
@@ -209,7 +250,27 @@ OUTPUT: Markdown.
                 patch_out = compile_result["output_path"]
                 patch_src = compile_result.get("source_path", "")
                 
-                t_res = toolkit.run_test_with_patch(test_file, patch_out, patch_src, target_module=target_module)
+                # Extract Changed Lines (Local implementation to avoid modifying shared PatchAnalyzer)
+                patch_lines_map = {}
+                try:
+                    from unidiff import PatchSet
+                    with open(patch_path, "r", encoding="utf-8") as f:
+                        patch_set = PatchSet(f.read())
+                        for p in patch_set:
+                            if p.is_modified_file or p.is_added_file:
+                                lines = []
+                                for hunk in p:
+                                    for line in hunk:
+                                        if line.is_added and line.target_line_no is not None:
+                                            lines.append(line.target_line_no)
+                                patch_lines_map[p.path] = lines
+                except ImportError:
+                    write_thought("Warning: unidiff not found. Patch Coverage will be skipped.")
+                except Exception as e:
+                    write_thought(f"Warning: Failed to extract patch lines: {e}")
+
+                # Enable Coverage!
+                t_res = toolkit.run_test_with_patch(test_file, patch_out, patch_src, target_module=target_module, coverage_enabled=True, patch_lines_map=patch_lines_map)
                 t_res["file"] = test_file
                 test_results.append(t_res)
                 
@@ -219,15 +280,14 @@ OUTPUT: Markdown.
                     validation_result["success"] = False
                     validation_result["issues"].append(f"Test Failed: {os.path.basename(test_file)}")
         else:
-            write_thought("No test files detected in patch. Skipping Test Execution.")
+            write_thought("No test files detected in patch or via RTS. Skipping Test Execution.")
 
         validation_result["tests"] = test_results
 
         # 4. Intelligent Analysis
         write_thought("Performing Intelligent Validation (Consistency & Quality Check).")
         try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+            llm = _get_llm()
             
             with open(patch_path, "r", encoding="utf-8", errors="replace") as f:
                 p_content = f.read()
@@ -239,10 +299,17 @@ OUTPUT: Markdown.
                 total = len(test_results)
                 test_summary = f"Passed: {passed}/{total}\n"
                 for t in test_results:
-                    test_summary += f"- {t['file']}: {'PASS' if t['success'] else 'FAIL'}\n"
+                    cov_info = ""
+                    if t.get('patch_coverage'):
+                        cov_info = f" (Patch Cov: {t['patch_coverage']['percent']}%)"
+                    elif t.get('coverage'):
+                        cov_info = f" (File Cov: {t['coverage']['percent']}%)"
+                    
+                    test_summary += f"- {t['file']}: {'PASS' if t['success'] else 'FAIL'}{cov_info}\n"
                     if not t['success']:
                         test_summary += f"  Error: {t['message'][:500]}...\n"
-
+                        
+            # TODO: Improve Prompt to use Coverage
             prompt = f"""
 You are a Senior Java Reviewer.
 CONTEXT:

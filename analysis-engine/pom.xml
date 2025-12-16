@@ -64,6 +64,21 @@
             <version>7.9.0</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- Jacoco for Code Coverage -->
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.agent</artifactId>
+            <version>0.8.11</version>
+            <classifier>runtime</classifier>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.cli</artifactId>
+            <version>0.8.11</version>
+            <classifier>nodeps</classifier>
+            <scope>runtime</scope>
+        </dependency>
     </dependencies>
 
     <build>

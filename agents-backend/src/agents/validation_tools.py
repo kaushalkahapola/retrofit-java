@@ -1,4 +1,5 @@
-from typing import List, Dict
+import os
+from typing import List, Dict, Optional, Any
 import subprocess
 import os
 import shutil
@@ -231,7 +232,7 @@ class ValidationToolkit:
             "source_path": source_path
         })
 
-    def run_test_with_patch(self, test_file_path: str, patch_classes_path: str, patch_source_path: str, target_module: str = "java.desktop") -> Dict:
+    def run_test_with_patch(self, test_file_path: str, patch_classes_path: str, patch_source_path: str, target_module: str = "java.desktop", coverage_enabled: bool = False, patch_lines_map: Dict[str, List[int]] = None) -> Dict:
         """
         Compiles and runs a single test file using the Universal Test Runner strategy.
         Supports:
@@ -241,35 +242,27 @@ class ValidationToolkit:
         
         Requires 'analysis-engine/target/dependency' to be populated with runners.
         """
-        print(f"  [Smart Test] Running test: {test_file_path} against module: {target_module}")
+        print(f"  [Smart Test] Running test: {test_file_path} against module: {target_module} (Coverage: {coverage_enabled})")
         
         # 1. Compile Test
         test_output_dir = tempfile.mkdtemp(prefix="validation_test_")
         abs_test_path = os.path.join(self.target_repo_path, test_file_path)
         
         # Locate Runners (Hardcoded relative to agent, assumes standard layout)
-        # Agents -> Backend -> Retrofit Root -> Analysis Engine -> ...
-        # self.target_repo_path is external to this tool structure.
-        # We assume 'analysis-engine' is a sibling of 'agents-backend' or similar.
-        # Let's try to find it relative to CWD first.
-        
-        # Assuming we run from agents-backend/
         analysis_dep_dir = os.path.abspath(os.path.join("..", "analysis-engine", "target", "dependency"))
         if not os.path.exists(analysis_dep_dir): 
-             # Fallback: maybe we are in root?
              analysis_dep_dir = os.path.abspath(os.path.join("analysis-engine", "target", "dependency"))
         
-        print(f"    Looking for runners in: {analysis_dep_dir}")
+        # print(f"    Looking for runners in: {analysis_dep_dir}")
         runner_cp = f"{analysis_dep_dir}/*" # Wildcard execution for libs
         
         # Compile Command
-        # We must add runner jars to classpath if this is a JUnit/TestNG test
         cmd_compile = [
             "javac", 
             "-d", test_output_dir,
             "--patch-module", f"{target_module}={patch_classes_path}",
             "--add-reads", f"{target_module}=ALL-UNNAMED",
-            "-cp", runner_cp, # Add runners to compile CP
+            "-cp", runner_cp, 
             abs_test_path
         ]
         
@@ -278,7 +271,7 @@ class ValidationToolkit:
         res_compile = subprocess.run(cmd_compile, capture_output=True, text=True, cwd=self.target_repo_path)
         
         if res_compile.returncode != 0:
-            shutil.rmtree(test_output_dir, ignore_errors=True) # Cleanup on failure
+            shutil.rmtree(test_output_dir, ignore_errors=True)
             return {
                 "success": False,
                 "stage": "compilation",
@@ -298,8 +291,6 @@ class ValidationToolkit:
         except (OSError, IOError) as e:
             print(f"Warning: Could not read test file '{abs_test_path}': {e}")
         
-        print(f"    Detected Test Type: {test_type}")
-
         # 3. Find Test Class Name
         test_class_name = os.path.basename(test_file_path).replace(".java", "")
         match = re.search(r'^\s*package\s+([\w\.]+)\s*;', test_content, re.MULTILINE)
@@ -314,10 +305,23 @@ class ValidationToolkit:
             "--add-opens", f"{target_module}/javax.swing=ALL-UNNAMED",
         ]
         
+        # Coverage Instrumentation
+        coverage_exec_file = None
+        jacoco_cli_jar = None
+        if coverage_enabled and os.path.exists(analysis_dep_dir):
+            jacoco_agent_jar = None
+            for f in os.listdir(analysis_dep_dir):
+                if "org.jacoco.agent" in f and "runtime" in f:
+                    jacoco_agent_jar = os.path.join(analysis_dep_dir, f)
+                elif "org.jacoco.cli" in f and "nodeps" in f:
+                    jacoco_cli_jar = os.path.join(analysis_dep_dir, f)
+            
+            if jacoco_agent_jar:
+                coverage_exec_file = os.path.join(test_output_dir, "jacoco.exec")
+                base_cmd.append(f"-javaagent:{jacoco_agent_jar}=destfile={coverage_exec_file}")
+        
         cmd_run = []
         if test_type == "JUNIT":
-            # java ... -jar junit-platform-console-standalone.jar -cp <test_out> -c <TestClass>
-            # Find the specific jar name
             junit_jar = None
             if os.path.exists(analysis_dep_dir):
                 for f in os.listdir(analysis_dep_dir):
@@ -329,24 +333,18 @@ class ValidationToolkit:
                  shutil.rmtree(test_output_dir, ignore_errors=True)
                  return {"success": False, "stage": "execution", "message": "JUnit Runner JAR not found."}
 
-            # Note: When using -jar, -cp is ignored! 
-            # We must use -cp <junit_jar>;<test_out> and launch ConsoleLauncher manually
             full_cp = f"{junit_jar}{os.pathsep}{test_output_dir}"
-            
             cmd_run = base_cmd + [
                 "-cp", full_cp,
                 "org.junit.platform.console.ConsoleLauncher",
                 "--select-class", test_class_name,
                 "--disable-banner",
-                "--details=none" # Minimal output to parsing easier
+                "--details=none"
             ]
             
         elif test_type == "TESTNG":
-             # Similar logic for TestNG
-             # Fix variable name testng_chars -> testng_jars
              testng_jars = [os.path.join(analysis_dep_dir, f) for f in os.listdir(analysis_dep_dir) if f.endswith(".jar")]
              full_cp = os.pathsep.join(testng_jars) + os.pathsep + test_output_dir
-             
              cmd_run = base_cmd + [
                  "-cp", full_cp,
                  "org.testng.TestNG",
@@ -361,7 +359,6 @@ class ValidationToolkit:
         
         print(f"    Running test: {' '.join(cmd_run)}")
         try:
-            # shell=True removed
             res_run = subprocess.run(
                 cmd_run, 
                 capture_output=True, 
@@ -370,17 +367,123 @@ class ValidationToolkit:
                 timeout=60
             )
             
-            # Check success
-            # JUnit Console returns 0 on success
             success = (res_run.returncode == 0)
-            
             output = (res_run.stdout + "\n" + res_run.stderr).strip()
             
-            return {
+            result = {
                 "success": success,
                 "stage": "execution",
-                "message": output
+                "message": output,
+                "coverage": None,
+                "patch_coverage": None
             }
+            
+            # Process Coverage
+            if coverage_enabled and coverage_exec_file and os.path.exists(coverage_exec_file) and jacoco_cli_jar:
+                # Use XML report for line-level details
+                xml_report = os.path.join(test_output_dir, "coverage.xml")
+                # Need source files for XML report to be meaningful? 
+                # Actually --sourcefiles matches source code to lines.
+                # We have patch_source_path which contains the source root.
+                
+                cmd_cov = [
+                    "java", "-jar", jacoco_cli_jar,
+                    "report", coverage_exec_file,
+                    "--classfiles", patch_classes_path,
+                    "--xml", xml_report
+                ]
+                
+                # If we have source path, add it
+                if patch_source_path:
+                    cmd_cov += ["--sourcefiles", patch_source_path]
+
+                print(f"    Generating coverage report: {' '.join(cmd_cov)}")
+                subprocess.run(cmd_cov, capture_output=True, cwd=self.target_repo_path)
+                
+                if os.path.exists(xml_report):
+                     try:
+                         import xml.etree.ElementTree as ET
+                         tree = ET.parse(xml_report)
+                         root = tree.getroot()
+                         
+                         total_covered = 0
+                         total_lines = 0
+                         
+                         patch_covered = 0
+                         patch_total = 0
+                         
+                         # Map patched file paths to their changes
+                         # FileChange.file_path is relative usually? or abs?
+                         # Usually relative e.g. src/java.desktop/share/classes/foo/Bar.java
+                         # Jacoco package format: foo/Bar.java
+                         
+                         file_change_map = {}
+                         if patch_lines_map:
+                             file_change_map = patch_lines_map
+
+                         # Parse XML
+                         # <package name="...">
+                         #   <sourcefile name="...">
+                         #     <line nr="123" mi="0" ci="1" ... />
+                         
+                         for pkg in root.findall("package"):
+                             pkg_name = pkg.get("name") # e.g. javax/swing/text
+                             for sourcefile in pkg.findall("sourcefile"):
+                                 sf_name = sourcefile.get("name") # e.g. EditorPaneCharset.java
+                                 
+                                 # Construct full path suffix for matching
+                                 # e.g. javax/swing/text/EditorPaneCharset.java
+                                 full_suffix = f"{pkg_name}/{sf_name}"
+                                 
+                                 # Find if this file is in our patch changes
+                                 changed_lines = []
+                                 if patch_lines_map:
+                                     for fpath, lines in patch_lines_map.items():
+                                         # Normalize separators
+                                         fc_path = fpath.replace("\\", "/")
+                                         if fc_path.endswith(full_suffix):
+                                             changed_lines = lines
+                                             break
+                                 
+                                 changed_lines_set = set(changed_lines)
+                                 
+                                 for line in sourcefile.findall("line"):
+                                     nr = int(line.get("nr"))
+                                     ci = int(line.get("ci", 0)) # Instructions covered? 
+                                     # Actually checking 'ci' > 0 means covered instructions > 0
+                                     # Jacoco XML: mi=missed instructions, ci=covered instructions
+                                     is_covered = (ci > 0)
+                                     
+                                     total_lines += 1
+                                     if is_covered:
+                                         total_covered += 1
+                                         
+                                     if nr in changed_lines_set:
+                                         patch_total += 1
+                                         if is_covered:
+                                             patch_covered += 1
+                                 
+                         pct = (total_covered / total_lines * 100) if total_lines > 0 else 0.0
+                         result["coverage"] = {
+                             "percent": round(pct, 2),
+                             "covered_lines": total_covered,
+                             "total_lines": total_lines
+                         }
+                         
+                         if patch_lines_map:
+                             p_pct = (patch_covered / patch_total * 100) if patch_total > 0 else 0.0
+                             result["patch_coverage"] = {
+                                 "percent": round(p_pct, 2),
+                                 "covered_lines": patch_covered,
+                                 "total_lines": patch_total
+                             }
+                             print(f"    Patch Coverage: {p_pct}% ({patch_covered}/{patch_total})")
+                             
+                     except Exception as e:
+                         print(f"    Error parsing coverage XML: {e}")
+
+            return result
+            
         except subprocess.TimeoutExpired:
             return {
                 "success": False,
@@ -388,7 +491,6 @@ class ValidationToolkit:
                 "message": "Test Execution Timed Out (60s)"
             }
         finally:
-            # Cleanup test output dir
             if os.path.exists(test_output_dir):
                 shutil.rmtree(test_output_dir, ignore_errors=True)
 

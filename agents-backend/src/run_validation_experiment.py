@@ -28,11 +28,13 @@ async def main():
     PATCH_PATH = args.patch
     if not PATCH_PATH:
         PATCH_PATH = input("Enter the absolute path to the patch file: ").strip()
+    PATCH_PATH = PATCH_PATH.strip('"').strip("'")
 
     # 2. Target Repo
     TARGET_REPO_PATH = args.repo
     if not TARGET_REPO_PATH:
         TARGET_REPO_PATH = input("Enter the absolute path to the target repo: ").strip()
+    TARGET_REPO_PATH = TARGET_REPO_PATH.strip('"').strip("'")
 
     # 3. Backport Commit
     BACKPORT_COMMIT = args.commit
@@ -44,6 +46,10 @@ async def main():
     if not PLAN_JSON_PATH:
         plan_input = input("Enter the absolute path to the Implementation Plan JSON (or press Enter for default 'implementation_plan.json'): ").strip()
         PLAN_JSON_PATH = plan_input if plan_input else "implementation_plan.json"
+    
+    PLAN_JSON_PATH = PLAN_JSON_PATH.strip('"').strip("'")
+    if PLAN_JSON_PATH.endswith(os.sep):
+        PLAN_JSON_PATH = PLAN_JSON_PATH.rstrip(os.sep)
     
     # Load your implementation plan. 
     if os.path.exists(PLAN_JSON_PATH):
