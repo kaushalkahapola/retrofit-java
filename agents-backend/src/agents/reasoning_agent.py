@@ -83,7 +83,9 @@ Your goal is to create a detailed `ImplementationPlan` to backport a patch from 
 
 **Crucial**:
 *   **Structural Matching First**: Compare dependency graphs (Classes AND Methods) to identify the correct files.
-*   **Smart Reading**: Use `get_class_context` to surgically inspect methods. Don't dump 2000 lines of code if you only need one function.
+*   **Smart Reading**: Use `get_class_context` to surgically inspect methods. The tool provides **LINE NUMBERS** in the output.
+*   **Line-Level Precision**: Your goal is to identify the **EXACT `start_line` and `end_line`** in the target file where the change belongs.
+*   **NO CODE SNIPPETS**: Do NOT generate the new code. The Generation Agent will do that. YOU are the architect/navigator. Tell the coder *where* to go.
 *   **Mainline Path**: You have access to `mainline_repo_path` in your state/tools. Use it for the reference graph.
 *   **Testing**: You MUST verify the graph connectivity before submitting.
 *   If a file is missing, check if it was renamed or if it should be created.
@@ -253,8 +255,10 @@ Please proceed with the backport planning:
                 for s in plan.steps:
                     f.write(f"### Step {s.step_id}: {s.action} `{s.file_path}`\n")
                     f.write(f"{s.description}\n")
-                    if s.code_snippet:
-                        f.write(f"```java\n{s.code_snippet}\n```\n")
+                    if s.start_line is not None:
+                        f.write(f"**Target Lines**: {s.start_line} - {s.end_line}\n")
+                    if s.target_context:
+                         f.write(f"**Context**:\n```java\n{s.target_context}\n```\n")
             
             return {
                 "messages": [HumanMessage(content="Plan Generated via ReAct")],
