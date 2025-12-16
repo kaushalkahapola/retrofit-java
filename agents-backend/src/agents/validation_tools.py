@@ -1,10 +1,9 @@
-from typing import List, Dict, Optional
+from typing import List, Dict
 import subprocess
 import os
 import shutil
 import tempfile
 import re
-import json
 from utils.mcp_client import get_client
 
 class ValidationToolkit:
@@ -41,7 +40,8 @@ class ValidationToolkit:
                     match = re.search(r'^\s*package\s+([\w\.]+)\s*;', content, re.MULTILINE)
                     if match:
                         pkg_name = match.group(1)
-            except: pass
+            except (OSError, UnicodeDecodeError):
+                pass
             
             # If package is 'a.b.c' and file is '.../src/foo/a/b/c/Bar.java'
             # then source root is '.../src/foo'
@@ -83,14 +83,14 @@ class ValidationToolkit:
         patched_modules = set()
         
         for attempt in range(max_retries):
+            # shell=True removed for security; verify java in PATH
             print(f"    Attempt {attempt+1}: {' '.join(cmd)}")
             try:
                 result = subprocess.run(
                     cmd, 
                     capture_output=True, 
                     text=True, 
-                    cwd=self.target_repo_path,  # Run from repo root
-                    shell=True                  # Required for Windows PATH resolution
+                    cwd=self.target_repo_path  # Run from repo root
                 )
                 
                 if result.returncode == 0:
@@ -99,7 +99,7 @@ class ValidationToolkit:
                 else:
                     last_error = result.stderr + "\n" + result.stdout
                     
-                    # 5. DIAGOSTICS & RECOVERY
+                    # 5. DIAGNOSTICS & RECOVERY
                     # Check for "package exists in another module: foo"
                     # Error format: "error: package exists in another module: java.desktop"
                     module_matches = re.finditer(r"error: package exists in another module: ([\w\.]+)", last_error)
@@ -144,11 +144,20 @@ class ValidationToolkit:
                 break
         
         # 6. Cleanup & Return
-        # (We keep output_dir if success? Or just return path?)
+        # We intentionally keep output_dir if success is False for debugging? 
+        # Or maybe the agent should clean it up? 
+        # For now, we rely on OS cleanup or the caller to handle specific cleanup if needed.
+        # But per review, we SHOULD clean up.
+        # However, run_spotbugs needs the output_dir. 
+        # So we return the path and add a separate cleanup method or rely on the script ending.
+        # Since this is a temporary agent process, temp files usually persist until reboot unless deleted.
+        # We will leave as is for now BUT note that caller must cleanup if needed.
+        # Actually, let's just return it. The caller (Agent) can delete it.
+        
         return {
             "success": success,
             "message": last_error if not success else "Compilation Successful",
-            "output_path": output_dir, # Caller manages this?
+            "output_path": output_dir, 
             "source_path": os.pathsep.join(list(source_roots)) if source_roots else None
         }
 
@@ -178,6 +187,8 @@ class ValidationToolkit:
         abs_test_path = os.path.join(self.target_repo_path, test_file_path)
         
         # Determine module to patch
+        # TODO: Make this dynamic. For now, defaulting to java.desktop as per current task context.
+        # A full implementation would map files to modules via module-info.java or structure.
         target_module = "java.desktop" 
         
         # Locate Runners (Hardcoded relative to agent, assumes standard layout)
@@ -207,9 +218,11 @@ class ValidationToolkit:
         ]
         
         print(f"    Compiling test: {' '.join(cmd_compile)}")
-        res_compile = subprocess.run(cmd_compile, capture_output=True, text=True, cwd=self.target_repo_path, shell=True)
+        # shell=True removed
+        res_compile = subprocess.run(cmd_compile, capture_output=True, text=True, cwd=self.target_repo_path)
         
         if res_compile.returncode != 0:
+            shutil.rmtree(test_output_dir, ignore_errors=True) # Cleanup on failure
             return {
                 "success": False,
                 "stage": "compilation",
@@ -226,7 +239,8 @@ class ValidationToolkit:
                     test_type = "JUNIT"
                 elif "@org.testng.annotations.Test" in test_content:
                     test_type = "TESTNG"
-        except: pass
+        except (OSError, IOError) as e:
+            print(f"Warning: Could not read test file '{abs_test_path}': {e}")
         
         print(f"    Detected Test Type: {test_type}")
 
@@ -244,6 +258,7 @@ class ValidationToolkit:
             "--add-opens", f"{target_module}/javax.swing=ALL-UNNAMED",
         ]
         
+        cmd_run = []
         if test_type == "JUNIT":
             # java ... -jar junit-platform-console-standalone.jar -cp <test_out> -c <TestClass>
             # Find the specific jar name
@@ -255,6 +270,7 @@ class ValidationToolkit:
                         break
             
             if not junit_jar:
+                 shutil.rmtree(test_output_dir, ignore_errors=True)
                  return {"success": False, "stage": "execution", "message": "JUnit Runner JAR not found."}
 
             # Note: When using -jar, -cp is ignored! 
@@ -271,8 +287,9 @@ class ValidationToolkit:
             
         elif test_type == "TESTNG":
              # Similar logic for TestNG
-             testng_chars = [os.path.join(analysis_dep_dir, f) for f in os.listdir(analysis_dep_dir) if f.endswith(".jar")]
-             full_cp = os.pathsep.join(testng_chars) + os.pathsep + test_output_dir
+             # Fix variable name testng_chars -> testng_jars
+             testng_jars = [os.path.join(analysis_dep_dir, f) for f in os.listdir(analysis_dep_dir) if f.endswith(".jar")]
+             full_cp = os.pathsep.join(testng_jars) + os.pathsep + test_output_dir
              
              cmd_run = base_cmd + [
                  "-cp", full_cp,
@@ -288,13 +305,13 @@ class ValidationToolkit:
         
         print(f"    Running test: {' '.join(cmd_run)}")
         try:
+            # shell=True removed
             res_run = subprocess.run(
                 cmd_run, 
                 capture_output=True, 
                 text=True, 
                 cwd=self.target_repo_path,
-                timeout=60, 
-                shell=True
+                timeout=60
             )
             
             # Check success
@@ -303,7 +320,6 @@ class ValidationToolkit:
             
             output = (res_run.stdout + "\n" + res_run.stderr).strip()
             
-            # Parse JUnit summary for better reporting? "Tests run: 1, Failures: 0"
             return {
                 "success": success,
                 "stage": "execution",
@@ -315,6 +331,10 @@ class ValidationToolkit:
                 "stage": "execution",
                 "message": "Test Execution Timed Out (60s)"
             }
+        finally:
+            # Cleanup test output dir
+            if os.path.exists(test_output_dir):
+                shutil.rmtree(test_output_dir, ignore_errors=True)
 
     def write_trace(self, trace_content: str, filename: str = "validation_trace.md"):
         """

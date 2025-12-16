@@ -78,17 +78,18 @@ async def validation_agent(state: AgentState, config):
             apply_log = []
             
             # Application Logic (Simplified for brevity but retaining robustness)
+            # Application Logic (Simplified for brevity but retaining robustness)
             try:
                 repo.git.apply(patch_path)
                 apply_success = True
                 apply_log.append("Direct Apply: Success")
-            except:
+            except Exception:
                 apply_log.append("Direct Apply: Failed")
                 try:
                     repo.git.apply(patch_path, ignore_space_change=True, ignore_whitespace=True)
                     apply_success = True
                     apply_log.append("Whitespace Ignore: Success")
-                except:
+                except Exception:
                     apply_log.append("Whitespace Ignore: Failed")
                     # Newline Fix Strategy
                     try:
@@ -108,7 +109,7 @@ async def validation_agent(state: AgentState, config):
                             apply_log.append("Newline Fix: Success")
                         finally:
                             if os.path.exists(tf_path): os.remove(tf_path)
-                    except:
+                    except Exception:
                         apply_log.append("Newline Fix: Failed")
             
             write_tool_output("git_apply", "\n".join(apply_log))
@@ -274,5 +275,12 @@ Determine acceptability. Return JSON:
     toolkit.write_trace(trace_content)
     with open("validation_result.json", "w", encoding="utf-8") as f:
         json.dump(validation_result, f, indent=2)
+
+    # Cleanup Compilation Artifacts
+    if "compilation" in validation_result and validation_result["compilation"].get("output_path"):
+        import shutil
+        out_path = validation_result["compilation"]["output_path"]
+        if os.path.exists(out_path):
+             shutil.rmtree(out_path, ignore_errors=True)
 
     return {"messages": [HumanMessage(content="Validation Complete.")]}
