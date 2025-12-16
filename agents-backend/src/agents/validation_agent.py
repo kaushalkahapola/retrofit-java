@@ -196,12 +196,20 @@ OUTPUT: Markdown.
         if candidate_tests:
             write_thought(f"Detected {len(candidate_tests)} test files. Running Smart Test Execution.")
             
+            # Determine Module (Priority: Compilation Result > First Patch File > Fallback)
+            target_module = "java.desktop" # Fallback
+            detected_modules = compile_result.get("patched_modules", [])
+            if detected_modules:
+                target_module = detected_modules[0]
+                if len(detected_modules) > 1:
+                     write_thought(f"Multiple modules detected ({detected_modules}). Using primary: {target_module}")
+            
             for test_file in candidate_tests:
                 # We need the compiled path of the patch, and its source path
                 patch_out = compile_result["output_path"]
-                patch_src = compile_result.get("source_path")
+                patch_src = compile_result.get("source_path", "")
                 
-                t_res = toolkit.run_test_with_patch(test_file, patch_out, patch_src)
+                t_res = toolkit.run_test_with_patch(test_file, patch_out, patch_src, target_module=target_module)
                 t_res["file"] = test_file
                 test_results.append(t_res)
                 

@@ -11,6 +11,51 @@ class ValidationToolkit:
         self.target_repo_path = target_repo_path
         self.client = get_client()
 
+    def _detect_module(self, file_path: str) -> str:
+        """
+        Attempts to infer the module name from a file path.
+        Strategy:
+        1. OpenJDK Source Layout Regex: src/<module>/share/classes...
+        2. 'module-info.java' Search: Walks up directory tree to find module definition.
+        """
+        # 1. OpenJDK Source Layout
+        # Regex handles both absolute (.../src/...) and relative (src/...) paths
+        match_src = re.search(r"(?:^|[\\/])src[\\/]([\w\.]+)[\\/](?:share|unix|windows|linux|macosx)[\\/]classes", file_path)
+        if match_src:
+            return match_src.group(1)
+            
+        # 2. Walk up to find module-info.java
+        try:
+            abs_path = os.path.join(self.target_repo_path, file_path)
+            if not os.path.exists(abs_path):
+                return None
+                
+            current_dir = os.path.dirname(abs_path)
+            repo_root = os.path.abspath(self.target_repo_path)
+            
+            # Walk up until we leave the repo
+            while current_dir.startswith(repo_root):
+                module_info = os.path.join(current_dir, "module-info.java")
+                if os.path.exists(module_info):
+                    try:
+                        with open(module_info, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                            # Match 'module java.desktop {' or 'open module foo.bar {'
+                            match_mod = re.search(r'^\s*(?:open\s+)?module\s+([\w\.]+)\s*\{', content, re.MULTILINE)
+                            if match_mod:
+                                return match_mod.group(1)
+                    except (OSError, UnicodeDecodeError):
+                        pass
+                
+                parent = os.path.dirname(current_dir)
+                if parent == current_dir: 
+                    break
+                current_dir = parent
+        except Exception:
+            pass
+            
+        return None
+
     def compile_files(self, file_paths: List[str]) -> Dict:
         """
         Compiles the specified files using a local 'Smart Compiler' strategy.
@@ -25,9 +70,16 @@ class ValidationToolkit:
         # 2. Group files by Source Root (Heuristic)
         # We need to find the compatible source path for the files.
         source_roots = set()
+        detected_modules = set()
         
         for file_path in file_paths:
             abs_path = os.path.join(self.target_repo_path, file_path)
+            
+            # Infer module from path
+            mod = self._detect_module(file_path)
+            if mod:
+                detected_modules.add(mod)
+
             if not os.path.exists(abs_path):
                 print(f"    Warning: File not found: {abs_path}")
                 continue
@@ -52,9 +104,9 @@ class ValidationToolkit:
                     root = parent_dir[:-len(package_path)].rstrip(os.sep)
                     source_roots.add(root)
                 else:
-                    # Fallback: just use parent dir? Or just repo root?
-                    # If directory structure doesn't match package, sourcepath is tricky.
-                    pass
+                    # Fallback: Source structure doesn't match package. 
+                    # Use repo root or parent as best effort.
+                    source_roots.add(parent_dir)
             else:
                  # Default package? root is parent dir
                  source_roots.add(parent_dir)
@@ -81,6 +133,13 @@ class ValidationToolkit:
         success = False
         
         patched_modules = set()
+        
+        # Add initially detected modules (from path)
+        # However, we only need --patch-module if we are actually overriding it.
+        # If the user is compiling 'src/java.desktop/...' javac might treat it as module source key if we setup module source path right.
+        # But with -searchpath, we are doing legacy mode often.
+        # Let's wait for errors to drive it, OR if we know it's a module, patch it proactively?
+        # Proactive patching is safer for "package exists in another module".
         
         for attempt in range(max_retries):
             # shell=True removed for security; verify java in PATH
@@ -132,6 +191,7 @@ class ValidationToolkit:
                                  cmd.insert(2, patch_arg)
                             
                             patched_modules.add(mod_name)
+                            detected_modules.add(mod_name)
                             new_patches = True
                             print(f"    Detected collision with module '{mod_name}'. Retrying with --patch-module.")
                     
@@ -158,7 +218,8 @@ class ValidationToolkit:
             "success": success,
             "message": last_error if not success else "Compilation Successful",
             "output_path": output_dir, 
-            "source_path": os.pathsep.join(list(source_roots)) if source_roots else None
+            "source_path": os.pathsep.join(list(source_roots)) if source_roots else None,
+            "patched_modules": list(detected_modules)
         }
 
     def run_spotbugs(self, compiled_classes_path: str, source_path: str = None) -> Dict:
@@ -170,7 +231,7 @@ class ValidationToolkit:
             "source_path": source_path
         })
 
-    def run_test_with_patch(self, test_file_path: str, patch_classes_path: str, patch_source_path: str) -> Dict:
+    def run_test_with_patch(self, test_file_path: str, patch_classes_path: str, patch_source_path: str, target_module: str = "java.desktop") -> Dict:
         """
         Compiles and runs a single test file using the Universal Test Runner strategy.
         Supports:
@@ -180,16 +241,11 @@ class ValidationToolkit:
         
         Requires 'analysis-engine/target/dependency' to be populated with runners.
         """
-        print(f"  [Smart Test] Running test: {test_file_path}")
+        print(f"  [Smart Test] Running test: {test_file_path} against module: {target_module}")
         
         # 1. Compile Test
         test_output_dir = tempfile.mkdtemp(prefix="validation_test_")
         abs_test_path = os.path.join(self.target_repo_path, test_file_path)
-        
-        # Determine module to patch
-        # TODO: Make this dynamic. For now, defaulting to java.desktop as per current task context.
-        # A full implementation would map files to modules via module-info.java or structure.
-        target_module = "java.desktop" 
         
         # Locate Runners (Hardcoded relative to agent, assumes standard layout)
         # Agents -> Backend -> Retrofit Root -> Analysis Engine -> ...
