@@ -434,6 +434,6 @@ PROJECT_OVERVIEW.md
 **/*.pkl
 datasets/
 agents-backend/venv_linux
-# references/
+references/
 venvwin/
 
