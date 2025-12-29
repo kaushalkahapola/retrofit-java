@@ -288,13 +288,64 @@ class EnsembleRetriever:
 
         return result_objects
 
+    def resolve_git_path(self, file_path: str, original_commit: str) -> Optional[List[Dict]]:
+        """
+        Phase 1: Deterministic resolution using Git History.
+        Returns a match if:
+        1. The file exists exactly in the target.
+        2. The file was renamed but we can trace it to a file that exists in the target.
+        """
+        # 1. Exact Match Check
+        if file_path in self.target_files:
+            return [{"file": file_path, "score": 1.0, "method": "GIT_EXACT", "reason": "Exact path match"}]
+
+        # 2. Rename Tracing (Mainline)
+        # We trace the file *backwards* from the original commit in the Mainline repo.
+        # If we see a rename, we check if the *new* name exists in our Target index.
+        try:
+            # git log --follow --name-only --format= <commit> -- <path>
+            # This lists the history of filenames for this path.
+            log_output = self.main_repo.git.log(
+                '--follow', 
+                '--name-only', 
+                '--format=', 
+                original_commit, 
+                '--', 
+                file_path
+            )
+            
+            # The output contains a list of filenames involved in the history.
+            # We check if any of them exist in our current target_files
+            historic_paths = [p.strip() for p in log_output.splitlines() if p.strip()]
+            
+            for path in historic_paths:
+                if path in self.target_files:
+                     return [{"file": path, "score": 1.0, "method": "GIT_RENAME", "reason": f"Traced via git log from {file_path}"}]
+                     
+        except Exception as e:
+            print(f"Git trace failed for {file_path}: {e}")
+            
+        return None
+
     def find_candidates(self, file_path: str, original_commit: str) -> List[Dict]:
         """
-        Orchestrates the retrieval process using all 3 signals.
+        Orchestrates the retrieval process using Split Flow (PORTGPT Style).
+        Phase 1: Git Precision (Deterministic)
+        Phase 2: Ensemble Search (Probabilistic)
         """
-        git_cands = self.get_git_candidates(file_path, original_commit)
+        # --- PHASE 1: Deterministic Git Resolution ---
+        git_match = self.resolve_git_path(file_path, original_commit)
+        if git_match:
+            print(f"Phase 1 (Git) Match Found: {git_match[0]['file']}")
+            return git_match
+
+        # --- PHASE 2: Probabilistic Ensemble Fallback ---
+        print(f"Phase 1 failed for {file_path}. Falling back to Ensemble Search...")
+        
+        # Note: We skip 'get_git_candidates' inside here because Phase 1 covers it better.
+        # We perform the expensive search now.
         sym_cands = self.get_symbol_candidates(file_path, original_commit)
         tfidf_cands = self.get_tfidf_candidates(file_path, original_commit)
 
-        pool = git_cands + sym_cands + tfidf_cands
+        pool = sym_cands + tfidf_cands
         return self.decide_candidate_list(pool)

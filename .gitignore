@@ -432,3 +432,8 @@ instructions/specification.md
 PROJECT_OVERVIEW.md
 *.ipynb
 **/*.pkl
+datasets/
+agents-backend/venv_linux
+# references/
+venvwin/
+

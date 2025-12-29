@@ -52,6 +52,58 @@ async def reasoning_agent(state: AgentState, config):
     toolkit = ReasoningToolkit(retriever, target_repo_path, mainline_repo_path, changes)
     tools = toolkit.get_tools()
     
+    # --- STAGE 0: Optimistic Patching ---
+    print("Reasoning Agent: Checking Optimistic Applicability...")
+    applicability = toolkit.check_patch_applicability()
+    
+    if applicability["success"]:
+        print("Optimistic Check SUCCEEDED! Returning simplified plan.")
+        
+        # Construct simplified plan
+        from utils.models import Step, CompatibilityAnalysis, FileMapping
+        
+        # Map strict 1-to-1 based on patch analysis
+        mappings = []
+        steps = []
+        
+        for idx, change in enumerate(changes):
+             mappings.append(FileMapping(
+                 source_file=change.file_path, 
+                 target_file=change.file_path, # Optimistic assumption
+                 confidence=1.0, 
+                 reasoning="Optimistic Patch Applicability Check Passed (Git Apply)"
+             ))
+             
+             steps.append(Step(
+                 step_id=idx+1,
+                 action="apply_patch_hunk",
+                 file_path=change.file_path,
+                 description="Apply patch directly as it fits cleanly.",
+                 start_line=None, end_line=None, target_context=None
+             ))
+             
+        plan = ImplementationPlan(
+            patch_intent="Direct Backport (Optimization)",
+            file_mappings=mappings,
+            compatibility_analysis=CompatibilityAnalysis(
+                java_version_differences="Unknown (Optimistic)",
+                missing_dependencies=[], 
+                refactoring_notes="None"
+            ),
+            steps=steps
+        )
+        
+        return {
+             "messages": [HumanMessage(content="Optimistic Patch Success")],
+             "patch_analysis": changes,
+             "implementation_plan": plan.dict()
+        }
+        
+    else:
+        print(f"Optimistic Check Failed: {applicability['output'][:100]}...")
+        # Add hint to initial prompt
+        hint_msg = f"\n\n[HINT]: I tried `git apply --check` and it FAILED with:\n{applicability['output']}\nUse this to locate the target file or specific conflict lines."
+    
     # 4. Setup LLM & Agent
     llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
     
@@ -61,14 +113,12 @@ Your goal is to create a detailed `ImplementationPlan` to backport a patch from 
 **Process**:
 1.  **Analyze**: Use `get_patch_analysis` to understand what changed.
 2.  **Explore**: For each modified file, use `search_candidates` to find potential matches in the Target.
-3.  **Reference Graph**: Use `get_dependency_graph` on the **Mainline Repository** for the modified files (set `use_mainline=True`).
-    *   **NEW**: The graph now includes **Method Calls**. Look at the `calls` list in the output to see which methods invoke which.
-4.  **Target Graph**: Use `get_dependency_graph` on the **Target Repository** with ALL your candidate files.
-5.  **Match & Verify**: Compare the two graphs.
-    *   **Class Level**: If `A` depends on `B` in Mainline, look for `CandidateA` depending on `CandidateB`.
-    *   **Method Level**: If `A.methodX()` calls `B.methodY()` in Mainline, look for that specific interaction in the Target.
-    *   **CRITICAL**: This "Structural Matching" is your primary filter. Do it BEFORE reading code.
-6.  **Deep Verification**: Use `get_class_context` (Smart Read) on the best-matching candidates.
+3.  **Structural Fingerprinting**: Use `match_structure` to deterministically find the correct target file(s).
+    *   **Usage**: `match_structure(mainline_file_path, [candidate_path_1, candidate_path_2, ...])`
+    *   **Logic**: This tool compares the "Rich AST Fingerprint" (Inheritance, Outgoing Calls, Fields) of the Mainline file against the candidates.
+    *   **Output**: It returns the best match(es) with a score and reasoning.
+    *   **Refactoring Support**: If the Mainline file was split (e.g., `UserManager` -> `UserAuth` + `UserProfile`), the tool may return **MULTIPLE** files. Trust this output.
+4.  **Deep Verification**: Use `get_class_context` (Smart Read) on the matched file(s).
     *   **Usage**: `get_class_context(file_path, focus_method="methodName")`
     *   **Tip**: You can also read the **Mainline** code by setting `use_mainline=True` if the patch diff is confusing and you need more context on the original logic.
     *   This gives you the class skeleton + the FULL BODY of the method you are patching.
@@ -79,10 +129,10 @@ Your goal is to create a detailed `ImplementationPlan` to backport a patch from 
         *   This tool uses a smart heuristic (Exact -> Signature -> Call Graph Fingerprint) to find the renamed method.
     *   Verify: Does the method exist? Is the logic similar? Is the fix already present?
     *   **Avoid `read_file`** unless you absolutely need to see the whole file (it wastes tokens).
-7.  **Plan**: Once you have gathered enough information, call the `submit_plan` tool with the final `ImplementationPlan`.
+5.  **Plan**: Once you have gathered enough information, call the `submit_plan` tool with the final `ImplementationPlan`.
 
 **Crucial**:
-*   **Structural Matching First**: Compare dependency graphs (Classes AND Methods) to identify the correct files.
+*   **Trust the Structural Matcher**: Do not try to "eye-ball" graphs yourself. Use `match_structure`.
 *   **Smart Reading**: Use `get_class_context` to surgically inspect methods. The tool provides **LINE NUMBERS** in the output.
 *   **Line-Level Precision**: Your goal is to identify the **EXACT `start_line` and `end_line`** in the target file where the change belongs.
 *   **NO CODE SNIPPETS**: Do NOT generate the new code. The Generation Agent will do that. YOU are the architect/navigator. Tell the coder *where* to go.
@@ -103,6 +153,7 @@ Your goal is to create a detailed `ImplementationPlan` to backport a patch from 
 {changes_summary}
 
 I have also loaded the full patch analysis into your tools (`get_patch_analysis`).
+{hint_msg}
 
 Please proceed with the backport planning:
 1. Analyze the changes.

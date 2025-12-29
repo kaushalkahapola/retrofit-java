@@ -6,6 +6,7 @@ import os
 import re
 
 from utils.models import ImplementationPlan
+from utils.structural_matcher import find_best_matches
 
 class ReasoningToolkit:
     def __init__(self, retriever: EnsembleRetriever, target_repo_path: str, mainline_repo_path: str, patch_analysis: List[FileChange]):
@@ -124,6 +125,62 @@ class ReasoningToolkit:
             "focus_method": focus_method
         })
 
+    def get_structural_analysis(self, file_path: str, use_mainline: bool = False) -> Dict:
+        """
+        Gets rich structural analysis (AST) for a file.
+        """
+        from utils.mcp_client import get_client
+        client = get_client()
+        
+        repo_path = self.mainline_repo_path if use_mainline else self.target_repo_path
+        
+        # The Java side returns a list of classes, we usually just want the first/main one for matching
+        result = client.call_tool("get_structural_analysis", {
+            "target_repo_path": repo_path,
+            "file_path": file_path
+        })
+        return result
+
+    def match_structure(self, mainline_file_path: str, candidate_file_paths: List[str]) -> str:
+        """
+        Determines the best matching target file(s) for a given mainline file using structural analysis.
+        Returns a JSON string describing the best match and the reasoning.
+        """
+        import json
+        
+        # 1. Analyze Mainline File
+        mainline_analysis = self.get_structural_analysis(mainline_file_path, use_mainline=True)
+        if "classes" not in mainline_analysis or not mainline_analysis["classes"]:
+            return json.dumps({"error": f"Could not analyze mainline file: {mainline_file_path}"})
+        mainline_node_data = mainline_analysis["classes"][0] # Assume one top level class for now
+
+        # 2. Analyze Candidate Files
+        candidates_data = []
+        for cand_path in candidate_file_paths:
+            cand_analysis = self.get_structural_analysis(cand_path, use_mainline=False)
+            if "classes" in cand_analysis and cand_analysis["classes"]:
+                # Inject the file path into the data so the matcher knows which file it is
+                data = cand_analysis["classes"][0]
+                data["file_path"] = cand_path 
+                candidates_data.append(data)
+                
+        if not candidates_data:
+             return json.dumps({"error": "No valid candidates to analyze."})
+
+        # 3. Run Matcher
+        matches = find_best_matches(mainline_node_data, candidates_data)
+        
+        # 4. Format Output
+        results = []
+        for m in matches:
+            results.append({
+                "file_path": m["data"]["file_path"],
+                "score": round(m["score"], 2),
+                "reasoning": "High structural similarity (Inheritance/Calls/Fields)"
+            })
+            
+        return json.dumps(results, indent=2)
+
     def find_method_match(self, target_file_path: str, old_method_name: str, old_signature: str, old_calls: List[str]) -> str:
         """
         Uses Method Fingerprinting to find a renamed method in a target file.
@@ -209,5 +266,15 @@ class ReasoningToolkit:
                 name="submit_plan",
                 description="Submits the final implementation plan.",
                 args_schema=ImplementationPlan
+            ),
+            StructuredTool.from_function(
+                func=self.match_structure,
+                name="match_structure",
+                description="Deterministic Structural Matcher. Finds the best target file(s) for a mainline file by comparing inheritance, calls, and fields. Handles 1-to-N splits.",
+            ),
+            StructuredTool.from_function(
+                func=self.check_patch_applicability_internal,
+                name="check_patch_applicability",
+                description="Optimistic Check: Checks if the patch applies cleanly to the target using 'git apply --check'. Input: absolute path to patch file.",
             )
         ]
