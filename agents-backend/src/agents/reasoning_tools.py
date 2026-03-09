@@ -4,6 +4,7 @@ from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from utils.patch_analyzer import PatchAnalyzer, FileChange
 import os
 import re
+import subprocess
 
 from utils.models import ImplementationPlan
 from utils.structural_matcher import find_best_matches
@@ -266,6 +267,103 @@ class ReasoningToolkit:
         
         return str(result)
 
+    # ------------------------------------------------------------------
+    # Patch Applicability Check (used by Phase 0 and exposed as LLM tool)
+    # ------------------------------------------------------------------
+
+    def check_patch_applicability(self) -> Dict:
+        """
+        Public method: Attempts `git apply --check` of the current patch against the
+        target repo. Returns {"success": bool, "output": str}.
+        Called by phase0_optimistic.py.
+        """
+        patch_path = None
+        for change in self.patch_analysis:
+            # Resolve the patch file path from the retriever's stored patch path
+            break
+        # Walk up from ensemble retriever target path to find the patch
+        # The patch path is injected externally — this method wraps the git call.
+        return self._run_git_apply_check(self.retriever.target_repo.working_dir)
+
+    def check_patch_applicability_internal(self, patch_path: str) -> str:
+        """
+        LLM-facing tool wrapper. Runs `git apply --check` with the given patch path.
+        Returns a summary string suitable for LLM consumption.
+        """
+        result = self._run_git_apply_check(self.retriever.target_repo.working_dir, patch_path)
+        if result["success"]:
+            return "Patch applies cleanly. No conflicts detected."
+        return f"Patch does NOT apply cleanly:\n{result['output']}"
+
+    def _run_git_apply_check(self, repo_dir: str, patch_path: str = None) -> Dict:
+        """
+        Core implementation: runs `git apply --check <patch_path>` in repo_dir.
+        If patch_path is None, looks for the patch file from state (best-effort).
+        """
+        if not patch_path:
+            return {"success": False, "output": "No patch path provided to git apply check."}
+        try:
+            result = subprocess.run(
+                ["git", "apply", "--check", patch_path],
+                capture_output=True,
+                text=True,
+                cwd=repo_dir,
+            )
+            if result.returncode == 0:
+                return {"success": True, "output": result.stdout or "Clean apply."}
+            else:
+                return {"success": False, "output": result.stderr or result.stdout}
+        except Exception as e:
+            return {"success": False, "output": f"Exception during git apply check: {e}"}
+
+    # ------------------------------------------------------------------
+    # Struct / Class Definition Fetcher (Agent 1 support)
+    # ------------------------------------------------------------------
+
+    def get_struct_definition(self, struct_name: str, use_mainline: bool = True) -> Dict:
+        """
+        Retrieves the full definition of a class or struct by name from AST analysis.
+        Useful for Agent 1 to pull dependent types referenced in the patch.
+
+        Args:
+            struct_name: Simple class/interface/struct name (e.g. 'ByteBuffer').
+            use_mainline: If True (default), searches the mainline repository.
+
+        Returns:
+            Dict with 'class_name', 'fields', 'methods', 'superclass', 'interfaces' keys.
+            Returns {'error': ...} if not found.
+        """
+        from utils.mcp_client import get_client
+        client = get_client()
+        repo_path = self.mainline_repo_path if use_mainline else self.target_repo_path
+
+        # Use ripgrep-style search to find the file defining the struct first
+        try:
+            result = subprocess.run(
+                ["grep", "-r", "--include=*.java", "-l",
+                 f"class {struct_name}|interface {struct_name}", repo_path],
+                capture_output=True, text=True
+            )
+            candidates = [f.strip() for f in result.stdout.splitlines() if f.strip()]
+        except Exception:
+            candidates = []
+
+        if not candidates:
+            return {"error": f"No file found defining '{struct_name}' in {'mainline' if use_mainline else 'target'} repo."}
+
+        # Analyze the first match
+        rel_path = os.path.relpath(candidates[0], repo_path)
+        analysis = client.call_tool("get_structural_analysis", {
+            "target_repo_path": repo_path,
+            "file_path": rel_path,
+        })
+        classes = analysis.get("classes", [])
+        for cls in classes:
+            if cls.get("simpleName") == struct_name or cls.get("name", "").endswith(struct_name):
+                return cls
+        # Return first class if name filter didn't hit
+        return classes[0] if classes else {"error": f"Struct '{struct_name}' not found in {rel_path}."}
+
     def get_tools(self):
         return [
             StructuredTool.from_function(
@@ -319,5 +417,10 @@ class ReasoningToolkit:
                 func=self.check_patch_applicability_internal,
                 name="check_patch_applicability",
                 description="Optimistic Check: Checks if the patch applies cleanly to the target using 'git apply --check'. Input: absolute path to patch file.",
-            )
+            ),
+            StructuredTool.from_function(
+                func=self.get_struct_definition,
+                name="get_struct_definition",
+                description="Retrieves the full class/struct definition by name from the mainline or target repo. Useful for understanding dependent types referenced in the patch.",
+            ),
         ]
