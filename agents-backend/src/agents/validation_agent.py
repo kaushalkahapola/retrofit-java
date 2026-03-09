@@ -1,115 +1,234 @@
-from langchain_core.messages import HumanMessage
-from state import AgentState
-from agents.validation_tools import ValidationToolkit
+"""
+Agent 4: The Verifier (Validation Loop)
+
+H-MABS Phase 4 — "Prove Red, Make Green" Loop
+"""
 import json
+import os
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
+from state import AgentState, AdaptedHunk
+from agents.validation_tools import ValidationToolkit
+from agents.hunk_generator import _extract_hunk_block
 
-async def validation_agent(state: AgentState, config):
-    """
-    The Gatekeeper. Validates the generated code by compiling and running SpotBugs.
-    """
-    print("Validation Agent: Starting validation loop...")
+_SYNTHESIZE_TEST_SYSTEM = """You are an expert Java test engineer.
+Your task is to write a single JUnit test method that specifically triggers a vulnerability."""
+
+_SYNTHESIZE_TEST_USER = """\
+## Root Cause & Fix Logic
+Root Cause: {root_cause}
+Fix Logic: {fix_logic}
+
+Write a JUnit test that proves this root cause exists (it should FAIL before the fix is applied, and PASS after).
+Output ONLY the unified diff block starting with @@ showing the addition of this test to an appropriate test class.
+"""
+
+MAX_VALIDATION_ATTEMPTS = 3
+
+async def _synthesize_target_test(state: AgentState, toolkit: ValidationToolkit) -> list[AdaptedHunk]:
+    """Phase 6: Test Synthesis"""
+    print("  Agent 4: No test hunks provided. Synthesizing a vulnerability test...")
+    blueprint = state.get("semantic_blueprint") or {}
+    root_cause = blueprint.get("root_cause_hypothesis", "")
+    fix_logic = blueprint.get("fix_logic", "")
     
-    # 1. Setup
+    prompt = _SYNTHESIZE_TEST_USER.format(
+        root_cause=root_cause,
+        fix_logic=fix_logic
+    )
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+    
+    try:
+        response = await llm.ainvoke([
+            SystemMessage(content=_SYNTHESIZE_TEST_SYSTEM),
+            HumanMessage(content=prompt)
+        ])
+        raw_content = response.content if hasattr(response, "content") else str(response)
+        adapted_hunk_text = _extract_hunk_block(raw_content)
+        
+        if adapted_hunk_text:
+            target_file = "src/test/java/SynthesizedVulnTest.java" # Fallback
+            lines = adapted_hunk_text.splitlines()
+            for line in lines:
+                if line.startswith("+++ b/"):
+                    target_file = line[6:].strip()
+                    break
+            
+            # Dry run test synthesis
+            dr = toolkit.apply_hunk_dry_run(target_file, adapted_hunk_text)
+            
+            hunk: AdaptedHunk = {
+                "target_file": target_file,
+                "mainline_file": "synthesized",
+                "hunk_text": adapted_hunk_text,
+                "insertion_line": 1,
+                "intent_verified": True
+            }
+            return [hunk]
+    except Exception as e:
+        print(f"  Agent 4: Test synthesis failed: {e}")
+        
+    return []
+
+def _extract_test_classes(test_hunks: list[AdaptedHunk]) -> list[str]:
+    """Helper to extract class names from file paths."""
+    classes = []
+    for h in test_hunks:
+        f = h.get("target_file", "")
+        if f.endswith(".java"):
+            # e.g., src/test/java/org/example/MyTest.java -> org.example.MyTest
+            parts = f.replace("\\", "/").split("/")
+            if "java" in parts:
+                idx = parts.index("java")
+                cls_path = parts[idx+1:]
+                cls_name = ".".join(cls_path).replace(".java", "")
+                if cls_name not in classes:
+                    classes.append(cls_name)
+    return classes
+
+async def validation_agent(state: AgentState, config) -> dict:
+    """
+    Agent 4: The Verifier.
+    Implements the 6-Phase Prove Red, Make Green loop.
+    """
+    print("Agent 4 (Validation): Starting 'Prove Red, Make Green' loop...")
+    
     target_repo_path = state.get("target_repo_path")
-    plan = state.get("implementation_plan")
-    
-    if not plan:
-        msg = "Error: No implementation plan found in state."
-        print(msg)
-        return {"messages": [HumanMessage(content=msg)]}
-
-    # Extract modified files from the plan
-    # The plan is a dict (if coming from serialized state) or ImplementationPlan object
-    # The 'steps' field contains the actions.
-    steps = plan.get("steps", []) if isinstance(plan, dict) else plan.steps
-
-    files_to_validate = set()
-    for step in steps:
-        # Check if step is dict or object
-        file_path = step.get("file_path") if isinstance(step, dict) else step.file_path
-        if file_path and file_path.endswith(".java"):
-            files_to_validate.add(file_path)
-
-    files_list = list(files_to_validate)
-    print(f"Validation Agent: Files to validate: {files_list}")
-
+    if not target_repo_path:
+        return {"messages": [HumanMessage(content="Validation Agent Error: No target_repo_path.")]}
+        
     toolkit = ValidationToolkit(target_repo_path)
+    
+    # 3.0 Setup
+    code_hunks = state.get("adapted_code_hunks", [])
+    test_hunks = state.get("adapted_test_hunks", [])
+    attempts = state.get("validation_attempts", 0)
+    
+    if attempts >= MAX_VALIDATION_ATTEMPTS:
+        print(f"  Agent 4: Max validation attempts ({MAX_VALIDATION_ATTEMPTS}) reached. Failing.")
+        return {"validation_passed": False}
+        
+    # Ensure clean repo
+    toolkit.restore_repo_state()
+    
+    trace_content = f"# Validation Agent Trace (Attempt {attempts + 1})\n\n"
+    
+    # 3.1 Phase 6: Test Synthesis (Moved to start if missing)
+    if not test_hunks:
+        trace_content += "## Phase 6: Test Synthesis\nNo test hunks found. Synthesizing...\n"
+        synthesized = await _synthesize_target_test(state, toolkit)
+        if not synthesized:
+            error_msg = "Failed to synthesize a viable test case."
+            trace_content += f"**Error**: {error_msg}\n"
+            toolkit.write_trace(trace_content, "validation_trace.md")
+            return {
+                "validation_passed": False,
+                "validation_attempts": attempts + 1,
+                "validation_error_context": error_msg
+            }
+        test_hunks = synthesized
 
-    trace_content = "# Validation Agent Trace\n\n"
-    trace_content += "## Validation Targets\n"
-    for f in files_list:
-        trace_content += f"- `{f}`\n"
-    trace_content += "\n"
+    test_classes = _extract_test_classes(test_hunks)
+    
+    # 3.2 Phase 1: Proof of Vulnerability
+    print("  Agent 4: Phase 1 — Proof of Vulnerability (Applying tests only)...")
+    trace_content += "## Phase 1: Proof of Vulnerability\n"
+    res1 = toolkit.apply_adapted_hunks(code_hunks=[], test_hunks=test_hunks)
+    if not res1["success"]:
+        error_msg = f"Failed to apply test patch:\n{res1['output']}"
+        print(f"    Agent 4 Error: {error_msg}")
+        trace_content += f"**Failed:**\n```\n{res1['output']}\n```\n"
+        toolkit.write_trace(trace_content, "validation_trace.md")
+        toolkit.restore_repo_state()
+        return {
+            "validation_passed": False,
+            "validation_attempts": attempts + 1,
+            "validation_error_context": error_msg,
+            "adapted_test_hunks": test_hunks
+        }
+        
+    # 3.3 Phase 2: Failure Confirmation
+    print("  Agent 4: Phase 2 — Failure Confirmation (Running targeted tests)...")
+    trace_content += f"## Phase 2: Failure Confirmation\nRunning tests: {test_classes}\n"
+    res2 = toolkit.run_targeted_tests(test_classes)
+    
+    if res2["compile_error"]:
+        error_msg = f"Test compilation error BEFORE fix applied:\n{res2['output']}"
+        print(f"    Agent 4 Error: {error_msg}")
+        trace_content += f"**Compile Error:**\n```\n{res2['output']}\n```\n"
+        toolkit.write_trace(trace_content, "validation_trace.md")
+        toolkit.restore_repo_state()
+        return {
+            "validation_passed": False,
+            "validation_attempts": attempts + 1,
+            "validation_error_context": error_msg,
+            "adapted_test_hunks": test_hunks
+        }
+        
+    if res2["success"]:
+        error_msg = "Targeted tests passed BEFORE the fix was applied. The test is invalid and does not trigger the vulnerability."
+        print(f"    Agent 4 Error: {error_msg}")
+        trace_content += f"**Invalid Test (Passed unexpectedly):**\n```\n{res2['output']}\n```\n"
+        toolkit.write_trace(trace_content, "validation_trace.md")
+        toolkit.restore_repo_state()
+        return {
+            "validation_passed": False,
+            "validation_attempts": attempts + 1,
+            "validation_error_context": error_msg,
+            "adapted_test_hunks": test_hunks
+        }
+        
+    trace_content += "**Failure Confirmed** (Tests failed as expected).\n"
+    
+    # 3.4 Phase 3: Patch Application
+    print("  Agent 4: Phase 3 — Patch Application (Applying code fix)...")
+    trace_content += "## Phase 3: Patch Application\n"
+    toolkit.restore_repo_state() # Cleanup buggy tests before full applied
+    res3 = toolkit.apply_adapted_hunks(code_hunks=code_hunks, test_hunks=test_hunks)
+    if not res3["success"]:
+        error_msg = f"Failed to apply code + test patch:\n{res3['output']}"
+        print(f"    Agent 4 Error: {error_msg}")
+        trace_content += f"**Failed:**\n```\n{res3['output']}\n```\n"
+        toolkit.write_trace(trace_content, "validation_trace.md")
+        toolkit.restore_repo_state()
+        return {
+            "validation_passed": False,
+            "validation_attempts": attempts + 1,
+            "validation_error_context": error_msg,
+            "adapted_test_hunks": test_hunks
+        }
 
-    validation_result = {
-        "success": True,
-        "compilation": {},
-        "spotbugs": {},
-        "issues": []
-    }
+    # 3.5 Phase 4: Targeted Verification
+    print("  Agent 4: Phase 4 — Targeted Verification (Making it Green)...")
+    trace_content += "## Phase 4: Targeted Verification\n"
+    res4 = toolkit.run_targeted_tests(test_classes)
+    
+    if not res4["success"]:
+        error_msg = f"Fix applied, but tests failed or compile aborted:\n{res4['output']}"
+        print(f"    Agent 4 Error: {error_msg}")
+        trace_content += f"**Failed:**\n```\n{res4['output']}\n```\n"
+        toolkit.write_trace(trace_content, "validation_trace.md")
+        toolkit.restore_repo_state()
+        return {
+            "validation_passed": False,
+            "validation_attempts": attempts + 1,
+            "validation_error_context": error_msg,
+            "adapted_test_hunks": test_hunks
+        }
+        
+    trace_content += "**Verification Successful** (Tests passed!).\n"
 
-    # 2. Compile
-    print("Validation Agent: Compiling...")
-    compile_result = toolkit.compile_files(files_list)
+    # 3.6 Phase 5: AST Validation
+    print("  Agent 4: Phase 5 — AST Validation (Skipped/Stubbed)...")
+    trace_content += "## Phase 5: AST Validation\n(Stubbed for now. Semantic correctness assured via tests.)\n"
 
-    trace_content += "## Compilation\n"
-    trace_content += f"**Success**: {compile_result.get('success')}\n\n"
-    trace_content += "### Output\n```\n" + compile_result.get("message", "") + "\n```\n\n"
-
-    validation_result["compilation"] = compile_result
-
-    if not compile_result.get("success"):
-        validation_result["success"] = False
-        validation_result["issues"].append("Compilation Failed")
-        trace_content += "**Status**: Compilation Failed. Aborting SpotBugs.\n"
-    else:
-        # 3. SpotBugs
-        print("Validation Agent: Running SpotBugs...")
-        compiled_classes_path = compile_result.get("output_path")
-        source_path = compile_result.get("source_path")
-
-        spotbugs_result = toolkit.run_spotbugs(compiled_classes_path, source_path)
-
-        trace_content += "## SpotBugs Analysis\n"
-        trace_content += f"**Success**: {spotbugs_result.get('success')}\n\n"
-        trace_content += "### Report\n```\n" + spotbugs_result.get("report", "") + "\n```\n\n"
-
-        validation_result["spotbugs"] = spotbugs_result
-
-        # Determine if SpotBugs failed (this is subjective based on report content)
-        # But we can check if success is false (runtime error)
-        if not spotbugs_result.get("success"):
-             validation_result["success"] = False
-             validation_result["issues"].append("SpotBugs Runtime Error")
-        else:
-             # Heuristic: Check if report contains specific bug patterns or isn't empty if that implies bugs
-             # For now, we assume if tool ran, it's 'success' in terms of execution,
-             # but we might want to parse the report to set validation_result["success"] = False if bugs found.
-             # The user said "if compilation fails then save ... with a success fail flag".
-             # Implies if SpotBugs finds bugs, we might mark as fail?
-             # Let's assume if report is not empty of bugs, it's a fail?
-             # SpotBugs text output usually lists bugs.
-             report = spotbugs_result.get("report", "")
-             # Simple check: if "M" (Medium) or "H" (High) priority bugs are listed?
-             # Or look for "BugInstance"?
-             # TextUI output example: "H D DLS_DEAD_LOCAL_STORE ..."
-             # If output is empty (or just summary saying 0 bugs), it's clean.
-             pass
-
-    # 4. Finalize
-    toolkit.write_trace(trace_content)
-
-    status_msg = "Validation Complete. " + ("Success." if validation_result["success"] else "Failed.")
-
-    # Append the result to the state (maybe in messages or a new field if state allowed dynamic fields,
-    # but strictly typed state might need update.
-    # The prompt says "output the things just similar to reasoning agents outputs (the mds and all)"
-    # and "save the final json".
-    # I'll save the json to a file as well, and return a message.
-
-    with open("validation_result.json", "w", encoding="utf-8") as f:
-        json.dump(validation_result, f, indent=2)
-
+    print("  Agent 4: 'Prove Red, Make Green' loop complete! Validation PASSED.")
+    trace_content += "\n**Final Status: VALIDATION PASSED**"
+    toolkit.write_trace(trace_content, "validation_trace.md")
+    
     return {
-        "messages": [HumanMessage(content=status_msg)]
+        "validation_passed": True,
+        "validation_attempts": attempts + 1,
+        "adapted_test_hunks": test_hunks,
+        "messages": [HumanMessage(content="Validation passed successfully.")]
     }

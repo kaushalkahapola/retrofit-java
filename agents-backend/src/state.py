@@ -41,6 +41,19 @@ e.g., {
 """
 
 
+
+class AdaptedHunk(TypedDict):
+    """
+    Agent 3 (Hunk Generator) output per hunk.
+    Represents a single rewritten patch hunk ready for application.
+    """
+    target_file: str        # Relative path in target repo
+    mainline_file: str      # Original mainline file path (for lineage tracking)
+    hunk_text: str          # Unified Diff hunk string (@@-header + +/- lines)
+    insertion_line: int     # Line number in target file where the hunk should anchor
+    intent_verified: bool   # True if the blueprint validation LLM call passed
+
+
 # ---------------------------------------------------------------------------
 # Core Agent State
 # ---------------------------------------------------------------------------
@@ -78,8 +91,8 @@ class AgentState(TypedDict):
     retrieval_results: dict          # Map: source_file -> list of candidates (from EnsembleRetriever)
 
     # --- Agent 3 (Hunk Generator) outputs ---
-    adapted_code_hunks: list         # Generated/adapted fix patch hunks
-    adapted_test_hunks: list         # Generated/adapted test patch hunks
+    adapted_code_hunks: list[AdaptedHunk]  # Generated/adapted fix patch hunks
+    adapted_test_hunks: list[AdaptedHunk]  # Generated/adapted test patch hunks
 
     # --- Agent 4 (Validation) feedback ---
     validation_attempts: int         # Counter for "Prove Red, Make Green" retry loop
