@@ -7,6 +7,15 @@ import json
 
 
 class ValidationToolkit:
+    def test_and_restore(self, test_classes: List[str]) -> Dict:
+        """
+        Runs targeted tests and restores repo state if tests fail or compile error.
+        Returns test result dict.
+        """
+        result = self.run_targeted_tests(test_classes)
+        if not result.get("success") or result.get("compile_error"):
+            self.restore_repo_state()
+            return result
     def __init__(self, target_repo_path: str):
         self.target_repo_path = target_repo_path
         self.client = get_client()
