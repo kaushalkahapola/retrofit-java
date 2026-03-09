@@ -12,7 +12,6 @@ import com.retrofit.analysis.tools.SpotBugsTool;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +33,8 @@ public class McpServer {
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     public McpServer(GetJavaVersionTool getJavaVersionTool, GetDependencyTool getDependencyTool,
-            GetClassContextTool getClassContextTool, CompileTool compileTool, SpotBugsTool spotBugsTool, ObjectMapper objectMapper) {
+            GetClassContextTool getClassContextTool, CompileTool compileTool, SpotBugsTool spotBugsTool,
+            ObjectMapper objectMapper) {
         this.getJavaVersionTool = getJavaVersionTool;
         this.getDependencyTool = getDependencyTool;
         this.getClassContextTool = getClassContextTool;
@@ -86,6 +86,7 @@ public class McpServer {
         return processRequest(request);
     }
 
+    @SuppressWarnings("null")
     @PostMapping("/messages")
     public void handleMessage(@RequestParam String sessionId, @RequestBody JsonNode request) {
         SseEmitter emitter = emitters.get(sessionId);

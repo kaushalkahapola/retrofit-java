@@ -9,7 +9,6 @@ import spoon.reflect.visitor.filter.TypeFilter;
 
 import java.io.File;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Component
 public class GetDependencyTool {

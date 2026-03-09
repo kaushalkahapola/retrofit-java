@@ -67,7 +67,7 @@ public class SpotBugsTool {
                 }
             }
 
-            int exitCode = process.waitFor();
+            process.waitFor();
 
             // SpotBugs exit codes:
             // 0: No bugs found

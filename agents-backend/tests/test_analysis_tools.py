@@ -2,12 +2,13 @@ import sys
 import os
 import json
 import asyncio
-
+import pytest
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
 
 from utils.mcp_client import get_client
 
+@pytest.mark.asyncio
 async def test_tools():
     client = get_client()
     

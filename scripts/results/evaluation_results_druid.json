@@ -1,0 +1,653 @@
+[
+  {
+    "patch_id": "17369_31.0.0",
+    "ground_truth_total": 1,
+    "ground_truth_files": [
+      "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java"
+    ],
+    "candidates_found_total": 1,
+    "matcher_found_total": 1,
+    "files_metrics": [
+      {
+        "source_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+        "candidates_count": 1,
+        "candidates": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java"
+        ],
+        "candidate_methods": {
+          "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      }
+    ]
+  },
+  {
+    "patch_id": "17319_31.0.0",
+    "ground_truth_total": 7,
+    "ground_truth_files": [
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/input/InputSpecs.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/DataSourcePlan.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/QueryKitSpec.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/groupby/GroupByQueryKit.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/scan/ScanQueryKit.java"
+    ],
+    "candidates_found_total": 1,
+    "matcher_found_total": 1,
+    "files_metrics": [
+      {
+        "source_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+        "candidates_count": 1,
+        "candidates": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java"
+        ],
+        "candidate_methods": {
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      }
+    ]
+  },
+  {
+    "patch_id": "17094_31.0.0",
+    "ground_truth_total": 4,
+    "ground_truth_files": [
+      "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+      "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
+      "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java",
+      "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java"
+    ],
+    "candidates_found_total": 4,
+    "matcher_found_total": 4,
+    "files_metrics": [
+      {
+        "source_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+        "candidates_count": 1,
+        "candidates": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java"
+        ],
+        "candidate_methods": {
+          "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
+        "candidates_count": 1,
+        "candidates": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java"
+        ],
+        "candidate_methods": {
+          "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java",
+        "candidates_count": 1,
+        "candidates": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java"
+        ],
+        "candidate_methods": {
+          "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java",
+        "candidates_count": 1,
+        "candidates": [
+          "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java"
+        ],
+        "candidate_methods": {
+          "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      }
+    ]
+  },
+  {
+    "patch_id": "16885_31.0.0",
+    "ground_truth_total": 5,
+    "ground_truth_files": [
+      "processing/src/main/java/org/apache/druid/frame/field/StringFieldReader.java",
+      "processing/src/main/java/org/apache/druid/frame/read/columnar/FrameColumnReaders.java",
+      "processing/src/main/java/org/apache/druid/frame/read/columnar/StringArrayFrameColumnReader.java",
+      "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+      "processing/src/main/java/org/apache/druid/frame/write/columnar/StringFrameColumnWriter.java"
+    ],
+    "candidates_found_total": 5,
+    "matcher_found_total": 5,
+    "files_metrics": [
+      {
+        "source_file": "processing/src/main/java/org/apache/druid/frame/field/StringFieldReader.java",
+        "candidates_count": 1,
+        "candidates": [
+          "processing/src/main/java/org/apache/druid/frame/field/StringFieldReader.java"
+        ],
+        "candidate_methods": {
+          "processing/src/main/java/org/apache/druid/frame/field/StringFieldReader.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "processing/src/main/java/org/apache/druid/frame/field/StringFieldReader.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "processing/src/main/java/org/apache/druid/frame/field/StringFieldReader.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "processing/src/main/java/org/apache/druid/frame/field/StringFieldReader.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/FrameColumnReaders.java",
+        "candidates_count": 1,
+        "candidates": [
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/FrameColumnReaders.java"
+        ],
+        "candidate_methods": {
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/FrameColumnReaders.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/FrameColumnReaders.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/FrameColumnReaders.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/FrameColumnReaders.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringArrayFrameColumnReader.java",
+        "candidates_count": 1,
+        "candidates": [
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/StringArrayFrameColumnReader.java"
+        ],
+        "candidate_methods": {
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/StringArrayFrameColumnReader.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/StringArrayFrameColumnReader.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/StringArrayFrameColumnReader.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/StringArrayFrameColumnReader.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "candidates_count": 1,
+        "candidates": [
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java"
+        ],
+        "candidate_methods": {
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "processing/src/main/java/org/apache/druid/frame/write/columnar/StringFrameColumnWriter.java",
+        "candidates_count": 1,
+        "candidates": [
+          "processing/src/main/java/org/apache/druid/frame/write/columnar/StringFrameColumnWriter.java"
+        ],
+        "candidate_methods": {
+          "processing/src/main/java/org/apache/druid/frame/write/columnar/StringFrameColumnWriter.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "processing/src/main/java/org/apache/druid/frame/write/columnar/StringFrameColumnWriter.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "processing/src/main/java/org/apache/druid/frame/write/columnar/StringFrameColumnWriter.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "processing/src/main/java/org/apache/druid/frame/write/columnar/StringFrameColumnWriter.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      }
+    ]
+  },
+  {
+    "patch_id": "16334_30.0.0",
+    "ground_truth_total": 6,
+    "ground_truth_files": [
+      "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java",
+      "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
+      "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
+      "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java",
+      "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java",
+      "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java"
+    ],
+    "candidates_found_total": 6,
+    "matcher_found_total": 6,
+    "files_metrics": [
+      {
+        "source_file": "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java",
+        "candidates_count": 1,
+        "candidates": [
+          "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java"
+        ],
+        "candidate_methods": {
+          "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
+        "candidates_count": 1,
+        "candidates": [
+          "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java"
+        ],
+        "candidate_methods": {
+          "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
+        "candidates_count": 1,
+        "candidates": [
+          "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java"
+        ],
+        "candidate_methods": {
+          "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java",
+        "candidates_count": 1,
+        "candidates": [
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java"
+        ],
+        "candidate_methods": {
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java",
+        "candidates_count": 1,
+        "candidates": [
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java"
+        ],
+        "candidate_methods": {
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
+        "candidates_count": 1,
+        "candidates": [
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java"
+        ],
+        "candidate_methods": {
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      }
+    ]
+  },
+  {
+    "patch_id": "16096_29.0.1",
+    "ground_truth_total": 3,
+    "ground_truth_files": [
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java"
+    ],
+    "candidates_found_total": 3,
+    "matcher_found_total": 3,
+    "files_metrics": [
+      {
+        "source_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java",
+        "candidates_count": 1,
+        "candidates": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java"
+        ],
+        "candidate_methods": {
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java",
+        "candidates_count": 1,
+        "candidates": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java"
+        ],
+        "candidate_methods": {
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java",
+        "candidates_count": 1,
+        "candidates": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java"
+        ],
+        "candidate_methods": {
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      }
+    ]
+  },
+  {
+    "patch_id": "15738_29.0.0",
+    "ground_truth_total": 5,
+    "ground_truth_files": [
+      "server/src/main/java/org/apache/druid/metadata/SegmentsMetadataManager.java",
+      "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataManager.java",
+      "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataQuery.java",
+      "server/src/main/java/org/apache/druid/server/http/DataSegmentPlus.java",
+      "server/src/main/java/org/apache/druid/server/http/MetadataResource.java"
+    ],
+    "candidates_found_total": 5,
+    "matcher_found_total": 5,
+    "files_metrics": [
+      {
+        "source_file": "server/src/main/java/org/apache/druid/metadata/SegmentsMetadataManager.java",
+        "candidates_count": 1,
+        "candidates": [
+          "server/src/main/java/org/apache/druid/metadata/SegmentsMetadataManager.java"
+        ],
+        "candidate_methods": {
+          "server/src/main/java/org/apache/druid/metadata/SegmentsMetadataManager.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "server/src/main/java/org/apache/druid/metadata/SegmentsMetadataManager.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "server/src/main/java/org/apache/druid/metadata/SegmentsMetadataManager.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "server/src/main/java/org/apache/druid/metadata/SegmentsMetadataManager.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataManager.java",
+        "candidates_count": 1,
+        "candidates": [
+          "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataManager.java"
+        ],
+        "candidate_methods": {
+          "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataManager.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataManager.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataManager.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataManager.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataQuery.java",
+        "candidates_count": 1,
+        "candidates": [
+          "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataQuery.java"
+        ],
+        "candidate_methods": {
+          "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataQuery.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataQuery.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataQuery.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "server/src/main/java/org/apache/druid/metadata/SqlSegmentsMetadataQuery.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "server/src/main/java/org/apache/druid/server/http/DataSegmentPlus.java",
+        "candidates_count": 1,
+        "candidates": [
+          "server/src/main/java/org/apache/druid/server/http/DataSegmentPlus.java"
+        ],
+        "candidate_methods": {
+          "server/src/main/java/org/apache/druid/server/http/DataSegmentPlus.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "server/src/main/java/org/apache/druid/server/http/DataSegmentPlus.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "server/src/main/java/org/apache/druid/server/http/DataSegmentPlus.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "server/src/main/java/org/apache/druid/server/http/DataSegmentPlus.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      },
+      {
+        "source_file": "server/src/main/java/org/apache/druid/server/http/MetadataResource.java",
+        "candidates_count": 1,
+        "candidates": [
+          "server/src/main/java/org/apache/druid/server/http/MetadataResource.java"
+        ],
+        "candidate_methods": {
+          "server/src/main/java/org/apache/druid/server/http/MetadataResource.java": "GIT_EXACT"
+        },
+        "ground_truth_matches_in_candidates": [
+          "server/src/main/java/org/apache/druid/server/http/MetadataResource.java"
+        ],
+        "ground_truth_matches_in_top1": [
+          "server/src/main/java/org/apache/druid/server/http/MetadataResource.java"
+        ],
+        "ground_truth_matches_in_top5": [
+          "server/src/main/java/org/apache/druid/server/http/MetadataResource.java"
+        ],
+        "candidate_recall": true,
+        "top1_accuracy": true,
+        "top5_accuracy": true
+      }
+    ]
+  }
+]

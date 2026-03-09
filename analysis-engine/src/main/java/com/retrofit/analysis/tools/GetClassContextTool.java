@@ -74,6 +74,9 @@ public class GetClassContextTool {
         }
 
         // Signature
+        if (type.getPosition().isValidPosition()) {
+            sb.append(indent).append("// Line ").append(type.getPosition().getLine()).append("\n");
+        }
         sb.append(indent);
         if (type.isPublic())
             sb.append("public ");
@@ -85,7 +88,6 @@ public class GetClassContextTool {
             sb.append("abstract ");
         if (type.isStatic())
             sb.append("static ");
-
         if (type.isInterface())
             sb.append("interface ");
         else if (type.isEnum())
@@ -115,7 +117,12 @@ public class GetClassContextTool {
 
         // Fields
         for (CtField<?> field : type.getFields()) {
-            sb.append(childIndent).append(field.toString()).append("\n");
+            if (field.getPosition().isValidPosition()) {
+                sb.append(childIndent).append("// Line ").append(field.getPosition().getLine()).append(": ");
+            } else {
+                sb.append(childIndent);
+            }
+            sb.append(field.toString()).append("\n");
         }
         if (!type.getFields().isEmpty())
             sb.append("\n");
@@ -125,16 +132,34 @@ public class GetClassContextTool {
             boolean isFocus = focusMethod != null && method.getSimpleName().equals(focusMethod);
 
             if (isFocus) {
-                // Print FULL body
-                sb.append(childIndent).append("// [FOCUS] Full Body\n");
-                // Split by lines to add indentation
-                String body = method.toString();
-                for (String line : body.split("\n")) {
-                    sb.append(childIndent).append(line).append("\n");
+                // Print FULL body with line numbers
+                int startLine = method.getPosition().isValidPosition() ? method.getPosition().getLine() : -1;
+                int endLine = method.getPosition().isValidPosition() ? method.getPosition().getEndLine() : -1;
+
+                sb.append(childIndent).append("// [FOCUS] Full Body (Lines ").append(startLine).append("-")
+                        .append(endLine).append(")\n");
+
+                // Get original source if possible to preserve formatting and provide exact
+                // lines
+                if (method.getPosition().isValidPosition()) {
+                    String originalContent = method.getPosition().getCompilationUnit().getOriginalSourceCode();
+                    // We need to extract lines manually because offsets might be tricky with
+                    // newlines
+                    // But we can just use the provided lines.
+                    String[] allLines = originalContent.split("\\r?\\n");
+                    for (int i = startLine; i <= endLine; i++) {
+                        if (i > 0 && i <= allLines.length) {
+                            sb.append(String.format("%4d: ", i)).append(allLines[i - 1]).append("\n");
+                        }
+                    }
+                } else {
+                    sb.append(childIndent).append(method.toString()).append("\n");
                 }
             } else {
                 // Print Signature ONLY
-                sb.append(childIndent);
+                int line = method.getPosition().isValidPosition() ? method.getPosition().getLine() : -1;
+                sb.append(childIndent).append("// Line ").append(line).append(": ");
+
                 // Modifiers
                 if (method.isPublic())
                     sb.append("public ");

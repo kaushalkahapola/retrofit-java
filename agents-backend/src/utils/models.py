@@ -12,7 +12,9 @@ class Step(BaseModel):
     description: str = Field(description="Detailed description of what to do")
     file_path: str = Field(description="The target file to modify or create")
     action: str = Field(description="Action type: MODIFY, CREATE, DELETE, or RENAME")
-    code_snippet: Optional[str] = Field(description="Specific code to add or modify (if applicable)")
+    start_line: Optional[int] = Field(description="The starting line number in the target file where change applies")
+    end_line: Optional[int] = Field(description="The ending line number in the target file where change applies")
+    target_context: Optional[str] = Field(description="Existing code at the target location for verification")
 
 class CompatibilityAnalysis(BaseModel):
     java_version_differences: str = Field(description="Analysis of Java version mismatches (e.g., var usage, switch expressions)")

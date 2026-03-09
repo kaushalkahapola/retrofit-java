@@ -66,3 +66,38 @@ class PatchAnalyzer:
         """
         lower_path = file_path.lower()
         return "test" in lower_path or lower_path.endswith("test.java")
+
+    def extract_raw_hunks(self, diff_text: str) -> dict:
+        """
+        Extracts raw hunk text per file from a unified diff.
+
+        Returns:
+            dict mapping file_path -> list of hunk strings (each hunk is the raw
+            unified-diff text including the @@ header and context lines).  This
+            lets Agent 1 pass individual hunks into an LLM prompt without having
+            to re-parse the full diff.
+        """
+        patch_set = self.parse_diff(diff_text)
+        result: dict[str, list[str]] = {}
+
+        for patched_file in patch_set:
+            file_path = patched_file.path
+            hunks: list[str] = []
+            for hunk in patched_file:
+                lines = []
+                # Reconstruct hunk header
+                lines.append(
+                    f"@@ -{hunk.source_start},{hunk.source_length} "
+                    f"+{hunk.target_start},{hunk.target_length} @@"
+                )
+                for line in hunk:
+                    if line.is_added:
+                        lines.append(f"+{line.value}")
+                    elif line.is_removed:
+                        lines.append(f"-{line.value}")
+                    else:
+                        lines.append(f" {line.value}")
+                hunks.append("".join(lines))
+            result[file_path] = hunks
+
+        return result

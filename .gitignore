@@ -426,9 +426,13 @@ venv/
 .env
 .DS_Store
 vscode-extension/out/
-datasets/*.csv
 temp_repo_storage/
 instructions/specification.md
 PROJECT_OVERVIEW.md
 *.ipynb
 **/*.pkl
+datasets/data/
+agents-backend/venv_linux
+references/
+venvwin/
+
