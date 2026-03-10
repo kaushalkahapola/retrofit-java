@@ -1,7 +1,7 @@
 """
 Phase 0: Optimistic Fast-Path Patching Node
 
-Before spinning up the expensive 4-agent LLM pipeline, H-MABS first tries
+Before spinning up the expensive 4-agent LLM pipeline, Retrofit first tries
 a direct `git apply --check` on the mainline patch against the target repo.
 If it applies cleanly *and* builds/tests pass, we exit immediately without
 burning any LLM tokens.
@@ -14,8 +14,6 @@ import os
 from langchain_core.messages import HumanMessage
 from state import AgentState
 from utils.patch_analyzer import PatchAnalyzer
-from utils.retrieval.ensemble_retriever import EnsembleRetriever
-from agents.reasoning_tools import ReasoningToolkit
 
 
 async def phase_0_optimistic(state: AgentState, config) -> dict:
@@ -53,37 +51,50 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
     changes = analyzer.analyze(diff_text)
 
     # ------------------------------------------------------------------
-    # 2. Setup retriever (needed by ReasoningToolkit for git operations)
+    # 2. Handle experiment mode checkout
     # ------------------------------------------------------------------
     target_repo_path = state.get("target_repo_path")
-    mainline_repo_path = state.get("mainline_repo_path")
     experiment_mode = state.get("experiment_mode", False)
     backport_commit = state.get("backport_commit")
 
-    retriever = EnsembleRetriever(mainline_repo_path, target_repo_path)
+    import subprocess
 
     if experiment_mode and backport_commit:
         print(f"Phase 0: Experiment mode — checking out parent of {backport_commit}...")
         try:
-            retriever.target_repo.git.checkout(f"{backport_commit}^")
-        except Exception as e:
-            print(f"Phase 0: Checkout failed: {e}")
+            subprocess.run(
+                ["git", "checkout", f"{backport_commit}^"],
+                cwd=target_repo_path,
+                check=True,
+                capture_output=True,
+                text=True
+            )
+        except subprocess.CalledProcessError as e:
+            print(f"Phase 0: Checkout failed: {e.stderr}")
             return {
-                "messages": [HumanMessage(content=f"Phase 0 checkout error: {e}")],
+                "messages": [HumanMessage(content=f"Phase 0 checkout error: {e.stderr}")],
                 "fast_path_success": False,
                 "patch_analysis": changes,
                 "patch_diff": diff_text,
             }
 
-    retriever.build_index("HEAD")
-
     # ------------------------------------------------------------------
     # 3. Attempt direct patch application check
     # ------------------------------------------------------------------
-    toolkit = ReasoningToolkit(retriever, target_repo_path, mainline_repo_path, changes)
-    applicability = toolkit.check_patch_applicability()
+    try:
+        check_result = subprocess.run(
+            ["git", "apply", "--check", patch_path],
+            cwd=target_repo_path,
+            capture_output=True,
+            text=True
+        )
+        is_applicable = (check_result.returncode == 0)
+        output = check_result.stdout if is_applicable else (check_result.stderr or check_result.stdout)
+    except Exception as e:
+        is_applicable = False
+        output = str(e)
 
-    if applicability.get("success"):
+    if is_applicable:
         print("Phase 0: git apply --check SUCCEEDED. Attempting actual patch application and test run.")
 
         # Actually apply the patch
@@ -186,7 +197,7 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
                 "fast_path_success": False,
             }
     else:
-        hint = applicability.get("output", "")[:200]
+        hint = output[:200]
         print(f"Phase 0: git apply --check FAILED. Escalating to full pipeline.\n  Hint: {hint}")
         return {
             "messages": [HumanMessage(content=f"Phase 0 failed. Reason: {hint}")],

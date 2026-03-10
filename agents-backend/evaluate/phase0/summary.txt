@@ -1,0 +1,18 @@
+Phase 0 (git apply --check) Evaluation Summary
+==============================================
+
+Project: druid
+--------------------
+  TYPE-I: 5/5 (100.00%)
+  TYPE-V: 1/1 (100.00%)
+  TYPE-II: 1/1 (100.00%)
+  OVERALL: 7/7 (100.00%)
+
+Project: elasticsearch
+--------------------
+  TYPE-I: 46/50 (92.00%)
+  TYPE-V: 2/16 (12.50%)
+  TYPE-II: 15/26 (57.69%)
+  TYPE-III: 0/2 (0.00%)
+  OVERALL: 63/94 (67.02%)
+

@@ -69,25 +69,7 @@ class ReasoningToolkit:
         except Exception as e:
             return [f"Error listing files: {e}"]
 
-    def get_patch_analysis(self) -> List[Dict]:
-        """
-        Returns the analysis of the patch, including modified files, added lines, etc.
-        """
-        return [
-            {
-                "file_path": c.file_path,
-                "change_type": c.change_type,
-                "added_lines": c.added_lines,
-                "removed_lines": c.removed_lines
-            }
-            for c in self.patch_analysis
-        ]
 
-    def submit_plan(self, **kwargs) -> str:
-        """
-        Submits the final implementation plan. Call this when you have gathered all information and created the plan.
-        """
-        return "Plan submitted successfully."
 
     def get_dependency_graph(self, file_paths: List[str], explore_neighbors: bool = False, use_mainline: bool = False) -> Dict:
         """
@@ -433,11 +415,6 @@ class ReasoningToolkit:
     def get_tools(self):
         return [
             StructuredTool.from_function(
-                func=self.get_patch_analysis,
-                name="get_patch_analysis",
-                description="Returns the analysis of the patch file (what changed)."
-            ),
-            StructuredTool.from_function(
                 func=self.search_candidates,
                 name="search_candidates",
                 description="Finds candidate files in the target repo that match a modified file from the patch."
@@ -468,12 +445,7 @@ class ReasoningToolkit:
                 name="list_files",
                 description="Lists files in a directory of the target repo."
             ),
-            StructuredTool.from_function(
-                func=self.submit_plan,
-                name="submit_plan",
-                description="Submits the final implementation plan.",
-                args_schema=ImplementationPlan
-            ),
+
             StructuredTool.from_function(
                 func=self.match_structure,
                 name="match_structure",

@@ -4,7 +4,7 @@ from langchain_core.messages import BaseMessage
 
 
 # ---------------------------------------------------------------------------
-# H-MABS Intermediate Artifact Schemas
+# Intermediate Artifact Schemas
 # ---------------------------------------------------------------------------
 
 class SemanticBlueprint(TypedDict):

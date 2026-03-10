@@ -218,9 +218,30 @@ async def validation_agent(state: AgentState, config) -> dict:
         
     trace_content += "**Verification Successful** (Tests passed!).\n"
 
-    # 3.6 Phase 5: AST Validation
-    print("  Agent 4: Phase 5 — AST Validation (Skipped/Stubbed)...")
-    trace_content += "## Phase 5: AST Validation\n(Stubbed for now. Semantic correctness assured via tests.)\n"
+    # 3.6 Phase 5: AST/Static Validation
+    print("  Agent 4: Phase 5 — AST/Static Validation (Running SpotBugs)...")
+    trace_content += "## Phase 5: AST/Static Validation\n"
+    
+    classes_path = os.path.join(target_repo_path, "target", "classes")
+    if not os.path.exists(classes_path):
+        classes_path = os.path.join(target_repo_path, "build", "classes", "java", "main")
+        
+    spotbugs_res = toolkit.run_spotbugs(compiled_classes_path=classes_path, source_path=os.path.join(target_repo_path, "src", "main", "java"))
+    
+    if not spotbugs_res.get("success", True):
+        error_msg = f"SpotBugs detected potential issues:\n{spotbugs_res.get('output', 'Unknown Check Failure')}"
+        print(f"    Agent 4 Error: {error_msg}")
+        trace_content += f"**Failed:**\n```\n{spotbugs_res.get('output', '')}\n```\n"
+        toolkit.write_trace(trace_content, "validation_trace.md")
+        toolkit.restore_repo_state()
+        return {
+            "validation_passed": False,
+            "validation_attempts": attempts + 1,
+            "validation_error_context": error_msg,
+            "adapted_test_hunks": test_hunks
+        }
+    
+    trace_content += "**Static Validation Successful** (No high-severity bugs found).\n"
 
     print("  Agent 4: 'Prove Red, Make Green' loop complete! Validation PASSED.")
     trace_content += "\n**Final Status: VALIDATION PASSED**"

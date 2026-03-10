@@ -127,23 +127,19 @@ class TestContextAnalyzerNodeIntegration(unittest.IsolatedAsyncioTestCase):
             "messages": [],
         }
 
-        # Mock LLM response
-        mock_response = MagicMock()
-        mock_response.content = MOCK_BLUEPRINT_JSON
-
-        mock_llm = AsyncMock()
-        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
-
-        # Mock MCP client to avoid real server calls
-        mock_mcp = MagicMock()
-        mock_mcp.call_tool.return_value = {
-            "context": "public void readBuffer() { process(buf); }",
-            "start_line": 10,
-            "end_line": 14,
-        }
+        # Mock LLM and Agent response
+        mock_llm = MagicMock()
+        
+        mock_agent = AsyncMock()
+        mock_msg = MagicMock()
+        mock_msg.content = MOCK_BLUEPRINT_JSON
+        mock_msg.type = "ai"
+        mock_response = {"messages": [mock_msg]}
+        mock_agent.ainvoke = AsyncMock(return_value=mock_response)
 
         with patch("agents.context_analyzer.ChatGoogleGenerativeAI", return_value=mock_llm), \
-             patch("agents.context_analyzer.get_client", return_value=mock_mcp):
+             patch("agents.context_analyzer.create_react_agent", return_value=mock_agent), \
+             patch("agents.context_analyzer.get_client", return_value=MagicMock()):
             result = await context_analyzer_node(state, {})
 
         self.assertIn("semantic_blueprint", result)
@@ -151,8 +147,8 @@ class TestContextAnalyzerNodeIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertIn("root_cause_hypothesis", bp)
         self.assertIn("fix_logic", bp)
         self.assertIn("dependent_apis", bp)
-        # Verify LLM was called
-        self.assertTrue(mock_llm.ainvoke.called)
+        # Verify LLM Agent was called
+        self.assertTrue(mock_agent.ainvoke.called)
 
     async def test_node_returns_error_on_missing_patch_diff(self):
         from agents.context_analyzer import context_analyzer_node

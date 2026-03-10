@@ -9,7 +9,13 @@
 
 ## Code File Mappings
 
-### ❌ `src/main/java/Foo.java` → **NOT FOUND** in target
+### `src/main/java/Foo.java`
+
+**Agent Tool Steps:**
+
+| Mainline Method | Target Method | Lines |
+|---|---|---|
+| `process` | `process` | 1–5 |
 
 ## Test File Mappings
 

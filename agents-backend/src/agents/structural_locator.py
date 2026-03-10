@@ -27,9 +27,41 @@ import re
 import json
 from langchain_core.messages import HumanMessage
 from state import AgentState
-from utils.mcp_client import get_client
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.prebuilt import create_react_agent
+from state import AgentState
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from agents.reasoning_tools import ReasoningToolkit
+
+_AGENT_SYSTEM = """You are an expert software engineer mapping code from a new mainline patch to an older target repository.
+You need to find the exact target file and target method corresponding to a modified mainline file and methods, determining the start and end lines.
+You also need to identify if any methods were renamed.
+
+You have tools:
+- `search_candidates(file_path)`: Find a moved/renamed file in the target repo.
+- `match_structure(mainline_file_path, candidate_paths)`: Compare structural similarity.
+- `get_class_context(file_path, method_name)`: Get method boundaries and code in the target repo.
+- `get_dependency_graph(file_paths)`: Find relations.
+- `read_file(file_path)`: Read a file from target repo if you need to manually inspect string matches.
+- `git_log_follow(file_path)`: Check git history for renames.
+
+Investigate to find where the mainline changes should be applied in the target repo.
+When you find it, output precisely this JSON:
+{
+    "mappings": [
+        {
+            "mainline_method": "<methodName>",
+            "target_file": "<path/in/target/repo>",
+            "target_method": "<methodName in target repo>",
+            "start_line": <int or null>,
+            "end_line": <int or null>,
+            "code_snippet": "<the code snippet of the method>"
+        }
+    ],
+    "consistency_map_entries": {"oldName": "newName"}
+}
+If a method cannot be found, set its target_file and target_method to null.
+Do not include markdown or explanations outside the JSON."""
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +148,6 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     print(f"  Agent 2: {len(code_changes)} code file(s), {len(test_changes)} test file(s)")
     trace += f"## Hunk Segregation\n- Code files: {len(code_changes)}\n- Test files: {len(test_changes)}\n\n"
 
-    mcp = get_client()
     dependent_apis = set(semantic_blueprint.get("dependent_apis", []))
 
     # Output accumulators
@@ -132,6 +163,17 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         retriever = None
         toolkit = None
 
+    # Setup LLM Agent
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+    tools = [
+        t for t in toolkit.get_tools() if t.name in [
+            "search_candidates", "match_structure", "get_dependency_graph",
+            "read_file", "get_class_context", "git_log_follow", "git_blame_lines"
+        ]
+    ] if toolkit else []
+    
+    agent = create_react_agent(llm, tools=tools, state_modifier=_AGENT_SYSTEM)
+
     # ------------------------------------------------------------------
     # 2. Process code files
     # ------------------------------------------------------------------
@@ -141,55 +183,63 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         mainline_file = change.file_path if hasattr(change, "file_path") else change.get("file_path")
         print(f"  Agent 2: Locating target for {mainline_file}...")
 
-        target_file = _find_target_file(mainline_file, target_repo_path, toolkit)
-        if not target_file:
-            trace += f"### ❌ `{mainline_file}` → **NOT FOUND** in target\n\n"
-            print(f"  Agent 2: Could not locate target for {mainline_file}")
-            continue
-
-        trace += f"### `{mainline_file}` → `{target_file}`\n\n"
-
-        # Per-method location with reflection loop
+        trace += f"### `{mainline_file}`\n\n"
         modified_methods = _infer_modified_methods(change)
-        if not modified_methods:
-            # No method names inferred — map at file level
-            mapped_target_context[mainline_file] = {
-                "target_file": target_file,
-                "method": None,
-                "start_line": None,
-                "end_line": None,
-                "code_snippet": "",
-            }
-            continue
+        
+        input_msg = f"Mainline File: {mainline_file}\nChanged Methods: {modified_methods}\nBlueprint:\n{json.dumps(semantic_blueprint, indent=2)}\nFind the target file and methods."
+        input_data = {"messages": [("user", input_msg)]}
+        
+        mapping_result = None
+        for attempt in range(2):
+            try:
+                result = await agent.ainvoke(input_data)
+                raw_content = result["messages"][-1].content
+                
+                text = raw_content.strip()
+                if "```" in text:
+                    lines = text.splitlines()
+                    inside = False
+                    json_lines = []
+                    for line in lines:
+                        if line.startswith("```"):
+                            inside = not inside
+                            continue
+                        if inside:
+                            json_lines.append(line)
+                    text = "\n".join(json_lines).strip()
+                
+                mapping_result = json.loads(text)
+                
+                trace += f"**Agent Tool Steps:**\n\n"
+                for m in result["messages"]:
+                    if m.type == "tool":
+                        trace += f"  - `Tool: {m.name}` -> {str(m.content)[:100]}...\n"
+                break
+            except Exception as e:
+                print(f"  Agent 2: LLM call error (attempt {attempt+1}/2): {e}")
 
-        for method_name in modified_methods:
-            located = _locate_method_with_reflection(
-                mcp=mcp,
-                toolkit=toolkit,
-                target_file=target_file,
-                mainline_method=method_name,
-                target_repo_path=target_repo_path,
-                dependent_apis=dependent_apis,
-                consistency_map=consistency_map,
-                trace_lines=[],
-                max_attempts=2,
-            )
-            trace += f"| Mainline Method | Target Method | Lines | Divergence |\n"
-            trace += f"|---|---|---|---|\n"
-            trace += (
-                f"| `{method_name}` | `{located.get('target_method', '?')}` "
-                f"| {located.get('start_line', '?')}–{located.get('end_line', '?')} "
-                f"| {located.get('divergence', 'ok')} |\n\n"
-            )
-
-            key = mainline_file
-            mapped_target_context[key] = {
-                "target_file": target_file,
-                "method": located.get("target_method"),
-                "start_line": located.get("start_line"),
-                "end_line": located.get("end_line"),
-                "code_snippet": located.get("code_snippet", ""),
-            }
+        if mapping_result and isinstance(mapping_result, dict):
+            for k, v in mapping_result.get("consistency_map_entries", {}).items():
+                consistency_map[k] = v
+                
+            mappings = mapping_result.get("mappings", [])
+            for m in mappings:
+                trace += f"| Mainline Method | Target Method | Lines |\n"
+                trace += f"|---|---|---|\n"
+                trace += (
+                    f"| `{m.get('mainline_method', '?')}` | `{m.get('target_method', '?')}` "
+                    f"| {m.get('start_line', '?')}–{m.get('end_line', '?')} |\n\n"
+                )
+                
+                mapped_target_context[mainline_file] = {
+                    "target_file": m.get("target_file"),
+                    "method": m.get("target_method"),
+                    "start_line": m.get("start_line"),
+                    "end_line": m.get("end_line"),
+                    "code_snippet": m.get("code_snippet", ""),
+                }
+        else:
+            trace += f"❌ Failed to extract mapping.\n\n"
 
     # ------------------------------------------------------------------
     # 3. Process test files

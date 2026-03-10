@@ -205,13 +205,30 @@ index 0000000..1111111 100644
             "messages": [],
         }
 
-        mock_mcp = MagicMock()
-        mock_mcp.call_tool.return_value = {"context": "void process() { buf.read(); }", "start_line": 1, "end_line": 5}
+        mock_agent = AsyncMock()
+        mock_msg = MagicMock()
+        mock_msg.content = """{
+            "mappings": [
+                {
+                    "mainline_method": "process",
+                    "target_file": "src/main/java/Foo.java",
+                    "target_method": "process",
+                    "start_line": 1,
+                    "end_line": 5,
+                    "code_snippet": "void process() { buf.read(); }"
+                }
+            ],
+            "consistency_map_entries": {}
+        }"""
+        mock_msg.type = "ai"
+        mock_response = {"messages": [mock_msg]}
+        mock_agent.ainvoke = AsyncMock(return_value=mock_response)
 
         mock_retriever = MagicMock()
         mock_retriever.target_repo.working_dir = "/fake/target"
 
-        with patch("agents.structural_locator.get_client", return_value=mock_mcp), \
+        with patch("agents.structural_locator.create_react_agent", return_value=mock_agent), \
+             patch("agents.structural_locator.ChatGoogleGenerativeAI", return_value=MagicMock()), \
              patch("agents.structural_locator.EnsembleRetriever", return_value=mock_retriever), \
              patch("agents.structural_locator.ReasoningToolkit", return_value=MagicMock()):
             result = await structural_locator_node(state, {})
