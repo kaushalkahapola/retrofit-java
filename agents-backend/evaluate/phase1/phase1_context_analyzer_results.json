@@ -1,0 +1,23 @@
+[
+  {
+    "project": "druid",
+    "mainline_commit": "5b09329479117a54f68d5ce9e4c8b245d76a8f79",
+    "backport_commit": "3ba7badda390977805600942d71016b5af12751b",
+    "patch_type": "TYPE-I",
+    "status": "Success",
+    "root_cause": "Insufficient check for available memory in the last allocated block could allow an allocation request to succeed even when the allocator cannot satisfy it, potentially leading to buffer overflows or logic errors.",
+    "fix_logic": "Added a check to ensure that if the allocator cannot satisfy the requested bytes, the method also verifies whether the last allocated block has enough capacity; if neither can satisfy the request, it returns false.",
+    "dependent_apis": [
+      "allocator.available",
+      "limits.getInt",
+      "blockHolders.get",
+      "getCapacity",
+      "currentBlockNumber"
+    ],
+    "token_usage": {
+      "input_tokens": 2167,
+      "output_tokens": 125,
+      "total_tokens": 2292
+    }
+  }
+]
