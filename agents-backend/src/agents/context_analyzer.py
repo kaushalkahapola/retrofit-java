@@ -219,6 +219,15 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
     
     agent = create_react_agent(llm, tools=tools, prompt=_AGENT_SYSTEM)
 
+    # Token tracking
+    token_usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+    def _update_tokens(usage: dict):
+        if not usage: return
+        token_usage["input_tokens"] += usage.get("input_tokens", usage.get("prompt_tokens", 0))
+        token_usage["output_tokens"] += usage.get("output_tokens", usage.get("completion_tokens", 0))
+        token_usage["total_tokens"] += usage.get("total_tokens", 0) or (token_usage["input_tokens"] + token_usage["output_tokens"])
+
     # Filter to non-test code changes only
     code_changes = [fc for fc in patch_analysis if not fc.is_test_file]
     if not code_changes:
@@ -272,6 +281,10 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
                         trace += f"  - `Tool: {m.name}` -> {str(m.content)[:100]}...\n"
                 
                 if blueprint:
+                    # Accumulate tokens from all steps in the agent execution
+                    for msg in result["messages"]:
+                        if msg.type == "ai" and hasattr(msg, "response_metadata"):
+                            _update_tokens(msg.response_metadata.get("token_usage", {}))
                     break
                 print(f"  Agent 1: Blueprint parse failed (attempt {attempt+1}/2), retrying...")
             except Exception as e:
@@ -300,7 +313,8 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
                 code_body = str(pre_ctx)
             except Exception:
                 code_body = "[Code body unavailable for reflection]"
-            verified = await _self_reflect(llm, code_body, blueprint)
+            verified, usage = await _self_reflect(llm, code_body, blueprint)
+            _update_tokens(usage)
             trace += f"**Self-Reflection**: {'VERIFIED ✅' if verified else 'FAILED ❌ (used anyway)'}\n\n"
             if not verified:
                 print(f"  Agent 1: Self-reflection rejected blueprint for {file_path}. Using best-effort result.")
@@ -345,6 +359,7 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
         ],
         "semantic_blueprint": consolidated,
         "patch_diff": patch_diff,  # ensure it's in state for downstream agents
+        "token_usage": token_usage,
     }
 
 
@@ -352,10 +367,10 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
 # Helpers
 # ---------------------------------------------------------------------------
 
-async def _self_reflect(llm: BaseChatModel, code_body: str, blueprint: SemanticBlueprint) -> bool:
+async def _self_reflect(llm: BaseChatModel, code_body: str, blueprint: SemanticBlueprint) -> tuple[bool, dict]:
     """
     Sends a verification prompt to the LLM to check that the blueprint is
-    internally consistent with the code. Returns True if verified.
+    internally consistent with the code. Returns (True, usage_dict) if verified.
     """
     messages = [
         SystemMessage(content=_REFLECTION_SYSTEM),
@@ -370,11 +385,12 @@ async def _self_reflect(llm: BaseChatModel, code_body: str, blueprint: SemanticB
     ]
     try:
         response = await llm.ainvoke(messages)
+        usage = getattr(response, "response_metadata", {}).get("token_usage", {})
         content = response.content if hasattr(response, "content") else str(response)
-        return content.strip().upper().startswith("YES")
+        return content.strip().upper().startswith("YES"), usage
     except Exception as e:
         print(f"  Agent 1: Self-reflection LLM call failed: {e}")
-        return True  # Assume valid on error (fail-open)
+        return True, {}  # Assume valid on error (fail-open)
 
 
 def _infer_method_name(change) -> str | None:
