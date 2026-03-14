@@ -172,7 +172,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         ]
     ] if toolkit else []
     
-    agent = create_react_agent(llm, tools=tools, state_modifier=_AGENT_SYSTEM)
+    agent = create_react_agent(llm, tools=tools, prompt=_AGENT_SYSTEM)
 
     # ------------------------------------------------------------------
     # 2. Process code files
