@@ -29,7 +29,7 @@ import re
 from langchain_core.messages import HumanMessage
 from state import AgentState
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import AzureChatOpenAI
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from state import AgentState
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
