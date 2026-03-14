@@ -1,0 +1,5 @@
+Phase 2 (Structural Locator) Evaluation Summary
+==============================================
+Total evaluated: 1
+File Mapping Accuracy: 1/1 (100.00%)
+Region Mapping Accuracy: 1/1 (100.00%)

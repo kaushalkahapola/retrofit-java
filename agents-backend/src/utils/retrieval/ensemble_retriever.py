@@ -67,7 +67,7 @@ class EnsembleRetriever:
         Builds the index for the target repository at the given commit.
         Checks for cached index first.
         """
-        cache_file = f"index_cache_{commit_sha}.pkl"
+        cache_file = os.path.join(self.target_repo.working_dir, f".index_cache_{commit_sha}.pkl")
         if os.path.exists(cache_file):
             print(f"Loading index from cache: {cache_file}")
             try:

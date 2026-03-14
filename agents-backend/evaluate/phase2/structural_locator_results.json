@@ -1,0 +1,31 @@
+[
+  {
+    "project": "druid",
+    "mainline_commit": "5b09329479117a54f68d5ce9e4c8b245d76a8f79",
+    "backport_commit": "3ba7badda390977805600942d71016b5af12751b",
+    "patch_type": "TYPE-I",
+    "results": [
+      {
+        "mainline_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+        "mapped_target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+        "mapped_range": [
+          149,
+          195
+        ],
+        "gt_available": true,
+        "gt_ranges": [
+          [
+            158,
+            169
+          ]
+        ],
+        "file_match": true,
+        "region_overlap": true,
+        "status": "Mapped"
+      }
+    ],
+    "overall_file_match": true,
+    "overall_region_overlap": true,
+    "consistency_map": {}
+  }
+]
