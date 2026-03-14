@@ -216,7 +216,7 @@ async def main():
                     "mainline_file": mainline_file,
                     "mapped_target_file": target_file,
                     "mapped_range": [start_line, end_line],
-                    "gt_available": mainline_file in ground_truth,
+                    "gt_available": len(gt_ranges) > 0,
                     "gt_ranges": gt_ranges,
                     "file_match": file_match,
                     "region_overlap": region_overlap,
