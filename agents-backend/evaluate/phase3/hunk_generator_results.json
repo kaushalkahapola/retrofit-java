@@ -1,0 +1,30 @@
+[
+  {
+    "project": "druid",
+    "mainline_commit": "5b09329479117a54f68d5ce9e4c8b245d76a8f79",
+    "backport_commit": "3ba7badda390977805600942d71016b5af12751b",
+    "patch_type": "TYPE-I",
+    "generated_hunks": 1,
+    "generated_test_hunks": 0,
+    "adapted_code_hunks": [
+      {
+        "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+        "mainline_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+        "hunk_text": "@@ -149,0 +149,6 @@ \n+    final int idx = currentBlockNumber();\n+\n+    // The request cannot be satisfied by the available bytes in the allocator\n+    if (bytes > allocator.available()) {\n+      // Check if the last allocated block has enough memory to satisfy the request\n+      if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {\n+        // The request cannot be satisfied by the allocator and the last allocated block. Return false\n+        return false;\n+      }\n+    }\n",
+        "insertion_line": 149,
+        "intent_verified": false
+      }
+    ],
+    "adapted_test_hunks": [],
+    "hunk_results": [
+      {
+        "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+        "application_status": "Applied",
+        "hunk_size_lines": 11,
+        "hunk_text": "@@ -149,0 +149,6 @@ \n+    final int idx = currentBlockNumber();\n+\n+    // The request cannot be satisfied by the available bytes in the allocator\n+    if (bytes > allocator.available()) {\n+      // Check if the last allocated block has enough memory to satisfy the request\n+      if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {\n+        // The request cannot be satisfied by the allocator and the last allocated block. Return false\n+        return false;\n+      }\n+    }\n"
+      }
+    ],
+    "all_hunks_applied": true,
+    "status": "Generated"
+  }
+]
