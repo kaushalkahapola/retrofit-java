@@ -117,7 +117,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
     Outputs written to state:
       - consistency_map:          { mainline_symbol: target_symbol }
-      - mapped_target_context:    { file_path: { method, start_line, end_line, code_snippet } }
+      - mapped_target_context:    { file_path: [{ hunk_index, mainline_method, target_file, target_method, start_line, end_line, code_snippet }, ...] }
     """
     print("Agent 2 (Structural Locator): Starting target location mapping...")
 
@@ -157,7 +157,8 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
     # Output accumulators
     consistency_map: dict[str, str] = {}
-    mapped_target_context: dict[str, dict] = {}
+    # Changed to support multiple hunks per file: dict[file_path] = list[hunk_mappings]
+    mapped_target_context: dict[str, list] = {}
 
     # Setup a lightweight retriever (lazy index build — only when Phase 2 git methods fail)
     try:
@@ -183,15 +184,28 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     agent = create_react_agent(llm, tools=tools, prompt=_AGENT_SYSTEM)
 
     # ------------------------------------------------------------------
-    # 2. Process code files
+    # 2. Process hunks from hunk_chain (from semantic_blueprint)
     # ------------------------------------------------------------------
     trace += "## Code File Mappings\n\n"
 
-    for change in code_changes:
-        mainline_file = change.file_path if hasattr(change, "file_path") else change.get("file_path")
-        print(f"  Agent 2: Locating target for {mainline_file}...")
-
+    # Extract hunk_chain from semantic_blueprint
+    hunk_chain = semantic_blueprint.get("hunk_chain", [])
+    print(f"  Agent 2: Found {len(hunk_chain)} hunk(s) in hunk_chain")
+    
+    # Group hunks by file for efficient processing
+    hunks_by_file: dict[str, list] = {}
+    for hunk in hunk_chain:
+        file = hunk.get("file", "")
+        if file:
+            if file not in hunks_by_file:
+                hunks_by_file[file] = []
+            hunks_by_file[file].append(hunk)
+    
+    # Process hunks grouped by file
+    for mainline_file, file_hunks in hunks_by_file.items():
+        print(f"  Agent 2: Locating target for {mainline_file} ({len(file_hunks)} hunk(s))...")
         trace += f"### `{mainline_file}`\n\n"
+        trace += f"**Hunks in this file**: {len(file_hunks)}\n\n"
         
         # STEP 1: Try git-based resolution first (no LLM call)
         git_candidates = None
@@ -206,24 +220,10 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 print(f"  Agent 2: Git resolution failed: {e}")
                 trace += f"⚠️ Git resolution failed: {e}\n\n"
         
-        # STEP 2: Try LLM refinement to get method-level details
-        modified_methods = _infer_modified_methods(change)
-        
-        # IMPROVEMENT: Extract method name from semantic blueprint if diff inference failed
-        # The blueprint often mentions the main modified method in root_cause_hypothesis or fix_logic
-        if not modified_methods:
-            root_cause = semantic_blueprint.get("root_cause_hypothesis", "")
-            fix_logic = semantic_blueprint.get("fix_logic", "")
-            blueprint_text = root_cause + " " + fix_logic
-            
-            # Look for pattern "method `methodName`" or "method methodName returned/failed"
-            method_pattern = re.compile(r"method\s+[`'\"]?(\w+)[`'\"]?")
-            for match in method_pattern.finditer(blueprint_text):
-                method_name = match.group(1)
-                if method_name not in {"The", "the", "a", "is", "can", "when"}:
-                    modified_methods = [method_name]
-                    print(f"  Agent 2: Extracted method from blueprint: {method_name}")
-                    break
+        # STEP 2: Extract target file (prefer git resolution result)
+        target_file = mainline_file
+        if git_candidates:
+            target_file = git_candidates[0]["file"]
         
         file_diff = ""
         try:
@@ -234,12 +234,32 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         except Exception:
             file_diff = "Diff not available."
 
+        # Build hunk details for LLM - CRITICAL: include hunk_index for proper ordering
+        hunk_details = "Hunk Details (in order):\n"
+        for idx, hunk in enumerate(file_hunks):
+            hunk_idx = hunk.get("hunk_index", idx)
+            role = hunk.get("role", "?")
+            summary = hunk.get("summary", "")
+            hunk_details += f"  - Hunk {hunk_idx} (role={role}): {summary}\n"
+        
+        # Simplified blueprint for LLM (avoid redundant info)
+        simple_blueprint = {
+            "root_cause_hypothesis": semantic_blueprint.get("root_cause_hypothesis", ""),
+            "fix_logic": semantic_blueprint.get("fix_logic", ""),
+            "dependent_apis": semantic_blueprint.get("dependent_apis", []),
+        }
+        
         input_msg = (
             f"Mainline File: {mainline_file}\n"
-            f"Inferred Changed Methods: {modified_methods}\n"
-            f"Semantic Blueprint:\n{json.dumps(semantic_blueprint, indent=2)}\n\n"
+            f"Target File (from git resolution): {target_file}\n"
+            f"{hunk_details}\n"
+            f"Semantic Blueprint:\n{json.dumps(simple_blueprint, indent=2)}\n\n"
             f"Patch Diff for this file:\n```diff\n{file_diff}\n```\n\n"
-            f"Examine the diff and the blueprint. Identify the target file and methods."
+            f"For EACH hunk listed above, identify:\n"
+            f"1. The target method where this hunk applies\n"
+            f"2. The start and end line numbers in the target file\n"
+            f"Return a JSON with 'mappings' array, one entry per hunk, in the SAME ORDER as the Hunk Details above.\n"
+            f"For import hunks, set target_method to '<import>'."
         )
         input_data = {"messages": [("user", input_msg)]}
         
@@ -292,33 +312,98 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 consistency_map[k] = v
                 
             mappings = mapping_result.get("mappings", [])
-            for m in mappings:
-                trace += f"| Mainline Method | Target Method | Lines |\n"
-                trace += f"|---|---|---|\n"
+            # Initialize list for this file if not present
+            if mainline_file not in mapped_target_context:
+                mapped_target_context[mainline_file] = []
+            
+            # Match each mapping to corresponding hunk by considering order
+            # Mappings should be in the same order as file_hunks
+            trace += f"| Hunk Idx | Role | Mainline Method | Target Method | Lines |\n"
+            trace += f"|---|---|---|---|---|\n"
+            
+            for hunk_idx_in_hunks, hunk in enumerate(file_hunks):
+                hunk_idx = hunk.get("hunk_index", hunk_idx_in_hunks)
+                hunk_role = hunk.get("role", "")
+                
+                # Get the mapping for this hunk (should be at same index)
+                if hunk_idx_in_hunks < len(mappings):
+                    m = mappings[hunk_idx_in_hunks]
+                else:
+                    # Not enough mappings returned by LLM - create default
+                    m = {
+                        "mainline_method": "<import>" if hunk_role == "declaration" else f"hunk_{hunk_idx}",
+                        "target_file": target_file,
+                        "target_method": "<import>" if hunk_role == "declaration" else None,
+                        "start_line": None,
+                        "end_line": None,
+                        "code_snippet": "",
+                    }
+                
+                # Ensure target_file is set from our git resolution
+                if not m.get("target_file"):
+                    m["target_file"] = target_file
+                
+                # CRITICAL: For import hunks, we need to ensure proper line numbers
+                # Without proper start_line/end_line, hunk_generator will fall back to original mainline line numbers,
+                # which won't match the target file. The sorting in apply_adapted_hunks depends on correct insertion_line values.
+                if hunk_role == "declaration" and m.get("start_line") is None:
+                    # For imports, try to at least suggest where imports should be
+                    # This is a fallback - the LLM mapping should ideally have provided this
+                    trace += f"  ⚠️ Import hunk {hunk_idx} has no target start_line. Hunk generator will extract from hunk header.\n"
+                
                 trace += (
-                    f"| `{m.get('mainline_method', '?')}` | `{m.get('target_method', '?')}` "
-                    f"| {m.get('start_line', '?')}–{m.get('end_line', '?')} |\n\n"
+                    f"| {hunk_idx} | {hunk_role} | `{m.get('mainline_method', '?')}` | "
+                    f"`{m.get('target_method', '?')}` | {m.get('start_line', '?')}–{m.get('end_line', '?')} |\n"
                 )
                 
-                mapped_target_context[mainline_file] = {
+                # Append mapping for this hunk
+                mapped_target_context[mainline_file].append({
+                    "hunk_index": hunk_idx,
+                    "mainline_method": m.get("mainline_method"),
                     "target_file": m.get("target_file"),
-                    "method": m.get("target_method"),
+                    "target_method": m.get("target_method"),
                     "start_line": m.get("start_line"),
                     "end_line": m.get("end_line"),
                     "code_snippet": m.get("code_snippet", ""),
-                }
+                })
+                print(f"  Agent 2: Mapped hunk {hunk_idx} ({m.get('mainline_method', '?')}) to {m.get('target_method', '?')} at lines {m.get('start_line', '?')}-{m.get('end_line', '?')}")
         elif git_candidates:
             # LLM failed, but git resolution succeeded — use it as fallback
             git_target = git_candidates[0]["file"]
             trace += f"**Fallback**: Using git resolution result (LLM refinement failed).\n\n"
-            mapped_target_context[mainline_file] = {
-                "target_file": git_target,
-                "method": None,  # Method details unknown
-                "start_line": None,
-                "end_line": None,
-                "code_snippet": "",
-            }
-            print(f"  Agent 2: Using fallback mapping: {mainline_file} → {git_target}")
+            
+            if mainline_file not in mapped_target_context:
+                mapped_target_context[mainline_file] = []
+            
+            # Create fallback mappings for each hunk
+            for idx, hunk in enumerate(file_hunks):
+                hunk_idx = hunk.get("hunk_index", idx)
+                hunk_role = hunk.get("role", "")
+                
+                if hunk_role == "declaration":
+                    # Import statements
+                    mapped_target_context[mainline_file].append({
+                        "hunk_index": hunk_idx,
+                        "mainline_method": "<import>",
+                        "target_file": git_target,
+                        "target_method": None,
+                        "start_line": None,
+                        "end_line": None,
+                        "code_snippet": "",
+                    })
+                    print(f"  Agent 2: Fallback mapped hunk {hunk_idx} (import) to {git_target}")
+                else:
+                    # Regular hunks
+                    mapped_target_context[mainline_file].append({
+                        "hunk_index": hunk_idx,
+                        "mainline_method": f"hunk_{hunk_idx}",
+                        "target_file": git_target,
+                        "target_method": None,
+                        "start_line": None,
+                        "end_line": None,
+                        "code_snippet": "",
+                    })
+                    print(f"  Agent 2: Fallback mapped hunk {hunk_idx} to {git_target}")
         else:
             trace += f"❌ Failed to locate target — neither LLM nor git resolution provided results.\n\n"
             print(f"  Agent 2: Could not map {mainline_file} — skipping.")
@@ -332,24 +417,29 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         mainline_test = change.file_path if hasattr(change, "file_path") else change.get("file_path")
         target_test = _find_target_test_file(mainline_test, target_repo_path)
 
+        if mainline_test not in mapped_target_context:
+            mapped_target_context[mainline_test] = []
+
         if target_test:
-            mapped_target_context[f"test:{mainline_test}"] = {
+            mapped_target_context[mainline_test].append({
+                "hunk_index": 0,
                 "target_file": target_test,
                 "method": None,
                 "start_line": None,
                 "end_line": None,
                 "code_snippet": "",
-            }
+            })
             trace += f"- `{mainline_test}` → `{target_test}` ✅\n"
             print(f"  Agent 2: Test file mapped: {mainline_test} → {target_test}")
         else:
-            mapped_target_context[f"test:{mainline_test}"] = {
+            mapped_target_context[mainline_test].append({
+                "hunk_index": 0,
                 "target_file": None,
                 "method": None,
                 "start_line": None,
                 "end_line": None,
                 "code_snippet": "",
-            }
+            })
             trace += f"- `{mainline_test}` → **null** (test synthesis required by Agent 4) ⚠️\n"
             print(f"  Agent 2: Test file not found for {mainline_test}. Agent 4 will synthesize.")
 
@@ -371,7 +461,8 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     except Exception as e:
         print(f"  Agent 2: Warning — could not write trace: {e}")
 
-    print(f"Agent 2: Complete. Mapped {len(mapped_target_context)} location(s). "
+    print(f"Agent 2: Complete. Mapped {len(mapped_target_context)} file(s). "
+          f"Total hunk mappings: {sum(len(v) for v in mapped_target_context.values())}. "
           f"ConsistencyMap has {len(consistency_map)} rename(s).")
 
     return {

@@ -40,18 +40,23 @@ Maps mainline symbols to their equivalent names in the target repo.
 e.g., {"alloc_buf": "Legacy_alloc_buf", "MAX_SIZE": "LEGACY_MAX"}
 """
 
-MappedTargetContext = dict[str, dict]
+MappedTargetContext = dict[str, list[dict]]
 """
 Agent 2 (Structural Locator) output.
-Stores the exact target file context (file path, insertion line numbers, surrounding code)
-for each hunk.
+Maps each source file to a list of hunk mappings (to support multiple hunks per file).
+Each mapping stores the exact target file context (file path, insertion line numbers, surrounding code).
 e.g., {
-    "src/Foo.java": {
-        "method": "legacyFoo",
-        "start_line": 42,
-        "end_line": 88,
-        "code_snippet": "..."
-    }
+    "src/Foo.java": [
+        {
+            "hunk_index": 0,
+            "mainline_method": "fooOld",
+            "target_file": "src/Foo.java",
+            "target_method": "legacyFoo",
+            "start_line": 42,
+            "end_line": 88,
+            "code_snippet": "..."
+        }
+    ]
 }
 """
 

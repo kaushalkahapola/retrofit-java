@@ -278,6 +278,56 @@ def _adjust_hunk_header(hunk_text: str, target_start_line: int) -> str:
     return "\n".join([new_header] + lines[1:]) + "\n"
 
 
+def _extract_added_lines(hunk_text: str) -> list[str]:
+    """
+    Returns all '+' body lines from a hunk (excluding the @@ header).
+    """
+    if not hunk_text:
+        return []
+    lines = hunk_text.splitlines()
+    if not lines:
+        return []
+    return [line for line in lines[1:] if line.startswith("+")]
+
+
+def _stabilize_hunk_structure(base_hunk: str, candidate_hunk: str) -> str:
+    """
+    Keeps the original hunk structure and replaces only '+' lines with candidate '+'.
+
+    This prevents malformed hunks when LLM output drops diff prefixes on context lines.
+    If candidate '+' count does not match base '+', falls back to base_hunk.
+    """
+    if not base_hunk:
+        return candidate_hunk or base_hunk
+
+    base_lines = base_hunk.splitlines()
+    if not base_lines or not base_lines[0].startswith("@@"):
+        return candidate_hunk or base_hunk
+
+    candidate_plus = _extract_added_lines(candidate_hunk or "")
+    base_plus_count = sum(1 for line in base_lines[1:] if line.startswith("+"))
+
+    if base_plus_count == 0:
+        return base_hunk if base_hunk.endswith("\n") else base_hunk + "\n"
+
+    if len(candidate_plus) != base_plus_count:
+        return base_hunk if base_hunk.endswith("\n") else base_hunk + "\n"
+
+    out = [base_lines[0]]
+    plus_idx = 0
+    for line in base_lines[1:]:
+        if line.startswith("+"):
+            out.append(candidate_plus[plus_idx])
+            plus_idx += 1
+        else:
+            out.append(line)
+
+    stabilized = "\n".join(out)
+    if not stabilized.endswith("\n"):
+        stabilized += "\n"
+    return stabilized
+
+
 # ---------------------------------------------------------------------------
 # Core Agent Node
 # ---------------------------------------------------------------------------
@@ -289,6 +339,11 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     Iterates over every modified hunk in the patch, rewrites it for the target
     via LLM, validates format (dry-run) and intent (blueprint check), and
     stores the results as AdaptedHunk lists.
+
+    IMPORTANT: The insertion_line field in each AdaptedHunk is critical for proper
+    application order. When multiple hunks target the same file, they are assembled
+    in top-to-bottom order and applied as one per-file patch section so standard patch
+    engines can resolve offsets as earlier hunks are applied.
     """
     print("Agent 3 (Hunk Generator): Starting surgical hunk rewrite...")
 
@@ -374,35 +429,38 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     # ------------------------------------------------------------------
     for change in code_changes:
         mainline_file = change.file_path if hasattr(change, "file_path") else change.get("file_path", "?")
-        mapped_ctx = mapped_target_context.get(mainline_file)
+        # Get list of mappings for this file (now returns list instead of single dict)
+        mapped_ctx_list = mapped_target_context.get(mainline_file, [])
         raw_hunks = raw_hunks_by_file.get(mainline_file, [])
 
-        if not mapped_ctx:
+        if not mapped_ctx_list:
             print(f"  Agent 3: Skipping {mainline_file} — no target context from Agent 2.")
             continue
 
-        target_file = mapped_ctx.get("target_file", mainline_file)
-        insertion_line = mapped_ctx.get("start_line")
-        target_body = mapped_ctx.get("code_snippet", "")
-        
-        # IMPROVEMENT: If insertion_line is None, try to extract from raw hunk header
-        if insertion_line is None and raw_hunks:
-            try:
-                first_hunk = raw_hunks[0]
-                # Parse @@ -X,Y +A,B @@ to get actual line numbers
-                hunk_header_match = re.search(r'@@ -\d+(?:,\d+)? \+(\d+)', first_hunk)
-                if hunk_header_match:
-                    insertion_line = int(hunk_header_match.group(1))
-                    print(f"  Agent 3: Extracted insertion_line {insertion_line} from hunk header")
-            except Exception as e:
-                print(f"  Agent 3: Could not extract insertion_line from hunk: {e}")
-        
-        # Default fallback
-        insertion_line = insertion_line or 1
-
-        print(f"  Agent 3: Rewriting {len(raw_hunks)} hunk(s) for {mainline_file} → {target_file}")
+        print(f"  Agent 3: Processing {len(raw_hunks)} hunk(s) for {mainline_file} with {len(mapped_ctx_list)} mapping(s)")
 
         for hunk_idx, raw_hunk in enumerate(raw_hunks):
+            # Get the mapping for this hunk (or reuse first one if not enough mappings)
+            mapped_ctx = mapped_ctx_list[min(hunk_idx, len(mapped_ctx_list) - 1)]
+            
+            target_file = mapped_ctx.get("target_file", mainline_file)
+            insertion_line = mapped_ctx.get("start_line")
+            target_body = mapped_ctx.get("code_snippet", "")
+            
+            # IMPROVEMENT: If insertion_line is None, try to extract from raw hunk header
+            if insertion_line is None:
+                try:
+                    # Parse @@ -X,Y +A,B @@ to get actual line numbers
+                    hunk_header_match = re.search(r'@@ -\d+(?:,\d+)? \+(\d+)', raw_hunk)
+                    if hunk_header_match:
+                        insertion_line = int(hunk_header_match.group(1))
+                        print(f"  Agent 3: Extracted insertion_line {insertion_line} from hunk {hunk_idx} header")
+                except Exception as e:
+                    print(f"  Agent 3: Could not extract insertion_line from hunk {hunk_idx}: {e}")
+            
+            # Default fallback
+            insertion_line = insertion_line or 1
+
             # Deterministic symbol substitution pre-pass
             pre_rewritten = _rewrite_hunk_symbols(raw_hunk, consistency_map)
 
@@ -432,7 +490,9 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     raw_content = response.content if hasattr(response, "content") else str(response)
                     extracted = _extract_hunk_block(raw_content)
                     if extracted:
-                        adapted_hunk_text = _adjust_hunk_header(extracted, insertion_line)
+                        # Preserve original diff structure and allow model to vary only '+' lines.
+                        stabilized = _stabilize_hunk_structure(pre_rewritten, extracted)
+                        adapted_hunk_text = _adjust_hunk_header(stabilized, insertion_line)
                         break
                     print(f"    Agent 3: Hunk parse failed (attempt {attempt+1}/2)")
                 except Exception as e:
@@ -473,12 +533,20 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     # ------------------------------------------------------------------
     for change in test_changes:
         mainline_test = change.file_path if hasattr(change, "file_path") else change.get("file_path", "?")
-        mapped_ctx = mapped_target_context.get(f"test:{mainline_test}")
+        # Get list of mappings for this test file
+        mapped_ctx_list = mapped_target_context.get(mainline_test, [])
         raw_hunks = raw_hunks_by_file.get(mainline_test, [])
 
-        target_test_file = (mapped_ctx or {}).get("target_file")
-        if not target_test_file:
+        if not mapped_ctx_list:
             print(f"  Agent 3: Skipping test {mainline_test} — no target test file (Agent 4 will synthesize).")
+            continue
+
+        # For test files, typically only one mapping
+        mapped_ctx = mapped_ctx_list[0]
+        target_test_file = mapped_ctx.get("target_file")
+        
+        if not target_test_file:
+            print(f"  Agent 3: Skipping test {mainline_test} — target test file is null (Agent 4 will synthesize).")
             continue
 
         print(f"  Agent 3: Rewriting {len(raw_hunks)} test hunk(s) for {mainline_test} → {target_test_file}")

@@ -11,6 +11,24 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _resolve_valid_java_home() -> str | None:
+    """
+    Returns a usable JAVA_HOME path if configured, otherwise None.
+
+    Preference order:
+      1) JAVA_21_HOME (if valid)
+      2) JAVA_HOME (if valid)
+    """
+    candidates = [os.getenv("JAVA_21_HOME"), os.getenv("JAVA_HOME")]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        java_bin = os.path.join(candidate, "bin", "java")
+        if os.path.isdir(candidate) and os.path.isfile(java_bin):
+            return candidate
+    return None
+
+
 def _clean_spotbugs_output(output: str) -> str:
     """
     Clean SpotBugs output by removing verbose noise while keeping important findings.
@@ -143,10 +161,10 @@ class ValidationToolkit:
             
         print(f"    Agent 4: Executing fallback build: {' '.join(cmd)}")
         try:
-            # Use Java 21 from .env file for compilation
-            java_21_home = os.getenv("JAVA_21_HOME", "/opt/homebrew/opt/openjdk@21")
             compile_env = os.environ.copy()
-            compile_env["JAVA_HOME"] = java_21_home
+            resolved_java_home = _resolve_valid_java_home()
+            if resolved_java_home:
+                compile_env["JAVA_HOME"] = resolved_java_home
             
             result = subprocess.run(
                 cmd,
@@ -244,8 +262,7 @@ class ValidationToolkit:
         # Direct JAR Invocation with SpotBugs 4.9.3
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         spotbugs_jar = os.path.join(base_dir, "tools", "spotbugs", "spotbugs-4.9.3.jar")
-        # Get Java 21 home from .env file
-        java_21_home = os.getenv("JAVA_21_HOME", "/opt/homebrew/opt/openjdk@21")
+        resolved_java_home = _resolve_valid_java_home()
 
         if os.path.exists(spotbugs_jar):
             print(f"    Agent 4: Executing SpotBugs via direct JAR invocation ({spotbugs_jar})...")
@@ -254,7 +271,7 @@ class ValidationToolkit:
             # Build the command for SpotBugs 4.9.3+ using wildcard classpath for dependencies
             # Uses Java 21 from JAVA_21_HOME env variable
             spotbugs_dir = os.path.dirname(spotbugs_jar)
-            java_bin = os.path.join(java_21_home, "bin", "java")
+            java_bin = os.path.join(resolved_java_home, "bin", "java") if resolved_java_home else "java"
             cmd = [
                 java_bin if os.path.exists(java_bin) else "java",
                 "-cp", os.path.join(spotbugs_dir, "*"),
@@ -318,10 +335,10 @@ class ValidationToolkit:
         is_maven = os.path.exists(os.path.join(self.target_repo_path, "pom.xml"))
         if is_maven:
             # Use SpotBugs Maven plugin as fallback (has known issues with -xml:withMessages)
-            # Get Java 21 home from .env file
-            java_21_home = os.getenv("JAVA_21_HOME", "/opt/homebrew/opt/openjdk@21")
             maven_env = os.environ.copy()
-            maven_env["JAVA_HOME"] = java_21_home
+            resolved_java_home = _resolve_valid_java_home()
+            if resolved_java_home:
+                maven_env["JAVA_HOME"] = resolved_java_home
             
             cmd = [
                 "mvn",
@@ -466,7 +483,7 @@ class ValidationToolkit:
                 tmp_path = tmp.name
 
             result = subprocess.run(
-                ["git", "apply", "--check", tmp_path],
+                ["git", "apply", "--check", "--recount", "--whitespace=nowarn", tmp_path],
                 capture_output=True,
                 text=True,
                 cwd=self.target_repo_path,
@@ -484,8 +501,14 @@ class ValidationToolkit:
 
     def apply_adapted_hunks(self, code_hunks: list, test_hunks: list) -> Dict:
         """
-        Applies the full set of adapted code and test hunks to the target repo
-        by writing them into a combined patch file and running `git apply`.
+                Applies the full set of adapted code and test hunks to the target repo
+                using a resilient multi-pass strategy.
+
+                Strategy:
+                    1) Build one unified diff section per file with hunks in top-to-bottom order.
+                    2) Try strict git apply with recount.
+                    3) Retry git apply with whitespace-tolerant flags.
+                    4) Fallback to GNU patch dry-run + apply (fuzzy matching/offset support).
 
         Args:
             code_hunks: List of AdaptedHunk dicts for code changes.
@@ -498,16 +521,54 @@ class ValidationToolkit:
         if not all_hunks:
             return {"success": False, "output": "No hunks to apply.", "applied_files": []}
 
-        # Build one combined patch file, one section per target file
-        patch_parts = []
-        applied_files = []
+        # Ensure all hunks have insertion_line set; fall back to hunk header parsing.
+        for h in all_hunks:
+            if not h.get("insertion_line"):
+                hunk_text = h.get("hunk_text", "")
+                try:
+                    match = re.search(r'@@ -\d+(?:,\d+)? \+(\d+)', hunk_text)
+                    if match:
+                        h["insertion_line"] = int(match.group(1))
+                except Exception:
+                    h["insertion_line"] = 0  # Fallback to 0 if extraction fails
+        
+        # Group hunks by target file, then sort each file's hunks in ascending line order.
+        hunks_by_file = {}
         for h in all_hunks:
             target_file = h.get("target_file", "unknown")
-            hunk_text = h.get("hunk_text", "")
-            if not hunk_text or not target_file:
+            if target_file not in hunks_by_file:
+                hunks_by_file[target_file] = []
+            hunks_by_file[target_file].append(h)
+
+        # Sort hunks within each file by insertion_line in natural patch order (lowest first).
+        for target_file in hunks_by_file:
+            hunks_by_file[target_file].sort(
+                key=lambda h: h.get("insertion_line", 0),
+                reverse=False
+            )
+            insertion_lines = [h.get("insertion_line") for h in hunks_by_file[target_file]]
+            print(
+                f"  Validation: {target_file} - applying {len(hunks_by_file[target_file])} "
+                f"hunk(s) in top-to-bottom order: {insertion_lines}"
+            )
+
+        # Build one patch section per file so offsets are resolved cumulatively.
+        patch_parts = []
+        applied_files = []
+        for target_file in hunks_by_file:
+            file_hunks = []
+            for h in hunks_by_file[target_file]:
+                hunk_text = h.get("hunk_text", "")
+                if not hunk_text:
+                    continue
+                file_hunks.append(hunk_text if hunk_text.endswith("\n") else hunk_text + "\n")
+
+            if not file_hunks:
                 continue
+
+            combined_hunks = "".join(file_hunks)
             try:
-                patch_part = self._build_patch_file(target_file, hunk_text)
+                patch_part = self._build_patch_file(target_file, combined_hunks)
                 patch_parts.append(patch_part)
                 if target_file not in applied_files:
                     applied_files.append(target_file)
@@ -518,9 +579,21 @@ class ValidationToolkit:
                     "applied_files": [],
                 }
 
-        # Combine patches with proper separation (no extra newlines, _build_patch_file handles that)
+        if not patch_parts:
+            return {
+                "success": False,
+                "output": "No valid hunk_text entries found.",
+                "applied_files": [],
+            }
+
         combined = "".join(patch_parts)
 
+        return self._apply_patch_with_fallbacks(combined, applied_files)
+
+    def _apply_patch_with_fallbacks(self, patch_content: str, applied_files: list[str]) -> Dict:
+        """
+        Apply patch content with increasingly permissive strategies.
+        """
         tmp_path = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -529,27 +602,85 @@ class ValidationToolkit:
                 delete=False,
                 encoding="utf-8",
             ) as tmp:
-                tmp.write(combined)
+                tmp.write(patch_content)
                 tmp_path = tmp.name
 
-            result = subprocess.run(
-                ["git", "apply", tmp_path],
+            attempts = [
+                (
+                    "git-apply-strict",
+                    ["git", "apply", "--recount", "--whitespace=nowarn", tmp_path],
+                ),
+                (
+                    "git-apply-whitespace-tolerant",
+                    [
+                        "git", "apply", "--recount", "--ignore-space-change",
+                        "--ignore-whitespace", "--whitespace=nowarn", tmp_path,
+                    ],
+                ),
+            ]
+
+            all_errors = []
+            for name, cmd in attempts:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    cwd=self.target_repo_path,
+                )
+                if result.returncode == 0:
+                    return {
+                        "success": True,
+                        "output": result.stdout or f"Applied successfully via {name}.",
+                        "applied_files": applied_files,
+                        "apply_strategy": name,
+                    }
+
+                err = result.stderr or result.stdout or "unknown apply failure"
+                all_errors.append(f"[{name}] {err.strip()}")
+
+            patch_dry_run_cmd = [
+                "patch", "-p1", "--dry-run", "--batch", "--forward",
+                "--reject-file=-", "--ignore-whitespace", "-i", tmp_path,
+            ]
+            patch_apply_cmd = [
+                "patch", "-p1", "--batch", "--forward",
+                "--reject-file=-", "--ignore-whitespace", "-i", tmp_path,
+            ]
+
+            dry_run = subprocess.run(
+                patch_dry_run_cmd,
                 capture_output=True,
                 text=True,
                 cwd=self.target_repo_path,
             )
-            if result.returncode == 0:
-                return {
-                    "success": True,
-                    "output": result.stdout or "Applied successfully.",
-                    "applied_files": applied_files,
-                }
+
+            if dry_run.returncode == 0:
+                patch_apply = subprocess.run(
+                    patch_apply_cmd,
+                    capture_output=True,
+                    text=True,
+                    cwd=self.target_repo_path,
+                )
+                if patch_apply.returncode == 0:
+                    return {
+                        "success": True,
+                        "output": patch_apply.stdout or "Applied successfully via patch fallback.",
+                        "applied_files": applied_files,
+                        "apply_strategy": "gnu-patch-fallback",
+                    }
+
+                self.restore_repo_state()
+                patch_err = patch_apply.stderr or patch_apply.stdout or "patch apply failed"
+                all_errors.append(f"[gnu-patch-apply] {patch_err.strip()}")
             else:
-                return {
-                    "success": False,
-                    "output": result.stderr or result.stdout,
-                    "applied_files": [],
-                }
+                patch_err = dry_run.stderr or dry_run.stdout or "patch dry-run failed"
+                all_errors.append(f"[gnu-patch-dry-run] {patch_err.strip()}")
+
+            return {
+                "success": False,
+                "output": "\n\n".join(all_errors),
+                "applied_files": [],
+            }
         except Exception as e:
             return {"success": False, "output": f"Exception during apply: {e}", "applied_files": []}
         finally:

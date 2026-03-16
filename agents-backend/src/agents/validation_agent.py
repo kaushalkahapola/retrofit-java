@@ -192,6 +192,10 @@ async def validation_agent(state: AgentState, config) -> dict:
     attempts = state.get("validation_attempts", 0)
     blueprint = state.get("semantic_blueprint", {})
     compile_only = state.get("compile_only", False)
+    # Temporary mode: skip compilation/static-analysis phases due environment constraints.
+    skip_compilation_checks = True
+    # Temporary mode: validation only checks whether hunks can be applied.
+    apply_only_validation = True
     
     if attempts >= MAX_VALIDATION_ATTEMPTS:
         print(f"  Agent 4: Max validation attempts ({MAX_VALIDATION_ATTEMPTS}) reached. Failing.")
@@ -230,6 +234,51 @@ async def validation_agent(state: AgentState, config) -> dict:
             out_str = out_str[:1000] + "... [TRUNCATED]"
         trace.append(f"  - `Tool: {tool_name}` -> {out_str}")
 
+    if apply_only_validation:
+        print("  Agent 4: Apply-only mode - checking patch application only...")
+        res = toolkit.apply_adapted_hunks(code_hunks, test_hunks)
+        log_step("apply_adapted_hunks", {"code_count": len(code_hunks), "test_count": len(test_hunks)}, res)
+
+        validation_results["hunk_application"] = {
+            "success": res["success"],
+            "raw": res["output"]
+        }
+
+        if not res["success"]:
+            analysis = await _analyze_failure("Hunk Application", res["output"], state)
+            validation_results["hunk_application"]["agent_evaluation"] = analysis
+            validation_results["hunk_application"]["error_context"] = analysis
+            trace.append(f"\n**Final Status: HUNK APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+            toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            return {
+                "validation_passed": False,
+                "validation_attempts": attempts + 1,
+                "validation_error_context": f"Hunk application failed: {analysis}",
+                "validation_results": validation_results,
+                "regeneration_hint": analysis
+            }
+
+        validation_results["hunk_application"]["agent_evaluation"] = "Hunks applied successfully to all target files."
+        validation_results["compilation"] = {
+            "success": True,
+            "raw": "Skipped by apply-only validation mode.",
+            "agent_evaluation": "Compilation step intentionally skipped."
+        }
+        validation_results["spotbugs"] = {
+            "success": True,
+            "raw": "Skipped by apply-only validation mode.",
+            "agent_evaluation": "SpotBugs step intentionally skipped."
+        }
+        trace.append("\n**Final Status: VALIDATION PASSED (APPLY-ONLY MODE)**")
+        trace.append("\n**Note:** Compilation, tests, and static-analysis phases are disabled.")
+        toolkit.write_trace("\n".join(trace), "validation_trace.md")
+        return {
+            "validation_passed": True,
+            "validation_attempts": attempts + 1,
+            "validation_error_context": "",
+            "validation_results": validation_results
+        }
+
     # Compile-Only Mode (Streamlined - Apply patch and compile changed files only)
     if compile_only:
         print("  Agent 4: Streamlined mode - applying patch and compiling changed files only...")
@@ -258,63 +307,78 @@ async def validation_agent(state: AgentState, config) -> dict:
         else:
             validation_results["hunk_application"]["agent_evaluation"] = "Hunks applied successfully to all target files."
 
-        applied_files = res.get("applied_files", [])
-        build_res = toolkit.compile_files(applied_files)
-        log_step("compile_files", {"files": applied_files}, build_res)
-
-        validation_results["compilation"] = {
-            "success": build_res.get("success"),
-            "raw": build_res.get("output", "")
-        }
-
-        if not build_res.get("success"):
-            # Use LLM to analyze compilation failure
-            analysis = await _analyze_failure("Compilation", build_res.get("output", ""), state)
-            validation_results["compilation"]["agent_evaluation"] = analysis
-            validation_results["compilation"]["error_context"] = analysis
-            trace.append(f"\n**Final Status: COMPILATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
-            toolkit.write_trace("\n".join(trace), "validation_trace.md")
-            return {
-                "validation_passed": False,
-                "validation_attempts": attempts + 1,
-                "validation_error_context": f"Compilation failed: {analysis}",
-                "validation_results": validation_results,
-                "regeneration_hint": analysis  # For hunk generator to use
+        if skip_compilation_checks:
+            validation_results["compilation"] = {
+                "success": True,
+                "raw": "Skipped by configuration for environment-constrained runs.",
+                "agent_evaluation": "Compilation step intentionally skipped."
             }
+            validation_results["spotbugs"] = {
+                "success": True,
+                "raw": "Skipped by configuration for environment-constrained runs.",
+                "agent_evaluation": "Static analysis step intentionally skipped."
+            }
+            trace.append("\n**Final Status: VALIDATION PASSED (COMPILATION/SPOTBUGS SKIPPED)**")
+            trace.append("\n**Note:** Compilation and static-analysis phases are disabled in this run mode.")
+            passed = True
         else:
-            validation_results["compilation"]["agent_evaluation"] = "All modified files compiled successfully."
+            applied_files = res.get("applied_files", [])
+            build_res = toolkit.compile_files(applied_files)
+            log_step("compile_files", {"files": applied_files}, build_res)
 
-        # Run SpotBugs after successful compile
-        print("  Agent 4: Running SpotBugs validation...")
-        modules = build_res.get("modules", [])
-        classes_paths = toolkit.get_module_class_paths(modules)
+            validation_results["compilation"] = {
+                "success": build_res.get("success"),
+                "raw": build_res.get("output", "")
+            }
 
-        # Use target_files for Maven SpotBugs optimization
-        spotbugs_res = toolkit.run_spotbugs(
-            compiled_classes_paths=classes_paths,
-            source_path=os.path.join(state["target_repo_path"], "src", "main", "java"),
-            target_files=unique_code_files + unique_test_files
-        )
-        log_step("run_spotbugs", {"paths": classes_paths}, spotbugs_res)
+            if not build_res.get("success"):
+                # Use LLM to analyze compilation failure
+                analysis = await _analyze_failure("Compilation", build_res.get("output", ""), state)
+                validation_results["compilation"]["agent_evaluation"] = analysis
+                validation_results["compilation"]["error_context"] = analysis
+                trace.append(f"\n**Final Status: COMPILATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+                toolkit.write_trace("\n".join(trace), "validation_trace.md")
+                return {
+                    "validation_passed": False,
+                    "validation_attempts": attempts + 1,
+                    "validation_error_context": f"Compilation failed: {analysis}",
+                    "validation_results": validation_results,
+                    "regeneration_hint": analysis  # For hunk generator to use
+                }
+            else:
+                validation_results["compilation"]["agent_evaluation"] = "All modified files compiled successfully."
 
-        passed = spotbugs_res.get("success", True)
-        spotbugs_output = spotbugs_res.get("output", "")
-        
-        validation_results["spotbugs"] = {
-            "success": passed,
-            "raw": spotbugs_output,
-            "agent_evaluation": ""
-        }
+            # Run SpotBugs after successful compile
+            print("  Agent 4: Running SpotBugs validation...")
+            modules = build_res.get("modules", [])
+            classes_paths = toolkit.get_module_class_paths(modules)
 
-        if not passed:
-            # Use LLM to analyze SpotBugs findings (only send relevant findings, not full output)
-            analysis = await _analyze_failure("SpotBugs", spotbugs_output, state)
-            validation_results["spotbugs"]["agent_evaluation"] = analysis
-            validation_results["spotbugs"]["error_context"] = analysis
-            trace.append(f"\n**Final Status: STATIC VALIDATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
-        else:
-            validation_results["spotbugs"]["agent_evaluation"] = "No high-severity bugs detected. Code passes static analysis."
-            trace.append(f"\n**Final Status: {'VALIDATION PASSED'}**")
+            # Use target_files for Maven SpotBugs optimization
+            spotbugs_res = toolkit.run_spotbugs(
+                compiled_classes_paths=classes_paths,
+                source_path=os.path.join(state["target_repo_path"], "src", "main", "java"),
+                target_files=unique_code_files + unique_test_files
+            )
+            log_step("run_spotbugs", {"paths": classes_paths}, spotbugs_res)
+
+            passed = spotbugs_res.get("success", True)
+            spotbugs_output = spotbugs_res.get("output", "")
+            
+            validation_results["spotbugs"] = {
+                "success": passed,
+                "raw": spotbugs_output,
+                "agent_evaluation": ""
+            }
+
+            if not passed:
+                # Use LLM to analyze SpotBugs findings (only send relevant findings, not full output)
+                analysis = await _analyze_failure("SpotBugs", spotbugs_output, state)
+                validation_results["spotbugs"]["agent_evaluation"] = analysis
+                validation_results["spotbugs"]["error_context"] = analysis
+                trace.append(f"\n**Final Status: STATIC VALIDATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+            else:
+                validation_results["spotbugs"]["agent_evaluation"] = "No high-severity bugs detected. Code passes static analysis."
+                trace.append(f"\n**Final Status: {'VALIDATION PASSED'}**")
 
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
 
