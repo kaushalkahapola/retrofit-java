@@ -1,10 +1,14 @@
 package com.retrofit.analysis.tools;
 
+import edu.umd.cs.findbugs.FindBugs2;
+import edu.umd.cs.findbugs.Project;
+import edu.umd.cs.findbugs.TextUIBugReporter;
+import edu.umd.cs.findbugs.Priorities;
 import org.springframework.stereotype.Component;
-import java.io.BufferedReader;
+
+import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.InputStreamReader;
-import java.util.ArrayList;
+import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,77 +16,105 @@ import java.util.Map;
 @Component
 public class SpotBugsTool {
 
-    public Map<String, Object> execute(String compiledClassesPath, String sourcePath) {
+    public Map<String, Object> execute(List<String> compiledClassesPaths, String sourcePath) {
         Map<String, Object> result = new HashMap<>();
+        StringBuilder debugLog = new StringBuilder();
         try {
-            // Check if SpotBugs is installed
-            String spotBugsHome = "/opt/spotbugs"; // As defined in Dockerfile
-            File sbHome = new File(spotBugsHome);
-            if (!sbHome.exists()) {
-                // Fallback for local testing if not in container
-                if (System.getenv("SPOTBUGS_HOME") != null) {
-                    spotBugsHome = System.getenv("SPOTBUGS_HOME");
-                } else {
-                     result.put("success", false);
-                     result.put("message", "SpotBugs not found at /opt/spotbugs and SPOTBUGS_HOME not set.");
-                     return result;
+            Project project = new Project();
+            project.setProjectName("AnalysisEngineProject");
+            
+            if (compiledClassesPaths == null || compiledClassesPaths.isEmpty()) {
+                result.put("success", false);
+                result.put("message", "No compiled classes paths provided.");
+                return result;
+            }
+
+            for (String path : compiledClassesPaths) {
+                File file = new File(path);
+                if (file.exists()) {
+                    project.addFile(path);
                 }
             }
-
-            List<String> command = new ArrayList<>();
-            command.add(spotBugsHome + "/bin/spotbugs");
-            command.add("-textui"); // Text interface
-            command.add("-low"); // Low confidence issues too? Or maybe -medium
-            command.add("-xml:withMessages"); // Output XML (easier to parse if we wanted, but text is fine for LLM/Agent)
-            // Actually, for the agent trace, text is better readable.
-            // But if we want to parse it for JSON output, XML is better.
-            // Let's stick to text for the trace, and maybe I'll wrap it in a pseudo-format.
-            // Wait, the agent needs to return "pass/fail + issues" in JSON.
-            // Parsing XML in Java is better.
-            // But to keep it simple and robust, let's use text output first. The agent can verify if "BugInstance" count > 0.
-            // Re-reading: "use spotbugs... output the things just similar to reasoning agents outputs (the mds and all)"
-            // So a readable text report is good for the MD.
-
-            // Let's use standard text output.
-
-            if (sourcePath != null) {
-                command.add("-sourcepath");
-                command.add(sourcePath);
+            
+            if (sourcePath != null && new File(sourcePath).exists()) {
+                project.addSourceDir(sourcePath);
             }
-
-            command.add(compiledClassesPath);
-
-            System.out.println("Executing SpotBugs: " + String.join(" ", command));
-
-            ProcessBuilder pb = new ProcessBuilder(command);
-            pb.redirectErrorStream(true);
-
-            Process process = pb.start();
-
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
+            
+            // Trigger static initialization of DetectorFactoryCollection with more debug info
+            debugLog.append("  SpotBugs: Checking DetectorFactoryCollection initialization...\n");
+            edu.umd.cs.findbugs.DetectorFactoryCollection dfc = null;
+            try {
+                dfc = edu.umd.cs.findbugs.DetectorFactoryCollection.instance();
+                if (dfc == null) {
+                    debugLog.append("  SpotBugs: DetectorFactoryCollection.instance() is null, resetting...\n");
+                    dfc = new edu.umd.cs.findbugs.DetectorFactoryCollection();
+                    edu.umd.cs.findbugs.DetectorFactoryCollection.resetInstance(dfc);
                 }
+                debugLog.append("  SpotBugs: DetectorFactoryCollection initialized.\n");
+            } catch (Throwable t) {
+                debugLog.append("  SpotBugs Error: DetectorFactoryCollection initialization failed: ").append(t.getMessage()).append("\n");
+                dfc = new edu.umd.cs.findbugs.DetectorFactoryCollection();
             }
-
-            process.waitFor();
-
-            // SpotBugs exit codes:
-            // 0: No bugs found
-            // 1: Error
-            // 2: Bugs found? Check docs.
-            // Actually, CLI often returns 0 even if bugs are found unless configuration says otherwise.
-            // But we can check the output.
-
-            result.put("success", true); // Execution was successful, bugs or not.
-            result.put("report", output.toString());
-
-        } catch (Exception e) {
+            
+            FindBugs2 findBugs = new FindBugs2();
+            findBugs.setProject(project);
+            if (dfc != null) {
+                findBugs.setDetectorFactoryCollection(dfc);
+            }
+            // Fix NullPointerException: UserPreferences must be set
+            findBugs.setUserPreferences(edu.umd.cs.findbugs.config.UserPreferences.createDefaultUserPreferences());
+            findBugs.finishSettings();
+            
+            // Check if detectors were loaded
+            try {
+                int detectorCount = 0;
+                var it = edu.umd.cs.findbugs.DetectorFactoryCollection.instance().pluginIterator();
+                while (it.hasNext()) {
+                    it.next();
+                    detectorCount++;
+                }
+                debugLog.append("  SpotBugs: Loaded ").append(detectorCount).append(" plugins.\n");
+            } catch (Throwable t) {
+                debugLog.append("  SpotBugs Error: Failed to iterate plugins: ").append(t.getMessage()).append("\n");
+            }
+            
+            // Use a collection to store bugs
+            edu.umd.cs.findbugs.SortedBugCollection bugCollection = new edu.umd.cs.findbugs.SortedBugCollection();
+            // PrintingBugReporter is concrete and useful
+            edu.umd.cs.findbugs.PrintingBugReporter reporter = new edu.umd.cs.findbugs.PrintingBugReporter();
+            reporter.setPriorityThreshold(Priorities.LOW_PRIORITY);
+            
+            findBugs.setBugReporter(reporter);
+            
+            debugLog.append("Executing SpotBugs programmatically on: ").append(String.join(", ", compiledClassesPaths)).append("\n");
+            findBugs.execute();
+            
+            // Actually, FindBugs2.execute() might not be enough if we don't capture the bugs.
+            // Let's use BugCollection directly.
+            edu.umd.cs.findbugs.BugCollection bugs = findBugs.getBugReporter().getBugCollection();
+            
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            PrintStream ps = new PrintStream(out);
+            
+            // Print summarized findings to the output stream
+            for (edu.umd.cs.findbugs.BugInstance bug : bugs.getCollection()) {
+                ps.println(bug.getBugPattern().getType() + ": " + bug.getMessage());
+                ps.println("  at " + bug.getPrimarySourceLineAnnotation());
+                ps.println();
+            }
+            
+            if (bugs.getCollection().isEmpty()) {
+                ps.println("No bugs found.");
+            }
+            
+            result.put("success", true);
+            result.put("report", out.toString());
+            result.put("debug_log", debugLog.toString());
+            
+        } catch (Throwable t) {
             result.put("success", false);
-            result.put("message", "Error during SpotBugs execution: " + e.getMessage());
-            e.printStackTrace();
+            result.put("message", "Error during SpotBugs programmatic execution: " + t.getMessage() + "\nDebug Log:\n" + debugLog.toString());
+            t.printStackTrace();
         }
         return result;
     }

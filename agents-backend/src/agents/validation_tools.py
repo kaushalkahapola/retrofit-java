@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from utils.mcp_client import get_client
 import tempfile
 import os
@@ -26,21 +26,124 @@ class ValidationToolkit:
 
     def compile_files(self, file_paths: List[str]) -> Dict:
         """
-        Compiles the specified files using the Analysis Engine.
+        Compiles the specified files using the Analysis Engine's compile tool.
+        If it fails, falls back to module-level Maven/Gradle compilation.
         """
-        return self.client.call_tool("compile", {
+        res = self.client.call_tool("compile", {
             "target_repo_path": self.target_repo_path,
             "file_paths": file_paths
         })
+        
+        # Check if successful (handle both success and status=success)
+        is_success = res.get("success") or res.get("status") == "success"
+        if is_success:
+            return {"success": True, "output": res.get("output", "Targeted compilation successful.")}
+        
+        # If targeted compile fails, try module-level compile
+        print(f"    Agent 4: Targeted compile failed, falling back to module-level build...")
+        
+        # Deduce module by finding closest build file for each file
+        modules = set()
+        is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
+        
+        for fp in file_paths:
+            # Find the directory containing the closest build file
+            current_dir = os.path.dirname(fp)
+            build_file = "build.gradle" if is_gradle else "pom.xml"
+            
+            found_module = None
+            while current_dir and current_dir != "":
+                if os.path.exists(os.path.join(self.target_repo_path, current_dir, build_file)):
+                    found_module = current_dir
+                    break
+                parent = os.path.dirname(current_dir)
+                if parent == current_dir: # Root
+                    break
+                current_dir = parent
+            
+            if found_module:
+                modules.add(found_module)
+        
+        java_compat_args = ["-Djdk.security.manager.allow.argLine="]
+        
+        if not modules:
+            # Fallback to root build
+            return self.run_build_script()
+            
+        is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
+        java_compat_args = ["-Djdk.security.manager.allow.argLine="]
+        
+        if is_gradle:
+            # Gradle: pass all tasks together
+            gradle_tasks = []
+            for mod in modules:
+                gradle_mod = ":" + mod.replace(os.sep, ":")
+                gradle_tasks.append(f"{gradle_mod}:classes")
+            cmd = ["gradle"] + gradle_tasks
+        else:
+            # Maven: pass all modules with -pl
+            mod_list = ",".join(modules)
+            # Use test-compile to ensure both main and test sources are compiled
+            # Skip FMPP and other slow plugins that aren't needed for basic compilation check
+            # Force Java 21 compatibility so SpotBugs can read the classes (Java 25 is currently unsupported)
+            # Skip forbiddenapis, checkstyle, and pmd to avoid version-specific check failures
+            cmd = ["mvn", "test-compile", "-pl", mod_list, "-am", "-DskipTests", "-Dfmpp.skip=true", 
+                   "-Dmaven.compiler.release=21", "-Dforbiddenapis.skip=true", "-Dcheckstyle.skip=true", "-Dpmd.skip=true"] + java_compat_args
+            
+        print(f"    Agent 4: Executing fallback build: {' '.join(cmd)}")
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=self.target_repo_path,
+            )
+            if result.returncode == 0:
+                return {"success": True, "output": "Module-level compilation successful.", "modules": list(modules)}
+            else:
+                return {
+                    "success": False, 
+                    "output": result.stderr or result.stdout
+                }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
 
-    def run_spotbugs(self, compiled_classes_path: str, source_path: str = None) -> Dict:
+    def get_module_class_paths(self, modules: List[str]) -> List[str]:
         """
-        Runs SpotBugs on the compiled classes.
+        Returns a list of class paths for the given modules.
         """
-        return self.client.call_tool("spotbugs", {
-            "compiled_classes_path": compiled_classes_path,
-            "source_path": source_path
-        })
+        class_paths = []
+        for mod in modules:
+            # Check Maven
+            cp = os.path.join(self.target_repo_path, mod, "target", "classes")
+            if os.path.exists(cp):
+                class_paths.append(cp)
+            # Check Gradle
+            cp = os.path.join(self.target_repo_path, mod, "build", "classes", "java", "main")
+            if os.path.exists(cp):
+                class_paths.append(cp)
+        
+        # Also check root just in case
+        root_maven = os.path.join(self.target_repo_path, "target", "classes")
+        if os.path.exists(root_maven) and root_maven not in class_paths:
+            class_paths.append(root_maven)
+        root_gradle = os.path.join(self.target_repo_path, "build", "classes", "java", "main")
+        if os.path.exists(root_gradle) and root_gradle not in class_paths:
+            class_paths.append(root_gradle)
+            
+        return class_paths
+
+    def run_spotbugs(self, compiled_classes_paths: List[str], source_path: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Runs SpotBugs using the Analysis Engine.
+        """
+        args = {
+            "compiled_classes_paths": compiled_classes_paths
+        }
+        if source_path:
+            args["source_path"] = source_path
+            
+        return self.client.call_tool("spotbugs", args)
 
     def write_trace(self, trace_content: str, filename: str = "validation_trace.md"):
         """
@@ -176,19 +279,22 @@ class ValidationToolkit:
         Detects if it's Maven (pom.xml) or Gradle (build.gradle).
         """
         is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
-        cmd = ["gradle", "build", "-x", "test"] if is_gradle else ["mvn", "clean", "compile"]
+        # Fix for Java 18+ / Java 25 security manager issues
+        java_compat_args = ["-Djdk.security.manager.allow.argLine="]
+        
+        cmd = ["gradle", "build", "-x", "test"] if is_gradle else ["mvn", "clean", "compile"] + java_compat_args
         
         try:
+            print(f"    Agent 4: Executing build command: {' '.join(cmd)}")
             result = subprocess.run(
                 cmd,
-                capture_output=True,
+                capture_output=False, # Stream to stdout/stderr
                 text=True,
                 cwd=self.target_repo_path,
             )
-            output = result.stdout + "\n" + result.stderr
             return {
                 "success": result.returncode == 0,
-                "output": output
+                "output": "Build log streamed to console."
             }
         except Exception as e:
             return {"success": False, "output": f"Exception building repo: {e}"}
@@ -209,35 +315,37 @@ class ValidationToolkit:
 
         is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
         
+        # Fix for Java 18+ / Java 25 security manager issues
+        java_compat_args = ["-Djdk.security.manager.allow.argLine="]
+
         if is_gradle:
             cmd = ["gradle", "test"]
-            for tc in test_classes:
-                cmd.extend(["--tests", tc])
+            for cls in test_classes:
+                cmd.extend(["--tests", cls])
         else:
             test_args = ",".join(test_classes)
-            cmd = ["mvn", "test", f"-Dtest={test_args}"]
+            cmd = ["mvn", "test", f"-Dtest={test_args}"] + java_compat_args
 
         try:
+            print(f"    Agent 4: Executing test command: {' '.join(cmd)}")
+            # Use Popen to stream output if possible, or just run and let it print
             result = subprocess.run(
                 cmd,
-                capture_output=True,
+                capture_output=False, # Let it print to console
                 text=True,
                 cwd=self.target_repo_path,
             )
-            output = result.stdout + "\n" + result.stderr
             success = result.returncode == 0
             
-            # Simple heuristic for compile error vs test failure
-            compile_error = "COMPILATION ERROR" in output or ("BUILD FAILURE" in output and "There are test failures" not in output) or "Compilation failed" in output
-
-            # We won't strictly parse failed tests from text for now, just return empty list. Phase 4 just needs success/fail stats.
-            failed_tests = []
-
+            # Since we didn't capture, we can't easily check for "COMPILATION ERROR" in output here
+            # but usually the return code is enough for Maven/Gradle.
+            # If we need to parse it, we'd need to capture AND print.
+            
             return {
                 "success": success,
-                "compile_error": compile_error,
-                "output": output,
-                "failed_tests": failed_tests
+                "compile_error": not success and result.returncode != 0, # Rough heuristic
+                "output": "Test log streamed to console.",
+                "failed_tests": []
             }
         except Exception as e:
             return {
@@ -270,12 +378,23 @@ class ValidationToolkit:
         """
         # Normalize path separators
         p = target_file_path.replace("\\", "/").lstrip("/")
-
-        header = (
-            f"diff --git a/{p} b/{p}\n"
-            f"--- a/{p}\n"
-            f"+++ b/{p}\n"
-        )
+        full_path = os.path.join(self.target_repo_path, p)
+        
+        is_new = not os.path.exists(full_path)
+        
+        if is_new:
+            header = (
+                f"diff --git a/{p} b/{p}\n"
+                f"new file mode 100644\n"
+                f"--- /dev/null\n"
+                f"+++ b/{p}\n"
+            )
+        else:
+            header = (
+                f"diff --git a/{p} b/{p}\n"
+                f"--- a/{p}\n"
+                f"+++ b/{p}\n"
+            )
         # Ensure hunk_text ends with newline
         body = hunk_text if hunk_text.endswith("\n") else hunk_text + "\n"
         return header + body

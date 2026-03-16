@@ -1,0 +1,10 @@
+[
+  {
+    "project": "druid",
+    "mainline_commit": "5b09329479117a54f68d5ce9e4c8b245d76a8f79",
+    "backport_commit": "3ba7badda390977805600942d71016b5af12751b",
+    "validation_passed": false,
+    "attempts": 1,
+    "error_context": ""
+  }
+]
