@@ -4,7 +4,7 @@ Full Pipeline Evaluation Script (Phase 0-4)
 Runs the complete H-MABS pipeline end-to-end for druid and elasticsearch patches.
 Saves all outputs from each phase for analysis.
 
-NOTE: Skips actual test execution/compilation at phase0 and phase4 to save time during testing.
+NOTE: Skips phase 0 completely and uses compile-only mode (no test execution).
 """
 
 import asyncio
@@ -34,7 +34,7 @@ REPOS_DIR = os.path.join(BASE_DIR, "temp_repo_storage")
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 
 TARGET_PROJECTS = ["druid", "elasticsearch"]
-MAX_PATCHES_PER_PROJECT = 5  # Limit for testing; set to None for all
+MAX_PATCHES_PER_PROJECT = 2  # Limit for testing; set to None for all
 
 
 def ensure_dirs():
@@ -201,15 +201,23 @@ async def run_full_pipeline(
             f"**Patch Content**:\n```diff\n{patch_output}\n```"
         )
         
+        # Parse patch analysis
+        analyzer = PatchAnalyzer()
+        patch_analysis = analyzer.analyze(patch_output)
+        
         # Prepare graph inputs
         inputs = {
             "messages": ["Start"],
             "patch_path": patch_path,
+            "patch_diff": patch_output,
+            "patch_analysis": patch_analysis,
             "target_repo_path": target_repo_path,
             "mainline_repo_path": mainline_repo_path,
             "experiment_mode": True,
             "backport_commit": backport_commit,
-            "original_commit": mainline_commit
+            "original_commit": mainline_commit,
+            "skip_phase_0": True,
+            "compile_only": True
         }
         
         # Run graph and collect outputs
@@ -319,6 +327,13 @@ async def main():
         mainline_repo_path = os.path.join(REPOS_DIR, project)
         target_repo_path = os.path.join(REPOS_DIR, project)  # Same repo, different commits
         
+        # Clean up repositories before processing
+        print(f"[{project}/{patch_id}] Cleaning repositories...")
+        for repo_path in [mainline_repo_path, target_repo_path]:
+            if os.path.exists(repo_path):
+                subprocess.run(["git", "reset", "--hard", "HEAD"], cwd=repo_path, capture_output=True)
+                subprocess.run(["git", "clean", "-fd"], cwd=repo_path, capture_output=True)
+        
         # Verify repos exist
         if not os.path.exists(mainline_repo_path):
             print(f"  ERROR: Repository not found at {mainline_repo_path}")
@@ -334,6 +349,14 @@ async def main():
             target_repo_path
         )
         all_results.append(result)
+        
+        # Clean up temp patch file
+        temp_patch_path = os.path.join(RESULTS_DIR, "temp_mainline.patch")
+        if os.path.exists(temp_patch_path):
+            try:
+                os.remove(temp_patch_path)
+            except Exception as e:
+                print(f"  Warning: Could not remove temp patch file: {e}")
     
     # Save summary report
     summary_file = os.path.join(RESULTS_DIR, "pipeline_summary.json")
