@@ -98,3 +98,4 @@ class AgentState(TypedDict):
     validation_attempts: int         # Counter for "Prove Red, Make Green" retry loop
     validation_passed: bool          # Final validation outcome (True = success)
     validation_error_context: str    # Error logs from failed validation (fed back to Agent 3)
+    validation_results: dict[str, dict] # Detailed results per step (e.g. "hunk_application": {...})

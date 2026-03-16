@@ -118,7 +118,8 @@ async def main():
                 "backport_commit": backport_commit,
                 "validation_passed": final_state.get("validation_passed"),
                 "attempts": final_state.get("validation_attempts"),
-                "error_context": final_state.get("validation_error_context")
+                "error_context": final_state.get("validation_error_context"),
+                "validation_results": final_state.get("validation_results")
             }
             results.append(res)
             print(f"  Result: {'PASSED' if res['validation_passed'] else 'FAILED'}")

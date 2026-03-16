@@ -436,3 +436,7 @@ agents-backend/venv_linux
 references/
 venvwin/
 .pytest_cache/
+
+# SpotBugs dependencies (downloaded via script)
+agents-backend/tools/spotbugs/*.jar
+!agents-backend/tools/spotbugs/README.md

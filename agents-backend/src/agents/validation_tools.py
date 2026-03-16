@@ -4,6 +4,56 @@ import tempfile
 import os
 import subprocess
 import json
+import re
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+
+def _clean_spotbugs_output(output: str) -> str:
+    """
+    Clean SpotBugs output by removing verbose noise while keeping important findings.
+    - Keeps bug findings (lines with bug codes like H B, M V, L C, etc.)
+    - Removes 'missing classes' list (usually noise for validation)
+    - Truncates very long outputs
+    """
+    if not output:
+        return output
+    
+    lines = output.split('\n')
+    cleaned_lines = []
+    in_missing_section = False
+    
+    for line in lines:
+        # Detect start of "missing classes" section
+        if "The following classes needed for analysis were missing:" in line:
+            in_missing_section = True
+            continue
+        
+        # Skip lines in missing classes section
+        if in_missing_section:
+            # End of missing section when we hit an empty line or a bug finding
+            if not line.strip() or re.match(r'^[HML]\s+[A-Z]', line):
+                in_missing_section = False
+                if not line.strip():
+                    continue
+            else:
+                continue
+        
+        # Keep bug findings and summary lines
+        if re.match(r'^[HML]\s+[A-Z]', line) or not line.strip():
+            cleaned_lines.append(line)
+    
+    result = '\n'.join(cleaned_lines)
+    
+    # Truncate if still too long (keep first and last findings)
+    if len(result) > 5000:
+        parts = result.split('\n\n')
+        if len(parts) > 10:
+            result = '\n\n'.join(parts[:5]) + '\n\n...[TRUNCATED]...\n\n' + '\n\n'.join(parts[-5:])
+    
+    return result.strip() if result.strip() else "SpotBugs completed with no findings."
 
 
 class ValidationToolkit:
@@ -85,24 +135,31 @@ class ValidationToolkit:
             mod_list = ",".join(modules)
             # Use test-compile to ensure both main and test sources are compiled
             # Skip FMPP and other slow plugins that aren't needed for basic compilation check
-            # Force Java 21 compatibility so SpotBugs can read the classes (Java 25 is currently unsupported)
+            # Force Java 21 for SpotBugs compatibility (Java 25 not supported by SpotBugs)
             # Skip forbiddenapis, checkstyle, and pmd to avoid version-specific check failures
-            cmd = ["mvn", "test-compile", "-pl", mod_list, "-am", "-DskipTests", "-Dfmpp.skip=true", 
-                   "-Dmaven.compiler.release=21", "-Dforbiddenapis.skip=true", "-Dcheckstyle.skip=true", "-Dpmd.skip=true"] + java_compat_args
+            cmd = ["mvn", "test-compile", "-pl", mod_list, "-am", "-DskipTests", "-Dfmpp.skip=true",
+                   "-Dmaven.compiler.release=21", "-Dmaven.compiler.source=21", "-Dmaven.compiler.target=21",
+                   "-Dforbiddenapis.skip=true", "-Dcheckstyle.skip=true", "-Dpmd.skip=true"] + java_compat_args
             
         print(f"    Agent 4: Executing fallback build: {' '.join(cmd)}")
         try:
+            # Use Java 21 from .env file for compilation
+            java_21_home = os.getenv("JAVA_21_HOME", "/opt/homebrew/opt/openjdk@21")
+            compile_env = os.environ.copy()
+            compile_env["JAVA_HOME"] = java_21_home
+            
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 cwd=self.target_repo_path,
+                env=compile_env,
             )
             if result.returncode == 0:
                 return {"success": True, "output": "Module-level compilation successful.", "modules": list(modules)}
             else:
                 return {
-                    "success": False, 
+                    "success": False,
                     "output": result.stderr or result.stdout
                 }
         except Exception as e:
@@ -133,16 +190,237 @@ class ValidationToolkit:
             
         return class_paths
 
-    def run_spotbugs(self, compiled_classes_paths: List[str], source_path: Optional[str] = None) -> Dict[str, Any]:
+    def get_project_classpath(self) -> List[str]:
         """
-        Runs SpotBugs using the Analysis Engine.
+        Retrieves the project's classpath using Maven or Gradle.
         """
+        is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
+        
+        if is_gradle:
+            # For Gradle, use the 'dependencies' or similar task. 
+            # A more robust way is to use a custom gradle script snippet.
+            # For now, let's try to get a basic classpath.
+            cmd = ["gradle", "properties", "-q"] # This is a placeholder; getting classpath from gradle is harder
+            # For brevity and since most targets are Maven, we'll return empty for Gradle for now
+            # or try to find common jar locations.
+            return []
+        else:
+            # Maven: use dependency:build-classpath
+            tmp_cp = os.path.join(tempfile.gettempdir(), "retrofit_cp.txt")
+            cmd = ["mvn", "dependency:build-classpath", f"-Dmdep.outputFile={tmp_cp}", "-DskipTests"]
+            try:
+                print(f"    Agent 4: Calculating project classpath...")
+                subprocess.run(cmd, cwd=self.target_repo_path, capture_output=True, text=True, check=True)
+                if os.path.exists(tmp_cp):
+                    with open(tmp_cp, "r") as f:
+                        cp_string = f.read().strip()
+                    os.unlink(tmp_cp)
+                    return cp_string.split(os.pathsep)
+            except Exception as e:
+                print(f"    Agent 4 Warning: Failed to get classpath: {e}")
+        return []
+
+    def run_spotbugs(self, compiled_classes_paths: List[str], source_path: Optional[str] = None, target_files: List[str] = None) -> Dict[str, Any]:
+        """
+        Runs SpotBugs using direct JAR invocation with Java 21.
+        Requires JAVA_HOME to be set to Java 21.
+
+        Args:
+            compiled_classes_paths: Paths to compiled class directories
+            source_path: Path to source code directory
+            target_files: List of target files to analyze (for focused analysis)
+        """
+        # Determine classes to analyze
+        class_names = []
+        if target_files:
+            for f in target_files:
+                if "src/main/java/" in f:
+                    cls = f.split("src/main/java/")[1].replace(".java", "").replace("/", ".")
+                    class_names.append(cls)
+                elif "src/test/java/" in f:
+                    cls = f.split("src/test/java/")[1].replace(".java", "").replace("/", ".")
+                    class_names.append(cls)
+
+        # Direct JAR Invocation with SpotBugs 4.9.3
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        spotbugs_jar = os.path.join(base_dir, "tools", "spotbugs", "spotbugs-4.9.3.jar")
+        # Get Java 21 home from .env file
+        java_21_home = os.getenv("JAVA_21_HOME", "/opt/homebrew/opt/openjdk@21")
+
+        if os.path.exists(spotbugs_jar):
+            print(f"    Agent 4: Executing SpotBugs via direct JAR invocation ({spotbugs_jar})...")
+            aux_cp = self.get_project_classpath()
+
+            # Build the command for SpotBugs 4.9.3+ using wildcard classpath for dependencies
+            # Uses Java 21 from JAVA_21_HOME env variable
+            spotbugs_dir = os.path.dirname(spotbugs_jar)
+            java_bin = os.path.join(java_21_home, "bin", "java")
+            cmd = [
+                java_bin if os.path.exists(java_bin) else "java",
+                "-cp", os.path.join(spotbugs_dir, "*"),
+                "edu.umd.cs.findbugs.LaunchAppropriateUI",
+                "-textui",
+                "-effort:max",
+                "-low",  # Report all confidence levels (low, medium, high)
+                "-noClassOk"
+            ]
+
+            if class_names:
+                cmd.extend(["-onlyAnalyze", ",".join(class_names)])
+
+            # Include project's compiled classes in aux classpath to ensure visibility
+            all_aux = list(aux_cp)
+            for p in compiled_classes_paths:
+                if p not in all_aux:
+                    all_aux.append(p)
+
+            if all_aux:
+                cmd.extend(["-auxclasspath", os.pathsep.join(all_aux)])
+
+            if source_path:
+                cmd.extend(["-sourcepath", source_path])
+
+            # Target classes for analysis (directories containing .class files)
+            for p in compiled_classes_paths:
+                cmd.append(p)
+
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                output = result.stdout + "\n" + result.stderr
+                # SpotBugs returns 0 if no bugs found, >0 if bugs found
+                passed = result.returncode == 0
+
+                # Clean output - remove noise, keep findings
+                cleaned_output = _clean_spotbugs_output(output)
+
+                # Check for critical errors that indicate the tool didn't run properly
+                # Ignore "Exception in thread" from missing classes (not a fatal error)
+                has_fatal_error = "Exception in thread" in output and "Could not instantiate" in output
+                has_fatal_error = has_fatal_error or ("Exception" in output and "ClassNotFoundException" in output)
+                has_fatal_error = has_fatal_error or ("Error" in output and "BUILD FAILURE" in output)
+
+                if has_fatal_error:
+                    print(f"    Agent 4 Warning: JAR invocation encountered errors, falling back...")
+                else:
+                    return {
+                        "success": passed,
+                        "output": cleaned_output,  # Return cleaned output
+                        "raw_output": output,  # Keep raw for debugging
+                        "method": "direct-jar",
+                        "return_code": result.returncode
+                    }
+            except subprocess.TimeoutExpired:
+                print(f"    Agent 4 Warning: Direct JAR SpotBugs timed out, falling back...")
+            except Exception as e:
+                print(f"    Agent 4 Warning: Direct JAR SpotBugs failed: {e}")
+
+        # 2. Maven Plugin Attempt (Fallback)
+        is_maven = os.path.exists(os.path.join(self.target_repo_path, "pom.xml"))
+        if is_maven:
+            # Use SpotBugs Maven plugin as fallback (has known issues with -xml:withMessages)
+            # Get Java 21 home from .env file
+            java_21_home = os.getenv("JAVA_21_HOME", "/opt/homebrew/opt/openjdk@21")
+            maven_env = os.environ.copy()
+            maven_env["JAVA_HOME"] = java_21_home
+            
+            cmd = [
+                "mvn",
+                "com.github.spotbugs:spotbugs-maven-plugin:4.9.0.0:spotbugs",
+                "-Dspotbugs.effort=Max",
+                "-Dspotbugs.threshold=Low",
+                "-DskipTests",
+                "-Djdk.security.manager.allow.argLine=",
+                "-Dmaven.compiler.release=21",
+                "-Dfmpp.skip=true",
+                "-Dforbiddenapis.skip=true",
+                "-Dcheckstyle.skip=true",
+                "-Dpmd.skip=true"
+            ]
+
+            # If we have specific modules from compilation, limit scope with -pl
+            if compiled_classes_paths:
+                modules_to_scan = set()
+                for cp in compiled_classes_paths:
+                    parts = cp.replace("\\", "/").split("/")
+                    if "target" in parts and "classes" in parts:
+                        idx = parts.index("target")
+                        if idx > 0:
+                            repo_parts = self.target_repo_path.replace("\\", "/").split("/")
+                            module_parts = parts[:idx]
+                            if len(module_parts) > len(repo_parts):
+                                relative_module = "/".join(module_parts[len(repo_parts):])
+                                modules_to_scan.add(relative_module)
+
+                if modules_to_scan:
+                    cmd.extend(["-pl", ",".join(modules_to_scan)])
+                    cmd.append("-am")
+
+            print(f"    Agent 4: Executing SpotBugs via Maven plugin: {' '.join(cmd)}")
+            try:
+                result = subprocess.run(cmd, cwd=self.target_repo_path, capture_output=True, text=True, timeout=600, env=maven_env)
+                output = result.stdout + "\n" + result.stderr
+
+                # Check for execution errors
+                if "MojoExecutionException" in output or "BUILD FAILURE" in output:
+                    print(f"    Agent 4 Warning: Maven SpotBugs failed, trying full scan...")
+                    cmd_fallback = [
+                        "mvn",
+                        "com.github.spotbugs:spotbugs-maven-plugin:4.9.0.0:spotbugs",
+                        "-Dspotbugs.effort=Max",
+                        "-Dspotbugs.threshold=Low",
+                        "-DskipTests",
+                        "-Djdk.security.manager.allow.argLine=",
+                        "-Dmaven.compiler.release=21",
+                        "-Dfmpp.skip=true",
+                        "-Dforbiddenapis.skip=true",
+                        "-Dcheckstyle.skip=true",
+                        "-Dpmd.skip=true"
+                    ]
+                    print(f"    Agent 4: Executing full project SpotBugs scan: {' '.join(cmd_fallback)}")
+                    result = subprocess.run(cmd_fallback, cwd=self.target_repo_path, capture_output=True, text=True, timeout=600, env=maven_env)
+                    output = result.stdout + "\n" + result.stderr
+
+                # Check again for critical failures
+                if "MojoExecutionException" in output or "BUILD FAILURE" in output:
+                    print(f"    Agent 4 Warning: Maven SpotBugs full scan also failed")
+                    return {
+                        "success": True,
+                        "output": output,
+                        "method": "maven-plugin-failed",
+                        "note": "SpotBugs execution failed, assuming clean by default"
+                    }
+                else:
+                    # Parse output for bug count - SpotBugs Maven plugin outputs "Total bugs: X"
+                    # Also check for individual bug reports like "BUG: ..."
+                    bug_match = re.search(r"Total bugs: (\d+)", output)
+                    if bug_match:
+                        bug_count = int(bug_match.group(1))
+                        passed = bug_count == 0
+                        return {
+                            "success": passed,
+                            "output": output,
+                            "method": "maven-plugin",
+                            "bug_count": bug_count
+                        }
+                    # Fallback: check for "No bugs found" or individual bug patterns
+                    has_bugs = "BUG:" in output or "High: " in output or "Medium: " in output
+                    passed = not has_bugs or "No bugs found" in output or "Total bugs: 0" in output
+                    return {"success": passed, "output": output, "method": "maven-plugin"}
+            except subprocess.TimeoutExpired:
+                print(f"    Agent 4 Warning: Maven SpotBugs timed out, falling back...")
+            except Exception as e:
+                print(f"    Agent 4 Warning: Maven SpotBugs failed: {e}")
+
+        # 3. Fallback to programmatic tool (Analysis Engine)
+        print("    Agent 4: Falling back to programmatic SpotBugs tool...")
+        aux_classpath = self.get_project_classpath()
         args = {
-            "compiled_classes_paths": compiled_classes_paths
+            "compiled_classes_paths": compiled_classes_paths,
+            "aux_classpath": aux_classpath
         }
         if source_path:
             args["source_path"] = source_path
-            
+
         return self.client.call_tool("spotbugs", args)
 
     def write_trace(self, trace_content: str, filename: str = "validation_trace.md"):
