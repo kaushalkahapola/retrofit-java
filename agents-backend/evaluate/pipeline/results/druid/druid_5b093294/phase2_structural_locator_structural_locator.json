@@ -1,0 +1,12 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java": {
+      "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+      "method": "reserveAdditional",
+      "start_line": 149,
+      "end_line": 195,
+      "code_snippet": "public boolean reserveAdditional(final int bytes)\n{\n    if (bytes < 0) {\n        throw new IAE(\"Cannot reserve negative bytes\");\n    }\n\n    if (bytes == 0) {\n        return true;\n    }\n\n    releaseLastBlockIfEmpty();\n\n    if (bytes > allocator.available()) {\n        return false;\n    }\n\n    final int idx = currentBlockNumber();\n\n    if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {\n        // Allocation needed.\n        // Math.max(allocationSize, bytes) in case \"bytes\" is greater than SOFT_MAXIMUM_ALLOCATION_SIZE.\n        // However, cap the allocation request to the available bytes in the allocator, in case the requested bytes\n        // are less than what are available in the allocator, however the SOFT_MAXIMUM_ALLOCATION_SIZE is greater than the\n        // bytes available in the allocator. In such a case where bytes < available < SOFT_MAXIMUM_ALLOCATION_SIZE, we\n        // want to allocate all the available memory in the allocator, and in the other cases where available is the greatest\n        // of all, we want to allocate according to the max of bytes & SOFT_MAXIMUM_ALLOCATION_SIZE\n        final Optional<ResourceHolder<WritableMemory>> newMemory =\n            allocator.allocate(Math.min(allocator.available(), Math.max(nextAllocationSize, bytes)));\n\n        if (!newMemory.isPresent()) {\n            return false;\n        } else if (newMemory.get().get().getCapacity() < bytes) {\n            // Not enough space in the allocation.\n            newMemory.get().close();\n            return false;\n        } else {\n            addBlock(newMemory.get());\n\n            if (!blocksPackedAndInitialSize && nextAllocationSize < SOFT_MAXIMUM_ALLOCATION_SIZE) {\n                // Increase size each time we add an allocation, to minimize the number of overall allocations.\n                nextAllocationSize *= 2;\n            }\n        }\n    }\n\n    return true;\n}"
+    }
+  }
+}

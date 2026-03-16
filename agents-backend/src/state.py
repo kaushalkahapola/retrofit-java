@@ -91,6 +91,7 @@ class AgentState(TypedDict):
     # --- Phase 0: Control flags ---
     skip_phase_0: bool               # If True, skip phase 0 and go directly to context analyzer
     compile_only: bool               # If True, validation only applies patch and compiles (no tests)
+    with_test_changes: bool          # If False (default), ignore test file changes/hunks in all phases
 
     # --- Phase 0: Pre-computed analysis ---
     patch_analysis: list             # List[FileChange] — from PatchAnalyzer

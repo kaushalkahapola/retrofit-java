@@ -119,6 +119,8 @@ def _extract_hunk_block(raw: str) -> str | None:
     """
     Extracts the first unified diff hunk (@@-prefixed block) from an LLM response.
     Strips markdown fences if present. Returns None if no valid hunk found.
+    
+    Important: Preserves all context lines and trailing whitespace needed for a valid patch.
     """
     if not raw:
         return None
@@ -149,11 +151,12 @@ def _extract_hunk_block(raw: str) -> str | None:
     if hunk_start is None:
         return None
 
-    # Collect hunk lines from @@ onwards (valid diff lines only)
+    # Collect hunk lines from @@ onwards
+    # A hunk ends when we encounter a new file header OR when we've consumed all valid diff lines
     hunk_lines = []
     for line in lines[hunk_start:]:
-        # A new file header means end of this hunk
-        if line.startswith("diff --git") or line.startswith("---") or line.startswith("+++"):
+        # Stop at new file/section headers (but these shouldn't appear in valid LLM output)
+        if line.startswith("diff --git"):
             if hunk_lines:  # only break if we already have some hunk content
                 break
         hunk_lines.append(line)
@@ -162,6 +165,7 @@ def _extract_hunk_block(raw: str) -> str | None:
         return None
 
     result = "\n".join(hunk_lines)
+    # Ensure the result ends with a newline for proper unified diff format
     if not result.endswith("\n"):
         result += "\n"
     return result
@@ -229,7 +233,7 @@ def _rewrite_hunk_symbols(hunk_text: str, consistency_map: dict) -> str:
 def _adjust_hunk_header(hunk_text: str, target_start_line: int) -> str:
     """
     Rewrites the @@ header of a hunk to anchor it at target_start_line.
-    Preserves the +count / -count values; only changes the start line numbers.
+    Recalculates the line counts (-count/+count) based on actual hunk content.
     """
     if not hunk_text or target_start_line is None:
         return hunk_text
@@ -244,11 +248,33 @@ def _adjust_hunk_header(hunk_text: str, target_start_line: int) -> str:
     if not m:
         return hunk_text
 
-    src_len = m.group(2) or "1"
-    tgt_len = m.group(4) or "1"
     ctx = m.group(5)  # trailing comment
 
-    new_header = f"@@ -{target_start_line},{src_len} +{target_start_line},{tgt_len} @@{ctx}"
+    # Count actual diff lines from body
+    removed_count = 0
+    added_count = 0
+    context_count = 0
+    
+    for line in lines[1:]:
+        if line.startswith("-"):
+            removed_count += 1
+        elif line.startswith("+"):
+            added_count += 1
+        elif line.startswith(" "):
+            context_count += 1
+        # Empty lines within the hunk body (just "") are part of the hunk, skip trailing empty
+    
+    # Calculate the correct counts
+    src_count = context_count + removed_count
+    tgt_count = context_count + added_count
+    
+    # Handle edge case: if counts are 0, default to 1
+    if src_count == 0:
+        src_count = 1
+    if tgt_count == 0:
+        tgt_count = 1
+
+    new_header = f"@@ -{target_start_line},{src_count} +{target_start_line},{tgt_count} @@{ctx}"
     return "\n".join([new_header] + lines[1:]) + "\n"
 
 
@@ -274,6 +300,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     target_repo_path: str = state.get("target_repo_path", "")
     validation_attempts: int = state.get("validation_attempts") or 0
     error_context: str = state.get("validation_error_context") or ""
+    with_test_changes: bool = state.get("with_test_changes", False)
 
     if not semantic_blueprint:
         msg = "Agent 3 Error: No semantic_blueprint in state. Agents 1 & 2 must run first."
@@ -302,7 +329,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     llm = get_llm(temperature=0)
     
     analyzer = PatchAnalyzer()
-    raw_hunks_by_file = analyzer.extract_raw_hunks(patch_diff) if patch_diff else {}
+    raw_hunks_by_file = analyzer.extract_raw_hunks(patch_diff, with_test_changes=with_test_changes) if patch_diff else {}
     toolkit = ValidationToolkit(target_repo_path) if target_repo_path else None
 
     fix_logic = semantic_blueprint.get("fix_logic", "")
@@ -317,6 +344,10 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     if not (fc.is_test_file if hasattr(fc, "is_test_file") else fc.get("is_test_file", False))]
     test_changes = [fc for fc in patch_analysis
                     if (fc.is_test_file if hasattr(fc, "is_test_file") else fc.get("is_test_file", False))]
+    
+    # Filter test changes based on with_test_changes flag
+    if not with_test_changes:
+        test_changes = []
 
     print(f"  Agent 3: {len(code_changes)} code file(s), {len(test_changes)} test file(s) to process.")
 
@@ -351,8 +382,23 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             continue
 
         target_file = mapped_ctx.get("target_file", mainline_file)
-        insertion_line = mapped_ctx.get("start_line") or 1
+        insertion_line = mapped_ctx.get("start_line")
         target_body = mapped_ctx.get("code_snippet", "")
+        
+        # IMPROVEMENT: If insertion_line is None, try to extract from raw hunk header
+        if insertion_line is None and raw_hunks:
+            try:
+                first_hunk = raw_hunks[0]
+                # Parse @@ -X,Y +A,B @@ to get actual line numbers
+                hunk_header_match = re.search(r'@@ -\d+(?:,\d+)? \+(\d+)', first_hunk)
+                if hunk_header_match:
+                    insertion_line = int(hunk_header_match.group(1))
+                    print(f"  Agent 3: Extracted insertion_line {insertion_line} from hunk header")
+            except Exception as e:
+                print(f"  Agent 3: Could not extract insertion_line from hunk: {e}")
+        
+        # Default fallback
+        insertion_line = insertion_line or 1
 
         print(f"  Agent 3: Rewriting {len(raw_hunks)} hunk(s) for {mainline_file} → {target_file}")
 
@@ -363,9 +409,14 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             # LLM rewrite (up to 2 attempts)
             adapted_hunk_text = None
             for attempt in range(2):
+                # Use full method body context (no truncation)
+                # The LLM needs complete context to properly understand method structure,
+                # boundaries, and surrounding code patterns for accurate hunk adaptation.
+                # If token budget is a concern, this can be adjusted, but complete context
+                # produces more accurate hunks.
                 prompt = _HUNK_REWRITE_USER.format(
                     mainline_hunk=pre_rewritten,
-                    target_method_body=target_body[:2000],
+                    target_method_body=target_body,  # Use full body, not truncated
                     consistency_map=cm_formatted,
                     fix_logic=fix_logic,
                     dependent_apis=", ".join(dependent_apis),

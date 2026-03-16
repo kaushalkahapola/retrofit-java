@@ -165,6 +165,7 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
     patch_analysis = state.get("patch_analysis", [])
     mainline_repo_path = state.get("mainline_repo_path", "")
     original_commit = state.get("original_commit", "HEAD")
+    with_test_changes = state.get("with_test_changes", False)
 
     if not patch_diff:
         msg = "Agent 1 Error: No patch_diff in state. Phase 0 must run first."
@@ -176,7 +177,7 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
     # ------------------------------------------------------------------
     llm = get_llm(temperature=0)
     analyzer = PatchAnalyzer()
-    raw_hunks_by_file = analyzer.extract_raw_hunks(patch_diff)
+    raw_hunks_by_file = analyzer.extract_raw_hunks(patch_diff, with_test_changes=with_test_changes)
     trace = "# Context Analyzer Trace\n\n"
 
     # Initialize tools that ONLY target the mainline repo
@@ -248,10 +249,14 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
         token_usage["output_tokens"] += usage.get("output_tokens", usage.get("completion_tokens", 0))
         token_usage["total_tokens"] += usage.get("total_tokens", 0) or (token_usage["input_tokens"] + token_usage["output_tokens"])
 
-    # Filter to non-test code changes only
-    code_changes = [fc for fc in patch_analysis if not fc.is_test_file]
-    if not code_changes:
+    # Filter to non-test code changes only (unless with_test_changes is True)
+    if with_test_changes:
         code_changes = patch_analysis
+    else:
+        code_changes = [fc for fc in patch_analysis if not fc.is_test_file]
+        if not code_changes:
+            # Fallback: if no non-test files found, use all
+            code_changes = patch_analysis
 
     all_root_causes = []
     all_fix_logic = []

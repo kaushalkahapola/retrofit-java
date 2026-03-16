@@ -217,7 +217,8 @@ async def run_full_pipeline(
             "backport_commit": backport_commit,
             "original_commit": mainline_commit,
             "skip_phase_0": True,
-            "compile_only": True
+            "compile_only": True,
+            "with_test_changes": False  # Ignore test changes by default
         }
         
         # Run graph and collect outputs

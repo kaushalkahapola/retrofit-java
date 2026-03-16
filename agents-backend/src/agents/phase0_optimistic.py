@@ -47,8 +47,9 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
     with open(patch_path, "r", encoding="utf-8") as f:
         diff_text = f.read()
 
+    with_test_changes = state.get("with_test_changes", False)
     analyzer = PatchAnalyzer()
-    changes = analyzer.analyze(diff_text)
+    changes = analyzer.analyze(diff_text, with_test_changes=with_test_changes)
 
     # ------------------------------------------------------------------
     # 2. Handle experiment mode checkout

@@ -21,9 +21,17 @@ class PatchAnalyzer:
         """
         return PatchSet(io.StringIO(diff_text))
 
-    def analyze(self, diff_text: str) -> List[FileChange]:
+    def analyze(self, diff_text: str, with_test_changes: bool = False) -> List[FileChange]:
         """
         Analyzes a raw git diff and returns structured information about each file change.
+        
+        Args:
+            diff_text: Raw unified diff text
+            with_test_changes: If False (default), filters out test file changes.
+                             If True, includes all changes including test files.
+        
+        Returns:
+            List[FileChange]: File changes, optionally filtered to exclude test files
         """
         patch_set = self.parse_diff(diff_text)
         changes = []
@@ -49,6 +57,10 @@ class PatchAnalyzer:
 
             file_path = patched_file.path
             is_test_file = self._is_test_file(file_path)
+            
+            # Skip test file changes if with_test_changes is False
+            if not with_test_changes and is_test_file:
+                continue
 
             changes.append(FileChange(
                 file_path=file_path,
@@ -67,9 +79,14 @@ class PatchAnalyzer:
         lower_path = file_path.lower()
         return "test" in lower_path or lower_path.endswith("test.java")
 
-    def extract_raw_hunks(self, diff_text: str) -> dict:
+    def extract_raw_hunks(self, diff_text: str, with_test_changes: bool = False) -> dict:
         """
         Extracts raw hunk text per file from a unified diff.
+        
+        Args:
+            diff_text: Raw unified diff text
+            with_test_changes: If False (default), filters out test file hunks.
+                             If True, includes all hunks including test files.
 
         Returns:
             dict mapping file_path -> list of hunk strings (each hunk is the raw
@@ -82,6 +99,11 @@ class PatchAnalyzer:
 
         for patched_file in patch_set:
             file_path = patched_file.path
+            
+            # Skip test files if with_test_changes is False
+            if not with_test_changes and self._is_test_file(file_path):
+                continue
+            
             hunks: list[str] = []
             for hunk in patched_file:
                 lines = []

@@ -84,7 +84,8 @@ async def main():
             "mainline_repo_path": mainline_repo_path,
             "experiment_mode": experiment_mode,
             "backport_commit": backport_commit,
-            "original_commit": mainline_commit
+            "original_commit": mainline_commit,
+            "with_test_changes": False  # Set to False by default to ignore test file changes
         }
         
         async for output in app.astream(inputs):

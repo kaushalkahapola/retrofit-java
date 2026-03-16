@@ -506,11 +506,20 @@ class ValidationToolkit:
             hunk_text = h.get("hunk_text", "")
             if not hunk_text or not target_file:
                 continue
-            patch_parts.append(self._build_patch_file(target_file, hunk_text))
-            if target_file not in applied_files:
-                applied_files.append(target_file)
+            try:
+                patch_part = self._build_patch_file(target_file, hunk_text)
+                patch_parts.append(patch_part)
+                if target_file not in applied_files:
+                    applied_files.append(target_file)
+            except ValueError as e:
+                return {
+                    "success": False,
+                    "output": f"Invalid hunk format for {target_file}: {e}",
+                    "applied_files": [],
+                }
 
-        combined = "\n".join(patch_parts)
+        # Combine patches with proper separation (no extra newlines, _build_patch_file handles that)
+        combined = "".join(patch_parts)
 
         tmp_path = None
         try:
@@ -660,19 +669,31 @@ class ValidationToolkit:
         
         is_new = not os.path.exists(full_path)
         
+        # Ensure hunk_text is properly formatted
+        if not hunk_text.startswith("@@"):
+            raise ValueError(f"Hunk must start with @@, got: {hunk_text[:50]}")
+        
+        # Ensure hunk ends with newline if it doesn't already
+        body = hunk_text if hunk_text.endswith("\n") else hunk_text + "\n"
+        
+        # Add trailing newline for proper separation between files in combined patches
+        if not body.endswith("\n\n"):
+            body = body.rstrip("\n") + "\n"
+        
         if is_new:
             header = (
                 f"diff --git a/{p} b/{p}\n"
                 f"new file mode 100644\n"
+                f"index 0000000..0000000 100644\n"
                 f"--- /dev/null\n"
                 f"+++ b/{p}\n"
             )
         else:
             header = (
                 f"diff --git a/{p} b/{p}\n"
+                f"index 0000000..0000000 100644\n"
                 f"--- a/{p}\n"
                 f"+++ b/{p}\n"
             )
-        # Ensure hunk_text ends with newline
-        body = hunk_text if hunk_text.endswith("\n") else hunk_text + "\n"
+        
         return header + body

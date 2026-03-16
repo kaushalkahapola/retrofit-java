@@ -125,6 +125,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     patch_analysis = state.get("patch_analysis", [])
     target_repo_path = state.get("target_repo_path", "")
     mainline_repo_path = state.get("mainline_repo_path", "")
+    with_test_changes = state.get("with_test_changes", False)
 
     if not semantic_blueprint:
         msg = "Agent 2 Error: No semantic_blueprint in state. Agent 1 must run first."
@@ -144,6 +145,10 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     # ------------------------------------------------------------------
     code_changes = [fc for fc in patch_analysis if not (fc.is_test_file if hasattr(fc, 'is_test_file') else fc.get("is_test_file", False))]
     test_changes = [fc for fc in patch_analysis if (fc.is_test_file if hasattr(fc, 'is_test_file') else fc.get("is_test_file", False))]
+    
+    # Filter test changes based on with_test_changes flag
+    if not with_test_changes:
+        test_changes = []
 
     print(f"  Agent 2: {len(code_changes)} code file(s), {len(test_changes)} test file(s)")
     trace += f"## Hunk Segregation\n- Code files: {len(code_changes)}\n- Test files: {len(test_changes)}\n\n"
@@ -203,6 +208,23 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         
         # STEP 2: Try LLM refinement to get method-level details
         modified_methods = _infer_modified_methods(change)
+        
+        # IMPROVEMENT: Extract method name from semantic blueprint if diff inference failed
+        # The blueprint often mentions the main modified method in root_cause_hypothesis or fix_logic
+        if not modified_methods:
+            root_cause = semantic_blueprint.get("root_cause_hypothesis", "")
+            fix_logic = semantic_blueprint.get("fix_logic", "")
+            blueprint_text = root_cause + " " + fix_logic
+            
+            # Look for pattern "method `methodName`" or "method methodName returned/failed"
+            method_pattern = re.compile(r"method\s+[`'\"]?(\w+)[`'\"]?")
+            for match in method_pattern.finditer(blueprint_text):
+                method_name = match.group(1)
+                if method_name not in {"The", "the", "a", "is", "can", "when"}:
+                    modified_methods = [method_name]
+                    print(f"  Agent 2: Extracted method from blueprint: {method_name}")
+                    break
+        
         file_diff = ""
         try:
             from utils.patch_analyzer import PatchAnalyzer
@@ -487,6 +509,17 @@ def _locate_method_with_reflection(
 
     Returns a dict with: target_method, start_line, end_line, code_snippet, divergence.
     """
+    # Guard: if mainline_method is None or empty, return early
+    if not mainline_method or not isinstance(mainline_method, str):
+        trace_lines.append(f"⚠️ Cannot locate None/empty method in {target_file}")
+        return {
+            "target_method": None,
+            "start_line": None,
+            "end_line": None,
+            "code_snippet": "",
+            "divergence": "method_not_identified",
+        }
+    
     target_method = mainline_method  # assume identity
     start_line = None
     end_line = None
