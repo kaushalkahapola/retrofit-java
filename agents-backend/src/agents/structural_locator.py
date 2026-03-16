@@ -22,14 +22,15 @@ Pipeline:
   5. Write structural_locator_trace.md.
 """
 
+import json
+import time
 import os
 import re
-import json
 from langchain_core.messages import HumanMessage
 from state import AgentState
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langgraph.prebuilt import create_react_agent
-from state import AgentState
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from agents.reasoning_tools import ReasoningToolkit
 
@@ -157,6 +158,10 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     # Setup a lightweight retriever (no index build — Agent 2 uses the already-built index from Phase 0)
     try:
         retriever = EnsembleRetriever(mainline_repo_path, target_repo_path)
+        # CRITICAL: Build index for retrieval to work
+        print("  Agent 2: Building repository index...")
+        retriever.build_index("HEAD")
+        
         toolkit = ReasoningToolkit(retriever, target_repo_path, mainline_repo_path, patch_analysis)
     except Exception as e:
         print(f"  Agent 2: Warning — could not init retriever: {e}")
@@ -164,7 +169,27 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         toolkit = None
 
     # Setup LLM Agent
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+    model_name = os.getenv("STRUCTURAL_LOCATOR_MODEL", "gemini-2.0-flash")
+    provider = os.getenv("STRUCTURAL_LOCATOR_PROVIDER", "google").lower()
+    
+    if provider == "azure":
+        llm = AzureChatOpenAI(
+            azure_deployment=os.getenv("AZURE_CHAT_DEPLOYMENT", "apim-4o-mini"),
+            openai_api_version=os.getenv("AZURE_CHAT_VERSION", "2024-02-01"),
+            azure_endpoint=os.getenv("AZURE_ENDPOINT", os.getenv("OPENAI_BASE_URL")),
+            api_key=os.getenv("AZURE_OPENAI_API_KEY", os.getenv("OPENAI_API_KEY")),
+            temperature=0
+        )
+    elif provider == "openai":
+        llm = ChatOpenAI(
+            model=model_name,
+            temperature=0,
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            openai_api_base=os.getenv("OPENAI_BASE_URL"),
+            openai_proxy=os.getenv("OPENAI_PROXY")
+        )
+    else:
+        llm = ChatGoogleGenerativeAI(model=model_name, temperature=0)
     tools = [
         t for t in toolkit.get_tools() if t.name in [
             "search_candidates", "match_structure", "get_dependency_graph",
@@ -172,7 +197,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         ]
     ] if toolkit else []
     
-    agent = create_react_agent(llm, tools=tools, state_modifier=_AGENT_SYSTEM)
+    agent = create_react_agent(llm, tools=tools, prompt=_AGENT_SYSTEM)
 
     # ------------------------------------------------------------------
     # 2. Process code files
@@ -185,8 +210,23 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
         trace += f"### `{mainline_file}`\n\n"
         modified_methods = _infer_modified_methods(change)
-        
-        input_msg = f"Mainline File: {mainline_file}\nChanged Methods: {modified_methods}\nBlueprint:\n{json.dumps(semantic_blueprint, indent=2)}\nFind the target file and methods."
+        # Get the diff for this specific file
+        file_diff = ""
+        try:
+            from utils.patch_analyzer import PatchAnalyzer
+            pa = PatchAnalyzer()
+            raw_hunks = pa.extract_raw_hunks(state.get("patch_diff", ""))
+            file_diff = "\n".join(raw_hunks.get(mainline_file, []))
+        except Exception:
+            file_diff = "Diff not available."
+
+        input_msg = (
+            f"Mainline File: {mainline_file}\n"
+            f"Inferred Changed Methods: {modified_methods}\n"
+            f"Semantic Blueprint:\n{json.dumps(semantic_blueprint, indent=2)}\n\n"
+            f"Patch Diff for this file:\n```diff\n{file_diff}\n```\n\n"
+            f"Examine the diff and the blueprint. Identify the target file and methods."
+        )
         input_data = {"messages": [("user", input_msg)]}
         
         mapping_result = None
@@ -196,27 +236,37 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 raw_content = result["messages"][-1].content
                 
                 text = raw_content.strip()
-                if "```" in text:
-                    lines = text.splitlines()
-                    inside = False
-                    json_lines = []
-                    for line in lines:
-                        if line.startswith("```"):
-                            inside = not inside
-                            continue
-                        if inside:
-                            json_lines.append(line)
-                    text = "\n".join(json_lines).strip()
+                # Find the first JSON-like object in the response
+                json_match = re.search(r"\{.*\}", text, re.DOTALL)
+                if json_match:
+                    text = json_match.group(0)
                 
-                mapping_result = json.loads(text)
+                try:
+                    mapping_result = json.loads(text)
+                except json.JSONDecodeError:
+                    # Try cleaning up markdown blocks if regex didn't get it perfectly
+                    text_clean = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", text, flags=re.DOTALL).strip()
+                    try:
+                        mapping_result = json.loads(text_clean)
+                    except json.JSONDecodeError:
+                        trace += f"⚠️ **Mapping Extraction Failed**\n\nRaw Response:\n```\n{raw_content}\n```\n\n"
+                        mapping_result = None
                 
-                trace += f"**Agent Tool Steps:**\n\n"
-                for m in result["messages"]:
-                    if m.type == "tool":
-                        trace += f"  - `Tool: {m.name}` -> {str(m.content)[:100]}...\n"
+                if mapping_result:
+                    trace += f"**Agent Tool Steps:**\n\n"
+                    for m in result.get("messages", []):
+                        if m.type == "tool":
+                            trace += f"  - `Tool: {m.name}` -> {str(m.content)[:200]}...\n"
+                        elif m.type == "ai" and m.tool_calls:
+                            for tc in m.tool_calls:
+                                trace += f"  - `Agent calls {tc['name']}` with `{json.dumps(tc['args'])}`\n"
+                    trace += "\n"
                 break
             except Exception as e:
                 print(f"  Agent 2: LLM call error (attempt {attempt+1}/2): {e}")
+                if attempt == 0:
+                    print("  Waiting 30 seconds before retry...")
+                    time.sleep(30)
 
         if mapping_result and isinstance(mapping_result, dict):
             for k, v in mapping_result.get("consistency_map_entries", {}).items():
@@ -398,11 +448,15 @@ def _infer_modified_methods(change) -> list[str]:
         lines.extend(change.get("added_lines", []))
 
     for line in lines:
+        # Search for method patterns (e.g., "void foo()", "int bar(String x)")
         for m in pattern.finditer(line):
             name = m.group(1)
             if name not in skip and name not in found:
                 found.append(name)
 
+    # Fallback/Improvement: If no methods found, try searching in context lines if available
+    # However, since FileChange doesn't have context lines, we'll rely on the LLM seeing the full diff.
+    
     return found
 
 

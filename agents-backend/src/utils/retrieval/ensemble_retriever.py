@@ -1,6 +1,7 @@
 import os
 import re
 import concurrent.futures
+import hashlib
 from typing import List, Dict, Set, Optional
 import pickle
 from git import Repo
@@ -67,7 +68,11 @@ class EnsembleRetriever:
         Builds the index for the target repository at the given commit.
         Checks for cached index first.
         """
-        cache_file = f"index_cache_{commit_sha}.pkl"
+        # Move cache out of the repo for security (avoid executable code injection from untrusted repos)
+        repo_hash = hashlib.sha256(self.target_repo.working_dir.encode()).hexdigest()[:12]
+        cache_dir = os.path.expanduser("~/.cache/agents-backend/retrieval")
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_file = os.path.join(cache_dir, f"index_{repo_hash}_{commit_sha}.pkl")
         if os.path.exists(cache_file):
             print(f"Loading index from cache: {cache_file}")
             try:
