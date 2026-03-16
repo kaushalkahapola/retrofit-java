@@ -34,7 +34,7 @@ REPOS_DIR = os.path.join(BASE_DIR, "temp_repo_storage")
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 
 TARGET_PROJECTS = ["druid"]
-MAX_PATCHES_PER_PROJECT = 2  # Limit for testing; set to None for all
+MAX_PATCHES_PER_PROJECT = 1  # Limit for testing; set to None for all
 
 
 def ensure_dirs():
@@ -279,6 +279,14 @@ async def run_full_pipeline(
         return results
 
 
+def is_patch_processed(project, patch_id):
+    """Check if a patch has already been processed by looking for results folder."""
+    patch_results_dir = os.path.join(RESULTS_DIR, project, patch_id)
+    # Consider a patch processed if the directory exists and contains a pipeline_results.json
+    results_file = os.path.join(patch_results_dir, "pipeline_results.json")
+    return os.path.exists(results_file)
+
+
 async def main():
     """Main evaluation pipeline."""
     print("=" * 80)
@@ -315,11 +323,18 @@ async def main():
     
     # Process each patch
     all_results = []
+    skipped_patches = []
     for idx, row in enumerate(data, 1):
         project = row['Project']
         mainline_commit = row['Original Commit']
         backport_commit = row['Backport Commit']
         patch_id = f"{project}_{mainline_commit[:8]}"
+        
+        # Check if patch has already been processed
+        if is_patch_processed(project, patch_id):
+            print(f"\n[{idx}/{len(data)}] SKIPPING (already processed): {patch_id}")
+            skipped_patches.append(patch_id)
+            continue
         
         print(f"\n[{idx}/{len(data)}] Processing: {patch_id}")
         
@@ -369,9 +384,13 @@ async def main():
     print("=" * 80)
     completed = sum(1 for r in all_results if r.get("status") == "completed")
     failed = sum(1 for r in all_results if r.get("status") == "failed")
-    print(f"Total Patches: {len(all_results)}")
+    print(f"Total Patches in Dataset: {len(data)}")
+    print(f"Skipped (already processed): {len(skipped_patches)}")
+    print(f"Newly Processed: {len(all_results)}")
     print(f"Completed: {completed}")
     print(f"Failed: {failed}")
+    if skipped_patches:
+        print(f"\nSkipped Patches: {', '.join(skipped_patches)}")
     print(f"Results Directory: {RESULTS_DIR}")
     print(f"Summary Report: {summary_file}")
 
