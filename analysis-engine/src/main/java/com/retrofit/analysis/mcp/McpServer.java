@@ -202,10 +202,10 @@ public class McpServer {
         ObjectNode sbSchema = sbTool.putObject("inputSchema");
         sbSchema.put("type", "object");
         ObjectNode sbProps = sbSchema.putObject("properties");
-        sbProps.putObject("compiled_classes_path").put("type", "string");
+        sbProps.putObject("compiled_classes_paths").put("type", "array").putObject("items").put("type", "string");
         sbProps.putObject("source_path").put("type", "string");
         ArrayNode sbRequired = sbSchema.putArray("required");
-        sbRequired.add("compiled_classes_path");
+        sbRequired.add("compiled_classes_paths");
 
         return response;
     }
@@ -246,15 +246,18 @@ public class McpServer {
                 Map<String, Object> result = compileTool.execute(repoPath, filePaths);
                 return createToolResponse(id, result);
             } else if ("spotbugs".equals(toolName)) {
-                String compiledClassesPath = arguments.get("compiled_classes_path").asText();
+                List<String> compiledClassesPaths = new ArrayList<>();
+                if (arguments.has("compiled_classes_paths")) {
+                    arguments.get("compiled_classes_paths").forEach(node -> compiledClassesPaths.add(node.asText()));
+                }
                 String sourcePath = arguments.has("source_path") ? arguments.get("source_path").asText() : null;
-                Map<String, Object> result = spotBugsTool.execute(compiledClassesPath, sourcePath);
+                Map<String, Object> result = spotBugsTool.execute(compiledClassesPaths, sourcePath);
                 return createToolResponse(id, result);
             } else {
                 return createErrorResponse(id, -32601, "Tool not found: " + toolName);
             }
-        } catch (Exception e) {
-            return createErrorResponse(id, -32603, "Internal error: " + e.getMessage());
+        } catch (Throwable t) {
+            return createErrorResponse(id, -32603, "Internal error: " + t.getMessage());
         }
     }
 
