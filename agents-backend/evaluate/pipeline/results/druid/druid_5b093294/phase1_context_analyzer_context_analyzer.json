@@ -1,7 +1,7 @@
 {
   "semantic_blueprint": {
     "root_cause_hypothesis": "Insufficient check for available memory before allocation, potentially leading to out-of-bounds access.",
-    "fix_logic": "Added a check to ensure that the last allocated block has enough memory to satisfy the request before returning false.",
+    "fix_logic": "Added a check to ensure that the last allocated block has enough memory to satisfy the request before proceeding with the allocation.",
     "dependent_apis": [
       "allocator",
       "blockHolders",
@@ -12,7 +12,7 @@
       {
         "hunk_index": 1,
         "file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
-        "summary": "Introduced a check to validate if the requested bytes exceed the available memory and if the last allocated block can satisfy the request.",
+        "summary": "Introduced a check to verify if the requested bytes exceed the available memory and if the last allocated block can satisfy the request.",
         "role": "core_fix",
         "connects_to_next": "",
         "global_index": 1
