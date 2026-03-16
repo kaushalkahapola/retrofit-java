@@ -16,7 +16,7 @@ import java.util.Map;
 @Component
 public class SpotBugsTool {
 
-    public Map<String, Object> execute(List<String> compiledClassesPaths, String sourcePath) {
+    public Map<String, Object> execute(List<String> compiledClassesPaths, String sourcePath, List<String> auxClasspath) {
         Map<String, Object> result = new HashMap<>();
         StringBuilder debugLog = new StringBuilder();
         try {
@@ -36,6 +36,14 @@ public class SpotBugsTool {
                 }
             }
             
+            if (auxClasspath != null) {
+                for (String path : auxClasspath) {
+                    if (new File(path).exists()) {
+                        project.addAuxClasspathEntry(path);
+                    }
+                }
+            }
+            
             if (sourcePath != null && new File(sourcePath).exists()) {
                 project.addSourceDir(sourcePath);
             }
@@ -44,25 +52,48 @@ public class SpotBugsTool {
             debugLog.append("  SpotBugs: Checking DetectorFactoryCollection initialization...\n");
             edu.umd.cs.findbugs.DetectorFactoryCollection dfc = null;
             try {
+                // Force loading of plugins before getting instance
                 dfc = edu.umd.cs.findbugs.DetectorFactoryCollection.instance();
-                if (dfc == null) {
-                    debugLog.append("  SpotBugs: DetectorFactoryCollection.instance() is null, resetting...\n");
-                    dfc = new edu.umd.cs.findbugs.DetectorFactoryCollection();
-                    edu.umd.cs.findbugs.DetectorFactoryCollection.resetInstance(dfc);
-                }
                 debugLog.append("  SpotBugs: DetectorFactoryCollection initialized.\n");
             } catch (Throwable t) {
                 debugLog.append("  SpotBugs Error: DetectorFactoryCollection initialization failed: ").append(t.getMessage()).append("\n");
-                dfc = new edu.umd.cs.findbugs.DetectorFactoryCollection();
+                // Try manual initialization if instance() fails
+                try {
+                    dfc = new edu.umd.cs.findbugs.DetectorFactoryCollection();
+                    edu.umd.cs.findbugs.DetectorFactoryCollection.resetInstance(dfc);
+                    debugLog.append("  SpotBugs: DetectorFactoryCollection reset manually.\n");
+                } catch (Throwable t2) {
+                    debugLog.append("  SpotBugs Error: Manual reset failed: ").append(t2.getMessage()).append("\n");
+                }
             }
+            
+            // Critical: AnalysisContext needs to be initialized. 
+            // Usually, FindBugs2.execute() handles this, but let's be safe.
             
             FindBugs2 findBugs = new FindBugs2();
             findBugs.setProject(project);
+            
+            // Allow analysis to continue even if some classes are missing
+            findBugs.setNoClassOk(true);
+            
+            // Critical: FindBugs2 needs a DetectorFactoryCollection
             if (dfc != null) {
                 findBugs.setDetectorFactoryCollection(dfc);
+            } else {
+                // Try one more time to get the instance
+                try {
+                    findBugs.setDetectorFactoryCollection(edu.umd.cs.findbugs.DetectorFactoryCollection.instance());
+                } catch (Throwable t) {
+                    debugLog.append("  SpotBugs Warning: Final attempt to set DetectorFactoryCollection failed.\n");
+                }
             }
+            
             // Fix NullPointerException: UserPreferences must be set
-            findBugs.setUserPreferences(edu.umd.cs.findbugs.config.UserPreferences.createDefaultUserPreferences());
+            edu.umd.cs.findbugs.config.UserPreferences prefs = edu.umd.cs.findbugs.config.UserPreferences.createDefaultUserPreferences();
+            // Set some basic effort
+            prefs.setEffort(edu.umd.cs.findbugs.config.UserPreferences.EFFORT_DEFAULT);
+            findBugs.setUserPreferences(prefs);
+            
             findBugs.finishSettings();
             
             // Check if detectors were loaded
@@ -112,8 +143,14 @@ public class SpotBugsTool {
             result.put("debug_log", debugLog.toString());
             
         } catch (Throwable t) {
+            java.io.StringWriter sw = new java.io.StringWriter();
+            java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+            t.printStackTrace(pw);
+            String stackTrace = sw.toString();
+            
             result.put("success", false);
             result.put("message", "Error during SpotBugs programmatic execution: " + t.getMessage() + "\nDebug Log:\n" + debugLog.toString());
+            result.put("stack_trace", stackTrace);
             t.printStackTrace();
         }
         return result;
