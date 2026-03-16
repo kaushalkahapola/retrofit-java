@@ -437,3 +437,5 @@ references/
 venvwin/
 .pytest_cache/
 temp_*
+agents-backend/tools/spotbugs/*.jar
+!agents-backend/tools/spotbugs/README.md

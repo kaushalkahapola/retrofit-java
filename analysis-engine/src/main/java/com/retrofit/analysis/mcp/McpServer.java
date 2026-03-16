@@ -204,6 +204,7 @@ public class McpServer {
         ObjectNode sbProps = sbSchema.putObject("properties");
         sbProps.putObject("compiled_classes_paths").put("type", "array").putObject("items").put("type", "string");
         sbProps.putObject("source_path").put("type", "string");
+        sbProps.putObject("aux_classpath").put("type", "array").putObject("items").put("type", "string");
         ArrayNode sbRequired = sbSchema.putArray("required");
         sbRequired.add("compiled_classes_paths");
 
@@ -251,7 +252,11 @@ public class McpServer {
                     arguments.get("compiled_classes_paths").forEach(node -> compiledClassesPaths.add(node.asText()));
                 }
                 String sourcePath = arguments.has("source_path") ? arguments.get("source_path").asText() : null;
-                Map<String, Object> result = spotBugsTool.execute(compiledClassesPaths, sourcePath);
+                List<String> auxClasspath = new ArrayList<>();
+                if (arguments.has("aux_classpath")) {
+                    arguments.get("aux_classpath").forEach(node -> auxClasspath.add(node.asText()));
+                }
+                Map<String, Object> result = spotBugsTool.execute(compiledClassesPaths, sourcePath, auxClasspath);
                 return createToolResponse(id, result);
             } else {
                 return createErrorResponse(id, -32601, "Tool not found: " + toolName);
