@@ -7,14 +7,29 @@ from langchain_core.messages import BaseMessage
 # Intermediate Artifact Schemas
 # ---------------------------------------------------------------------------
 
+class HunkRole(TypedDict):
+    """
+    Per-hunk annotation produced by Agent 1.
+    Explains each hunk's role and how it connects to adjacent hunks in the fix chain.
+    """
+    hunk_index: int       # 1-based index within the file
+    file: str             # file path this hunk belongs to
+    summary: str          # what this hunk changes in plain English
+    role: str             # "core_fix" | "guard" | "propagation" | "declaration" | "cleanup" | "refactor"
+    connects_to_next: str # how this hunk makes the next hunk necessary/possible (empty for last)
+
+
 class SemanticBlueprint(TypedDict):
     """
     Agent 1 (Context Analyzer) output.
-    Describes WHY and HOW the mainline patch works.
+    Describes WHY and HOW the mainline patch works, including an ordered
+    causal chain showing how each hunk connects back to the patch intent.
     """
     root_cause_hypothesis: str       # e.g., "Missing bounds check on buffer_size"
     fix_logic: str                   # e.g., "Add if(buffer_size > MAX) return; before memcpy"
     dependent_apis: list             # e.g., ["alloc_buf", "MAX_BUF_SIZE"]
+    patch_intent_summary: str        # One-sentence overall goal of the entire patch
+    hunk_chain: list                 # Ordered list of HunkRole dicts — causal chain across all hunks
 
 
 # Type aliases for semantic clarity
