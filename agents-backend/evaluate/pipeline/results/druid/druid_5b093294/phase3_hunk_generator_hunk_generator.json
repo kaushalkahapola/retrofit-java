@@ -5,7 +5,8 @@
       "mainline_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
       "hunk_text": "@@ -149,11 +149,16 @@ \n     releaseLastBlockIfEmpty();\n \n+    final int idx = currentBlockNumber();\n+\n+    // The request cannot be satisfied by the available bytes in the allocator\n     if (bytes > allocator.available()) {\n-      return false;\n+      // Check if the last allocated block has enough memory to satisfy the request\n+      if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {\n+        // The request cannot be satisfied by the allocator and the last allocated block. Return false\n+        return false;\n+      }\n     }\n \n-    final int idx = currentBlockNumber();\n-\n     if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {\n       // Allocation needed.\n       // Math.max(allocationSize, bytes) in case \"bytes\" is greater than SOFT_MAXIMUM_ALLOCATION_SIZE.\n",
       "insertion_line": 149,
-      "intent_verified": true
+      "intent_verified": true,
+      "file_operation": "MODIFIED"
     }
   ],
   "adapted_test_hunks": []

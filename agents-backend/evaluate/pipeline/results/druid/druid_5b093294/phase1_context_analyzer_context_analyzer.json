@@ -1,18 +1,20 @@
 {
   "semantic_blueprint": {
-    "root_cause_hypothesis": "Insufficient check for available memory before allocation, potentially leading to out-of-bounds access.",
-    "fix_logic": "Added a check to ensure that the last allocated block has enough memory to satisfy the request before proceeding with the allocation.",
+    "root_cause_hypothesis": "The method allowed memory allocation requests to be denied even when the last allocated block had sufficient capacity, due to not checking the last block's available space before returning false.",
+    "fix_logic": "Refined the allocation logic to check if the last allocated block can satisfy the request before returning false when the allocator reports insufficient available bytes.",
     "dependent_apis": [
-      "allocator",
-      "blockHolders",
-      "limits"
+      "allocator.available",
+      "currentBlockNumber",
+      "limits.getInt",
+      "blockHolders.get",
+      "getCapacity"
     ],
-    "patch_intent_summary": "Ensure safe memory allocation by validating available memory against requested bytes.",
+    "patch_intent_summary": "Ensure reserveAdditional only fails if neither the allocator nor the last allocated block can satisfy the memory request.",
     "hunk_chain": [
       {
         "hunk_index": 1,
         "file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
-        "summary": "Introduced a check to verify if the requested bytes exceed the available memory and if the last allocated block can satisfy the request.",
+        "summary": "Adds a check to see if the last allocated block can satisfy the memory request before returning false when the allocator reports insufficient available bytes.",
         "role": "core_fix",
         "connects_to_next": "",
         "global_index": 1

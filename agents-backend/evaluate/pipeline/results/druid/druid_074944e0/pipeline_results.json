@@ -3,15 +3,15 @@
   "patch_id": "druid_074944e0",
   "mainline_commit": "074944e02c7fb29b9f4160626ff8dc6fd225b0a9",
   "backport_commit": "06c1a6a31eaa2339a8507658ea1baf378da48e4a",
-  "timestamp": "2026-03-17T05:12:32.513201",
+  "timestamp": "2026-03-17T12:29:34.060091",
   "phases": {
     "phase1_context_analyzer": {
       "context_analyzer": {
         "node": "context_analyzer",
         "outputs": {
           "semantic_blueprint": {
-            "root_cause_hypothesis": "The code previously added all server types to the workerIds list, potentially including non-historical servers, which could lead to incorrect worker assignment or processing errors.",
-            "fix_logic": "Introduced a conditional check to only add servers of type ServerType.HISTORICAL to the workerIds list, ensuring only appropriate servers are considered as workers.",
+            "root_cause_hypothesis": "The code was including all server types as workers, potentially allowing non-historical servers to be treated as workers, which could lead to incorrect behavior or security issues.",
+            "fix_logic": "Added a conditional check to only add servers of type ServerType.HISTORICAL to the workerIds list, ensuring only historical servers are considered as workers.",
             "dependent_apis": [
               "DruidServerMetadata",
               "ServerType",
@@ -23,15 +23,15 @@
               {
                 "hunk_index": 1,
                 "file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
-                "summary": "Adds an import statement for ServerType to enable type checking in the following code.",
+                "summary": "Imports ServerType to enable type checking of servers.",
                 "role": "declaration",
-                "connects_to_next": "This import is necessary to reference ServerType in the conditional logic introduced in the next hunk.",
+                "connects_to_next": "This import is necessary to use ServerType in the conditional check introduced in the next hunk.",
                 "global_index": 1
               },
               {
                 "hunk_index": 2,
                 "file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
-                "summary": "Wraps the addition of workerIds in a conditional that only includes servers of type ServerType.HISTORICAL.",
+                "summary": "Adds a conditional to only include servers of type ServerType.HISTORICAL in the workerIds list.",
                 "role": "core_fix",
                 "connects_to_next": "",
                 "global_index": 2
@@ -60,10 +60,10 @@
               },
               {
                 "hunk_index": 2,
-                "mainline_method": null,
+                "mainline_method": "someMethodContainingWorkerIdsLogic",
                 "target_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
-                "target_method": "someMethodContainingWorkerIdsLoop",
-                "start_line": 124,
+                "target_method": "getWorkerIds",
+                "start_line": 123,
                 "end_line": 128,
                 "code_snippet": "final List<String> workerIds = new ArrayList<>(servers.size());\nfor (final DruidServerMetadata server : servers) {\n  if (server.getType() == ServerType.HISTORICAL) {\n    workerIds.add(WorkerId.fromDruidServerMetadata(server, queryId).toString());\n  }\n}"
               }
@@ -80,16 +80,18 @@
             {
               "target_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
               "mainline_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
-              "hunk_text": "@@ -49,5 +49,6 @@ import org.apache.druid.query.QueryContext;\n import org.apache.druid.server.DruidNode;\n import org.apache.druid.server.coordination.DruidServerMetadata;\n+import org.apache.druid.server.coordination.ServerType;\n \n import java.util.ArrayList;\n import java.util.Collections;\n",
-              "insertion_line": 49,
-              "intent_verified": false
+              "hunk_text": "@@ -48,5 +48,6 @@ import org.apache.druid.query.QueryContext;\n import org.apache.druid.server.DruidNode;\n import org.apache.druid.server.coordination.DruidServerMetadata;\n+import org.apache.druid.server.coordination.ServerType;\n \n import java.util.ArrayList;\n import java.util.Collections;\n",
+              "insertion_line": 48,
+              "intent_verified": false,
+              "file_operation": "MODIFIED"
             },
             {
               "target_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
               "mainline_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
-              "hunk_text": "@@ -124,6 +124,8 @@     // since the serverView is referenced shortly after the worker list is created.\n     final List<String> workerIds = new ArrayList<>(servers.size());\n     for (final DruidServerMetadata server : servers) {\n-      workerIds.add(WorkerId.fromDruidServerMetadata(server, queryId).toString());\n+  if (server.getType() == ServerType.HISTORICAL) {\n+    workerIds.add(WorkerId.fromDruidServerMetadata(server, queryId).toString());\n+  }\n     }\n \n     // Shuffle workerIds, so we don't bias towards specific servers when running multiple queries concurrently. For any\n",
-              "insertion_line": 124,
-              "intent_verified": true
+              "hunk_text": "@@ -123,6 +123,8 @@     // since the serverView is referenced shortly after the worker list is created.\n     final List<String> workerIds = new ArrayList<>(servers.size());\n     for (final DruidServerMetadata server : servers) {\n-      workerIds.add(WorkerId.fromDruidServerMetadata(server, queryId).toString());\n+  if (server.getType() == ServerType.HISTORICAL) {\n+    workerIds.add(WorkerId.fromDruidServerMetadata(server, queryId).toString());\n+  }\n     }\n \n     // Shuffle workerIds, so we don't bias towards specific servers when running multiple queries concurrently. For any\n",
+              "insertion_line": 123,
+              "intent_verified": true,
+              "file_operation": "MODIFIED"
             }
           ],
           "adapted_test_hunks": []
@@ -123,6 +125,41 @@
         }
       }
     }
+  },
+  "exact_developer_patch": false,
+  "developer_patch_comparison": {
+    "comparison_method": "file_state",
+    "compared_files": [
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/input/InputSpecs.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/DataSourcePlan.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/QueryKitSpec.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/groupby/GroupByQueryKit.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/scan/ScanQueryKit.java"
+    ],
+    "mismatched_files": [
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/input/InputSpecs.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/DataSourcePlan.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/QueryKitSpec.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/groupby/GroupByQueryKit.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/scan/ScanQueryKit.java"
+    ],
+    "developer_files": [
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/input/InputSpecs.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/DataSourcePlan.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/QueryKitSpec.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/groupby/GroupByQueryKit.java",
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/scan/ScanQueryKit.java"
+    ],
+    "generated_files": [
+      "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java"
+    ],
+    "error": null
   },
   "status": "completed"
 }

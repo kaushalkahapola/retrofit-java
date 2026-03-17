@@ -556,7 +556,10 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 "file_operation": change_type,
             }
             adapted_code_hunks.append(hunk)
-            trace += f"| `{target_file}` | {hunk_idx} | {'✅' if dry_run_ok else '❌'} | {'✅' if intent_ok else '❌'} |\n"
+            trace += (
+                f"| `{target_file}` | {hunk_idx} | "
+                f"{'✅' if dry_run_ok else '❌'} | {'✅' if intent_ok else '❌'} |\n"
+            )
 
     # ------------------------------------------------------------------
     # Test hunk processing
@@ -627,7 +630,10 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 "file_operation": change_type,
             }
             adapted_test_hunks.append(hunk)
-            trace += f"| `{target_test_file}` (test) | {hunk_idx} | {'✅' if dry_run_ok else '❌'} | — |\n"
+            trace += (
+                f"| `{target_test_file}` (test) | {hunk_idx} | "
+                f"{'✅' if dry_run_ok else '❌'} | — |\n"
+            )
 
     # ------------------------------------------------------------------
     # Write trace and finalize

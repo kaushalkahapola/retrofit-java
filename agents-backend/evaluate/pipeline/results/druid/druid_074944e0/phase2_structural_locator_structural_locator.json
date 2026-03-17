@@ -13,10 +13,10 @@
       },
       {
         "hunk_index": 2,
-        "mainline_method": null,
+        "mainline_method": "someMethodContainingWorkerIdsLogic",
         "target_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
-        "target_method": "someMethodContainingWorkerIdsLoop",
-        "start_line": 124,
+        "target_method": "getWorkerIds",
+        "start_line": 123,
         "end_line": 128,
         "code_snippet": "final List<String> workerIds = new ArrayList<>(servers.size());\nfor (final DruidServerMetadata server : servers) {\n  if (server.getType() == ServerType.HISTORICAL) {\n    workerIds.add(WorkerId.fromDruidServerMetadata(server, queryId).toString());\n  }\n}"
       }

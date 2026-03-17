@@ -11,9 +11,9 @@
     {
       "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
       "mainline_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
-      "hunk_text": "@@ -105,5 +105,35 @@     return cursor;\n   }\n \n+  /**\n+   * Maximum number that can be successfully passed to {@link #reserveAdditional(int)}.\n+   */\n+  public int availableToReserve()\n+  {\n+    final int currentBlockIdx = currentBlockNumber();\n+    final long availableInCurrentBlock;\n+    final boolean currentBlockIsEmpty;\n+\n+    if (currentBlockIdx < 0) {\n+      availableInCurrentBlock = 0;\n+      currentBlockIsEmpty = false;\n+    } else {\n+      final int usedInCurrentBlock = limits.getInt(currentBlockIdx);\n+      availableInCurrentBlock = blockHolders.get(currentBlockIdx).get().getCapacity() - usedInCurrentBlock;\n+      currentBlockIsEmpty = usedInCurrentBlock == 0;\n+    }\n+\n+    // If currentBlockIsEmpty, add availableInCurrentBlock to account for reclamation in releaseLastBlockIfEmpty().\n+    final long availableInAllocator = allocator.available() + (currentBlockIsEmpty ? availableInCurrentBlock : 0);\n+\n+    return (int) Math.min(\n+        Integer.MAX_VALUE,\n+        Math.max(\n+            availableInAllocator,\n+            availableInCurrentBlock\n+        )\n+    );\n+  }\n+\n   /**\n    * Ensure that at least \"bytes\" amount of space is available after the cursor. Allocates a new block if needed.\n    * Note: the amount of bytes is guaranteed to be in a *single* block.\n",
+      "hunk_text": "@@ -105,5 +105,35 @@     return cursor;\n   }\n \n+  /**\n+   * Maximum number that can be successfully passed to {@link #reserveAdditional(int)}.\n+   */\n+  public int availableToReserve()\n+  {\n+    final int currentBlockIdx = currentBlockNumber();\n+    final long availableInCurrentBlock;\n+    final boolean currentBlockIsEmpty;\n+\n+    if (currentBlockIdx < 0) {\n+      availableInCurrentBlock = 0;\n+      currentBlockIsEmpty = false;\n+    } else {\n+      final int usedInCurrentBlock = limits.getInt(currentBlockIdx);\n+      availableInCurrentBlock = blockHolders.get(currentBlockIdx).get().getCapacity() - usedInCurrentBlock;\n+      currentBlockIsEmpty = usedInCurrentBlock == 0;\n+    }\n+\n+    // If currentBlockIsEmpty, add availableInCurrentBlock to account for reclamation in reclaimLastBlockIfEmpty().\n+    final long availableInAllocator = allocator.available() + (currentBlockIsEmpty ? availableInCurrentBlock : 0);\n+\n+    return (int) Math.min(\n+        Integer.MAX_VALUE,\n+        Math.max(\n+            availableInAllocator,\n+            availableInCurrentBlock\n+        )\n+    );\n+  }\n+\n   /**\n    * Ensure that at least \"bytes\" amount of space is available after the cursor. Allocates a new block if needed.\n    * Note: the amount of bytes is guaranteed to be in a *single* block.\n",
       "insertion_line": 105,
-      "intent_verified": false,
+      "intent_verified": true,
       "file_operation": "MODIFIED"
     },
     {
@@ -37,7 +37,7 @@
       "mainline_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
       "hunk_text": "@@ -331,11 +331,20 @@     cursor.set(blockMemory, 0, blockMemory.getCapacity());\n   }\n \n-  private int currentBlockNumber()\n+  private void releaseLastBlockIfEmpty()\n   {\n-    if (blockHolders.isEmpty()) {\n-      return NO_BLOCK;\n-    } else {\n-      return blockHolders.size() - 1;\n+    final int lastBlockNumber = currentBlockNumber();\n+    if (lastBlockNumber != NO_BLOCK && limits.getInt(lastBlockNumber) == 0) {\n+      blockHolders.remove(lastBlockNumber).close();\n+      limits.removeInt(lastBlockNumber);\n     }\n   }\n+\n+  /**\n+   * Returns the index into {@link #blockHolders} and {@link #limits} of the current block, or {@link #NO_BLOCK}\n+   * if there are no blocks.\n+   */\n+  private int currentBlockNumber()\n+  {\n+    return blockHolders.size() - 1;\n+  }\n }\n",
       "insertion_line": 331,
-      "intent_verified": false,
+      "intent_verified": true,
       "file_operation": "MODIFIED"
     },
     {
@@ -51,8 +51,8 @@
     {
       "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
       "mainline_file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
-      "hunk_text": "@@ -68,19 +68,22 @@   @Override\n   public Optional<ResourceHolder<WritableMemory>> allocate(final long size)\n   {\n-    if (position + size < arena.getCapacity()) {\n+    if (position + size <= arena.getCapacity()) {\n       final long start = position;\n       allocations++;\n       position += size;\n \n+      final WritableMemory memory = arena.writableRegion(start, size, ByteOrder.LITTLE_ENDIAN);\n+      lastAllocation = memory;\n+\n       return Optional.of(\n           new ResourceHolder<WritableMemory>()\n           {\n-            private WritableMemory memory = arena.writableRegion(start, size, ByteOrder.LITTLE_ENDIAN);\n+            boolean closed;\n \n             @Override\n             public WritableMemory get()\n             {\n-              if (memory == null) {\n+              if (closed) {\n                 throw new ISE(\"Already closed\");\n               }\n \n",
-      "insertion_line": 68,
+      "hunk_text": "@@ -65,19 +65,22 @@   @Override\n   public Optional<ResourceHolder<WritableMemory>> allocate(final long size)\n   {\n-    if (position + size < arena.getCapacity()) {\n+  if (position + size <= arena.getCapacity()) {\n       final long start = position;\n       allocations++;\n       position += size;\n \n+    final WritableMemory memory = arena.writableRegion(start, size, ByteOrder.LITTLE_ENDIAN);\n+    lastAllocation = memory;\n+\n       return Optional.of(\n           new ResourceHolder<WritableMemory>()\n           {\n-            private WritableMemory memory = arena.writableRegion(start, size, ByteOrder.LITTLE_ENDIAN);\n+          boolean closed;\n \n             @Override\n             public WritableMemory get()\n             {\n-              if (memory == null) {\n+            if (closed) {\n                 throw new ISE(\"Already closed\");\n               }\n \n",
+      "insertion_line": 65,
       "intent_verified": false,
       "file_operation": "MODIFIED"
     },
@@ -67,7 +67,7 @@
     {
       "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java",
       "mainline_file": "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java",
-      "hunk_text": "@@ -78,7 +78,9 @@             @Override\n             public void close()\n             {\n-              memory = null;\n-              bytesAllocated -= size;\n+              if (memory != null) {\n+                memory = null;\n+                bytesAllocated -= size;\n+              }\n             }\n           }\n       );\n",
+      "hunk_text": "@@ -78,7 +78,9 @@             @Override\n             public void close()\n             {\n-              memory = null;\n-              bytesAllocated -= size;\n+    if (memory != null) {\n+      memory = null;\n+      bytesAllocated -= size;\n+    }\n             }\n           }\n       );\n",
       "insertion_line": 78,
       "intent_verified": true,
       "file_operation": "MODIFIED"
@@ -83,8 +83,8 @@
     {
       "target_file": "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java",
       "mainline_file": "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java",
-      "hunk_text": "@@ -268,9 +268,21 @@         // Reset to beginning of loop.\n         i = -1;\n \n+        final int priorAllocation = BASE_DATA_ALLOCATION_SIZE * reserveMultiple;\n+\n         // Try again with a bigger allocation.\n         reserveMultiple *= 2;\n \n-        if (!dataMemory.reserveAdditional(Ints.checkedCast((long) BASE_DATA_ALLOCATION_SIZE * reserveMultiple))) {\n+        final int nextAllocation = Math.min(\n+            dataMemory.availableToReserve(),\n+            Ints.checkedCast((long) BASE_DATA_ALLOCATION_SIZE * reserveMultiple)\n+        );\n+\n+        if (nextAllocation > priorAllocation) {\n+          if (!dataMemory.reserveAdditional(nextAllocation)) {\n+            // Shouldn't see this unless availableToReserve lied to us.\n+            throw DruidException.defensive(\"Unexpected failure of dataMemory.reserveAdditional\");\n+          }\n+        } else {\n           return false;\n         }\n \n",
-      "insertion_line": 268,
+      "hunk_text": "@@ -314,9 +314,21 @@         // Reset to beginning of loop.\n         i = -1;\n \n+        final int priorAllocation = BASE_DATA_ALLOCATION_SIZE * reserveMultiple;\n+\n         // Try again with a bigger allocation.\n         reserveMultiple *= 2;\n \n-        if (!dataMemory.reserveAdditional(Ints.checkedCast((long) BASE_DATA_ALLOCATION_SIZE * reserveMultiple))) {\n+        final int nextAllocation = Math.min(\n+            dataMemory.availableToReserve(),\n+            Ints.checkedCast((long) BASE_DATA_ALLOCATION_SIZE * reserveMultiple)\n+        );\n+\n+        if (nextAllocation > priorAllocation) {\n+          if (!dataMemory.reserveAdditional(nextAllocation)) {\n+            // Shouldn't see this unless availableToReserve lied to us.\n+            throw DruidException.defensive(\"Unexpected failure of dataMemory.reserveAdditional\");\n+          }\n+        } else {\n           return false;\n         }\n \n",
+      "insertion_line": 314,
       "intent_verified": true,
       "file_operation": "MODIFIED"
     }

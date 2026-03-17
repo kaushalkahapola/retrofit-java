@@ -1,0 +1,222 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "processing/src/main/java/org/apache/druid/frame/field/StringFieldReader.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "isNull",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/field/StringFieldReader.java",
+        "target_method": "isNull",
+        "start_line": 366,
+        "end_line": 372,
+        "code_snippet": "public boolean isNull(int rowNum)\n{\n  final long fieldPosition = coach.computeFieldPosition(rowNum);\n  byte[] nullBytes = new byte[3];\n  dataRegion.getByteArray(fieldPosition, nullBytes, 0, 3);\n  return Arrays.equals(nullBytes, EXPECTED_BYTES_FOR_NULL);\n}"
+      }
+    ],
+    "processing/src/main/java/org/apache/druid/frame/read/columnar/FrameColumnReaders.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "create",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/FrameColumnReaders.java",
+        "target_method": "create",
+        "start_line": 37,
+        "end_line": 75,
+        "code_snippet": "  public static FrameColumnReader create(\n      final String columnName,\n      final int columnNumber,\n      final ColumnType columnType\n  )\n  {\n    switch (columnType.getType()) {\n      case LONG:\n        return new LongFrameColumnReader(columnNumber);\n\n      case FLOAT:\n        return new FloatFrameColumnReader(columnNumber);\n\n      case DOUBLE:\n        return new DoubleFrameColumnReader(columnNumber);\n\n      case STRING:\n        return new StringFrameColumnReader(columnNumber, false);\n\n      case COMPLEX:\n        return new ComplexFrameColumnReader(columnNumber);\n\n      case ARRAY:\n        switch (columnType.getElementType().getType()) {\n          case STRING:\n            return new StringFrameColumnReader(columnNumber, true);\n          case LONG:\n            return new LongArrayFrameColumnReader(columnNumber);\n          case FLOAT:\n            return new FloatArrayFrameColumnReader(columnNumber);\n          case DOUBLE:\n            return new DoubleArrayFrameColumnReader(columnNumber);\n          default:\n            return new UnsupportedColumnTypeFrameColumnReader(columnName, columnType);\n        }\n      default:\n        return new UnsupportedColumnTypeFrameColumnReader(columnName, columnType);\n    }\n  }"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "create",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/FrameColumnReaders.java",
+        "target_method": "create",
+        "start_line": 37,
+        "end_line": 75,
+        "code_snippet": "  public static FrameColumnReader create(\n      final String columnName,\n      final int columnNumber,\n      final ColumnType columnType\n  )\n  {\n    switch (columnType.getType()) {\n      case LONG:\n        return new LongFrameColumnReader(columnNumber);\n\n      case FLOAT:\n        return new FloatFrameColumnReader(columnNumber);\n\n      case DOUBLE:\n        return new DoubleFrameColumnReader(columnNumber);\n\n      case STRING:\n        return new StringFrameColumnReader(columnNumber, false);\n\n      case COMPLEX:\n        return new ComplexFrameColumnReader(columnNumber);\n\n      case ARRAY:\n        switch (columnType.getElementType().getType()) {\n          case STRING:\n            return new StringFrameColumnReader(columnNumber, true);\n          case LONG:\n            return new LongArrayFrameColumnReader(columnNumber);\n          case FLOAT:\n            return new FloatArrayFrameColumnReader(columnNumber);\n          case DOUBLE:\n            return new DoubleArrayFrameColumnReader(columnNumber);\n          default:\n            return new UnsupportedColumnTypeFrameColumnReader(columnName, columnType);\n        }\n      default:\n        return new UnsupportedColumnTypeFrameColumnReader(columnName, columnType);\n    }\n  }"
+      }
+    ],
+    "processing/src/main/java/org/apache/druid/frame/read/columnar/StringArrayFrameColumnReader.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "StringArrayFrameColumnReader (class and all methods)",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringArrayFrameColumnReader.java",
+        "target_method": "StringArrayFrameColumnReader (class and all methods)",
+        "start_line": 1,
+        "end_line": 385,
+        "code_snippet": "/*\n * Licensed to the Apache Software Foundation (ASF) under one\n * or more contributor license agreements.  See the NOTICE file\n * distributed with this work for additional information\n * regarding copyright ownership.  The ASF licenses this file\n * to you under the Apache License, Version 2.0 (the\n * \"License\"); you may not use this file except in compliance\n * with the License.  You may obtain a copy of the License at\n *\n *   http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing,\n * software distributed under the License is distributed on an\n * \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY\n * KIND, either express or implied.  See the License for the\n * specific language governing permissions and limitations\n * under the License.\n */\n\npackage org.apache.druid.frame.read.columnar;\n\nimport com.google.common.primitives.Ints;\nimport it.unimi.dsi.fastutil.objects.ObjectArrays;\nimport org.apache.datasketches.memory.Memory;\nimport org.apache.druid.common.config.NullHandling;\nimport org.apache.druid.error.DruidException;\nimport org.apache.druid.frame.Frame;\nimport org.apache.druid.frame.read.FrameReaderUtils;\nimport org.apache.druid.frame.write.FrameWriterUtils;\nimport org.apache.druid.frame.write.columnar.FrameColumnWriters;\nimport org.apache.druid.frame.write.columnar.StringFrameColumnWriter;\nimport org.apache.druid.java.util.common.StringUtils;\nimport org.apache.druid.query.monomorphicprocessing.RuntimeShapeInspector;\nimport org.apache.druid.query.rowsandcols.column.Column;\nimport org.apache.druid.query.rowsandcols.column.ColumnAccessorBasedColumn;\nimport org.apache.druid.query.rowsandcols.column.accessor.ObjectColumnAccessorBase;\nimport org.apache.druid.segment.ColumnValueSelector;\nimport org.apache.druid.segment.ObjectColumnSelector;\nimport org.apache.druid.segment.column.BaseColumn;\nimport org.apache.druid.segment.column.ColumnCapabilitiesImpl;\nimport org.apache.druid.segment.column.ColumnType;\nimport org.apache.druid.segment.data.ReadableOffset;\nimport org.apache.druid.segment.vector.ReadableVectorInspector;\nimport org.apache.druid.segment.vector.ReadableVectorOffset;\nimport org.apache.druid.segment.vector.VectorObjectSelector;\n\nimport javax.annotation.Nullable;\nimport java.nio.ByteBuffer;\nimport java.util.Comparator;\n\n/**\n * Reader for {@link ColumnType#STRING_ARRAY}.\n * This is similar to {@link StringFrameColumnReader} reading mvds in reading bytes from frame\n */\npublic class StringArrayFrameColumnReader implements FrameColumnReader\n{\n  private final int columnNumber;\n\n  /**\n   * Create a new reader.\n   *\n   * @param columnNumber column number\n   */\n  StringArrayFrameColumnReader(int columnNumber)\n  {\n    this.columnNumber = columnNumber;\n  }\n\n  @Override\n  public Column readRACColumn(Frame frame)\n  {\n    final Memory memory = frame.region(columnNumber);\n    validate(memory);\n\n    final long positionOfLengths = getStartOfStringLengthSection(frame.numRows());\n    final long positionOfPayloads = getStartOfStringDataSection(memory, frame.numRows());\n\n    StringArrayFrameColumn frameCol = new StringArrayFrameColumn(\n        frame,\n        memory,\n        positionOfLengths,\n        positionOfPayloads\n    );\n\n    return new ColumnAccessorBasedColumn(frameCol);\n  }\n\n  @Override\n  public ColumnPlus readColumn(final Frame frame)\n  {\n    final Memory memory = frame.region(columnNumber);\n    validate(memory);\n\n    final long startOfStringLengthSection = getStartOfStringLengthSection(frame.numRows());\n    final long startOfStringDataSection = getStartOfStringDataSection(memory, frame.numRows());\n\n    final BaseColumn baseColumn = new StringArrayFrameColumn(\n        frame,\n        memory,\n        startOfStringLengthSection,\n        startOfStringDataSection\n    );\n\n    return new ColumnPlus(\n        baseColumn,\n        new ColumnCapabilitiesImpl().setType(ColumnType.STRING_ARRAY)\n                                    .setHasMultipleValues(false)\n                                    .setDictionaryEncoded(false),\n        frame.numRows()\n    );\n  }\n\n  private void validate(final Memory region)\n  {\n    // Check if column is big enough for a header\n    if (region.getCapacity() < StringFrameColumnWriter.DATA_OFFSET) {\n      throw DruidException.defensive(\"Column[%s] is not big enough for a header\", columnNumber);\n    }\n\n    final byte typeCode = region.getByte(0);\n    if (typeCode != FrameColumnWriters.TYPE_STRING_ARRAY) {\n      throw DruidException.defensive(\n          \"Column[%s] does not have the correct type code; expected[%s], got[%s]\",\n          columnNumber,\n          FrameColumnWriters.TYPE_STRING_ARRAY,\n          typeCode\n      );\n    }\n  }\n\n  private static long getStartOfCumulativeLengthSection()\n  {\n    return StringFrameColumnWriter.DATA_OFFSET;\n  }\n\n  private static long getStartOfStringLengthSection(final int numRows)\n  {\n    return StringFrameColumnWriter.DATA_OFFSET + (long) Integer.BYTES * numRows;\n  }\n\n  private long getStartOfStringDataSection(\n      final Memory memory,\n      final int numRows\n  )\n  {\n    if (numRows < 0) {\n      throw DruidException.defensive(\"Encountered -ve numRows [%s] while reading frame\", numRows);\n    }\n    final int totalNumValues = FrameColumnReaderUtils.getAdjustedCumulativeRowLength(\n        memory,\n        getStartOfCumulativeLengthSection(),\n        numRows - 1\n    );\n\n    return getStartOfStringLengthSection(numRows) + (long) Integer.BYTES * totalNumValues;\n  }\n\n  private static class StringArrayFrameColumn extends ObjectColumnAccessorBase implements BaseColumn\n  {\n    private final Frame frame;\n    private final Memory memory;\n    private final long startOfStringLengthSection;\n    private final long startOfStringDataSection;\n\n    private StringArrayFrameColumn(\n        Frame frame,\n        Memory memory,\n        long startOfStringLengthSection,\n        long startOfStringDataSection\n    )\n    {\n      this.frame = frame;\n      this.memory = memory;\n      this.startOfStringLengthSection = startOfStringLengthSection;\n      this.startOfStringDataSection = startOfStringDataSection;\n    }\n\n    @Override\n    public ColumnValueSelector<?> makeColumnValueSelector(ReadableOffset offset)\n    {\n      return new ObjectColumnSelector<Object>()\n      {\n        @Override\n        public void inspectRuntimeShape(RuntimeShapeInspector inspector)\n        {\n          // Do nothing.\n        }\n\n        @Nullable\n        @Override\n        public Object getObject()\n        {\n          return getRowAsObject(frame.physicalRow(offset.getOffset()), true);\n        }\n\n        @Override\n        public Class<?> classOfObject()\n        {\n          return Object[].class;\n        }\n      };\n    }\n\n    @Override\n    public VectorObjectSelector makeVectorObjectSelector(final ReadableVectorOffset offset)\n    {\n      class StringArrayFrameVectorObjectSelector implements VectorObjectSelector\n      {\n        private final Object[] vector = new Object[offset.getMaxVectorSize()];\n        private int id = ReadableVectorInspector.NULL_ID;\n\n        @Override\n        public Object[] getObjectVector()\n        {\n          computeVectorIfNeeded();\n          return vector;\n        }\n\n        @Override\n        public int getMaxVectorSize()\n        {\n          return offset.getMaxVectorSize();\n        }\n\n        @Override\n        public int getCurrentVectorSize()\n        {\n          return offset.getCurrentVectorSize();\n        }\n\n        private void computeVectorIfNeeded()\n        {\n          if (id == offset.getId()) {\n            return;\n          }\n\n          if (offset.isContiguous()) {\n            final int start = offset.getStartOffset();\n\n            for (int i = 0; i < offset.getCurrentVectorSize(); i++) {\n              final int physicalRow = frame.physicalRow(i + start);\n              vector[i] = getRowAsObject(physicalRow, true);\n            }\n          } else {\n            final int[] offsets = offset.getOffsets();\n\n            for (int i = 0; i < offset.getCurrentVectorSize(); i++) {\n              final int physicalRow = frame.physicalRow(offsets[i]);\n              vector[i] = getRowAsObject(physicalRow, true);\n            }\n          }\n\n          id = offset.getId();\n        }\n      }\n\n      return new StringArrayFrameVectorObjectSelector();\n    }\n\n    @Override\n    public void close()\n    {\n      // Do nothing.\n    }\n\n    @Override\n    public ColumnType getType()\n    {\n      return ColumnType.STRING_ARRAY;\n    }\n\n    @Override\n    public int numRows()\n    {\n      return frame.numRows();\n    }\n\n    @Override\n    protected Object getVal(int rowNum)\n    {\n      return getRowAsObject(frame.physicalRow(rowNum), true);\n    }\n\n    @Override\n    protected Comparator<Object> getComparator()\n    {\n      return Comparator.nullsFirst(ColumnType.STRING_ARRAY.getStrategy());\n    }\n\n    /**\n     * Returns a ByteBuffer containing UTF-8 encoded string number {@code index}. The ByteBuffer is always newly\n     * created, so it is OK to change its position, limit, etc. However, it may point to shared memory, so it is\n     * not OK to write to its contents.\n     */\n    @Nullable\n    private ByteBuffer getStringUtf8(final int index)\n    {\n      if (startOfStringLengthSection > Long.MAX_VALUE - (long) Integer.BYTES * index) {\n        throw DruidException.defensive(\"length index would overflow trying to read the frame memory!\");\n      }\n\n      final int dataEndVariableIndex = memory.getInt(startOfStringLengthSection + (long) Integer.BYTES * index);\n      if (startOfStringDataSection > Long.MAX_VALUE - dataEndVariableIndex) {\n        throw DruidException.defensive(\"data end index would overflow trying to read the frame memory!\");\n      }\n\n      final long dataStart;\n      final long dataEnd = startOfStringDataSection + dataEndVariableIndex;\n\n      if (index == 0) {\n        dataStart = startOfStringDataSection;\n      } else {\n        final int dataStartVariableIndex = memory.getInt(startOfStringLengthSection + (long) Integer.BYTES * (index\n                                                                                                              - 1));\n        if (startOfStringDataSection > Long.MAX_VALUE - dataStartVariableIndex) {\n          throw DruidException.defensive(\"data start index would overflow trying to read the frame memory!\");\n        }\n        dataStart = startOfStringDataSection + dataStartVariableIndex;\n      }\n\n      final int dataLength = Ints.checkedCast(dataEnd - dataStart);\n\n      if ((dataLength == 0 && NullHandling.replaceWithDefault()) ||\n          (dataLength == 1 && memory.getByte(dataStart) == FrameWriterUtils.NULL_STRING_MARKER)) {\n        return null;\n      }\n\n      return FrameReaderUtils.readByteBuffer(memory, dataStart, dataLength);\n    }\n\n    @Nullable\n    private String getString(final int index)\n    {\n      final ByteBuffer stringUtf8 = getStringUtf8(index);\n\n      if (stringUtf8 == null) {\n        return null;\n      } else {\n        return StringUtils.fromUtf8(stringUtf8);\n      }\n    }\n\n    /**\n     * Returns the object at the given physical row number.\n     *\n     * @param physicalRow physical row number\n     * @param decode      if true, return java.lang.String. If false, return UTF-8 ByteBuffer.\n     */\n    @Nullable\n    private Object getRowAsObject(final int physicalRow, final boolean decode)\n    {\n      final int cumulativeRowLength = FrameColumnReaderUtils.getCumulativeRowLength(\n          memory,\n          getStartOfCumulativeLengthSection(),\n          physicalRow\n      );\n      final int rowLength;\n\n      if (FrameColumnReaderUtils.isNullRow(cumulativeRowLength)) {\n        return null;\n      } else if (physicalRow == 0) {\n        rowLength = cumulativeRowLength;\n      } else {\n        rowLength = cumulativeRowLength - FrameColumnReaderUtils.getAdjustedCumulativeRowLength(\n            memory,\n            getStartOfCumulativeLengthSection(),\n            physicalRow - 1\n        );\n      }\n\n      if (rowLength == 0) {\n        return ObjectArrays.EMPTY_ARRAY;\n      } else {\n        final Object[] row = new Object[rowLength];\n\n        for (int i = 0; i < rowLength; i++) {\n          final int index = cumulativeRowLength - rowLength + i;\n          row[i] = decode ? getString(index) : getStringUtf8(index);\n        }\n\n        return row;\n      }\n    }\n  }\n}\n"
+      }
+    ],
+    "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<import>",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "<import>",
+        "start_line": 3,
+        "end_line": 23,
+        "code_snippet": null
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "<import>",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "<import>",
+        "start_line": 24,
+        "end_line": 44,
+        "code_snippet": null
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "StringFrameColumnReader.<init>",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "StringFrameColumnReader",
+        "start_line": 52,
+        "end_line": 61,
+        "code_snippet": "  public StringFrameColumnReader(int columnNumber, boolean asArray)\n  {\n    this.columnNumber = columnNumber;\n    this.asArray = asArray;\n  }"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "StringFrameColumnReader.readColumn",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "readColumn",
+        "start_line": 63,
+        "end_line": 86,
+        "code_snippet": "  @Override\n  public BaseColumn readColumn(Frame frame)\n  {\n    final Memory memory = frame.region(columnNumber);\n    validate(memory);\n\n    final boolean multiValue = isMultiValue(memory);\n    final long positionOfLengths = getStartOfStringLengthSection(frame.numRows(), multiValue);\n    final long positionOfPayloads = getStartOfStringDataSection(memory, frame.numRows(), multiValue);\n\n    if (asArray) {\n      return new StringArrayFrameColumn(\n          frame,\n          multiValue,\n          memory,\n          positionOfLengths,\n          positionOfPayloads\n      );\n    } else {\n      return new StringFrameColumn(\n          frame,\n          multiValue,\n          memory,\n          positionOfLengths,\n          positionOfPayloads,\n          false\n      );\n    }\n  }"
+      },
+      {
+        "hunk_index": 5,
+        "mainline_method": "StringFrameColumnReader.readColumn",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "readColumn",
+        "start_line": 63,
+        "end_line": 86,
+        "code_snippet": "  @Override\n  public BaseColumn readColumn(Frame frame)\n  {\n    final Memory memory = frame.region(columnNumber);\n    validate(memory);\n\n    final boolean multiValue = isMultiValue(memory);\n    final long positionOfLengths = getStartOfStringLengthSection(frame.numRows(), multiValue);\n    final long positionOfPayloads = getStartOfStringDataSection(memory, frame.numRows(), multiValue);\n\n    if (asArray) {\n      return new StringArrayFrameColumn(\n          frame,\n          multiValue,\n          memory,\n          positionOfLengths,\n          positionOfPayloads\n      );\n    } else {\n      return new StringFrameColumn(\n          frame,\n          multiValue,\n          memory,\n          positionOfLengths,\n          positionOfPayloads,\n          false\n      );\n    }\n  }"
+      },
+      {
+        "hunk_index": 6,
+        "mainline_method": "StringFrameColumnReader.readColumn",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "readColumn",
+        "start_line": 63,
+        "end_line": 86,
+        "code_snippet": "  @Override\n  public BaseColumn readColumn(Frame frame)\n  {\n    final Memory memory = frame.region(columnNumber);\n    validate(memory);\n\n    final boolean multiValue = isMultiValue(memory);\n    final long positionOfLengths = getStartOfStringLengthSection(frame.numRows(), multiValue);\n    final long positionOfPayloads = getStartOfStringDataSection(memory, frame.numRows(), multiValue);\n\n    if (asArray) {\n      return new StringArrayFrameColumn(\n          frame,\n          multiValue,\n          memory,\n          positionOfLengths,\n          positionOfPayloads\n      );\n    } else {\n      return new StringFrameColumn(\n          frame,\n          multiValue,\n          memory,\n          positionOfLengths,\n          positionOfPayloads,\n          false\n      );\n    }\n  }"
+      },
+      {
+        "hunk_index": 7,
+        "mainline_method": "StringFrameColumnReader.isMultiValue",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "isMultiValue",
+        "start_line": 108,
+        "end_line": 111,
+        "code_snippet": "  private static boolean isMultiValue(final Memory memory)\n  {\n    return memory.getByte(1) == 1;\n  }"
+      },
+      {
+        "hunk_index": 8,
+        "mainline_method": "StringFrameColumnReader.StringFrameColumn",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "StringFrameColumn",
+        "start_line": 120,
+        "end_line": 272,
+        "code_snippet": "  static class StringFrameColumn extends ObjectColumnAccessorBase implements DictionaryEncodedColumn<String>\n  {\n    private final Frame frame;\n    private final boolean multiValue;\n    private final Memory memory;\n    private final long startOfStringLengthSection;\n    private final long startOfStringDataSection;\n    private final boolean asArray;\n\n    private StringFrameColumn(\n        Frame frame,\n        boolean multiValue,\n        Memory memory,\n        long startOfStringLengthSection,\n        long startOfStringDataSection,\n        final boolean asArray\n    )\n    {\n      this.frame = frame;\n      this.multiValue = multiValue;\n      this.memory = memory;\n      this.startOfStringLengthSection = startOfStringLengthSection;\n      this.startOfStringDataSection = startOfStringDataSection;\n      this.asArray = asArray;\n    }\n    ...\n  }"
+      },
+      {
+        "hunk_index": 9,
+        "mainline_method": "StringFrameColumnReader.StringFrameColumn.<init>",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "StringFrameColumn",
+        "start_line": 132,
+        "end_line": 143,
+        "code_snippet": "    private StringFrameColumn(\n        Frame frame,\n        boolean multiValue,\n        Memory memory,\n        long startOfStringLengthSection,\n        long startOfStringDataSection,\n        final boolean asArray\n    )\n    {\n      this.frame = frame;\n      this.multiValue = multiValue;\n      this.memory = memory;\n      this.startOfStringLengthSection = startOfStringLengthSection;\n      this.startOfStringDataSection = startOfStringDataSection;\n      this.asArray = asArray;\n    }"
+      },
+      {
+        "hunk_index": 10,
+        "mainline_method": "StringFrameColumnReader.StringFrameColumn.<init>",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "StringFrameColumn",
+        "start_line": 132,
+        "end_line": 143,
+        "code_snippet": "    private StringFrameColumn(\n        Frame frame,\n        boolean multiValue,\n        Memory memory,\n        long startOfStringLengthSection,\n        long startOfStringDataSection,\n        final boolean asArray\n    )\n    {\n      this.frame = frame;\n      this.multiValue = multiValue;\n      this.memory = memory;\n      this.startOfStringLengthSection = startOfStringLengthSection;\n      this.startOfStringDataSection = startOfStringDataSection;\n      this.asArray = asArray;\n    }"
+      },
+      {
+        "hunk_index": 11,
+        "mainline_method": "StringFrameColumnReader.StringFrameColumn.makeDimensionSelector",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "StringFrameColumn.makeDimensionSelector",
+        "start_line": 145,
+        "end_line": 210,
+        "code_snippet": "    @Override\n    public DimensionSelector makeDimensionSelector(ReadableOffset offset, @Nullable ExtractionFn extractionFn)\n    {\n      return makeDimensionSelectorInternal(offset, extractionFn);\n    }"
+      },
+      {
+        "hunk_index": 12,
+        "mainline_method": "StringFrameColumnReader.StringFrameColumn.getType",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "StringFrameColumn.getType",
+        "start_line": 246,
+        "end_line": 249,
+        "code_snippet": "    @Override\n    public ColumnType getType()\n    {\n      return asArray ? ColumnType.STRING_ARRAY : ColumnType.STRING;\n    }"
+      },
+      {
+        "hunk_index": 13,
+        "mainline_method": "StringFrameColumnReader.StringFrameColumn.getVal",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "StringFrameColumn.getVal",
+        "start_line": 252,
+        "end_line": 255,
+        "code_snippet": "    @Override\n    protected Object getVal(int rowNum)\n    {\n      return getString(frame.physicalRow(rowNum));\n    }"
+      },
+      {
+        "hunk_index": 14,
+        "mainline_method": "StringFrameColumnReader.StringFrameColumn.getRowAsObject",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "StringFrameColumn.getRowAsObject",
+        "start_line": 273,
+        "end_line": 312,
+        "code_snippet": "    /**\n     * Returns the object at the given physical row number.\n     *\n     * When {@link #asArray}, the return value is always of type {@code Object[]}. Otherwise, the return value\n     * is either an empty list (if the row is empty), a single String (if the row has one value), or a List\n     * of Strings (if the row has more than one value).\n     *\n     * @param physicalRow physical row number\n     * @param decode      if true, return java.lang.String. If false, return UTF-8 ByteBuffer.\n     */\n    private Object getRowAsObject(final int physicalRow, final boolean decode)\n    {\n      ...\n    }"
+      },
+      {
+        "hunk_index": 15,
+        "mainline_method": "StringFrameColumnReader.StringFrameColumn.getRowAsListUtf8",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "StringFrameColumn.getRowAsListUtf8",
+        "start_line": 314,
+        "end_line": 329,
+        "code_snippet": "    /**\n     * Returns the value at the given physical row number as a list of ByteBuffers. Only valid when !asArray, i.e.,\n     * when type is {@link ColumnType#STRING}.\n     *\n     * @param physicalRow physical row number\n     */\n    private List<ByteBuffer> getRowAsListUtf8(final int physicalRow)\n    {\n      if (asArray) {\n        throw DruidException.defensive(\"Unexpected call for array column\");\n      }\n\n      final Object object = getRowAsObject(physicalRow, false);\n\n      if (object == null) {\n        return Collections.emptyList();\n      } else if (object instanceof List) {\n        return (List<ByteBuffer>) object;\n      } else {\n        return Collections.singletonList((ByteBuffer) object);\n      }\n    }"
+      },
+      {
+        "hunk_index": 16,
+        "mainline_method": "StringFrameColumnReader.StringArrayFrameColumn",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": "StringArrayFrameColumn",
+        "start_line": 331,
+        "end_line": 370,
+        "code_snippet": "  static class StringArrayFrameColumn implements BaseColumn\n  {\n    private final StringFrameColumn delegate;\n\n    private StringArrayFrameColumn(\n        Frame frame,\n        boolean multiValue,\n        Memory memory,\n        long startOfStringLengthSection,\n        long startOfStringDataSection\n    )\n    {\n      this.delegate = new StringFrameColumn(\n          frame,\n          multiValue,\n          memory,\n          startOfStringLengthSection,\n          startOfStringDataSection,\n          true\n      );\n    }\n\n    @Override\n    @SuppressWarnings(\"rawtypes\")\n    public ColumnValueSelector makeColumnValueSelector(ReadableOffset offset)\n    {\n      return delegate.makeDimensionSelectorInternal(offset, null);\n    }\n\n    @Override\n    public void close()\n    {\n      delegate.close();\n    }\n  }"
+      },
+      {
+        "hunk_index": 17,
+        "mainline_method": "hunk_17",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/read/columnar/StringFrameColumnReader.java",
+        "target_method": null,
+        "start_line": null,
+        "end_line": null,
+        "code_snippet": ""
+      }
+    ],
+    "processing/src/main/java/org/apache/druid/frame/write/columnar/StringFrameColumnWriter.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<declaration>",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/write/columnar/StringFrameColumnWriter.java",
+        "target_method": "<declaration>",
+        "start_line": 45,
+        "end_line": 45,
+        "code_snippet": "public static final long DATA_OFFSET = 1  + 1 ;"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "writeTo",
+        "target_file": "processing/src/main/java/org/apache/druid/frame/write/columnar/StringFrameColumnWriter.java",
+        "target_method": "writeTo",
+        "start_line": 225,
+        "end_line": 242,
+        "code_snippet": "public long writeTo(final WritableMemory memory, final long startPosition)\n{\n  final boolean writeMultiValue = isWriteMultiValue();\n  long currentPosition = startPosition;\n  memory.putByte(currentPosition, typeCode);\n  memory.putByte(currentPosition + 1, writeMultiValue ? (byte) 1 : (byte) 0);\n  currentPosition += 2;\n  if (writeMultiValue) {\n    currentPosition += cumulativeRowLengths.writeTo(memory, currentPosition);\n  }\n  currentPosition += cumulativeStringLengths.writeTo(memory, currentPosition);\n  currentPosition += stringData.writeTo(memory, currentPosition);\n  return currentPosition - startPosition;\n}"
+      }
+    ]
+  }
+}

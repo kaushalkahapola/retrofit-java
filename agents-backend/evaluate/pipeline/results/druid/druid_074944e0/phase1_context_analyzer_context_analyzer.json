@@ -1,7 +1,7 @@
 {
   "semantic_blueprint": {
-    "root_cause_hypothesis": "The code previously added all server types to the workerIds list, potentially including non-historical servers, which could lead to incorrect worker assignment or processing errors.",
-    "fix_logic": "Introduced a conditional check to only add servers of type ServerType.HISTORICAL to the workerIds list, ensuring only appropriate servers are considered as workers.",
+    "root_cause_hypothesis": "The code was including all server types as workers, potentially allowing non-historical servers to be treated as workers, which could lead to incorrect behavior or security issues.",
+    "fix_logic": "Added a conditional check to only add servers of type ServerType.HISTORICAL to the workerIds list, ensuring only historical servers are considered as workers.",
     "dependent_apis": [
       "DruidServerMetadata",
       "ServerType",
@@ -13,15 +13,15 @@
       {
         "hunk_index": 1,
         "file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
-        "summary": "Adds an import statement for ServerType to enable type checking in the following code.",
+        "summary": "Imports ServerType to enable type checking of servers.",
         "role": "declaration",
-        "connects_to_next": "This import is necessary to reference ServerType in the conditional logic introduced in the next hunk.",
+        "connects_to_next": "This import is necessary to use ServerType in the conditional check introduced in the next hunk.",
         "global_index": 1
       },
       {
         "hunk_index": 2,
         "file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
-        "summary": "Wraps the addition of workerIds in a conditional that only includes servers of type ServerType.HISTORICAL.",
+        "summary": "Adds a conditional to only include servers of type ServerType.HISTORICAL in the workerIds list.",
         "role": "core_fix",
         "connects_to_next": "",
         "global_index": 2

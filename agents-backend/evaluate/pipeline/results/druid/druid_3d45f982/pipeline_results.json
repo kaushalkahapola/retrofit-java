@@ -3,28 +3,27 @@
   "patch_id": "druid_3d45f982",
   "mainline_commit": "3d45f9829c7b80e3b5289aaf5710b3932639349e",
   "backport_commit": "4a8008aebb7b3f324325feabd1b5a11a07e76022",
-  "timestamp": "2026-03-17T10:58:13.207791",
+  "timestamp": "2026-03-17T12:32:49.250730",
   "phases": {
     "phase1_context_analyzer": {
       "context_analyzer": {
         "node": "context_analyzer",
         "outputs": {
           "semantic_blueprint": {
-            "root_cause_hypothesis": "Failure to reclaim and release the last memory block if it is empty, leading to potential memory waste or exhaustion. | ArenaMemoryAllocator did not properly track and reclaim memory when allocations were closed, leading to inefficient memory reuse and potential memory exhaustion. | The code decrements bytesAllocated and nulls memory even if memory is already null, potentially leading to incorrect memory accounting or double-free-like logic. | The method for reserving additional memory did not properly check if the requested allocation exceeded the available memory, potentially leading to failed allocations or silent errors.",
-            "fix_logic": "Introduced a method to release the last block if it is empty, invoked this method before allocating new memory in reserveAdditional, and clarified/updated related comments and logic to ensure correct block tracking. | Introduced a 'lastAllocation' field to track the most recent allocation, updated allocation and close logic to decrement the position and allow partial arena reuse when the last allocation is closed, and added a 'closed' flag to prevent double-closing. | Wrapped the memory nullification and bytesAllocated decrement in a conditional check to ensure they only occur if memory is not already null. | Introduced logic to cap the next allocation size to the available memory, check if the new allocation is actually larger than the prior allocation, and throw a defensive exception if reserveAdditional fails unexpectedly.",
+            "root_cause_hypothesis": "Failure to reclaim and release the last memory block when it is empty, leading to inefficient memory usage and potential resource leaks. | ArenaMemoryAllocator did not properly track and reclaim memory when allocations were closed, leading to inefficient memory reuse and potential memory exhaustion. | The code decrements the bytesAllocated counter and nulls the memory reference in the close() method without checking if memory is already null, potentially leading to double-free or incorrect accounting if close() is called multiple times. | The code did not properly check if additional memory could actually be reserved before attempting to reserve it, potentially leading to failed allocations or inconsistent state.",
+            "fix_logic": "Introduced a releaseLastBlockIfEmpty() method that checks if the last memory block is empty and, if so, releases and removes it; updated reserveAdditional(int) to call this method before allocating new memory, and added availableToReserve() to accurately report reservable memory considering possible reclamation. | Introduced a lastAllocation field to track the most recent allocation, updated allocation and close logic to decrement position and allow partial arena reuse when the last allocation is closed, and added a closed flag to prevent double-closing. | Added a guard to ensure that memory is only set to null and bytesAllocated is decremented if memory is not already null. | Introduced logic to calculate the next allocation size based on available memory, only attempting to reserve additional memory if the new allocation is larger than the prior allocation, and throwing a defensive exception if reservation fails unexpectedly.",
             "dependent_apis": [
               "blockHolders",
               "limits",
               "currentBlockNumber()",
               "releaseLastBlockIfEmpty()",
               "reserveAdditional(int)",
-              "allocator.available()",
+              "availableToReserve()",
               "lastAllocation",
               "position",
               "arena",
               "allocate",
               "close",
-              "WritableMemory",
               "memory",
               "bytesAllocated",
               "size",
@@ -34,38 +33,38 @@
               "BASE_DATA_ALLOCATION_SIZE",
               "DruidException"
             ],
-            "patch_intent_summary": "Prevent double-free or incorrect memory accounting by ensuring memory is only released and bytesAllocated decremented if memory is not already null.",
+            "patch_intent_summary": "Ensure that memory allocation attempts for dataMemory are only made when additional memory is available and handle unexpected allocation failures defensively.",
             "hunk_chain": [
               {
                 "hunk_index": 1,
                 "file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
-                "summary": "Corrects comments to refer to 'blockHolders' instead of the outdated 'memoryHolders' variable name.",
+                "summary": "Corrects comments to reference 'blockHolders' instead of the outdated 'memoryHolders' variable name.",
                 "role": "cleanup",
-                "connects_to_next": "Clarifying the comments sets the stage for introducing new logic that manipulates these variables, ensuring future maintainers understand the correct relationships.",
+                "connects_to_next": "Prepares the code for clarity, ensuring that new logic referencing 'blockHolders' is not confusing or inconsistent.",
                 "global_index": 1
               },
               {
                 "hunk_index": 2,
                 "file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
-                "summary": "Adds the availableToReserve() method to compute the maximum reservable memory, accounting for possible reclamation of an empty last block.",
+                "summary": "Introduces the availableToReserve() method to compute the maximum reservable memory, accounting for possible reclamation of an empty last block.",
                 "role": "declaration",
-                "connects_to_next": "This method introduces the logic for considering reclaimable memory, which is then operationalized in the core allocation logic in the next hunk.",
+                "connects_to_next": "Establishes the logic for determining available memory, which is necessary for the next hunk to correctly handle block reclamation before new allocations.",
                 "global_index": 2
               },
               {
                 "hunk_index": 3,
                 "file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
-                "summary": "Calls releaseLastBlockIfEmpty() before checking allocator availability in reserveAdditional, ensuring empty blocks are released before new allocations.",
+                "summary": "Calls releaseLastBlockIfEmpty() at the start of reserveAdditional(int) to ensure empty blocks are reclaimed before checking allocator availability and possibly allocating new blocks.",
                 "role": "core_fix",
-                "connects_to_next": "This fix requires the actual implementation of releaseLastBlockIfEmpty, which is provided in a later hunk.",
+                "connects_to_next": "Implements the core fix of reclaiming empty blocks, which requires the helper method defined in the next hunk.",
                 "global_index": 3
               },
               {
                 "hunk_index": 4,
                 "file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
-                "summary": "Adds a clarifying comment for the size() method, documenting its purpose.",
+                "summary": "Adds a documentation comment for the size() method, clarifying its purpose.",
                 "role": "cleanup",
-                "connects_to_next": "This is a documentation improvement and does not directly affect the logic, but the next hunk implements the new block release method referenced earlier.",
+                "connects_to_next": "Provides documentation clarity, while the next hunk introduces the actual helper method for block reclamation.",
                 "global_index": 4
               },
               {
@@ -79,23 +78,23 @@
               {
                 "hunk_index": 1,
                 "file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
-                "summary": "Adds a new private field 'lastAllocation' to track the most recent WritableMemory allocation.",
+                "summary": "Adds a new private field lastAllocation to track the most recent WritableMemory allocation.",
                 "role": "declaration",
-                "connects_to_next": "The new field enables the allocation logic to record the last allocated memory region, which is necessary for the next hunk to update and use this tracking.",
+                "connects_to_next": "This field is necessary for the allocation and close logic in the next hunk to determine if a closed allocation is the most recent one.",
                 "global_index": 6
               },
               {
                 "hunk_index": 2,
                 "file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
-                "summary": "Modifies the allocation logic to update 'lastAllocation' with each new allocation, changes the allocation boundary check to '<=', and introduces a 'closed' flag for the ResourceHolder.",
+                "summary": "Modifies the allocation logic to use <= for capacity check, creates a memory region, assigns it to lastAllocation, and introduces a closed flag in the ResourceHolder.",
                 "role": "core_fix",
-                "connects_to_next": "Tracking 'lastAllocation' and the 'closed' state sets up the logic needed in the close() method to reclaim memory only when the last allocation is closed.",
+                "connects_to_next": "The closed flag and lastAllocation tracking set up here are used in the close method in the next hunk to safely reclaim memory.",
                 "global_index": 7
               },
               {
                 "hunk_index": 3,
                 "file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
-                "summary": "Updates the close() method to decrement 'position' and clear 'lastAllocation' only if the closed allocation is the last one, and ensures position is reset only when all allocations are closed.",
+                "summary": "Updates the close method to use the closed flag, check if the closed allocation is lastAllocation, and decrement position for partial reuse; resets lastAllocation and position as appropriate.",
                 "role": "core_fix",
                 "connects_to_next": "",
                 "global_index": 8
@@ -103,7 +102,7 @@
               {
                 "hunk_index": 1,
                 "file": "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java",
-                "summary": "Adds a null check around memory nullification and bytesAllocated decrement in the close() method.",
+                "summary": "Wraps the memory nullification and bytesAllocated decrement in a null check to ensure these actions only occur if memory is not already null.",
                 "role": "guard",
                 "connects_to_next": "",
                 "global_index": 9
@@ -111,15 +110,15 @@
               {
                 "hunk_index": 1,
                 "file": "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java",
-                "summary": "Adds import for DruidException to enable defensive error handling in the allocation logic.",
+                "summary": "Adds import for DruidException to enable defensive exception handling in the code.",
                 "role": "declaration",
-                "connects_to_next": "Allows the next hunk to throw a DruidException when an unexpected allocation failure occurs.",
+                "connects_to_next": "Allows the next hunk to throw a DruidException when an unexpected memory reservation failure occurs.",
                 "global_index": 10
               },
               {
                 "hunk_index": 2,
                 "file": "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java",
-                "summary": "Refactors the memory allocation logic to cap the requested allocation to available memory, checks if the new allocation is larger than the previous, and throws a defensive exception if allocation fails unexpectedly.",
+                "summary": "Refactors the memory allocation logic to check available memory before attempting to reserve, only proceeds if the next allocation is larger, and throws a defensive exception if reservation fails unexpectedly.",
                 "role": "core_fix",
                 "connects_to_next": "",
                 "global_index": 11
@@ -143,7 +142,7 @@
                 "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
                 "target_method": null,
                 "start_line": 54,
-                "end_line": 59,
+                "end_line": 60,
                 "code_snippet": "// One holder for every Memory we've allocated.\nprivate final List<ResourceHolder<WritableMemory>> blockHolders = new ArrayList<>();\n\n// The amount of space that has been used from each Memory block. Same length as \"blockHolders\".\nprivate final IntList limits = new IntArrayList();\n\n// The global starting position for each Memory block (blockNumber -> position). Same length as \"blockHolders\".\nprivate final LongArrayList globalStartPositions = new LongArrayList();"
               },
               {
@@ -162,7 +161,7 @@
                 "target_method": "reserveAdditional",
                 "start_line": 127,
                 "end_line": 159,
-                "code_snippet": "public boolean reserveAdditional(int bytes)\n{\n  if (bytes < 0) {\n    throw new IAE(\"bytes < 0\");\n  }\n  if (bytes == 0) {\n    return true;\n  }\n\n  releaseLastBlockIfEmpty();\n\n  if (bytes > allocator.available()) {\n    return false;\n  }\n\n  final int idx = currentBlockNumber();\n\n  if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {\n    // Allocation needed.\n    // ... (rest of method omitted for brevity)\n  }\n  // ... (rest of method omitted for brevity)\n}"
+                "code_snippet": "public boolean reserveAdditional(int bytes)\n{\n  if (bytes < 0) {\n    throw new IAE(\"bytes < 0\");\n  }\n\n  if (bytes == 0) {\n    return true;\n  }\n\n  releaseLastBlockIfEmpty();\n\n  if (bytes > allocator.available()) {\n    return false;\n  }\n\n  final int idx = currentBlockNumber();\n\n  if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {\n    // Allocation needed.\n    // ...\n  }\n  // ...\n}"
               },
               {
                 "hunk_index": 4,
@@ -170,8 +169,8 @@
                 "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
                 "target_method": "size",
                 "start_line": 261,
-                "end_line": 267,
-                "code_snippet": "/**\n * Current used size, in bytes.\n */\npublic long size()\n{\n  long sz = 0;\n  // ... (rest of method omitted for brevity)\n}"
+                "end_line": 266,
+                "code_snippet": "/**\n * Current used size, in bytes.\n */\npublic long size()\n{\n  long sz = 0;\n  // ...\n}"
               },
               {
                 "hunk_index": 5,
@@ -186,9 +185,9 @@
             "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java": [
               {
                 "hunk_index": 1,
-                "mainline_method": "<declaration>",
+                "mainline_method": "<field_declaration>",
                 "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
-                "target_method": "<declaration>",
+                "target_method": "<field_declaration>",
                 "start_line": 41,
                 "end_line": 41,
                 "code_snippet": "private WritableMemory lastAllocation;"
@@ -198,17 +197,17 @@
                 "mainline_method": "allocate",
                 "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
                 "target_method": "allocate",
-                "start_line": 68,
-                "end_line": 108,
-                "code_snippet": "public Optional<ResourceHolder<WritableMemory>> allocate(final long size)\n{\n  if (position + size <= arena.getCapacity()) {\n    final long start = position;\n    allocations++;\n    position += size;\n\n    final WritableMemory memory = arena.writableRegion(start, size, ByteOrder.LITTLE_ENDIAN);\n    lastAllocation = memory;\n\n    return Optional.of(\n        new ResourceHolder<WritableMemory>()\n        {\n          boolean closed;\n\n          @Override\n          public WritableMemory get()\n          {\n            if (closed) {\n              throw new ISE(\"Already closed\");\n            }\n            return memory;\n          }\n\n          @Override\n          public void close()\n          {\n            if (closed) {\n              return;\n            }\n\n            closed = true;\n\n            //noinspection ObjectEquality\n            if (memory == lastAllocation) {\n              // Last allocation closed; decrement position to enable partial arena reuse.\n              position -= memory.getCapacity();\n              lastAllocation = null;\n            }\n\n            if (--allocations == 0) {\n              // All allocations closed; reset position to enable full arena reuse.\n              position = 0;\n            }\n          }\n        }\n    );\n  } else {\n    return Optional.empty();\n  }\n}"
+                "start_line": 65,
+                "end_line": 109,
+                "code_snippet": "public Optional<ResourceHolder<WritableMemory>> allocate(final long size)\n{\n  if (position + size <= arena.getCapacity()) {\n    final long start = position;\n    allocations++;\n    position += size;\n\n    final WritableMemory memory = arena.writableRegion(start, size, ByteOrder.LITTLE_ENDIAN);\n    lastAllocation = memory;\n\n    return Optional.of(\n        new ResourceHolder<WritableMemory>()\n        {\n          boolean closed;\n\n          @Override\n          public WritableMemory get()\n          {\n            if (closed) {\n              throw new ISE(\"Already closed\");\n            }\n            return memory;\n          }\n\n          @Override\n          public void close()\n          {\n            if (closed) {\n              return;\n            }\n\n            closed = true;\n\n            //noinspection ObjectEquality\n            if (memory == lastAllocation) {\n              // Last allocation closed; decrement position to enable partial arena reuse.\n              position -= memory.getCapacity();\n              lastAllocation = null;\n            }\n\n            if (--allocations == 0) {\n              // All allocations closed; reset position to enable full arena reuse.\n              position = 0;\n            }\n          }\n        }\n    );\n  }\n  return Optional.empty();\n}"
               },
               {
                 "hunk_index": 3,
-                "mainline_method": "close",
+                "mainline_method": "allocate/ResourceHolder.close",
                 "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
-                "target_method": "close",
+                "target_method": "allocate/ResourceHolder.close",
                 "start_line": 91,
-                "end_line": 108,
+                "end_line": 109,
                 "code_snippet": "public void close()\n{\n  if (closed) {\n    return;\n  }\n\n  closed = true;\n\n  //noinspection ObjectEquality\n  if (memory == lastAllocation) {\n    // Last allocation closed; decrement position to enable partial arena reuse.\n    position -= memory.getCapacity();\n    lastAllocation = null;\n  }\n\n  if (--allocations == 0) {\n    // All allocations closed; reset position to enable full arena reuse.\n    position = 0;\n  }\n}"
               }
             ],
@@ -219,8 +218,8 @@
                 "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java",
                 "target_method": "close",
                 "start_line": 78,
-                "end_line": 82,
-                "code_snippet": "            @Override\n            public void close()\n            {\n              memory = null;\n              bytesAllocated -= size;\n            }"
+                "end_line": 84,
+                "code_snippet": "public void close()\n{\n  if (memory != null) {\n    memory = null;\n    bytesAllocated -= size;\n  }\n}"
               }
             ],
             "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java": [
@@ -229,18 +228,18 @@
                 "mainline_method": "<import>",
                 "target_file": "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java",
                 "target_method": "<import>",
-                "start_line": 1,
-                "end_line": 21,
-                "code_snippet": "package org.apache.druid.frame.write;\nimport com.google.common.base.Throwables;\nimport com.google.common.primitives.Ints;\nimport org.apache.datasketches.memory.Memory;\nimport org.apache.datasketches.memory.WritableMemory;\nimport org.apache.druid.frame.Frame;\nimport org.apache.druid.frame.FrameType;\nimport org.apache.druid.frame.allocation.AppendableMemory;\nimport org.apache.druid.frame.allocation.MemoryRange;\nimport org.apache.druid.frame.field.FieldWriter;\nimport org.apache.druid.frame.key.KeyColumn;\nimport org.apache.druid.frame.read.FrameReader;\nimport org.apache.druid.java.util.common.IAE;\nimport org.apache.druid.java.util.common.ISE;\nimport org.apache.druid.java.util.common.io.Closer;\nimport org.apache.druid.java.util.common.parsers.ParseException;\nimport org.apache.druid.segment.column.RowSignature;\nimport org.apache.druid.utils.CloseableUtils;\nimport javax.annotation.Nullable;\nimport java.util.List;\nimport java.util.Set;\nimport java.util.function.Supplier;"
+                "start_line": 24,
+                "end_line": 24,
+                "code_snippet": "import org.apache.druid.error.DruidException;"
               },
               {
                 "hunk_index": 2,
-                "mainline_method": "writeDataUsingFieldWriters",
+                "mainline_method": "addSelection",
                 "target_file": "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java",
-                "target_method": "writeDataUsingFieldWriters",
-                "start_line": 268,
-                "end_line": 336,
-                "code_snippet": "private boolean writeDataUsingFieldWriters()\n{\n  assert fieldWriters != null;\n  final long fieldPositionBytes = (long) fieldWriters.size() * Integer.BYTES;\n  if (numRows == 0) {\n    if (!dataMemory.reserveAdditional(Ints.checkedCast(Math.max(fieldPositionBytes, BASE_DATA_ALLOCATION_SIZE)))) {\n      return false;\n    }\n  }\n  MemoryRange<WritableMemory> dataCursor = dataMemory.cursor();\n  long remainingInBlock = dataCursor.length();\n  long bytesWritten = fieldPositionBytes;\n  int reserveMultiple = 1;\n  for (int i = 0; i < fieldWriters.size(); i++) {\n    final FieldWriter fieldWriter = fieldWriters.get(i);\n    final long writeResult;\n    try {\n      writeResult = fieldWriter.writeTo(\n          dataCursor.memory(),\n          dataCursor.start() + bytesWritten,\n          remainingInBlock - bytesWritten\n      );\n    }\n    catch (InvalidNullByteException inbe) {\n      throw InvalidNullByteException.builder(inbe)\n                                    .column(signature.getColumnName(i))\n                                    .build();\n    }\n    catch (ParseException pe) {\n      throw Throwables.propagate(pe);\n    }\n    catch (Exception e) {\n      throw InvalidFieldException.builder().column(signature.getColumnName(i))\n                                 .errorMsg(e.getMessage())\n                                 .build();\n    }\n    if (writeResult < 0) {\n      i = -1;\n      reserveMultiple *= 2;\n      if (!dataMemory.reserveAdditional(Ints.checkedCast((long) BASE_DATA_ALLOCATION_SIZE * reserveMultiple))) {\n        return false;\n      }\n      dataCursor = dataMemory.cursor();\n      remainingInBlock = dataCursor.length();\n      bytesWritten = fieldPositionBytes;\n    } else {\n      bytesWritten += writeResult;\n      dataCursor.memory().putInt(dataCursor.start() + (long) i * Integer.BYTES, Ints.checkedCast(bytesWritten));\n    }\n  }\n  dataMemory.advanceCursor(Ints.checkedCast(bytesWritten));\n  return true;\n}"
+                "target_method": "addSelection",
+                "start_line": 314,
+                "end_line": 334,
+                "code_snippet": "public boolean addSelection(int[] selection)\n{\n  // ...\n  final int priorAllocation = BASE_DATA_ALLOCATION_SIZE * reserveMultiple;\n  // Try again with a bigger allocation.\n  reserveMultiple *= 2;\n\n  final int nextAllocation = Math.min(\n      dataMemory.availableToReserve(),\n      Ints.checkedCast((long) BASE_DATA_ALLOCATION_SIZE * reserveMultiple)\n  );\n\n  if (nextAllocation > priorAllocation) {\n    if (!dataMemory.reserveAdditional(nextAllocation)) {\n      // Shouldn't see this unless availableToReserve lied to us.\n      throw DruidException.defensive(\"Unexpected failure of dataMemory.reserveAdditional\");\n    }\n  } else {\n    return false;\n  }\n  // ...\n}"
               }
             ]
           }
@@ -263,9 +262,9 @@
             {
               "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
               "mainline_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
-              "hunk_text": "@@ -105,5 +105,35 @@     return cursor;\n   }\n \n+  /**\n+   * Maximum number that can be successfully passed to {@link #reserveAdditional(int)}.\n+   */\n+  public int availableToReserve()\n+  {\n+    final int currentBlockIdx = currentBlockNumber();\n+    final long availableInCurrentBlock;\n+    final boolean currentBlockIsEmpty;\n+\n+    if (currentBlockIdx < 0) {\n+      availableInCurrentBlock = 0;\n+      currentBlockIsEmpty = false;\n+    } else {\n+      final int usedInCurrentBlock = limits.getInt(currentBlockIdx);\n+      availableInCurrentBlock = blockHolders.get(currentBlockIdx).get().getCapacity() - usedInCurrentBlock;\n+      currentBlockIsEmpty = usedInCurrentBlock == 0;\n+    }\n+\n+    // If currentBlockIsEmpty, add availableInCurrentBlock to account for reclamation in releaseLastBlockIfEmpty().\n+    final long availableInAllocator = allocator.available() + (currentBlockIsEmpty ? availableInCurrentBlock : 0);\n+\n+    return (int) Math.min(\n+        Integer.MAX_VALUE,\n+        Math.max(\n+            availableInAllocator,\n+            availableInCurrentBlock\n+        )\n+    );\n+  }\n+\n   /**\n    * Ensure that at least \"bytes\" amount of space is available after the cursor. Allocates a new block if needed.\n    * Note: the amount of bytes is guaranteed to be in a *single* block.\n",
+              "hunk_text": "@@ -105,5 +105,35 @@     return cursor;\n   }\n \n+  /**\n+   * Maximum number that can be successfully passed to {@link #reserveAdditional(int)}.\n+   */\n+  public int availableToReserve()\n+  {\n+    final int currentBlockIdx = currentBlockNumber();\n+    final long availableInCurrentBlock;\n+    final boolean currentBlockIsEmpty;\n+\n+    if (currentBlockIdx < 0) {\n+      availableInCurrentBlock = 0;\n+      currentBlockIsEmpty = false;\n+    } else {\n+      final int usedInCurrentBlock = limits.getInt(currentBlockIdx);\n+      availableInCurrentBlock = blockHolders.get(currentBlockIdx).get().getCapacity() - usedInCurrentBlock;\n+      currentBlockIsEmpty = usedInCurrentBlock == 0;\n+    }\n+\n+    // If currentBlockIsEmpty, add availableInCurrentBlock to account for reclamation in reclaimLastBlockIfEmpty().\n+    final long availableInAllocator = allocator.available() + (currentBlockIsEmpty ? availableInCurrentBlock : 0);\n+\n+    return (int) Math.min(\n+        Integer.MAX_VALUE,\n+        Math.max(\n+            availableInAllocator,\n+            availableInCurrentBlock\n+        )\n+    );\n+  }\n+\n   /**\n    * Ensure that at least \"bytes\" amount of space is available after the cursor. Allocates a new block if needed.\n    * Note: the amount of bytes is guaranteed to be in a *single* block.\n",
               "insertion_line": 105,
-              "intent_verified": false,
+              "intent_verified": true,
               "file_operation": "MODIFIED"
             },
             {
@@ -289,7 +288,7 @@
               "mainline_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
               "hunk_text": "@@ -331,11 +331,20 @@     cursor.set(blockMemory, 0, blockMemory.getCapacity());\n   }\n \n-  private int currentBlockNumber()\n+  private void releaseLastBlockIfEmpty()\n   {\n-    if (blockHolders.isEmpty()) {\n-      return NO_BLOCK;\n-    } else {\n-      return blockHolders.size() - 1;\n+    final int lastBlockNumber = currentBlockNumber();\n+    if (lastBlockNumber != NO_BLOCK && limits.getInt(lastBlockNumber) == 0) {\n+      blockHolders.remove(lastBlockNumber).close();\n+      limits.removeInt(lastBlockNumber);\n     }\n   }\n+\n+  /**\n+   * Returns the index into {@link #blockHolders} and {@link #limits} of the current block, or {@link #NO_BLOCK}\n+   * if there are no blocks.\n+   */\n+  private int currentBlockNumber()\n+  {\n+    return blockHolders.size() - 1;\n+  }\n }\n",
               "insertion_line": 331,
-              "intent_verified": false,
+              "intent_verified": true,
               "file_operation": "MODIFIED"
             },
             {
@@ -303,8 +302,8 @@
             {
               "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
               "mainline_file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
-              "hunk_text": "@@ -68,19 +68,22 @@   @Override\n   public Optional<ResourceHolder<WritableMemory>> allocate(final long size)\n   {\n-    if (position + size < arena.getCapacity()) {\n+    if (position + size <= arena.getCapacity()) {\n       final long start = position;\n       allocations++;\n       position += size;\n \n+      final WritableMemory memory = arena.writableRegion(start, size, ByteOrder.LITTLE_ENDIAN);\n+      lastAllocation = memory;\n+\n       return Optional.of(\n           new ResourceHolder<WritableMemory>()\n           {\n-            private WritableMemory memory = arena.writableRegion(start, size, ByteOrder.LITTLE_ENDIAN);\n+            boolean closed;\n \n             @Override\n             public WritableMemory get()\n             {\n-              if (memory == null) {\n+              if (closed) {\n                 throw new ISE(\"Already closed\");\n               }\n \n",
-              "insertion_line": 68,
+              "hunk_text": "@@ -65,19 +65,22 @@   @Override\n   public Optional<ResourceHolder<WritableMemory>> allocate(final long size)\n   {\n-    if (position + size < arena.getCapacity()) {\n+  if (position + size <= arena.getCapacity()) {\n       final long start = position;\n       allocations++;\n       position += size;\n \n+    final WritableMemory memory = arena.writableRegion(start, size, ByteOrder.LITTLE_ENDIAN);\n+    lastAllocation = memory;\n+\n       return Optional.of(\n           new ResourceHolder<WritableMemory>()\n           {\n-            private WritableMemory memory = arena.writableRegion(start, size, ByteOrder.LITTLE_ENDIAN);\n+          boolean closed;\n \n             @Override\n             public WritableMemory get()\n             {\n-              if (memory == null) {\n+            if (closed) {\n                 throw new ISE(\"Already closed\");\n               }\n \n",
+              "insertion_line": 65,
               "intent_verified": false,
               "file_operation": "MODIFIED"
             },
@@ -319,7 +318,7 @@
             {
               "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java",
               "mainline_file": "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java",
-              "hunk_text": "@@ -78,7 +78,9 @@             @Override\n             public void close()\n             {\n-              memory = null;\n-              bytesAllocated -= size;\n+              if (memory != null) {\n+                memory = null;\n+                bytesAllocated -= size;\n+              }\n             }\n           }\n       );\n",
+              "hunk_text": "@@ -78,7 +78,9 @@             @Override\n             public void close()\n             {\n-              memory = null;\n-              bytesAllocated -= size;\n+    if (memory != null) {\n+      memory = null;\n+      bytesAllocated -= size;\n+    }\n             }\n           }\n       );\n",
               "insertion_line": 78,
               "intent_verified": true,
               "file_operation": "MODIFIED"
@@ -335,8 +334,8 @@
             {
               "target_file": "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java",
               "mainline_file": "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java",
-              "hunk_text": "@@ -268,9 +268,21 @@         // Reset to beginning of loop.\n         i = -1;\n \n+        final int priorAllocation = BASE_DATA_ALLOCATION_SIZE * reserveMultiple;\n+\n         // Try again with a bigger allocation.\n         reserveMultiple *= 2;\n \n-        if (!dataMemory.reserveAdditional(Ints.checkedCast((long) BASE_DATA_ALLOCATION_SIZE * reserveMultiple))) {\n+        final int nextAllocation = Math.min(\n+            dataMemory.availableToReserve(),\n+            Ints.checkedCast((long) BASE_DATA_ALLOCATION_SIZE * reserveMultiple)\n+        );\n+\n+        if (nextAllocation > priorAllocation) {\n+          if (!dataMemory.reserveAdditional(nextAllocation)) {\n+            // Shouldn't see this unless availableToReserve lied to us.\n+            throw DruidException.defensive(\"Unexpected failure of dataMemory.reserveAdditional\");\n+          }\n+        } else {\n           return false;\n         }\n \n",
-              "insertion_line": 268,
+              "hunk_text": "@@ -314,9 +314,21 @@         // Reset to beginning of loop.\n         i = -1;\n \n+        final int priorAllocation = BASE_DATA_ALLOCATION_SIZE * reserveMultiple;\n+\n         // Try again with a bigger allocation.\n         reserveMultiple *= 2;\n \n-        if (!dataMemory.reserveAdditional(Ints.checkedCast((long) BASE_DATA_ALLOCATION_SIZE * reserveMultiple))) {\n+        final int nextAllocation = Math.min(\n+            dataMemory.availableToReserve(),\n+            Ints.checkedCast((long) BASE_DATA_ALLOCATION_SIZE * reserveMultiple)\n+        );\n+\n+        if (nextAllocation > priorAllocation) {\n+          if (!dataMemory.reserveAdditional(nextAllocation)) {\n+            // Shouldn't see this unless availableToReserve lied to us.\n+            throw DruidException.defensive(\"Unexpected failure of dataMemory.reserveAdditional\");\n+          }\n+        } else {\n           return false;\n         }\n \n",
+              "insertion_line": 314,
               "intent_verified": true,
               "file_operation": "MODIFIED"
             }
@@ -372,6 +371,34 @@
         }
       }
     }
+  },
+  "exact_developer_patch": false,
+  "developer_patch_comparison": {
+    "comparison_method": "file_state",
+    "compared_files": [
+      "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+      "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
+      "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java",
+      "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java"
+    ],
+    "mismatched_files": [
+      "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+      "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
+      "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java"
+    ],
+    "developer_files": [
+      "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+      "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
+      "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java",
+      "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java"
+    ],
+    "generated_files": [
+      "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
+      "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
+      "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java",
+      "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java"
+    ],
+    "error": null
   },
   "status": "completed"
 }
