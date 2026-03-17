@@ -557,18 +557,21 @@ class ValidationToolkit:
         applied_files = []
         for target_file in hunks_by_file:
             file_hunks = []
+            file_operations = set()
             for h in hunks_by_file[target_file]:
                 hunk_text = h.get("hunk_text", "")
                 if not hunk_text:
                     continue
                 file_hunks.append(hunk_text if hunk_text.endswith("\n") else hunk_text + "\n")
+                file_operations.add((h.get("file_operation") or "MODIFIED").upper())
 
             if not file_hunks:
                 continue
 
             combined_hunks = "".join(file_hunks)
+            file_operation = next(iter(file_operations)) if len(file_operations) == 1 else "MODIFIED"
             try:
-                patch_part = self._build_patch_file(target_file, combined_hunks)
+                patch_part = self._build_patch_file(target_file, combined_hunks, file_operation=file_operation)
                 patch_parts.append(patch_part)
                 if target_file not in applied_files:
                     applied_files.append(target_file)
@@ -789,16 +792,27 @@ class ValidationToolkit:
     # Private Helpers
     # ------------------------------------------------------------------
 
-    def _build_patch_file(self, target_file_path: str, hunk_text: str) -> str:
+    def _build_patch_file(self, target_file_path: str, hunk_text: str, file_operation: str = "MODIFIED") -> str:
         """
         Wraps a hunk in a minimal unified diff file header so `git apply`
         can understand it. The hunk_text must already start with @@ ... @@.
         """
-        # Normalize path separators
-        p = target_file_path.replace("\\", "/").lstrip("/")
+        # Normalize path separators and strip optional diff prefixes.
+        p = (target_file_path or "").strip().replace("\\", "/").lstrip("/")
+        if p.startswith("a/") or p.startswith("b/"):
+            p = p[2:]
+
+        if not p:
+            raise ValueError("target_file_path is empty")
+
         full_path = os.path.join(self.target_repo_path, p)
-        
-        is_new = not os.path.exists(full_path)
+
+        file_exists = os.path.exists(full_path)
+        normalized_op = (file_operation or "MODIFIED").upper()
+
+        # If metadata says MODIFIED but file is absent, treat as add fallback.
+        if normalized_op == "MODIFIED" and not file_exists:
+            normalized_op = "ADDED"
         
         # Ensure hunk_text is properly formatted
         if not hunk_text.startswith("@@"):
@@ -811,13 +825,21 @@ class ValidationToolkit:
         if not body.endswith("\n\n"):
             body = body.rstrip("\n") + "\n"
         
-        if is_new:
+        if normalized_op == "ADDED":
             header = (
                 f"diff --git a/{p} b/{p}\n"
                 f"new file mode 100644\n"
                 f"index 0000000..0000000 100644\n"
                 f"--- /dev/null\n"
                 f"+++ b/{p}\n"
+            )
+        elif normalized_op == "DELETED":
+            header = (
+                f"diff --git a/{p} b/{p}\n"
+                f"deleted file mode 100644\n"
+                f"index 0000000..0000000 100644\n"
+                f"--- a/{p}\n"
+                f"+++ /dev/null\n"
             )
         else:
             header = (

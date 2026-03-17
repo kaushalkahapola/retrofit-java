@@ -278,6 +278,22 @@ def _adjust_hunk_header(hunk_text: str, target_start_line: int) -> str:
     return "\n".join([new_header] + lines[1:]) + "\n"
 
 
+def _extract_target_start_line(hunk_text: str) -> int | None:
+    """
+    Extracts the target-side start line from a unified hunk header.
+    """
+    if not hunk_text:
+        return None
+    first_line = hunk_text.splitlines()[0] if hunk_text.splitlines() else ""
+    m = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@", first_line)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except ValueError:
+        return None
+
+
 def _extract_added_lines(hunk_text: str) -> list[str]:
     """
     Returns all '+' body lines from a hunk (excluding the @@ header).
@@ -429,6 +445,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     # ------------------------------------------------------------------
     for change in code_changes:
         mainline_file = change.file_path if hasattr(change, "file_path") else change.get("file_path", "?")
+        change_type = change.change_type if hasattr(change, "change_type") else change.get("change_type", "MODIFIED")
         # Get list of mappings for this file (now returns list instead of single dict)
         mapped_ctx_list = mapped_target_context.get(mainline_file, [])
         raw_hunks = raw_hunks_by_file.get(mainline_file, [])
@@ -446,6 +463,13 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             target_file = mapped_ctx.get("target_file", mainline_file)
             insertion_line = mapped_ctx.get("start_line")
             target_body = mapped_ctx.get("code_snippet", "")
+            raw_start_line = _extract_target_start_line(raw_hunk)
+            target_method = (mapped_ctx.get("target_method") or "").strip().lower()
+            mainline_method = (mapped_ctx.get("mainline_method") or "").strip().lower()
+            is_declaration_or_class_hunk = (
+                target_method in {"<import>", "<class_declaration>"}
+                or mainline_method.startswith("<")
+            )
             
             # IMPROVEMENT: If insertion_line is None, try to extract from raw hunk header
             if insertion_line is None:
@@ -457,6 +481,11 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         print(f"  Agent 3: Extracted insertion_line {insertion_line} from hunk {hunk_idx} header")
                 except Exception as e:
                     print(f"  Agent 3: Could not extract insertion_line from hunk {hunk_idx}: {e}")
+
+            # Declaration/class-level mappings often return coarse line anchors (e.g., 1).
+            # Prefer raw hunk header anchor in those cases.
+            if raw_start_line and (is_declaration_or_class_hunk or (isinstance(insertion_line, int) and insertion_line <= 1)):
+                insertion_line = raw_start_line
             
             # Default fallback
             insertion_line = insertion_line or 1
@@ -524,6 +553,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 "hunk_text": adapted_hunk_text,
                 "insertion_line": insertion_line,
                 "intent_verified": intent_ok,
+                "file_operation": change_type,
             }
             adapted_code_hunks.append(hunk)
             trace += f"| `{target_file}` | {hunk_idx} | {'✅' if dry_run_ok else '❌'} | {'✅' if intent_ok else '❌'} |\n"
@@ -533,6 +563,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     # ------------------------------------------------------------------
     for change in test_changes:
         mainline_test = change.file_path if hasattr(change, "file_path") else change.get("file_path", "?")
+        change_type = change.change_type if hasattr(change, "change_type") else change.get("change_type", "MODIFIED")
         # Get list of mappings for this test file
         mapped_ctx_list = mapped_target_context.get(mainline_test, [])
         raw_hunks = raw_hunks_by_file.get(mainline_test, [])
@@ -593,6 +624,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 "hunk_text": adapted_hunk_text,
                 "insertion_line": 1,
                 "intent_verified": True,  # Tests don't undergo blueprint check
+                "file_operation": change_type,
             }
             adapted_test_hunks.append(hunk)
             trace += f"| `{target_test_file}` (test) | {hunk_idx} | {'✅' if dry_run_ok else '❌'} | — |\n"

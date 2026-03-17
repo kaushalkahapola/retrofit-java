@@ -1,7 +1,5 @@
 {
-  "consistency_map": {
-    "memoryHolders": "blockHolders"
-  },
+  "consistency_map": {},
   "mapped_target_context": {
     "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java": [
       {
@@ -9,65 +7,65 @@
         "mainline_method": "<class-level field comments>",
         "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
         "target_method": null,
-        "start_line": 55,
+        "start_line": 54,
         "end_line": 59,
-        "code_snippet": "  // One holder for every Memory we've allocated.\n  private final List<ResourceHolder<WritableMemory>> blockHolders = new ArrayList<>();\n\n  // The amount of space that has been used from each Memory block. Same length as \"blockHolders\".\n  private final IntList limits = new IntArrayList();\n\n  // The global starting position for each Memory block (blockNumber -> position). Same length as \"blockHolders\".\n  private final LongArrayList globalStartPositions = new LongArrayList();"
+        "code_snippet": "// One holder for every Memory we've allocated.\nprivate final List<ResourceHolder<WritableMemory>> blockHolders = new ArrayList<>();\n\n// The amount of space that has been used from each Memory block. Same length as \"blockHolders\".\nprivate final IntList limits = new IntArrayList();\n\n// The global starting position for each Memory block (blockNumber -> position). Same length as \"blockHolders\".\nprivate final LongArrayList globalStartPositions = new LongArrayList();"
       },
       {
         "hunk_index": 2,
         "mainline_method": "availableToReserve",
         "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
         "target_method": "availableToReserve",
-        "start_line": 108,
-        "end_line": 137,
-        "code_snippet": "  /**\n   * Maximum number that can be successfully passed to {@link #reserveAdditional(int)}.\n   */\n  public int availableToReserve()\n  {\n    final int currentBlockIdx = currentBlockNumber();\n    final long availableInCurrentBlock;\n    final boolean currentBlockIsEmpty;\n\n    if (currentBlockIdx < 0) {\n      availableInCurrentBlock = 0;\n      currentBlockIsEmpty = false;\n    } else {\n      final int usedInCurrentBlock = limits.getInt(currentBlockIdx);\n      availableInCurrentBlock = blockHolders.get(currentBlockIdx).get().getCapacity() - usedInCurrentBlock;\n      currentBlockIsEmpty = usedInCurrentBlock == 0;\n    }\n\n    // If currentBlockIsEmpty, add availableInCurrentBlock to account for reclamation in reclaimLastBlockIfEmpty().\n    final long availableInAllocator = allocator.available() + (currentBlockIsEmpty ? availableInCurrentBlock : 0);\n\n    return (int) Math.min(\n        Integer.MAX_VALUE,\n        Math.max(\n            availableInAllocator,\n            availableInCurrentBlock\n        )\n    );\n  }"
+        "start_line": 105,
+        "end_line": 135,
+        "code_snippet": "public int availableToReserve()\n{\n  final int currentBlockIdx = currentBlockNumber();\n  final long availableInCurrentBlock;\n  final boolean currentBlockIsEmpty;\n\n  if (currentBlockIdx < 0) {\n    availableInCurrentBlock = 0;\n    currentBlockIsEmpty = false;\n  } else {\n    final int usedInCurrentBlock = limits.getInt(currentBlockIdx);\n    availableInCurrentBlock = blockHolders.get(currentBlockIdx).get().getCapacity() - usedInCurrentBlock;\n    currentBlockIsEmpty = usedInCurrentBlock == 0;\n  }\n\n  // If currentBlockIsEmpty, add availableInCurrentBlock to account for reclamation in reclaimLastBlockIfEmpty().\n  final long availableInAllocator = allocator.available() + (currentBlockIsEmpty ? availableInCurrentBlock : 0);\n\n  return (int) Math.min(\n      Integer.MAX_VALUE,\n      Math.max(\n          availableInAllocator,\n          availableInCurrentBlock\n      )\n  );\n}"
       },
       {
         "hunk_index": 3,
         "mainline_method": "reserveAdditional",
         "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
         "target_method": "reserveAdditional",
-        "start_line": 160,
-        "end_line": 176,
-        "code_snippet": "  public boolean reserveAdditional(int bytes)\n  {\n    if (bytes == 0) {\n      return true;\n    }\n\n    releaseLastBlockIfEmpty();\n\n    if (bytes > allocator.available()) {\n      return false;\n    }\n\n    final int idx = currentBlockNumber();\n\n    if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {\n      // Allocation needed.\n      // ...\n    }\n    // ...\n  }"
+        "start_line": 127,
+        "end_line": 159,
+        "code_snippet": "public boolean reserveAdditional(int bytes)\n{\n  if (bytes < 0) {\n    throw new IAE(\"bytes < 0\");\n  }\n  if (bytes == 0) {\n    return true;\n  }\n\n  releaseLastBlockIfEmpty();\n\n  if (bytes > allocator.available()) {\n    return false;\n  }\n\n  final int idx = currentBlockNumber();\n\n  if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {\n    // Allocation needed.\n    // ... (rest of method omitted for brevity)\n  }\n  // ... (rest of method omitted for brevity)\n}"
       },
       {
         "hunk_index": 4,
         "mainline_method": "size",
         "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
         "target_method": "size",
-        "start_line": 264,
-        "end_line": 269,
-        "code_snippet": "  /**\n   * Current used size, in bytes.\n   */\n  public long size()\n  {\n    long sz = 0;\n    // ...\n  }"
+        "start_line": 261,
+        "end_line": 267,
+        "code_snippet": "/**\n * Current used size, in bytes.\n */\npublic long size()\n{\n  long sz = 0;\n  // ... (rest of method omitted for brevity)\n}"
       },
       {
         "hunk_index": 5,
         "mainline_method": "releaseLastBlockIfEmpty, currentBlockNumber",
         "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java",
         "target_method": "releaseLastBlockIfEmpty",
-        "start_line": 336,
-        "end_line": 347,
-        "code_snippet": "  private void releaseLastBlockIfEmpty()\n  {\n    final int lastBlockNumber = currentBlockNumber();\n    if (lastBlockNumber != NO_BLOCK && limits.getInt(lastBlockNumber) == 0) {\n      blockHolders.remove(lastBlockNumber).close();\n      limits.removeInt(lastBlockNumber);\n    }\n  }\n\n  /**\n   * Returns the index into {@link #blockHolders} and {@link #limits} of the current block, or {@link #NO_BLOCK}\n   * if there are no blocks.\n   */\n  private int currentBlockNumber()\n  {\n    return blockHolders.size() - 1;\n  }"
+        "start_line": 331,
+        "end_line": 343,
+        "code_snippet": "private void releaseLastBlockIfEmpty()\n{\n  final int lastBlockNumber = currentBlockNumber();\n  if (lastBlockNumber != NO_BLOCK && limits.getInt(lastBlockNumber) == 0) {\n    blockHolders.remove(lastBlockNumber).close();\n    limits.removeInt(lastBlockNumber);\n  }\n}\n\n/**\n * Returns the index into {@link #blockHolders} and {@link #limits} of the current block, or {@link #NO_BLOCK}\n * if there are no blocks.\n */\nprivate int currentBlockNumber()\n{\n  return blockHolders.size() - 1;\n}"
       }
     ],
     "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java": [
       {
         "hunk_index": 1,
-        "mainline_method": "<class_declaration>",
+        "mainline_method": "<declaration>",
         "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
-        "target_method": "<class_declaration>",
-        "start_line": 1,
-        "end_line": null,
-        "code_snippet": "public class ArenaMemoryAllocator implements MemoryAllocator {\n  private final WritableMemory arena;\n  private long allocations = 0;\n  private long position = 0;\n  private WritableMemory lastAllocation;"
+        "target_method": "<declaration>",
+        "start_line": 41,
+        "end_line": 41,
+        "code_snippet": "private WritableMemory lastAllocation;"
       },
       {
         "hunk_index": 2,
         "mainline_method": "allocate",
         "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/ArenaMemoryAllocator.java",
         "target_method": "allocate",
-        "start_line": 65,
-        "end_line": 91,
-        "code_snippet": "public Optional<ResourceHolder<WritableMemory>> allocate(final long size)\n{\n  if (position + size <= arena.getCapacity()) {\n    final long start = position;\n    allocations++;\n    position += size;\n\n    final WritableMemory memory = arena.writableRegion(start, size, ByteOrder.LITTLE_ENDIAN);\n    lastAllocation = memory;\n\n    return Optional.of(\n        new ResourceHolder<WritableMemory>()\n        {\n          boolean closed;\n\n          @Override\n          public WritableMemory get()\n          {\n            if (closed) {\n              throw new ISE(\"Already closed\");\n            }\n            return memory;\n          }"
+        "start_line": 68,
+        "end_line": 108,
+        "code_snippet": "public Optional<ResourceHolder<WritableMemory>> allocate(final long size)\n{\n  if (position + size <= arena.getCapacity()) {\n    final long start = position;\n    allocations++;\n    position += size;\n\n    final WritableMemory memory = arena.writableRegion(start, size, ByteOrder.LITTLE_ENDIAN);\n    lastAllocation = memory;\n\n    return Optional.of(\n        new ResourceHolder<WritableMemory>()\n        {\n          boolean closed;\n\n          @Override\n          public WritableMemory get()\n          {\n            if (closed) {\n              throw new ISE(\"Already closed\");\n            }\n            return memory;\n          }\n\n          @Override\n          public void close()\n          {\n            if (closed) {\n              return;\n            }\n\n            closed = true;\n\n            //noinspection ObjectEquality\n            if (memory == lastAllocation) {\n              // Last allocation closed; decrement position to enable partial arena reuse.\n              position -= memory.getCapacity();\n              lastAllocation = null;\n            }\n\n            if (--allocations == 0) {\n              // All allocations closed; reset position to enable full arena reuse.\n              position = 0;\n            }\n          }\n        }\n    );\n  } else {\n    return Optional.empty();\n  }\n}"
       },
       {
         "hunk_index": 3,
@@ -86,8 +84,8 @@
         "target_file": "processing/src/main/java/org/apache/druid/frame/allocation/HeapMemoryAllocator.java",
         "target_method": "close",
         "start_line": 78,
-        "end_line": 84,
-        "code_snippet": "public void close()\n{\n  if (memory != null) {\n    memory = null;\n    bytesAllocated -= size;\n  }\n}"
+        "end_line": 82,
+        "code_snippet": "            @Override\n            public void close()\n            {\n              memory = null;\n              bytesAllocated -= size;\n            }"
       }
     ],
     "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java": [
@@ -97,8 +95,8 @@
         "target_file": "processing/src/main/java/org/apache/druid/frame/write/RowBasedFrameWriter.java",
         "target_method": "<import>",
         "start_line": 1,
-        "end_line": 24,
-        "code_snippet": "import com.google.common.base.Throwables;\nimport com.google.common.primitives.Ints;\nimport org.apache.datasketches.memory.Memory;\nimport org.apache.datasketches.memory.WritableMemory;\nimport org.apache.druid.frame.Frame;\nimport org.apache.druid.frame.FrameType;\nimport org.apache.druid.frame.allocation.AppendableMemory;\nimport org.apache.druid.frame.allocation.MemoryRange;\nimport org.apache.druid.frame.field.FieldWriter;\nimport org.apache.druid.frame.key.KeyColumn;\nimport org.apache.druid.frame.read.FrameReader;\nimport org.apache.druid.java.util.common.IAE;\nimport org.apache.druid.java.util.common.ISE;\nimport org.apache.druid.java.util.common.io.Closer;\nimport org.apache.druid.java.util.common.parsers.ParseException;\nimport org.apache.druid.segment.column.RowSignature;\nimport org.apache.druid.utils.CloseableUtils;\nimport javax.annotation.Nullable;\nimport java.util.List;\nimport java.util.Set;\nimport java.util.function.Supplier;"
+        "end_line": 21,
+        "code_snippet": "package org.apache.druid.frame.write;\nimport com.google.common.base.Throwables;\nimport com.google.common.primitives.Ints;\nimport org.apache.datasketches.memory.Memory;\nimport org.apache.datasketches.memory.WritableMemory;\nimport org.apache.druid.frame.Frame;\nimport org.apache.druid.frame.FrameType;\nimport org.apache.druid.frame.allocation.AppendableMemory;\nimport org.apache.druid.frame.allocation.MemoryRange;\nimport org.apache.druid.frame.field.FieldWriter;\nimport org.apache.druid.frame.key.KeyColumn;\nimport org.apache.druid.frame.read.FrameReader;\nimport org.apache.druid.java.util.common.IAE;\nimport org.apache.druid.java.util.common.ISE;\nimport org.apache.druid.java.util.common.io.Closer;\nimport org.apache.druid.java.util.common.parsers.ParseException;\nimport org.apache.druid.segment.column.RowSignature;\nimport org.apache.druid.utils.CloseableUtils;\nimport javax.annotation.Nullable;\nimport java.util.List;\nimport java.util.Set;\nimport java.util.function.Supplier;"
       },
       {
         "hunk_index": 2,
@@ -107,7 +105,7 @@
         "target_method": "writeDataUsingFieldWriters",
         "start_line": 268,
         "end_line": 336,
-        "code_snippet": "private boolean writeDataUsingFieldWriters()\n{\n  assert fieldWriters != null;\n\n  // One int per field, containing the end offset of that field.\n  final long fieldPositionBytes = (long) fieldWriters.size() * Integer.BYTES;\n\n  if (numRows == 0) {\n    if (!dataMemory.reserveAdditional(Ints.checkedCast(Math.max(fieldPositionBytes, BASE_DATA_ALLOCATION_SIZE)))) {\n      return false;\n    }\n  }\n\n  MemoryRange<WritableMemory> dataCursor = dataMemory.cursor();\n  long remainingInBlock = dataCursor.length();\n  long bytesWritten = fieldPositionBytes;\n  int reserveMultiple = 1;\n\n  for (int i = 0; i < fieldWriters.size(); i++) {\n    final FieldWriter fieldWriter = fieldWriters.get(i);\n    final long writeResult;\n\n    // May throw InvalidNullByteException; allow it to propagate upwards.\n    try {\n      writeResult = fieldWriter.writeTo(\n          dataCursor.memory(),\n          dataCursor.start() + bytesWritten,\n          remainingInBlock - bytesWritten\n      );\n    }\n    catch (InvalidNullByteException inbe) {\n      throw InvalidNullByteException.builder(inbe)\n                                    .column(signature.getColumnName(i))\n                                    .build();\n    }\n    catch (ParseException pe) {\n      throw Throwables.propagate(pe);\n    }\n    catch (Exception e) {\n      throw InvalidFieldException.builder().column(signature.getColumnName(i))\n                                 .errorMsg(e.getMessage())\n                                 .build();\n    }\n\n    if (writeResult < 0) {\n      // Reset to beginning of loop.\n      i = -1;\n\n      // Try again with a bigger allocation.\n      reserveMultiple *= 2;\n\n      if (!dataMemory.reserveAdditional(Ints.checkedCast((long) BASE_DATA_ALLOCATION_SIZE * reserveMultiple))) {\n        return false;\n      }\n\n      dataCursor = dataMemory.cursor();\n      remainingInBlock = dataCursor.length();\n      bytesWritten = fieldPositionBytes;\n    } else {\n      bytesWritten += writeResult;\n\n      // Write field ending position.\n      dataCursor.memory().putInt(dataCursor.start() + (long) i * Integer.BYTES, Ints.checkedCast(bytesWritten));\n    }\n  }\n\n  dataMemory.advanceCursor(Ints.checkedCast(bytesWritten));\n  return true;\n}"
+        "code_snippet": "private boolean writeDataUsingFieldWriters()\n{\n  assert fieldWriters != null;\n  final long fieldPositionBytes = (long) fieldWriters.size() * Integer.BYTES;\n  if (numRows == 0) {\n    if (!dataMemory.reserveAdditional(Ints.checkedCast(Math.max(fieldPositionBytes, BASE_DATA_ALLOCATION_SIZE)))) {\n      return false;\n    }\n  }\n  MemoryRange<WritableMemory> dataCursor = dataMemory.cursor();\n  long remainingInBlock = dataCursor.length();\n  long bytesWritten = fieldPositionBytes;\n  int reserveMultiple = 1;\n  for (int i = 0; i < fieldWriters.size(); i++) {\n    final FieldWriter fieldWriter = fieldWriters.get(i);\n    final long writeResult;\n    try {\n      writeResult = fieldWriter.writeTo(\n          dataCursor.memory(),\n          dataCursor.start() + bytesWritten,\n          remainingInBlock - bytesWritten\n      );\n    }\n    catch (InvalidNullByteException inbe) {\n      throw InvalidNullByteException.builder(inbe)\n                                    .column(signature.getColumnName(i))\n                                    .build();\n    }\n    catch (ParseException pe) {\n      throw Throwables.propagate(pe);\n    }\n    catch (Exception e) {\n      throw InvalidFieldException.builder().column(signature.getColumnName(i))\n                                 .errorMsg(e.getMessage())\n                                 .build();\n    }\n    if (writeResult < 0) {\n      i = -1;\n      reserveMultiple *= 2;\n      if (!dataMemory.reserveAdditional(Ints.checkedCast((long) BASE_DATA_ALLOCATION_SIZE * reserveMultiple))) {\n        return false;\n      }\n      dataCursor = dataMemory.cursor();\n      remainingInBlock = dataCursor.length();\n      bytesWritten = fieldPositionBytes;\n    } else {\n      bytesWritten += writeResult;\n      dataCursor.memory().putInt(dataCursor.start() + (long) i * Integer.BYTES, Ints.checkedCast(bytesWritten));\n    }\n  }\n  dataMemory.advanceCursor(Ints.checkedCast(bytesWritten));\n  return true;\n}"
       }
     ]
   }

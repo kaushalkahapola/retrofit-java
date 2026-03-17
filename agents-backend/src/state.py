@@ -72,6 +72,7 @@ class AdaptedHunk(TypedDict):
     hunk_text: str          # Unified Diff hunk string (@@-header + +/- lines)
     insertion_line: int     # Line number in target file where the hunk should anchor
     intent_verified: bool   # True if the blueprint validation LLM call passed
+    file_operation: Optional[str]  # "ADDED" | "DELETED" | "MODIFIED" | "RENAMED"
 
 
 # ---------------------------------------------------------------------------
