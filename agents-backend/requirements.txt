@@ -1,6 +1,7 @@
 langgraph
 langchain>=0.3.0
 langchain-openai>=0.2.0
+langchain-aws
 langchain-groq
 langchain_cerebras
 cerebras-cloud-sdk

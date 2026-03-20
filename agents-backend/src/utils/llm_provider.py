@@ -6,10 +6,11 @@ Supports multiple LLM providers:
   - Azure OpenAI (via Azure endpoint, deployment, version)
   - Groq (via Groq API)
   - Google Gemini (via Google API key or OpenAI-compatible endpoint)
+    - AWS Bedrock (via AWS credentials chain, region, optional profile)
   - Any OpenAI-compatible provider (via custom base URL)
 
 Configuration via environment variables:
-  - LLM_PROVIDER: 'openai', 'azure', 'groq', 'google', or 'custom'
+    - LLM_PROVIDER: 'openai', 'azure', 'groq', 'google', 'bedrock', or 'custom'
   - LLM_MODEL: Model name (e.g., 'gpt-4', 'claude-3-5-sonnet', 'mixtral-8x7b-32768')
   - OPENAI_API_KEY: API key for OpenAI / Groq / Google compatible endpoints
   - OPENAI_BASE_URL: Base URL for OpenAI-compatible endpoints
@@ -25,6 +26,14 @@ Configuration via environment variables:
   For Google Gemini:
     - GOOGLE_API_KEY: Google Gemini API key
     - Or use OpenAI-compatible endpoint if provided
+
+    For AWS Bedrock:
+        - AWS_REGION or AWS_DEFAULT_REGION: AWS region (e.g., 'us-east-1')
+        - AWS_PROFILE: Optional AWS profile name
+        - BEDROCK_MODEL_PROVIDER: Optional explicit provider (e.g., 'anthropic')
+        - BEDROCK_INFERENCE_PROFILE_ARN or BEDROCK_INFERENCE_PROFILE_ID: Optional
+            Inference profile identifier (required by some models for Converse API)
+        - AWS credentials should be available via standard AWS SDK chain
 """
 
 import os
@@ -33,6 +42,23 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _infer_bedrock_model_provider(model_name: str) -> Optional[str]:
+    """Infer Bedrock model provider from common model ID / ARN patterns."""
+    if not model_name:
+        return None
+
+    lowered = model_name.lower()
+    known_providers = ["anthropic", "amazon", "meta", "mistral", "cohere", "ai21"]
+    for provider in known_providers:
+        if lowered.startswith(f"{provider}."):
+            return provider
+        if f".{provider}." in lowered:
+            return provider
+        if f"/{provider}." in lowered:
+            return provider
+    return None
 
 
 def get_llm(
@@ -66,6 +92,8 @@ def get_llm(
         return _get_groq(llm_model, temperature)
     elif llm_provider == "google":
         return _get_google_gemini(llm_model, temperature)
+    elif llm_provider == "bedrock":
+        return _get_bedrock(llm_model, temperature)
     elif llm_provider == "cerebras":
         return _get_cerebras(llm_model, temperature)
     elif llm_provider == "custom" or llm_provider == "openai":
@@ -78,7 +106,7 @@ def get_llm(
     else:
         raise ValueError(
             f"Unsupported LLM provider: {llm_provider}. "
-            f"Supported: 'openai', 'azure', 'groq', 'google', 'cerebras', 'custom'"
+            f"Supported: 'openai', 'azure', 'groq', 'google', 'bedrock', 'cerebras', 'custom'"
         )
 
 
@@ -182,6 +210,89 @@ def _get_google_gemini(model: str, temperature: float) -> BaseChatModel:
         model=model,
         temperature=temperature,
         google_api_key=api_key,
+    )
+
+
+def _get_bedrock(model: str, temperature: float) -> BaseChatModel:
+    """Get AWS Bedrock instance using langchain-aws."""
+    try:
+        from langchain_aws import ChatBedrockConverse
+    except ImportError:
+        ChatBedrockConverse = None
+
+    try:
+        from langchain_aws import ChatBedrock
+    except ImportError:
+        ChatBedrock = None
+
+    if not ChatBedrockConverse and not ChatBedrock:
+        raise ImportError(
+            "langchain-aws is required for Bedrock provider. "
+            "Install with: pip install langchain-aws"
+        )
+
+    region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+    if not region:
+        raise ValueError(
+            "AWS_REGION or AWS_DEFAULT_REGION environment variable is required for Bedrock provider"
+        )
+
+    profile = os.getenv("AWS_PROFILE")
+    explicit_provider = os.getenv("BEDROCK_MODEL_PROVIDER")
+    inference_profile = (
+        os.getenv("BEDROCK_INFERENCE_PROFILE_ARN")
+        or os.getenv("BEDROCK_INFERENCE_PROFILE_ID")
+    )
+    effective_model = inference_profile or model
+    model_provider = explicit_provider or _infer_bedrock_model_provider(model)
+
+    base_kwargs = {"region_name": region}
+    if profile:
+        base_kwargs["credentials_profile_name"] = profile
+
+    constructors = [
+        (ChatBedrockConverse, "ChatBedrockConverse"),
+        (ChatBedrock, "ChatBedrock"),
+    ]
+    errors = []
+
+    # Some langchain-aws versions expose pydantic-style constructors where signature
+    # inspection is not reliable; use runtime fallbacks for known parameter variants.
+    for bedrock_cls, cls_name in constructors:
+        if not bedrock_cls:
+            continue
+
+        attempts = [
+            {**base_kwargs, "model": effective_model, "temperature": temperature},
+            {**base_kwargs, "model_id": effective_model, "temperature": temperature},
+            {**base_kwargs, "model": effective_model, "model_kwargs": {"temperature": temperature}},
+            {**base_kwargs, "model_id": effective_model, "model_kwargs": {"temperature": temperature}},
+        ]
+
+        if model_provider:
+            attempts.extend([
+                {**base_kwargs, "model": effective_model, "temperature": temperature, "model_provider": model_provider},
+                {**base_kwargs, "model_id": effective_model, "temperature": temperature, "model_provider": model_provider},
+                {**base_kwargs, "model": effective_model, "model_kwargs": {"temperature": temperature}, "model_provider": model_provider},
+                {**base_kwargs, "model_id": effective_model, "model_kwargs": {"temperature": temperature}, "model_provider": model_provider},
+                {**base_kwargs, "model": effective_model, "temperature": temperature, "provider": model_provider},
+                {**base_kwargs, "model_id": effective_model, "temperature": temperature, "provider": model_provider},
+            ])
+
+        for attempt_kwargs in attempts:
+            try:
+                return bedrock_cls(**attempt_kwargs)
+            except Exception as exc:
+                errors.append(f"{cls_name}({', '.join(attempt_kwargs.keys())}): {exc}")
+
+    error_preview = " | ".join(errors[:3])
+    raise ValueError(
+        "Unable to initialize AWS Bedrock provider with current langchain-aws version. "
+        "If you see 'on-demand throughput is not supported', set "
+        "BEDROCK_INFERENCE_PROFILE_ARN (or BEDROCK_INFERENCE_PROFILE_ID) and keep "
+        "LLM_MODEL as your base model. If you see model ARN/provider errors, set "
+        "BEDROCK_MODEL_PROVIDER (e.g., anthropic). "
+        f"Tried multiple constructor variants. First errors: {error_preview}"
     )
 
 

@@ -13,6 +13,7 @@ import difflib
 import json
 import os
 import re
+import logging
 import subprocess
 import sys
 import tempfile
@@ -31,14 +32,24 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def configure_logging() -> None:
+    """Configure process-wide logging for pipeline evaluation runs."""
+    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+
 # Configuration
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 DATASET_PATH = os.path.join(BASE_DIR, "datasets", "all_projects_final.csv")
 REPOS_DIR = os.path.join(BASE_DIR, "temp_repo_storage")
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 
-TARGET_PROJECTS = ["druid"]
-MAX_PATCHES_PER_PROJECT = 5  # Limit for testing; set to None for all
+TARGET_PROJECTS = ["elasticsearch"]
+MAX_PATCHES_PER_PROJECT = 1  # Limit for testing; set to None for all
 
 
 def ensure_dirs():
@@ -75,7 +86,7 @@ def setup_repos(mainline_commit, backport_commit, project, mainline_repo_path, t
     success, output = run_cmd(
         ["git", "checkout", mainline_commit],
         cwd=mainline_repo_path,
-        timeout=30
+        timeout=300
     )
     if not success:
         return False, f"Failed to checkout mainline commit {mainline_commit}: {output}"
@@ -84,7 +95,7 @@ def setup_repos(mainline_commit, backport_commit, project, mainline_repo_path, t
     success, output = run_cmd(
         ["git", "checkout", f"{backport_commit}^"],
         cwd=target_repo_path,
-        timeout=30
+        timeout=300
     )
     if not success:
         return False, f"Failed to checkout target commit {backport_commit}^: {output}"
@@ -99,7 +110,7 @@ def generate_mainline_patch(mainline_commit, mainline_repo_path):
     success, output = run_cmd(
         ["git", "format-patch", "-1", mainline_commit, "--stdout"],
         cwd=mainline_repo_path,
-        timeout=30
+        timeout=300
     )
     
     if not success:
@@ -119,7 +130,7 @@ def generate_developer_backport_patch(backport_commit, target_repo_path):
     success, output = run_cmd(
         ["git", "show", "--format=", "--no-color", backport_commit],
         cwd=target_repo_path,
-        timeout=30,
+        timeout=300,
     )
     if not success:
         return None, f"Failed to generate developer backport patch for {backport_commit}: {output}"
@@ -284,7 +295,7 @@ def _get_non_test_changed_files(commit, repo_path):
     success, output = run_cmd(
         ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit],
         cwd=repo_path,
-        timeout=30,
+        timeout=300,
     )
     if not success:
         return None, output
@@ -299,7 +310,7 @@ def _get_blob_id_from_commit(repo_path, commit, rel_path):
     success, output = run_cmd(
         ["git", "rev-parse", f"{commit}:{rel_path}"],
         cwd=repo_path,
-        timeout=30,
+        timeout=300,
     )
     if not success:
         return None
@@ -312,7 +323,7 @@ def _get_blob_id_from_index(repo_path, rel_path, env):
         ["git", "rev-parse", f":{rel_path}"],
         cwd=repo_path,
         env=env,
-        timeout=30,
+        timeout=300,
     )
     if not success:
         return None
@@ -331,7 +342,7 @@ def _apply_patch_with_temp_index(repo_path, patch_file_path, env):
 
     errors = []
     for cmd in attempts:
-        success, output = run_cmd(cmd, cwd=repo_path, env=env, timeout=30)
+        success, output = run_cmd(cmd, cwd=repo_path, env=env, timeout=300)
         if success:
             return True, ""
         errors.append(output)
@@ -380,7 +391,7 @@ def compare_generated_with_developer_patch(adapted_code_hunks, developer_patch_d
             ["git", "read-tree", f"{backport_commit}^"],
             cwd=target_repo_path,
             env=index_env,
-            timeout=60,
+            timeout=300,
         )
         if not success:
             return {
@@ -661,6 +672,7 @@ def is_patch_processed(project, patch_id):
 
 async def main():
     """Main evaluation pipeline."""
+    configure_logging()
     print("=" * 80)
     print("FULL PIPELINE EVALUATION (Phase 0-4)")
     print("=" * 80)

@@ -1,152 +1,152 @@
 [
   {
-    "project": "druid",
-    "patch_id": "druid_f8015eb0",
-    "mainline_commit": "f8015eb02a95925036b4ce5ad0c1384ff634b30a",
-    "backport_commit": "d6858771d1acb63c5fb39a3a6bcd62b03461dc15",
-    "timestamp": "2026-03-17T12:51:54.713404",
+    "project": "elasticsearch",
+    "patch_id": "elasticsearch_da51c8cc",
+    "mainline_commit": "da51c8ccbf0171abefb2978810efd6db0f6f743e",
+    "backport_commit": "b25542fd147164cd0e89a803bbe49f865972abdb",
+    "timestamp": "2026-03-20T09:34:44.015490",
     "phases": {
       "phase1_context_analyzer": {
         "context_analyzer": {
           "node": "context_analyzer",
           "outputs": {
             "semantic_blueprint": {
-              "root_cause_hypothesis": "Documentation missing description of the 'lagAggregate' configuration option for supervisor scaling. | The computeLagForAutoScaler method is exposed as a public API but is not intended for external use, potentially leading to misuse or unintended access. | The code previously used a single lag value from supervisor.computeLagForAutoScaler(), which did not support flexible aggregation or robust handling of missing lag stats, potentially leading to incorrect scaling decisions or failures. | Lack of configurability for the lag aggregation function in LagBasedAutoScalerConfig, preventing users from specifying how lag should be aggregated for autoscaling decisions. | The computeLagForAutoScaler() default method may provide misleading or unsafe lag values if not properly overridden by implementing classes, potentially leading to incorrect autoscaling decisions. | Missing definition of the AggregateFunction enum, which is required for code that needs to reference aggregate operations (MAX, SUM, AVERAGE) in the autoscaler logic. | The LagStats class lacked support for specifying and retrieving the preferred aggregate function for scaling, making it inflexible and potentially error-prone when different scaling metrics are needed.",
-              "fix_logic": "Added a new row to the configuration options table documenting the 'lagAggregate' parameter, its possible values, and default. | Removed the public computeLagForAutoScaler method from the KinesisSupervisor class, eliminating its exposure. | Replaced the direct call to supervisor.computeLagForAutoScaler() with supervisor.computeLagStats(), allowing selection of an aggregate function for lag calculation and handling null LagStats by defaulting to 0L. | Introduced a new AggregateFunction field 'lagAggregate' to LagBasedAutoScalerConfig, updated the constructor and toString method to handle it, and added a getter with appropriate Jackson annotations for serialization/deserialization. | Removed the default implementation of computeLagForAutoScaler(), requiring implementing classes to provide their own logic and preventing accidental reliance on a potentially unsafe default. | Introduced a new public enum AggregateFunction with values MAX, SUM, and AVERAGE to provide a type-safe way to specify aggregation operations. | Introduced a new field 'aggregateForScaling' with appropriate constructors, a getter, and a method to retrieve lag metrics by aggregate type, ensuring null safety and extensibility.",
+              "root_cause_hypothesis": "Incorrect use of try-with-resources on a ReleasableBytesReference that is not required to be explicitly closed, potentially leading to premature resource release or double release. | The use of MessageToMessageDecoder<ByteBuf> and its decode method is incompatible with the intended Netty pipeline usage, potentially leading to incorrect buffer handling or memory leaks due to improper buffer propagation and reference counting. | Improper resource management: ReleasableBytesReference buffers were not always properly closed, leading to potential memory/resource leaks during decoding, especially in decompression and fragment consumption paths. | Inefficient and potentially unsafe fragment handling in the message decoding pipeline due to use of a ThreadLocal ArrayList and manual fragment management, leading to possible memory/resource leaks and concurrency issues.",
+              "fix_logic": "Removed the try-with-resources block around Netty4Utils.toReleasableBytesReference(buffer) and instead passed the reference directly to pipeline.handleBytes, relying on the pipeline to manage resource release. | Replaces inheritance from MessageToMessageDecoder<ByteBuf> with ChannelInboundHandlerAdapter and rewrites the decode logic into channelRead, ensuring correct buffer handling and propagation via ctx.fireChannelRead, while maintaining buffer resizing logic for large ByteBufs. | Replaced Consumer<Object> with CheckedConsumer<Object, IOException> to allow fragmentConsumer to throw IOException, and refactored buffer handling to ensure all ReleasableBytesReference instances are closed via try-with-resources, eliminating the decompress helper and inlining resource management. | Replaces the ThreadLocal fragment list and manual fragment forwarding with a stateless, per-fragment consumer approach, eliminates unnecessary fragment accumulation, and simplifies resource management by forwarding fragments immediately as they are decoded.",
               "dependent_apis": [
-                "lagAggregate",
-                "computeLagForAutoScaler",
-                "computeLagStats",
-                "LagStats.getMaxLag",
-                "supervisor.computeLagStats",
-                "LagStats",
-                "AggregateFunction",
-                "lagBasedAutoScalerConfig.getLagAggregate",
-                "lagMetricsQueue.offer",
-                "getLagAggregate",
-                "LagBasedAutoScalerConfig",
-                "LagStats.getTotalLag",
-                "aggregateForScaling",
-                "getAggregateForScaling",
-                "getMetric"
+                "Netty4Utils.toReleasableBytesReference",
+                "pipeline.handleBytes",
+                "ReleasableBytesReference",
+                "ByteBuf",
+                "ChannelHandlerContext",
+                "MessageToMessageDecoder",
+                "ChannelInboundHandlerAdapter",
+                "decode",
+                "channelRead",
+                "ctx.fireChannelRead",
+                "internalDecode",
+                "finishMessage",
+                "decompress",
+                "fragmentConsumer",
+                "CheckedConsumer",
+                "doHandleBytes",
+                "fragmentList",
+                "forwardFragments",
+                "getPendingBytes",
+                "endOfMessage",
+                "forwardFragment",
+                "pending",
+                "decoder.decode"
               ],
-              "patch_intent_summary": "Enable flexible and robust lag aggregation for autoscaling by using LagStats and configurable aggregate functions, with safe handling of missing lag data.",
+              "patch_intent_summary": "Refactor the inbound message decoding pipeline to process and forward fragments immediately, removing the ThreadLocal fragment list and related resource management to improve safety and efficiency.",
               "hunk_chain": [
                 {
                   "hunk_index": 1,
-                  "file": "docs/ingestion/supervisor.md",
-                  "summary": "Adds a table row describing the 'lagAggregate' parameter, its purpose, possible values, and default.",
-                  "role": "declaration",
-                  "connects_to_next": "",
+                  "file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+                  "summary": "Removes the import statement for ReleasableBytesReference.",
+                  "role": "cleanup",
+                  "connects_to_next": "With the removal of explicit usage of ReleasableBytesReference in a try-with-resources block, the import is no longer needed, setting up for the code change in the next hunk.",
                   "global_index": 1
                 },
                 {
-                  "hunk_index": 1,
-                  "file": "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java",
-                  "summary": "Removes the public computeLagForAutoScaler method from the KinesisSupervisor class.",
+                  "hunk_index": 2,
+                  "file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+                  "summary": "Removes the try-with-resources block around Netty4Utils.toReleasableBytesReference(buffer) and passes the reference directly to pipeline.handleBytes.",
                   "role": "core_fix",
                   "connects_to_next": "",
                   "global_index": 2
                 },
                 {
                   "hunk_index": 1,
-                  "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
-                  "summary": "Adds imports for AggregateFunction and LagStats to support new lag aggregation logic.",
-                  "role": "declaration",
-                  "connects_to_next": "These imports are prerequisites for using LagStats and AggregateFunction in the lag computation logic updated in the next hunk.",
+                  "file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+                  "summary": "Changes the superclass from MessageToMessageDecoder<ByteBuf> to ChannelInboundHandlerAdapter, removing the dependency on the decoder abstraction.",
+                  "role": "refactor",
+                  "connects_to_next": "This refactor necessitates moving the buffer handling logic from the decode method to the channelRead method, which is implemented in the next hunk.",
                   "global_index": 3
                 },
                 {
                   "hunk_index": 2,
-                  "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
-                  "summary": "Replaces direct lag computation with LagStats-based aggregation, allowing configurable aggregation and null-safe lag metric collection.",
+                  "file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+                  "summary": "Replaces the decode method with an overridden channelRead method, adapting the buffer resizing logic and ensuring correct propagation of messages using ctx.fireChannelRead.",
                   "role": "core_fix",
                   "connects_to_next": "",
                   "global_index": 4
                 },
                 {
                   "hunk_index": 1,
-                  "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                  "summary": "Imports the AggregateFunction class, making it available for use in the file.",
+                  "file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                  "summary": "Imports CheckedConsumer and removes unused Consumer import.",
                   "role": "declaration",
-                  "connects_to_next": "Allows the declaration of an AggregateFunction-typed field in the class.",
+                  "connects_to_next": "Prepares for changing method signatures from Consumer to CheckedConsumer in subsequent hunks.",
                   "global_index": 5
                 },
                 {
                   "hunk_index": 2,
-                  "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                  "summary": "Declares a new private final field 'lagAggregate' of type AggregateFunction in LagBasedAutoScalerConfig.",
-                  "role": "declaration",
-                  "connects_to_next": "The new field must be initialized via the constructor, requiring changes to the constructor signature.",
+                  "file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                  "summary": "Changes decode method signature to use CheckedConsumer<Object, IOException> instead of Consumer<Object>.",
+                  "role": "propagation",
+                  "connects_to_next": "Requires internalDecode to also accept CheckedConsumer, propagating the signature change.",
                   "global_index": 6
                 },
                 {
                   "hunk_index": 3,
-                  "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                  "summary": "Adds a new parameter 'lagAggregate' to the constructor and marks it with @JsonProperty for deserialization.",
+                  "file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                  "summary": "Changes internalDecode method signature to use CheckedConsumer<Object, IOException> and updates its implementation.",
                   "role": "propagation",
-                  "connects_to_next": "The constructor parameter must be assigned to the new field, which is handled in the next hunk.",
+                  "connects_to_next": "Sets up for the core fix in buffer handling and resource management within the decoding logic.",
                   "global_index": 7
                 },
                 {
                   "hunk_index": 4,
-                  "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                  "summary": "Assigns the constructor parameter 'lagAggregate' to the class field.",
+                  "file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                  "summary": "Refactors buffer handling in the decoding logic: ensures all ReleasableBytesReference buffers are closed via try-with-resources, inlines decompression logic, and ensures fragmentConsumer is called with properly managed resources.",
                   "role": "core_fix",
-                  "connects_to_next": "With the field now set, a getter is needed to expose this configuration to other components.",
+                  "connects_to_next": "Requires finishMessage to also use CheckedConsumer and propagate IOException, as fragmentConsumer may now throw.",
                   "global_index": 8
                 },
                 {
                   "hunk_index": 5,
-                  "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                  "summary": "Adds a public getter method 'getLagAggregate' with @JsonProperty and @Nullable annotations.",
+                  "file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                  "summary": "Changes finishMessage to use CheckedConsumer<Object, IOException> and declare throws IOException.",
                   "role": "propagation",
-                  "connects_to_next": "To ensure the new field is visible in logs and debugging, the toString method must be updated.",
+                  "connects_to_next": "Removes the now-unnecessary decompress helper method, as its logic is inlined and resource management is handled directly.",
                   "global_index": 9
                 },
                 {
                   "hunk_index": 6,
-                  "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                  "summary": "Updates the toString method to include the new 'lagAggregate' field in the output.",
+                  "file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                  "summary": "Removes the decompress helper method, as resource management is now handled inline in the decoding logic.",
                   "role": "cleanup",
                   "connects_to_next": "",
                   "global_index": 10
                 },
                 {
                   "hunk_index": 1,
-                  "file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java",
-                  "summary": "Removes the default implementation of computeLagForAutoScaler() from the Supervisor interface.",
-                  "role": "core_fix",
-                  "connects_to_next": "",
+                  "file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+                  "summary": "Removes the ThreadLocal fragmentList field, which was used to accumulate decoded message fragments per thread.",
+                  "role": "cleanup",
+                  "connects_to_next": "With fragmentList removed, the code that used it in doHandleBytes must be refactored to no longer depend on accumulating fragments in a shared list.",
                   "global_index": 11
                 },
                 {
-                  "hunk_index": 1,
-                  "file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java",
-                  "summary": "Adds the AggregateFunction enum with MAX, SUM, and AVERAGE values.",
-                  "role": "declaration",
-                  "connects_to_next": "",
+                  "hunk_index": 2,
+                  "file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+                  "summary": "Refactors doHandleBytes to process and forward fragments immediately using a CheckedConsumer, eliminates the fragment accumulation logic, and introduces forwardFragment to handle each fragment as it is decoded.",
+                  "role": "core_fix",
+                  "connects_to_next": "With fragment accumulation and forwarding logic in doHandleBytes removed, the now-unused helper methods for fragment management (endOfMessage, getPendingBytes) can be deleted.",
                   "global_index": 12
                 },
                 {
-                  "hunk_index": 1,
-                  "file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
-                  "summary": "Adds the 'aggregateForScaling' field, updates constructors to accept it (with null safety), and sets a default value if not provided.",
-                  "role": "declaration",
-                  "connects_to_next": "With the new field and constructor in place, the next hunk can safely add methods to expose and utilize this field for metric retrieval.",
-                  "global_index": 13
-                },
-                {
-                  "hunk_index": 2,
-                  "file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
-                  "summary": "Introduces the 'getAggregateForScaling' getter and 'getMetric' method to retrieve lag metrics based on the specified aggregate function.",
-                  "role": "core_fix",
+                  "hunk_index": 3,
+                  "file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+                  "summary": "Removes the now-unused helper methods endOfMessage and getPendingBytes, which were previously used for fragment accumulation and decoding.",
+                  "role": "cleanup",
                   "connects_to_next": "",
-                  "global_index": 14
+                  "global_index": 13
                 }
               ]
             },
-            "patch_diff": "From f8015eb02a95925036b4ce5ad0c1384ff634b30a Mon Sep 17 00:00:00 2001\nFrom: Adithya Chakilam <35785271+adithyachakilam@users.noreply.github.com>\nDate: Mon, 29 Apr 2024 11:50:41 -0500\nSubject: [PATCH] Add config lagAggregate to LagBasedAutoScalerConfig  (#16334)\n\nChanges:\n- Add new config `lagAggregate` to `LagBasedAutoScalerConfig`\n- Add field `aggregateForScaling` to `LagStats`\n- Use the new field/config to determine which aggregate to use to compute lag\n- Remove method `Supervisor.computeLagForAutoScaler()`\n---\n docs/ingestion/supervisor.md                  |  1 +\n .../kinesis/supervisor/KinesisSupervisor.java |  7 -----\n .../autoscaler/LagBasedAutoScaler.java        | 15 ++++++++--\n .../autoscaler/LagBasedAutoScalerConfig.java  | 14 ++++++++-\n .../overlord/supervisor/Supervisor.java       |  9 ------\n .../autoscaler/AggregateFunction.java         | 27 +++++++++++++++++\n .../supervisor/autoscaler/LagStats.java       | 29 +++++++++++++++++++\n ...{SupervisorTest.java => LagStatsTest.java} | 15 +++++-----\n 8 files changed, 90 insertions(+), 27 deletions(-)\n create mode 100644 server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java\n rename server/src/test/java/org/apache/druid/indexing/overlord/supervisor/{SupervisorTest.java => LagStatsTest.java} (69%)\n\ndiff --git a/docs/ingestion/supervisor.md b/docs/ingestion/supervisor.md\nindex 76dd1cc4a7..9320c39a02 100644\n--- a/docs/ingestion/supervisor.md\n+++ b/docs/ingestion/supervisor.md\n@@ -96,6 +96,7 @@ The following table outlines the configuration properties related to the `lagBas\n |`scaleActionPeriodMillis`|The frequency in milliseconds to check if a scale action is triggered.|No|60000|\n |`scaleInStep`|The number of tasks to reduce at once when scaling down.|No|1|\n |`scaleOutStep`|The number of tasks to add at once when scaling out.|No|2|\n+|`lagAggregate`|The aggregate function used to compute the lag metric for scaling decisions. Possible values are `MAX`, `SUM` and `AVERAGE`. |No|`SUM`|\n \n The following example shows a supervisor spec with `lagBased` autoscaler:\n \ndiff --git a/extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java b/extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java\nindex 365a9135e3..a142f41476 100644\n--- a/extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java\n+++ b/extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java\n@@ -427,13 +427,6 @@ public class KinesisSupervisor extends SeekableStreamSupervisor<String, String,\n     );\n   }\n \n-  @Override\n-  public long computeLagForAutoScaler()\n-  {\n-    LagStats lagStats = computeLagStats();\n-    return lagStats == null ? 0L : lagStats.getMaxLag();\n-  }\n-\n   private SeekableStreamDataSourceMetadata<String, String> createDataSourceMetadataWithClosedOrExpiredPartitions(\n       SeekableStreamDataSourceMetadata<String, String> currentMetadata,\n       Set<String> terminatedPartitionIds,\ndiff --git a/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java b/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java\nindex f8618b06f7..ec81c5f9f9 100644\n--- a/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java\n+++ b/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java\n@@ -21,6 +21,8 @@ package org.apache.druid.indexing.seekablestream.supervisor.autoscaler;\n \n import org.apache.commons.collections4.queue.CircularFifoQueue;\n import org.apache.druid.indexing.overlord.supervisor.SupervisorSpec;\n+import org.apache.druid.indexing.overlord.supervisor.autoscaler.AggregateFunction;\n+import org.apache.druid.indexing.overlord.supervisor.autoscaler.LagStats;\n import org.apache.druid.indexing.overlord.supervisor.autoscaler.SupervisorTaskAutoScaler;\n import org.apache.druid.indexing.seekablestream.supervisor.SeekableStreamSupervisor;\n import org.apache.druid.java.util.common.StringUtils;\n@@ -154,8 +156,17 @@ public class LagBasedAutoScaler implements SupervisorTaskAutoScaler\n       LOCK.lock();\n       try {\n         if (!spec.isSuspended()) {\n-          long lag = supervisor.computeLagForAutoScaler();\n-          lagMetricsQueue.offer(lag > 0 ? lag : 0L);\n+          LagStats lagStats = supervisor.computeLagStats();\n+\n+          if (lagStats != null) {\n+            AggregateFunction aggregate = lagBasedAutoScalerConfig.getLagAggregate() == null ?\n+                                          lagStats.getAggregateForScaling() :\n+                                          lagBasedAutoScalerConfig.getLagAggregate();\n+            long lag = lagStats.getMetric(aggregate);\n+            lagMetricsQueue.offer(lag > 0 ? lag : 0L);\n+          } else {\n+            lagMetricsQueue.offer(0L);\n+          }\n           log.debug(\"Current lags for dataSource[%s] are [%s].\", dataSource, lagMetricsQueue);\n         } else {\n           log.warn(\"[%s] supervisor is suspended, skipping lag collection\", dataSource);\ndiff --git a/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java b/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java\nindex e03242de27..068e7cc4f8 100644\n--- a/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java\n+++ b/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java\n@@ -23,6 +23,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;\n import com.fasterxml.jackson.annotation.JsonProperty;\n import org.apache.druid.indexing.overlord.supervisor.Supervisor;\n import org.apache.druid.indexing.overlord.supervisor.SupervisorSpec;\n+import org.apache.druid.indexing.overlord.supervisor.autoscaler.AggregateFunction;\n import org.apache.druid.indexing.overlord.supervisor.autoscaler.SupervisorTaskAutoScaler;\n import org.apache.druid.indexing.seekablestream.supervisor.SeekableStreamSupervisor;\n import org.apache.druid.java.util.emitter.service.ServiceEmitter;\n@@ -45,6 +46,7 @@ public class LagBasedAutoScalerConfig implements AutoScalerConfig\n   private final int scaleOutStep;\n   private final boolean enableTaskAutoScaler;\n   private final long minTriggerScaleActionFrequencyMillis;\n+  private final AggregateFunction lagAggregate;\n \n   @JsonCreator\n   public LagBasedAutoScalerConfig(\n@@ -61,7 +63,8 @@ public class LagBasedAutoScalerConfig implements AutoScalerConfig\n           @Nullable @JsonProperty(\"scaleInStep\") Integer scaleInStep,\n           @Nullable @JsonProperty(\"scaleOutStep\") Integer scaleOutStep,\n           @Nullable @JsonProperty(\"enableTaskAutoScaler\") Boolean enableTaskAutoScaler,\n-          @Nullable @JsonProperty(\"minTriggerScaleActionFrequencyMillis\") Long minTriggerScaleActionFrequencyMillis\n+          @Nullable @JsonProperty(\"minTriggerScaleActionFrequencyMillis\") Long minTriggerScaleActionFrequencyMillis,\n+          @Nullable @JsonProperty(\"lagAggregate\") AggregateFunction lagAggregate\n   )\n   {\n     this.enableTaskAutoScaler = enableTaskAutoScaler != null ? enableTaskAutoScaler : false;\n@@ -73,6 +76,7 @@ public class LagBasedAutoScalerConfig implements AutoScalerConfig\n     this.scaleInThreshold = scaleInThreshold != null ? scaleInThreshold : 1000000;\n     this.triggerScaleOutFractionThreshold = triggerScaleOutFractionThreshold != null ? triggerScaleOutFractionThreshold : 0.3;\n     this.triggerScaleInFractionThreshold = triggerScaleInFractionThreshold != null ? triggerScaleInFractionThreshold : 0.9;\n+    this.lagAggregate = lagAggregate;\n \n     // Only do taskCountMax and taskCountMin check when autoscaler is enabled. So that users left autoConfig empty{} will not throw any exception and autoscaler is disabled.\n     // If autoscaler is disabled, no matter what configs are set, they are not used.\n@@ -186,6 +190,13 @@ public class LagBasedAutoScalerConfig implements AutoScalerConfig\n     return minTriggerScaleActionFrequencyMillis;\n   }\n \n+  @JsonProperty\n+  @Nullable\n+  public AggregateFunction getLagAggregate()\n+  {\n+    return lagAggregate;\n+  }\n+\n   @Override\n   public String toString()\n   {\n@@ -204,6 +215,7 @@ public class LagBasedAutoScalerConfig implements AutoScalerConfig\n             \", scaleActionPeriodMillis=\" + scaleActionPeriodMillis +\n             \", scaleInStep=\" + scaleInStep +\n             \", scaleOutStep=\" + scaleOutStep +\n+            \", lagAggregate=\" + lagAggregate +\n             '}';\n   }\n }\ndiff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java\nindex b1fb439184..bcfc5ebe81 100644\n--- a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java\n+++ b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java\n@@ -92,14 +92,5 @@ public interface Supervisor\n    */\n   LagStats computeLagStats();\n \n-  /**\n-   * Used by AutoScaler to make scaling decisions.\n-   */\n-  default long computeLagForAutoScaler()\n-  {\n-    LagStats lagStats = computeLagStats();\n-    return lagStats == null ? 0L : lagStats.getTotalLag();\n-  }\n-\n   int getActiveTaskGroupsCount();\n }\ndiff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java\nnew file mode 100644\nindex 0000000000..247c05180b\n--- /dev/null\n+++ b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java\n@@ -0,0 +1,27 @@\n+/*\n+ * Licensed to the Apache Software Foundation (ASF) under one\n+ * or more contributor license agreements.  See the NOTICE file\n+ * distributed with this work for additional information\n+ * regarding copyright ownership.  The ASF licenses this file\n+ * to you under the Apache License, Version 2.0 (the\n+ * \"License\"); you may not use this file except in compliance\n+ * with the License.  You may obtain a copy of the License at\n+ *\n+ *   http://www.apache.org/licenses/LICENSE-2.0\n+ *\n+ * Unless required by applicable law or agreed to in writing,\n+ * software distributed under the License is distributed on an\n+ * \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY\n+ * KIND, either express or implied.  See the License for the\n+ * specific language governing permissions and limitations\n+ * under the License.\n+ */\n+\n+package org.apache.druid.indexing.overlord.supervisor.autoscaler;\n+\n+public enum AggregateFunction\n+{\n+  MAX,\n+  SUM,\n+  AVERAGE\n+}\ndiff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java\nindex 7b6e5fd0ba..2240585680 100644\n--- a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java\n+++ b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java\n@@ -24,12 +24,19 @@ public class LagStats\n   private final long maxLag;\n   private final long totalLag;\n   private final long avgLag;\n+  private final AggregateFunction aggregateForScaling;\n \n   public LagStats(long maxLag, long totalLag, long avgLag)\n+  {\n+    this(maxLag, totalLag, avgLag, AggregateFunction.SUM);\n+  }\n+\n+  public LagStats(long maxLag, long totalLag, long avgLag, AggregateFunction aggregateForScaling)\n   {\n     this.maxLag = maxLag;\n     this.totalLag = totalLag;\n     this.avgLag = avgLag;\n+    this.aggregateForScaling = aggregateForScaling == null ? AggregateFunction.SUM : aggregateForScaling;\n   }\n \n   public long getMaxLag()\n@@ -46,4 +53,26 @@ public class LagStats\n   {\n     return avgLag;\n   }\n+\n+  /**\n+   * The preferred scaling metric that supervisor may specify to be used.\n+   * This could be overrided by the autscaler.\n+   */\n+  public AggregateFunction getAggregateForScaling()\n+  {\n+    return aggregateForScaling;\n+  }\n+\n+  public long getMetric(AggregateFunction metric)\n+  {\n+    switch (metric) {\n+      case MAX:\n+        return getMaxLag();\n+      case SUM:\n+        return getTotalLag();\n+      case AVERAGE:\n+        return getAvgLag();\n+    }\n+    throw new IllegalStateException(\"Unknown scale metric\");\n+  }\n }\ndiff --git a/server/src/test/java/org/apache/druid/indexing/overlord/supervisor/SupervisorTest.java b/server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java\nsimilarity index 69%\nrename from server/src/test/java/org/apache/druid/indexing/overlord/supervisor/SupervisorTest.java\nrename to server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java\nindex 79811079d3..5799d8c5e8 100644\n--- a/server/src/test/java/org/apache/druid/indexing/overlord/supervisor/SupervisorTest.java\n+++ b/server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java\n@@ -19,22 +19,21 @@\n \n package org.apache.druid.indexing.overlord.supervisor;\n \n+import org.apache.druid.indexing.overlord.supervisor.autoscaler.AggregateFunction;\n import org.apache.druid.indexing.overlord.supervisor.autoscaler.LagStats;\n import org.junit.Assert;\n import org.junit.Test;\n-import org.mockito.Mockito;\n \n-public class SupervisorTest\n+public class LagStatsTest\n {\n   @Test\n   public void testAutoScalerLagComputation()\n   {\n-    Supervisor supervisor = Mockito.spy(Supervisor.class);\n+    LagStats lagStats = new LagStats(1, 2, 3);\n \n-    Mockito.when(supervisor.computeLagStats()).thenReturn(new LagStats(1, 2, 3));\n-    Assert.assertEquals(2, supervisor.computeLagForAutoScaler());\n-\n-    Mockito.when(supervisor.computeLagStats()).thenReturn(null);\n-    Assert.assertEquals(0, supervisor.computeLagForAutoScaler());\n+    Assert.assertEquals(1, lagStats.getMetric(AggregateFunction.MAX));\n+    Assert.assertEquals(2, lagStats.getMetric(AggregateFunction.SUM));\n+    Assert.assertEquals(3, lagStats.getMetric(AggregateFunction.AVERAGE));\n+    Assert.assertEquals(AggregateFunction.SUM, lagStats.getAggregateForScaling());\n   }\n }\n-- \n2.43.0\n\n"
+            "patch_diff": "From da51c8ccbf0171abefb2978810efd6db0f6f743e Mon Sep 17 00:00:00 2001\nFrom: Armin Braun <me@obrown.io>\nDate: Wed, 26 Feb 2025 23:11:17 +0100\nSubject: [PATCH] Remove lots of redundant ref-counting from transport pipeline\n (#123390)\n\nWe can do with a whole lot less in ref-counting, avoiding lots of contention and speeding\nup the logic in general by only incrementing ref-counts where ownership is unclear while\navoiding count changes on obvious \"moves\".\n---\n .../netty4/Netty4MessageInboundHandler.java   |   5 +-\n .../transport/netty4/NettyByteBufSizer.java   |  20 ++-\n .../transport/InboundDecoder.java             |  38 +++--\n .../transport/InboundPipeline.java            | 133 +++++++-----------\n .../transport/InboundDecoderTests.java        |   9 +-\n .../transport/InboundPipelineTests.java       |  22 ++-\n 6 files changed, 97 insertions(+), 130 deletions(-)\n\ndiff --git a/modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java b/modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java\nindex 8fdb7051e2b..46f810ed2d9 100644\n--- a/modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java\n+++ b/modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java\n@@ -14,7 +14,6 @@ import io.netty.channel.ChannelInboundHandlerAdapter;\n \n import org.elasticsearch.ElasticsearchException;\n import org.elasticsearch.ExceptionsHelper;\n-import org.elasticsearch.common.bytes.ReleasableBytesReference;\n import org.elasticsearch.common.network.ThreadWatchdog;\n import org.elasticsearch.core.Releasables;\n import org.elasticsearch.transport.InboundPipeline;\n@@ -51,8 +50,8 @@ public class Netty4MessageInboundHandler extends ChannelInboundHandlerAdapter {\n         final ByteBuf buffer = (ByteBuf) msg;\n         Netty4TcpChannel channel = ctx.channel().attr(Netty4Transport.CHANNEL_KEY).get();\n         activityTracker.startActivity();\n-        try (ReleasableBytesReference reference = Netty4Utils.toReleasableBytesReference(buffer)) {\n-            pipeline.handleBytes(channel, reference);\n+        try {\n+            pipeline.handleBytes(channel, Netty4Utils.toReleasableBytesReference(buffer));\n         } finally {\n             activityTracker.stopActivity();\n         }\ndiff --git a/modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java b/modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java\nindex 2d62f8eb19e..4a9be0acaaa 100644\n--- a/modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java\n+++ b/modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java\n@@ -12,12 +12,10 @@ package org.elasticsearch.transport.netty4;\n import io.netty.buffer.ByteBuf;\n import io.netty.channel.ChannelHandler;\n import io.netty.channel.ChannelHandlerContext;\n-import io.netty.handler.codec.MessageToMessageDecoder;\n-\n-import java.util.List;\n+import io.netty.channel.ChannelInboundHandlerAdapter;\n \n @ChannelHandler.Sharable\n-public class NettyByteBufSizer extends MessageToMessageDecoder<ByteBuf> {\n+public class NettyByteBufSizer extends ChannelInboundHandlerAdapter {\n \n     public static final NettyByteBufSizer INSTANCE = new NettyByteBufSizer();\n \n@@ -26,14 +24,12 @@ public class NettyByteBufSizer extends MessageToMessageDecoder<ByteBuf> {\n     }\n \n     @Override\n-    protected void decode(ChannelHandlerContext ctx, ByteBuf buf, List<Object> out) {\n-        int readableBytes = buf.readableBytes();\n-        if (buf.capacity() >= 1024) {\n-            ByteBuf resized = buf.discardReadBytes().capacity(readableBytes);\n-            assert resized.readableBytes() == readableBytes;\n-            out.add(resized.retain());\n-        } else {\n-            out.add(buf.retain());\n+    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {\n+        if (msg instanceof ByteBuf buf && buf.capacity() >= 1024) {\n+            int readableBytes = buf.readableBytes();\n+            buf = buf.discardReadBytes().capacity(readableBytes);\n+            assert buf.readableBytes() == readableBytes;\n         }\n+        ctx.fireChannelRead(msg);\n     }\n }\ndiff --git a/server/src/main/java/org/elasticsearch/transport/InboundDecoder.java b/server/src/main/java/org/elasticsearch/transport/InboundDecoder.java\nindex eed3cbd7e82..fdcbd6912bc 100644\n--- a/server/src/main/java/org/elasticsearch/transport/InboundDecoder.java\n+++ b/server/src/main/java/org/elasticsearch/transport/InboundDecoder.java\n@@ -18,12 +18,12 @@ import org.elasticsearch.common.io.stream.StreamInput;\n import org.elasticsearch.common.recycler.Recycler;\n import org.elasticsearch.common.unit.ByteSizeUnit;\n import org.elasticsearch.common.unit.ByteSizeValue;\n+import org.elasticsearch.core.CheckedConsumer;\n import org.elasticsearch.core.Releasable;\n import org.elasticsearch.core.Releasables;\n \n import java.io.IOException;\n import java.io.StreamCorruptedException;\n-import java.util.function.Consumer;\n \n public class InboundDecoder implements Releasable {\n \n@@ -53,7 +53,7 @@ public class InboundDecoder implements Releasable {\n         this.channelType = channelType;\n     }\n \n-    public int decode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {\n+    public int decode(ReleasableBytesReference reference, CheckedConsumer<Object, IOException> fragmentConsumer) throws IOException {\n         ensureOpen();\n         try {\n             return internalDecode(reference, fragmentConsumer);\n@@ -63,7 +63,8 @@ public class InboundDecoder implements Releasable {\n         }\n     }\n \n-    public int internalDecode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {\n+    public int internalDecode(ReleasableBytesReference reference, CheckedConsumer<Object, IOException> fragmentConsumer)\n+        throws IOException {\n         if (isOnHeader()) {\n             int messageLength = TcpTransport.readMessageLength(reference);\n             if (messageLength == -1) {\n@@ -104,25 +105,28 @@ public class InboundDecoder implements Releasable {\n             }\n             int remainingToConsume = totalNetworkSize - bytesConsumed;\n             int maxBytesToConsume = Math.min(reference.length(), remainingToConsume);\n-            ReleasableBytesReference retainedContent;\n-            if (maxBytesToConsume == remainingToConsume) {\n-                retainedContent = reference.retainedSlice(0, maxBytesToConsume);\n-            } else {\n-                retainedContent = reference.retain();\n-            }\n-\n             int bytesConsumedThisDecode = 0;\n             if (decompressor != null) {\n-                bytesConsumedThisDecode += decompress(retainedContent);\n+                bytesConsumedThisDecode += decompressor.decompress(\n+                    maxBytesToConsume == remainingToConsume ? reference.slice(0, maxBytesToConsume) : reference\n+                );\n                 bytesConsumed += bytesConsumedThisDecode;\n                 ReleasableBytesReference decompressed;\n                 while ((decompressed = decompressor.pollDecompressedPage(isDone())) != null) {\n-                    fragmentConsumer.accept(decompressed);\n+                    try (var buf = decompressed) {\n+                        fragmentConsumer.accept(buf);\n+                    }\n                 }\n             } else {\n                 bytesConsumedThisDecode += maxBytesToConsume;\n                 bytesConsumed += maxBytesToConsume;\n-                fragmentConsumer.accept(retainedContent);\n+                if (maxBytesToConsume == remainingToConsume) {\n+                    try (ReleasableBytesReference retained = reference.retainedSlice(0, maxBytesToConsume)) {\n+                        fragmentConsumer.accept(retained);\n+                    }\n+                } else {\n+                    fragmentConsumer.accept(reference);\n+                }\n             }\n             if (isDone()) {\n                 finishMessage(fragmentConsumer);\n@@ -138,7 +142,7 @@ public class InboundDecoder implements Releasable {\n         cleanDecodeState();\n     }\n \n-    private void finishMessage(Consumer<Object> fragmentConsumer) {\n+    private void finishMessage(CheckedConsumer<Object, IOException> fragmentConsumer) throws IOException {\n         cleanDecodeState();\n         fragmentConsumer.accept(END_CONTENT);\n     }\n@@ -154,12 +158,6 @@ public class InboundDecoder implements Releasable {\n         }\n     }\n \n-    private int decompress(ReleasableBytesReference content) throws IOException {\n-        try (content) {\n-            return decompressor.decompress(content);\n-        }\n-    }\n-\n     private boolean isDone() {\n         return bytesConsumed == totalNetworkSize;\n     }\ndiff --git a/server/src/main/java/org/elasticsearch/transport/InboundPipeline.java b/server/src/main/java/org/elasticsearch/transport/InboundPipeline.java\nindex 35665e95c80..abc3e29727b 100644\n--- a/server/src/main/java/org/elasticsearch/transport/InboundPipeline.java\n+++ b/server/src/main/java/org/elasticsearch/transport/InboundPipeline.java\n@@ -11,18 +11,17 @@ package org.elasticsearch.transport;\n \n import org.elasticsearch.common.bytes.CompositeBytesReference;\n import org.elasticsearch.common.bytes.ReleasableBytesReference;\n+import org.elasticsearch.core.CheckedConsumer;\n import org.elasticsearch.core.Releasable;\n import org.elasticsearch.core.Releasables;\n \n import java.io.IOException;\n import java.util.ArrayDeque;\n-import java.util.ArrayList;\n import java.util.function.BiConsumer;\n import java.util.function.LongSupplier;\n \n public class InboundPipeline implements Releasable {\n \n-    private static final ThreadLocal<ArrayList<Object>> fragmentList = ThreadLocal.withInitial(ArrayList::new);\n     private static final InboundMessage PING_MESSAGE = new InboundMessage(null, true);\n \n     private final LongSupplier relativeTimeInMillis;\n@@ -56,81 +55,74 @@ public class InboundPipeline implements Releasable {\n \n     public void handleBytes(TcpChannel channel, ReleasableBytesReference reference) throws IOException {\n         if (uncaughtException != null) {\n+            reference.close();\n             throw new IllegalStateException(\"Pipeline state corrupted by uncaught exception\", uncaughtException);\n         }\n         try {\n-            doHandleBytes(channel, reference);\n+            channel.getChannelStats().markAccessed(relativeTimeInMillis.getAsLong());\n+            statsTracker.markBytesRead(reference.length());\n+            if (isClosed) {\n+                reference.close();\n+                return;\n+            }\n+            pending.add(reference);\n+            doHandleBytes(channel);\n         } catch (Exception e) {\n             uncaughtException = e;\n             throw e;\n         }\n     }\n \n-    public void doHandleBytes(TcpChannel channel, ReleasableBytesReference reference) throws IOException {\n-        channel.getChannelStats().markAccessed(relativeTimeInMillis.getAsLong());\n-        statsTracker.markBytesRead(reference.length());\n-        pending.add(reference.retain());\n-\n-        final ArrayList<Object> fragments = fragmentList.get();\n-        boolean continueHandling = true;\n-\n-        while (continueHandling && isClosed == false) {\n-            boolean continueDecoding = true;\n-            while (continueDecoding && pending.isEmpty() == false) {\n-                try (ReleasableBytesReference toDecode = getPendingBytes()) {\n-                    final int bytesDecoded = decoder.decode(toDecode, fragments::add);\n-                    if (bytesDecoded != 0) {\n-                        releasePendingBytes(bytesDecoded);\n-                        if (fragments.isEmpty() == false && endOfMessage(fragments.get(fragments.size() - 1))) {\n-                            continueDecoding = false;\n-                        }\n-                    } else {\n-                        continueDecoding = false;\n-                    }\n+    private void doHandleBytes(TcpChannel channel) throws IOException {\n+        do {\n+            CheckedConsumer<Object, IOException> decodeConsumer = f -> forwardFragment(channel, f);\n+            int bytesDecoded = decoder.decode(pending.peekFirst(), decodeConsumer);\n+            if (bytesDecoded == 0 && pending.size() > 1) {\n+                final ReleasableBytesReference[] bytesReferences = new ReleasableBytesReference[pending.size()];\n+                int index = 0;\n+                for (ReleasableBytesReference pendingReference : pending) {\n+                    bytesReferences[index] = pendingReference.retain();\n+                    ++index;\n+                }\n+                try (\n+                    ReleasableBytesReference toDecode = new ReleasableBytesReference(\n+                        CompositeBytesReference.of(bytesReferences),\n+                        () -> Releasables.closeExpectNoException(bytesReferences)\n+                    )\n+                ) {\n+                    bytesDecoded = decoder.decode(toDecode, decodeConsumer);\n                 }\n             }\n-\n-            if (fragments.isEmpty()) {\n-                continueHandling = false;\n+            if (bytesDecoded != 0) {\n+                releasePendingBytes(bytesDecoded);\n             } else {\n-                try {\n-                    forwardFragments(channel, fragments);\n-                } finally {\n-                    for (Object fragment : fragments) {\n-                        if (fragment instanceof ReleasableBytesReference) {\n-                            ((ReleasableBytesReference) fragment).close();\n-                        }\n-                    }\n-                    fragments.clear();\n-                }\n+                break;\n             }\n-        }\n+        } while (pending.isEmpty() == false);\n     }\n \n-    private void forwardFragments(TcpChannel channel, ArrayList<Object> fragments) throws IOException {\n-        for (Object fragment : fragments) {\n-            if (fragment instanceof Header) {\n-                headerReceived((Header) fragment);\n-            } else if (fragment instanceof Compression.Scheme) {\n-                assert aggregator.isAggregating();\n-                aggregator.updateCompressionScheme((Compression.Scheme) fragment);\n-            } else if (fragment == InboundDecoder.PING) {\n-                assert aggregator.isAggregating() == false;\n-                messageHandler.accept(channel, PING_MESSAGE);\n-            } else if (fragment == InboundDecoder.END_CONTENT) {\n-                assert aggregator.isAggregating();\n-                InboundMessage aggregated = aggregator.finishAggregation();\n-                try {\n-                    statsTracker.markMessageReceived();\n-                    messageHandler.accept(channel, aggregated);\n-                } finally {\n-                    aggregated.decRef();\n-                }\n-            } else {\n-                assert aggregator.isAggregating();\n-                assert fragment instanceof ReleasableBytesReference;\n-                aggregator.aggregate((ReleasableBytesReference) fragment);\n+    private void forwardFragment(TcpChannel channel, Object fragment) throws IOException {\n+        if (fragment instanceof Header) {\n+            headerReceived((Header) fragment);\n+        } else if (fragment instanceof Compression.Scheme) {\n+            assert aggregator.isAggregating();\n+            aggregator.updateCompressionScheme((Compression.Scheme) fragment);\n+        } else if (fragment == InboundDecoder.PING) {\n+            assert aggregator.isAggregating() == false;\n+            messageHandler.accept(channel, PING_MESSAGE);\n+        } else if (fragment == InboundDecoder.END_CONTENT) {\n+            assert aggregator.isAggregating();\n+            InboundMessage aggregated = aggregator.finishAggregation();\n+            try {\n+                statsTracker.markMessageReceived();\n+                messageHandler.accept(channel, aggregated);\n+            } finally {\n+                aggregated.decRef();\n             }\n+        } else {\n+            assert aggregator.isAggregating();\n+            assert fragment instanceof ReleasableBytesReference;\n+            aggregator.aggregate((ReleasableBytesReference) fragment);\n         }\n     }\n \n@@ -139,25 +131,6 @@ public class InboundPipeline implements Releasable {\n         aggregator.headerReceived(header);\n     }\n \n-    private static boolean endOfMessage(Object fragment) {\n-        return fragment == InboundDecoder.PING || fragment == InboundDecoder.END_CONTENT || fragment instanceof Exception;\n-    }\n-\n-    private ReleasableBytesReference getPendingBytes() {\n-        if (pending.size() == 1) {\n-            return pending.peekFirst().retain();\n-        } else {\n-            final ReleasableBytesReference[] bytesReferences = new ReleasableBytesReference[pending.size()];\n-            int index = 0;\n-            for (ReleasableBytesReference pendingReference : pending) {\n-                bytesReferences[index] = pendingReference.retain();\n-                ++index;\n-            }\n-            final Releasable releasable = () -> Releasables.closeExpectNoException(bytesReferences);\n-            return new ReleasableBytesReference(CompositeBytesReference.of(bytesReferences), releasable);\n-        }\n-    }\n-\n     private void releasePendingBytes(int bytesConsumed) {\n         int bytesToRelease = bytesConsumed;\n         while (bytesToRelease != 0) {\ndiff --git a/server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java b/server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java\nindex cfb3cc68e03..97ca7d2ecd9 100644\n--- a/server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java\n+++ b/server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java\n@@ -117,8 +117,6 @@ public class InboundDecoderTests extends ESTestCase {\n             assertEquals(messageBytes, content);\n             // Ref count is incremented since the bytes are forwarded as a fragment\n             assertTrue(releasable2.hasReferences());\n-            releasable2.decRef();\n-            assertTrue(releasable2.hasReferences());\n             assertTrue(releasable2.decRef());\n             assertEquals(InboundDecoder.END_CONTENT, endMarker);\n         }\n@@ -335,7 +333,12 @@ public class InboundDecoderTests extends ESTestCase {\n \n             final BytesReference bytes2 = totalBytes.slice(bytesConsumed, totalBytes.length() - bytesConsumed);\n             final ReleasableBytesReference releasable2 = wrapAsReleasable(bytes2);\n-            int bytesConsumed2 = decoder.decode(releasable2, fragments::add);\n+            int bytesConsumed2 = decoder.decode(releasable2, e -> {\n+                fragments.add(e);\n+                if (e instanceof ReleasableBytesReference reference) {\n+                    reference.retain();\n+                }\n+            });\n             assertEquals(totalBytes.length() - totalHeaderSize, bytesConsumed2);\n \n             final Object compressionScheme = fragments.get(0);\ndiff --git a/server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java b/server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java\nindex 282cb720f52..d0c6cd8b00f 100644\n--- a/server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java\n+++ b/server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java\n@@ -159,12 +159,11 @@ public class InboundPipelineTests extends ESTestCase {\n                     final int remainingBytes = networkBytes.length() - currentOffset;\n                     final int bytesToRead = Math.min(randomIntBetween(1, 32 * 1024), remainingBytes);\n                     final BytesReference slice = networkBytes.slice(currentOffset, bytesToRead);\n-                    try (ReleasableBytesReference reference = new ReleasableBytesReference(slice, () -> {})) {\n-                        toRelease.add(reference);\n-                        bytesReceived += reference.length();\n-                        pipeline.handleBytes(channel, reference);\n-                        currentOffset += bytesToRead;\n-                    }\n+                    ReleasableBytesReference reference = new ReleasableBytesReference(slice, () -> {});\n+                    toRelease.add(reference);\n+                    bytesReceived += reference.length();\n+                    pipeline.handleBytes(channel, reference);\n+                    currentOffset += bytesToRead;\n                 }\n \n                 final int messages = expected.size();\n@@ -288,13 +287,12 @@ public class InboundPipelineTests extends ESTestCase {\n             final Releasable releasable = () -> bodyReleased.set(true);\n             final int from = totalHeaderSize - 1;\n             final BytesReference partHeaderPartBody = reference.slice(from, reference.length() - from - 1);\n-            try (ReleasableBytesReference slice = new ReleasableBytesReference(partHeaderPartBody, releasable)) {\n-                pipeline.handleBytes(new FakeTcpChannel(), slice);\n-            }\n+            pipeline.handleBytes(new FakeTcpChannel(), new ReleasableBytesReference(partHeaderPartBody, releasable));\n             assertFalse(bodyReleased.get());\n-            try (ReleasableBytesReference slice = new ReleasableBytesReference(reference.slice(reference.length() - 1, 1), releasable)) {\n-                pipeline.handleBytes(new FakeTcpChannel(), slice);\n-            }\n+            pipeline.handleBytes(\n+                new FakeTcpChannel(),\n+                new ReleasableBytesReference(reference.slice(reference.length() - 1, 1), releasable)\n+            );\n             assertTrue(bodyReleased.get());\n         }\n     }\n-- \n2.43.0\n\n"
           }
         }
       },
@@ -154,146 +154,134 @@
         "structural_locator": {
           "node": "structural_locator",
           "outputs": {
-            "consistency_map": {},
+            "consistency_map": {
+              "decode": "channelRead",
+              "Consumer<Object>": "CheckedConsumer<Object, IOException>"
+            },
             "mapped_target_context": {
-              "docs/ingestion/supervisor.md": [
-                {
-                  "hunk_index": 1,
-                  "mainline_method": null,
-                  "target_file": "docs/ingestion/supervisor.md",
-                  "target_method": null,
-                  "start_line": 99,
-                  "end_line": 99,
-                  "code_snippet": "|`lagAggregate`|The aggregate function used to compute the lag metric for scaling decisions. Possible values are `MAX`, `SUM` and `AVERAGE`. |No|`SUM`|"
-                }
-              ],
-              "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java": [
-                {
-                  "hunk_index": 1,
-                  "mainline_method": "computeLagForAutoScaler",
-                  "target_file": "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java",
-                  "target_method": "computeLagForAutoScaler",
-                  "start_line": 431,
-                  "end_line": 435,
-                  "code_snippet": "  public long computeLagForAutoScaler()\n  {\n    LagStats lagStats = computeLagStats();\n    return lagStats == null ? 0L : lagStats.getMaxLag();\n  }"
-                }
-              ],
-              "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java": [
+              "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java": [
                 {
                   "hunk_index": 1,
                   "mainline_method": "<import>",
-                  "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
+                  "target_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
                   "target_method": "<import>",
-                  "start_line": 4,
-                  "end_line": 4,
-                  "code_snippet": "import org.apache.druid.indexing.overlord.supervisor.autoscaler.AggregateFunction;\nimport org.apache.druid.indexing.overlord.supervisor.autoscaler.LagStats;"
+                  "start_line": 15,
+                  "end_line": 15,
+                  "code_snippet": "import org.elasticsearch.common.bytes.ReleasableBytesReference;"
                 },
                 {
                   "hunk_index": 2,
-                  "mainline_method": "computeAndCollectLag",
-                  "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
-                  "target_method": "computeAndCollectLag",
-                  "start_line": 151,
-                  "end_line": 183,
-                  "code_snippet": "private Runnable computeAndCollectLag()\n  {\n    return () -> {\n      LOCK.lock();\n      try {\n        if (!spec.isSuspended()) {\n          long lag = supervisor.computeLagForAutoScaler();\n          lagMetricsQueue.offer(lag > 0 ? lag : 0L);\n          log.debug(\"Current lags for dataSource[%s] are [%s].\", dataSource, lagMetricsQueue);\n        } else {\n          log.warn(\"[%s] supervisor is suspended, skipping lag collection\", dataSource);\n        }\n      }\n      catch (Exception e) {\n        log.error(e, \"Error while collecting lags\");\n      }\n      finally {\n        LOCK.unlock();\n      }\n    };\n  }"
+                  "mainline_method": "channelRead",
+                  "target_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+                  "target_method": "channelRead",
+                  "start_line": 51,
+                  "end_line": 58,
+                  "code_snippet": "    @Override\n    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {\n        final ByteBuf buffer = (ByteBuf) msg;\n        Netty4TcpChannel channel = ctx.channel().attr(Netty4Transport.CHANNEL_KEY).get();\n        activityTracker.startActivity();\n        try (ReleasableBytesReference reference = Netty4Utils.toReleasableBytesReference(buffer)) {\n            pipeline.handleBytes(channel, reference);\n        } finally {\n            activityTracker.stopActivity();\n        }\n    }"
                 }
               ],
-              "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java": [
+              "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java": [
+                {
+                  "hunk_index": 1,
+                  "mainline_method": "NettyByteBufSizer",
+                  "target_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+                  "target_method": "NettyByteBufSizer",
+                  "start_line": 17,
+                  "end_line": 19,
+                  "code_snippet": "public class NettyByteBufSizer extends MessageToMessageDecoder<ByteBuf> {\n\n    public static final NettyByteBufSizer INSTANCE = new NettyByteBufSizer();"
+                },
+                {
+                  "hunk_index": 2,
+                  "mainline_method": "decode",
+                  "target_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+                  "target_method": "decode",
+                  "start_line": 23,
+                  "end_line": 33,
+                  "code_snippet": "    @Override\n    protected void decode(ChannelHandlerContext ctx, ByteBuf buf, List<Object> out) {\n        int readableBytes = buf.readableBytes();\n        if (buf.capacity() >= 1024) {\n            ByteBuf resized = buf.discardReadBytes().capacity(readableBytes);\n            assert resized.readableBytes() == readableBytes;\n            out.add(resized.retain());\n        } else {\n            out.add(buf.retain());\n        }\n    }"
+                }
+              ],
+              "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java": [
                 {
                   "hunk_index": 1,
                   "mainline_method": "<import>",
-                  "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
+                  "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
                   "target_method": "<import>",
-                  "start_line": 24,
-                  "end_line": 27,
-                  "code_snippet": "import com.fasterxml.jackson.annotation.JsonProperty;\nimport org.apache.druid.indexing.overlord.supervisor.Supervisor;\nimport org.apache.druid.indexing.overlord.supervisor.SupervisorSpec;\nimport org.apache.druid.indexing.overlord.supervisor.autoscaler.AggregateFunction;"
+                  "start_line": 18,
+                  "end_line": 24,
+                  "code_snippet": "import org.elasticsearch.common.recycler.Recycler;\nimport org.elasticsearch.common.unit.ByteSizeUnit;\nimport org.elasticsearch.common.unit.ByteSizeValue;\nimport org.elasticsearch.core.Releasable;\nimport org.elasticsearch.core.Releasables;\nimport java.io.IOException;\nimport java.io.StreamCorruptedException;\nimport java.util.function.Consumer;"
                 },
                 {
                   "hunk_index": 2,
-                  "mainline_method": "LagBasedAutoScalerConfig",
-                  "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                  "target_method": "LagBasedAutoScalerConfig",
-                  "start_line": 47,
-                  "end_line": 56,
-                  "code_snippet": "private final int scaleOutStep;\nprivate final boolean enableTaskAutoScaler;\nprivate final long minTriggerScaleActionFrequencyMillis;\nprivate final AggregateFunction lagAggregate;"
+                  "mainline_method": "decode",
+                  "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                  "target_method": "decode",
+                  "start_line": 56,
+                  "end_line": 64,
+                  "code_snippet": "public int decode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {\n    ensureOpen();\n    try {\n        return internalDecode(reference, fragmentConsumer);\n    } catch (Exception e) {\n        cleanDecodeState();\n        throw e;\n    }\n}"
                 },
                 {
                   "hunk_index": 3,
-                  "mainline_method": "LagBasedAutoScalerConfig",
-                  "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                  "target_method": "LagBasedAutoScalerConfig",
-                  "start_line": 63,
-                  "end_line": 75,
-                  "code_snippet": "@JsonCreator\npublic LagBasedAutoScalerConfig(\n        @Nullable @JsonProperty(\"scaleInThreshold\") Integer scaleInThreshold,\n        @Nullable @JsonProperty(\"triggerScaleOutFractionThreshold\") Double triggerScaleOutFractionThreshold,\n        @Nullable @JsonProperty(\"triggerScaleInFractionThreshold\") Double triggerScaleInFractionThreshold,\n        @Nullable @JsonProperty(\"scaleInStep\") Integer scaleInStep,\n        @Nullable @JsonProperty(\"scaleOutStep\") Integer scaleOutStep,\n        @Nullable @JsonProperty(\"enableTaskAutoScaler\") Boolean enableTaskAutoScaler,\n        @Nullable @JsonProperty(\"minTriggerScaleActionFrequencyMillis\") Long minTriggerScaleActionFrequencyMillis,\n        @Nullable @JsonProperty(\"lagAggregate\") AggregateFunction lagAggregate\n) {"
+                  "mainline_method": "internalDecode",
+                  "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                  "target_method": "internalDecode",
+                  "start_line": 66,
+                  "end_line": 133,
+                  "code_snippet": "public int internalDecode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {\n    if (isOnHeader()) {\n        int messageLength = TcpTransport.readMessageLength(reference);\n        if (messageLength == -1) {\n            return 0;\n        } else if (messageLength == 0) {\n            fragmentConsumer.accept(PING);\n            return 6;\n        } else {\n            int headerBytesToRead = headerBytesToRead(reference, maxHeaderSize);\n            if (headerBytesToRead == 0) {\n                return 0;\n            } else {\n                totalNetworkSize = messageLength + TcpHeader.BYTES_REQUIRED_FOR_MESSAGE_SIZE;\n\n                Header header = readHeader(messageLength, reference, channelType);\n                bytesConsumed += headerBytesToRead;\n                if (header.isCompressed()) {\n                    isCompressed = true;\n                }\n                fragmentConsumer.accept(header);\n\n                if (isDone()) {\n                    finishMessage(fragmentConsumer);\n                }\n                return headerBytesToRead;\n            }\n        }\n    } else {\n        if (isCompressed && decompressor == null) {\n            // Attempt to initialize decompressor\n            TransportDecompressor decompressor = TransportDecompressor.getDecompressor(recycler, reference);\n            if (decompressor == null) {\n                return 0;\n            } else {\n                this.decompressor = decompressor;\n                fragmentConsumer.accept(this.decompressor.getScheme());\n            }\n        }\n        int remainingToConsume = totalNetworkSize - bytesConsumed;\n        int maxBytesToConsume = Math.min(reference.length(), remainingToConsume);\n        ReleasableBytesReference retainedContent;\n        if (maxBytesToConsume == remainingToConsume) {\n            retainedContent = reference.retainedSlice(0, maxBytesToConsume);\n        } else {\n            retainedContent = reference.retain();\n        }\n\n        int bytesConsumedThisDecode = 0;\n        if (decompressor != null) {\n            bytesConsumedThisDecode += decompress(retainedContent);\n            bytesConsumed += bytesConsumedThisDecode;\n            ReleasableBytesReference decompressed;\n            while ((decompressed = decompressor.pollDecompressedPage(isDone())) != null) {\n                fragmentConsumer.accept(decompressed);\n            }\n        } else {\n            bytesConsumedThisDecode += maxBytesToConsume;\n            bytesConsumed += maxBytesToConsume;\n            fragmentConsumer.accept(retainedContent);\n        }\n        if (isDone()) {\n            finishMessage(fragmentConsumer);\n        }\n\n        return bytesConsumedThisDecode;\n    }\n}"
                 },
                 {
                   "hunk_index": 4,
-                  "mainline_method": "LagBasedAutoScalerConfig",
-                  "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                  "target_method": "LagBasedAutoScalerConfig",
-                  "start_line": 78,
-                  "end_line": 81,
-                  "code_snippet": "this.lagAggregate = lagAggregate;"
+                  "mainline_method": "internalDecode",
+                  "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                  "target_method": "internalDecode",
+                  "start_line": 66,
+                  "end_line": 133,
+                  "code_snippet": "public int internalDecode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {\n    if (isOnHeader()) {\n        int messageLength = TcpTransport.readMessageLength(reference);\n        if (messageLength == -1) {\n            return 0;\n        } else if (messageLength == 0) {\n            fragmentConsumer.accept(PING);\n            return 6;\n        } else {\n            int headerBytesToRead = headerBytesToRead(reference, maxHeaderSize);\n            if (headerBytesToRead == 0) {\n                return 0;\n            } else {\n                totalNetworkSize = messageLength + TcpHeader.BYTES_REQUIRED_FOR_MESSAGE_SIZE;\n\n                Header header = readHeader(messageLength, reference, channelType);\n                bytesConsumed += headerBytesToRead;\n                if (header.isCompressed()) {\n                    isCompressed = true;\n                }\n                fragmentConsumer.accept(header);\n\n                if (isDone()) {\n                    finishMessage(fragmentConsumer);\n                }\n                return headerBytesToRead;\n            }\n        }\n    } else {\n        if (isCompressed && decompressor == null) {\n            // Attempt to initialize decompressor\n            TransportDecompressor decompressor = TransportDecompressor.getDecompressor(recycler, reference);\n            if (decompressor == null) {\n                return 0;\n            } else {\n                this.decompressor = decompressor;\n                fragmentConsumer.accept(this.decompressor.getScheme());\n            }\n        }\n        int remainingToConsume = totalNetworkSize - bytesConsumed;\n        int maxBytesToConsume = Math.min(reference.length(), remainingToConsume);\n        ReleasableBytesReference retainedContent;\n        if (maxBytesToConsume == remainingToConsume) {\n            retainedContent = reference.retainedSlice(0, maxBytesToConsume);\n        } else {\n            retainedContent = reference.retain();\n        }\n\n        int bytesConsumedThisDecode = 0;\n        if (decompressor != null) {\n            bytesConsumedThisDecode += decompress(retainedContent);\n            bytesConsumed += bytesConsumedThisDecode;\n            ReleasableBytesReference decompressed;\n            while ((decompressed = decompressor.pollDecompressedPage(isDone())) != null) {\n                fragmentConsumer.accept(decompressed);\n            }\n        } else {\n            bytesConsumedThisDecode += maxBytesToConsume;\n            bytesConsumed += maxBytesToConsume;\n            fragmentConsumer.accept(retainedContent);\n        }\n        if (isDone()) {\n            finishMessage(fragmentConsumer);\n        }\n\n        return bytesConsumedThisDecode;\n    }\n}"
                 },
                 {
                   "hunk_index": 5,
-                  "mainline_method": "getLagAggregate",
-                  "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                  "target_method": "getLagAggregate",
-                  "start_line": 193,
-                  "end_line": 200,
-                  "code_snippet": "@JsonProperty\n@Nullable\npublic AggregateFunction getLagAggregate() {\n    return lagAggregate;\n}"
+                  "mainline_method": "finishMessage",
+                  "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                  "target_method": "finishMessage",
+                  "start_line": 141,
+                  "end_line": 144,
+                  "code_snippet": "private void finishMessage(Consumer<Object> fragmentConsumer) {\n    cleanDecodeState();\n    fragmentConsumer.accept(END_CONTENT);\n}"
                 },
                 {
                   "hunk_index": 6,
-                  "mainline_method": "toString",
-                  "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                  "target_method": "toString",
-                  "start_line": 218,
-                  "end_line": 229,
-                  "code_snippet": "@Override\npublic String toString() {\n    return \"LagBasedAutoScalerConfig{\" +\n            \"scaleActionPeriodMillis=\" + scaleActionPeriodMillis +\n            \", scaleInStep=\" + scaleInStep +\n            \", scaleOutStep=\" + scaleOutStep +\n            \", lagAggregate=\" + lagAggregate +\n            '}';\n}"
+                  "mainline_method": "decompress",
+                  "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                  "target_method": "decompress",
+                  "start_line": 157,
+                  "end_line": 161,
+                  "code_snippet": "private int decompress(ReleasableBytesReference content) throws IOException {\n    try (content) {\n        return decompressor.decompress(content);\n    }\n}"
                 }
               ],
-              "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java": [
+              "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java": [
                 {
                   "hunk_index": 1,
-                  "mainline_method": "computeLagForAutoScaler",
-                  "target_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java",
-                  "target_method": "computeLagForAutoScaler",
-                  "start_line": 95,
-                  "end_line": 103,
-                  "code_snippet": "  /**\n   * Used by AutoScaler to make scaling decisions.\n   */\n  default long computeLagForAutoScaler()\n  {\n    LagStats lagStats = computeLagStats();\n    return lagStats == null ? 0L : lagStats.getTotalLag();\n  }"
-                }
-              ],
-              "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java": [
-                {
-                  "hunk_index": 1,
-                  "mainline_method": "AggregateFunction",
-                  "target_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java",
-                  "target_method": "AggregateFunction",
-                  "start_line": 19,
-                  "end_line": 27,
-                  "code_snippet": "public enum AggregateFunction\n{\n  MAX,\n  SUM,\n  AVERAGE\n}"
-                }
-              ],
-              "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java": [
-                {
-                  "hunk_index": 1,
-                  "mainline_method": "LagStats (constructor)",
-                  "target_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
-                  "target_method": "LagStats",
-                  "start_line": 7,
-                  "end_line": 13,
-                  "code_snippet": "public LagStats(long maxLag, long totalLag, long avgLag)\n{\n  this.maxLag = maxLag;\n  this.totalLag = totalLag;\n  this.avgLag = avgLag;\n}"
+                  "mainline_method": "<class-level field>",
+                  "target_file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+                  "target_method": "<class-level field>",
+                  "start_line": 15,
+                  "end_line": 15,
+                  "code_snippet": "private static final ThreadLocal<ArrayList<Object>> fragmentList = ThreadLocal.withInitial(ArrayList::new);"
                 },
                 {
                   "hunk_index": 2,
-                  "mainline_method": "getAggregateForScaling / getMetric",
-                  "target_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
-                  "target_method": null,
-                  "start_line": null,
-                  "end_line": null,
-                  "code_snippet": ""
+                  "mainline_method": "doHandleBytes",
+                  "target_file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+                  "target_method": "doHandleBytes",
+                  "start_line": 61,
+                  "end_line": 109,
+                  "code_snippet": "public void doHandleBytes(TcpChannel channel, ReleasableBytesReference reference) throws IOException {\n    channel.getChannelStats().markAccessed(relativeTimeInMillis.getAsLong());\n    statsTracker.markBytesRead(reference.length());\n    pending.add(reference.retain());\n\n    final ArrayList<Object> fragments = fragmentList.get();\n    boolean continueHandling = true;\n\n    while (continueHandling && isClosed == false) {\n        boolean continueDecoding = true;\n        while (continueDecoding && pending.isEmpty() == false) {\n            try (ReleasableBytesReference toDecode = getPendingBytes()) {\n                final int bytesDecoded = decoder.decode(toDecode, fragments::add);\n                if (bytesDecoded != 0) {\n                    releasePendingBytes(bytesDecoded);\n                    if (fragments.isEmpty() == false && endOfMessage(fragments.get(fragments.size() - 1))) {\n                        continueDecoding = false;\n                    }\n                } else {\n                    continueDecoding = false;\n                }\n            }\n        }\n\n        if (fragments.isEmpty()) {\n            continueHandling = false;\n        } else {\n            try {\n                forwardFragments(channel, fragments);\n            } finally {\n                for (Object fragment : fragments) {\n                    if (fragment instanceof ReleasableBytesReference) {\n                        ((ReleasableBytesReference) fragment).close();\n                    }\n                }\n                fragments.clear();\n            }\n        }\n    }\n}"
+                },
+                {
+                  "hunk_index": 3,
+                  "mainline_method": "endOfMessage / getPendingBytes",
+                  "target_file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+                  "target_method": "endOfMessage",
+                  "start_line": 142,
+                  "end_line": 161,
+                  "code_snippet": "private static boolean endOfMessage(Object fragment) {\n    return fragment == InboundDecoder.PING || fragment == InboundDecoder.END_CONTENT || fragment instanceof Exception;\n}\n\nprivate ReleasableBytesReference getPendingBytes() {\n    if (pending.size() == 1) {\n        return pending.peekFirst().retain();\n    } else {\n        final ReleasableBytesReference[] bytesReferences = new ReleasableBytesReference[pending.size()];\n        int index = 0;\n        for (ReleasableBytesReference pendingReference : pending) {\n            bytesReferences[index] = pendingReference.retain();\n            ++index;\n        }\n        final Releasable releasable = () -> Releasables.closeExpectNoException(bytesReferences);\n        return new ReleasableBytesReference(CompositeBytesReference.of(bytesReferences), releasable);\n    }\n}"
                 }
               ]
             }
@@ -306,115 +294,107 @@
           "outputs": {
             "adapted_code_hunks": [
               {
-                "target_file": "docs/ingestion/supervisor.md",
-                "mainline_file": "docs/ingestion/supervisor.md",
-                "hunk_text": "@@ -99,5 +99,6 @@ |`scaleActionPeriodMillis`|The frequency in milliseconds to check if a scale action is triggered.|No|60000|\n |`scaleInStep`|The number of tasks to reduce at once when scaling down.|No|1|\n |`scaleOutStep`|The number of tasks to add at once when scaling out.|No|2|\n+|`lagAggregate`|The aggregate function used to compute the lag metric for scaling decisions. Possible values are `MAX`, `SUM` and `AVERAGE`. |No|`SUM`|\n \n The following example shows a supervisor spec with `lagBased` autoscaler:\n \n",
-                "insertion_line": 99,
+                "target_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+                "mainline_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+                "hunk_text": "@@ -14,6 +14,5 @@ \n import org.elasticsearch.ElasticsearchException;\n import org.elasticsearch.ExceptionsHelper;\n-import org.elasticsearch.common.bytes.ReleasableBytesReference;\n import org.elasticsearch.common.network.ThreadWatchdog;\n import org.elasticsearch.core.Releasables;\n import org.elasticsearch.transport.InboundPipeline;\n",
+                "insertion_line": 14,
                 "intent_verified": false,
                 "file_operation": "MODIFIED"
               },
               {
-                "target_file": "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java",
-                "mainline_file": "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java",
-                "hunk_text": "@@ -431,12 +431,5 @@     );\n   }\n \n-  @Override\n-  public long computeLagForAutoScaler()\n-  {\n-    LagStats lagStats = computeLagStats();\n-    return lagStats == null ? 0L : lagStats.getMaxLag();\n-  }\n-\n   private SeekableStreamDataSourceMetadata<String, String> createDataSourceMetadataWithClosedOrExpiredPartitions(\n       SeekableStreamDataSourceMetadata<String, String> currentMetadata,\n       Set<String> terminatedPartitionIds,\n",
-                "insertion_line": 431,
+                "target_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+                "mainline_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+                "hunk_text": "@@ -51,7 +51,7 @@         final ByteBuf buffer = (ByteBuf) msg;\n         Netty4TcpChannel channel = ctx.channel().attr(Netty4Transport.CHANNEL_KEY).get();\n         activityTracker.startActivity();\n-        try (ReleasableBytesReference reference = Netty4Utils.toReleasableBytesReference(buffer)) {\n-            pipeline.handleBytes(channel, reference);\n+        try {\n+            pipeline.handleBytes(channel, Netty4Utils.toReleasableBytesReference(buffer));\n         } finally {\n             activityTracker.stopActivity();\n         }\n",
+                "insertion_line": 51,
                 "intent_verified": true,
                 "file_operation": "MODIFIED"
               },
               {
-                "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
-                "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
-                "hunk_text": "@@ -21,5 +21,7 @@ \n import org.apache.commons.collections4.queue.CircularFifoQueue;\n import org.apache.druid.indexing.overlord.supervisor.SupervisorSpec;\n+import org.apache.druid.indexing.overlord.supervisor.autoscaler.AggregateFunction;\n+import org.apache.druid.indexing.overlord.supervisor.autoscaler.LagStats;\n import org.apache.druid.indexing.overlord.supervisor.autoscaler.SupervisorTaskAutoScaler;\n import org.apache.druid.indexing.seekablestream.supervisor.SeekableStreamSupervisor;\n import org.apache.druid.java.util.common.StringUtils;\n",
-                "insertion_line": 21,
+                "target_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+                "mainline_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+                "hunk_text": "@@ -17,11 +17,9 @@ import io.netty.buffer.ByteBuf;\n import io.netty.channel.ChannelHandler;\n import io.netty.channel.ChannelHandlerContext;\n-import io.netty.handler.codec.MessageToMessageDecoder;\n-\n-import java.util.List;\n+import io.netty.channel.ChannelInboundHandlerAdapter;\n \n @ChannelHandler.Sharable\n-public class NettyByteBufSizer extends MessageToMessageDecoder<ByteBuf> {\n+public class NettyByteBufSizer extends ChannelInboundHandlerAdapter {\n \n     public static final NettyByteBufSizer INSTANCE = new NettyByteBufSizer();\n \n",
+                "insertion_line": 17,
                 "intent_verified": false,
                 "file_operation": "MODIFIED"
               },
               {
-                "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
-                "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
-                "hunk_text": "@@ -151,7 +151,16 @@       LOCK.lock();\n       try {\n         if (!spec.isSuspended()) {\n-          long lag = supervisor.computeLagForAutoScaler();\n-          lagMetricsQueue.offer(lag > 0 ? lag : 0L);\n+         LagStats lagStats = supervisor.computeLagStats();\n+\n+         if (lagStats != null) {\n+           AggregateFunction aggregate = lagBasedAutoScalerConfig.getLagAggregate() == null ?\n+                                         lagStats.getAggregateForScaling() :\n+                                         lagBasedAutoScalerConfig.getLagAggregate();\n+           long lag = lagStats.getMetric(aggregate);\n+           lagMetricsQueue.offer(lag > 0 ? lag : 0L);\n+         } else {\n+           lagMetricsQueue.offer(0L);\n+         }\n           log.debug(\"Current lags for dataSource[%s] are [%s].\", dataSource, lagMetricsQueue);\n         } else {\n           log.warn(\"[%s] supervisor is suspended, skipping lag collection\", dataSource);\n",
-                "insertion_line": 151,
-                "intent_verified": true,
-                "file_operation": "MODIFIED"
-              },
-              {
-                "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                "hunk_text": "@@ -23,5 +23,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;\n import org.apache.druid.indexing.overlord.supervisor.Supervisor;\n import org.apache.druid.indexing.overlord.supervisor.SupervisorSpec;\n+import org.apache.druid.indexing.overlord.supervisor.autoscaler.AggregateFunction;\n import org.apache.druid.indexing.overlord.supervisor.autoscaler.SupervisorTaskAutoScaler;\n import org.apache.druid.indexing.seekablestream.supervisor.SeekableStreamSupervisor;\n import org.apache.druid.java.util.emitter.service.ServiceEmitter;\n",
+                "target_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+                "mainline_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+                "hunk_text": "@@ -23,13 +23,11 @@     }\n \n     @Override\n-    protected void decode(ChannelHandlerContext ctx, ByteBuf buf, List<Object> out) {\n-        int readableBytes = buf.readableBytes();\n-        if (buf.capacity() >= 1024) {\n-            ByteBuf resized = buf.discardReadBytes().capacity(readableBytes);\n-            assert resized.readableBytes() == readableBytes;\n-            out.add(resized.retain());\n-        } else {\n-            out.add(buf.retain());\n+    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {\n+        if (msg instanceof ByteBuf buf && buf.capacity() >= 1024) {\n+            int readableBytes = buf.readableBytes();\n+            buf = buf.discardReadBytes().capacity(readableBytes);\n+            assert buf.readableBytes() == readableBytes;\n         }\n+        ctx.fireChannelRead(msg);\n     }\n }\n",
                 "insertion_line": 23,
                 "intent_verified": false,
                 "file_operation": "MODIFIED"
               },
               {
-                "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                "hunk_text": "@@ -47,5 +47,6 @@   private final int scaleOutStep;\n   private final boolean enableTaskAutoScaler;\n   private final long minTriggerScaleActionFrequencyMillis;\n+private final AggregateFunction lagAggregate;\n \n   @JsonCreator\n   public LagBasedAutoScalerConfig(\n",
-                "insertion_line": 47,
+                "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                "hunk_text": "@@ -18,11 +18,11 @@ import org.elasticsearch.common.recycler.Recycler;\n import org.elasticsearch.common.unit.ByteSizeUnit;\n import org.elasticsearch.common.unit.ByteSizeValue;\n+import org.elasticsearch.core.CheckedConsumer;\n import org.elasticsearch.core.Releasable;\n import org.elasticsearch.core.Releasables;\n \n import java.io.IOException;\n import java.io.StreamCorruptedException;\n-import java.util.function.Consumer;\n \n public class InboundDecoder implements Releasable {\n \n",
+                "insertion_line": 18,
                 "intent_verified": false,
                 "file_operation": "MODIFIED"
               },
               {
-                "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                "hunk_text": "@@ -63,6 +63,7 @@           @Nullable @JsonProperty(\"scaleInStep\") Integer scaleInStep,\n           @Nullable @JsonProperty(\"scaleOutStep\") Integer scaleOutStep,\n           @Nullable @JsonProperty(\"enableTaskAutoScaler\") Boolean enableTaskAutoScaler,\n-          @Nullable @JsonProperty(\"minTriggerScaleActionFrequencyMillis\") Long minTriggerScaleActionFrequencyMillis\n+        @Nullable @JsonProperty(\"minTriggerScaleActionFrequencyMillis\") Long minTriggerScaleActionFrequencyMillis,\n+        @Nullable @JsonProperty(\"lagAggregate\") AggregateFunction lagAggregate\n   )\n   {\n     this.enableTaskAutoScaler = enableTaskAutoScaler != null ? enableTaskAutoScaler : false;\n",
-                "insertion_line": 63,
-                "intent_verified": true,
-                "file_operation": "MODIFIED"
-              },
-              {
-                "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                "hunk_text": "@@ -78,5 +78,6 @@     this.scaleInThreshold = scaleInThreshold != null ? scaleInThreshold : 1000000;\n     this.triggerScaleOutFractionThreshold = triggerScaleOutFractionThreshold != null ? triggerScaleOutFractionThreshold : 0.3;\n     this.triggerScaleInFractionThreshold = triggerScaleInFractionThreshold != null ? triggerScaleInFractionThreshold : 0.9;\n+    this.lagAggregate = lagAggregate;\n \n     // Only do taskCountMax and taskCountMin check when autoscaler is enabled. So that users left autoConfig empty{} will not throw any exception and autoscaler is disabled.\n     // If autoscaler is disabled, no matter what configs are set, they are not used.\n",
-                "insertion_line": 78,
-                "intent_verified": true,
-                "file_operation": "MODIFIED"
-              },
-              {
-                "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                "hunk_text": "@@ -193,5 +193,12 @@     return minTriggerScaleActionFrequencyMillis;\n   }\n \n+  @JsonProperty\n+  @Nullable\n+  public AggregateFunction getLagAggregate()\n+  {\n+    return lagAggregate;\n+  }\n+\n   @Override\n   public String toString()\n   {\n",
-                "insertion_line": 193,
-                "intent_verified": true,
-                "file_operation": "MODIFIED"
-              },
-              {
-                "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-                "hunk_text": "@@ -218,5 +218,6 @@             \", scaleActionPeriodMillis=\" + scaleActionPeriodMillis +\n             \", scaleInStep=\" + scaleInStep +\n             \", scaleOutStep=\" + scaleOutStep +\n+            \", lagAggregate=\" + lagAggregate +\n             '}';\n   }\n }\n",
-                "insertion_line": 218,
+                "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                "hunk_text": "@@ -56,6 +56,6 @@         this.channelType = channelType;\n     }\n \n-    public int decode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {\n+    public int channelRead(ReleasableBytesReference reference, CheckedConsumer<Object, IOException> fragmentConsumer) throws IOException {\n         ensureOpen();\n         try {\n             return internalDecode(reference, fragmentConsumer);\n",
+                "insertion_line": 56,
                 "intent_verified": false,
                 "file_operation": "MODIFIED"
               },
               {
-                "target_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java",
-                "mainline_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java",
-                "hunk_text": "@@ -95,13 +95,4 @@    */\n   LagStats computeLagStats();\n \n-  /**\n-   * Used by AutoScaler to make scaling decisions.\n-   */\n-  default long computeLagForAutoScaler()\n-  {\n-    LagStats lagStats = computeLagStats();\n-    return lagStats == null ? 0L : lagStats.getTotalLag();\n-  }\n-\n   int getActiveTaskGroupsCount();\n }\n",
-                "insertion_line": 95,
+                "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                "hunk_text": "@@ -66,6 +66,7 @@         }\n     }\n \n-    public int internalDecode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {\n+    public int internalDecode(ReleasableBytesReference reference, CheckedConsumer<Object, IOException> fragmentConsumer)\n+        throws IOException {\n         if (isOnHeader()) {\n             int messageLength = TcpTransport.readMessageLength(reference);\n             if (messageLength == -1) {\n",
+                "insertion_line": 66,
                 "intent_verified": true,
                 "file_operation": "MODIFIED"
               },
               {
-                "target_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java",
-                "mainline_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java",
-                "hunk_text": "@@ -19,1 +19,26 @@+/*\n+ * Licensed to the Apache Software Foundation (ASF) under one\n+ * or more contributor license agreements.  See the NOTICE file\n+ * distributed with this work for additional information\n+ * regarding copyright ownership.  The ASF licenses this file\n+ * to you under the Apache License, Version 2.0 (the\n+ * \"License\"); you may not use this file except in compliance\n+ * with the License.  You may obtain a copy of the License at\n+ *\n+ *   http://www.apache.org/licenses/LICENSE-2.0\n+ *\n+ * Unless required by applicable law or agreed to in writing,\n+ * software distributed under the License is distributed on an\n+ * \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY\n+ * KIND, either express or implied.  See the License for the\n+ * specific language governing permissions and limitations\n+ * under the License.\n+ */\n+\n+package org.apache.druid.indexing.overlord.supervisor.autoscaler;\n+\n+public enum AggregateFunction\n+{\n+  MAX,\n+  SUM,\n+  AVERAGE\n+}\n",
-                "insertion_line": 19,
-                "intent_verified": true,
-                "file_operation": "ADDED"
+                "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                "hunk_text": "@@ -66,24 +66,27 @@             }\n             int remainingToConsume = totalNetworkSize - bytesConsumed;\n             int maxBytesToConsume = Math.min(reference.length(), remainingToConsume);\n-            ReleasableBytesReference retainedContent;\n-            if (maxBytesToConsume == remainingToConsume) {\n-                retainedContent = reference.retainedSlice(0, maxBytesToConsume);\n-            } else {\n-                retainedContent = reference.retain();\n-            }\n-\n             int bytesConsumedThisDecode = 0;\n             if (decompressor != null) {\n-                bytesConsumedThisDecode += decompress(retainedContent);\n+            bytesConsumedThisDecode += decompressor.decompress(\n+                maxBytesToConsume == remainingToConsume ? reference.slice(0, maxBytesToConsume) : reference\n+            );\n                 bytesConsumed += bytesConsumedThisDecode;\n                 ReleasableBytesReference decompressed;\n                 while ((decompressed = decompressor.pollDecompressedPage(isDone())) != null) {\n-                    fragmentConsumer.accept(decompressed);\n+                try (var buf = decompressed) {\n+                    fragmentConsumer.accept(buf);\n+                }\n                 }\n             } else {\n                 bytesConsumedThisDecode += maxBytesToConsume;\n                 bytesConsumed += maxBytesToConsume;\n-                fragmentConsumer.accept(retainedContent);\n+            if (maxBytesToConsume == remainingToConsume) {\n+                try (ReleasableBytesReference retained = reference.retainedSlice(0, maxBytesToConsume)) {\n+                    fragmentConsumer.accept(retained);\n+                }\n+            } else {\n+                fragmentConsumer.accept(reference);\n+            }\n             }\n             if (isDone()) {\n                 finishMessage(fragmentConsumer);\n",
+                "insertion_line": 66,
+                "intent_verified": false,
+                "file_operation": "MODIFIED"
               },
               {
-                "target_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
-                "mainline_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
-                "hunk_text": "@@ -7,11 +7,18 @@   private final long maxLag;\n   private final long totalLag;\n   private final long avgLag;\n+  private final AggregateFunction aggregateForScaling;\n \n   public LagStats(long maxLag, long totalLag, long avgLag)\n+  {\n+    this(maxLag, totalLag, avgLag, AggregateFunction.SUM);\n+  }\n+\n+  public LagStats(long maxLag, long totalLag, long avgLag, AggregateFunction aggregateForScaling)\n   {\n     this.maxLag = maxLag;\n     this.totalLag = totalLag;\n     this.avgLag = avgLag;\n+    this.aggregateForScaling = aggregateForScaling == null ? AggregateFunction.SUM : aggregateForScaling;\n   }\n \n   public long getMaxLag()\n",
-                "insertion_line": 7,
+                "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                "hunk_text": "@@ -141,6 +141,6 @@         cleanDecodeState();\n     }\n \n-    private void finishMessage(Consumer<Object> fragmentConsumer) {\n+private void finishMessage(CheckedConsumer<Object, IOException> fragmentConsumer) throws IOException {\n         cleanDecodeState();\n         fragmentConsumer.accept(END_CONTENT);\n     }\n",
+                "insertion_line": 141,
                 "intent_verified": true,
                 "file_operation": "MODIFIED"
               },
               {
-                "target_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
-                "mainline_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
-                "hunk_text": "@@ -53,3 +53,25 @@   {\n     return avgLag;\n   }\n+  /**\n+   * The preferred scaling metric that supervisor may specify to be used.\n+   * This could be overrided by the autscaler.\n+   */\n+  public AggregateFunction getAggregateForScaling()\n+  {\n+    return aggregateForScaling;\n+  }\n+\n+  public long getMetric(AggregateFunction metric)\n+  {\n+    switch (metric) {\n+      case MAX:\n+        return getMaxLag();\n+      case SUM:\n+        return getTotalLag();\n+      case AVERAGE:\n+        return getAvgLag();\n+    }\n+    throw new IllegalStateException(\"Unknown scale metric\");\n+  }\n+\n }\n",
-                "insertion_line": 53,
+                "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+                "hunk_text": "@@ -157,11 +157,5 @@         }\n     }\n \n-    private int decompress(ReleasableBytesReference content) throws IOException {\n-        try (content) {\n-            return decompressor.decompress(content);\n-        }\n-    }\n-\n     private boolean isDone() {\n         return bytesConsumed == totalNetworkSize;\n     }\n",
+                "insertion_line": 157,
                 "intent_verified": true,
+                "file_operation": "MODIFIED"
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+                "hunk_text": "@@ -11,17 +11,16 @@ \n import org.elasticsearch.common.bytes.CompositeBytesReference;\n import org.elasticsearch.common.bytes.ReleasableBytesReference;\n+import org.elasticsearch.core.CheckedConsumer;\n import org.elasticsearch.core.Releasable;\n import org.elasticsearch.core.Releasables;\n \n import java.io.IOException;\n import java.util.ArrayDeque;\n-import java.util.ArrayList;\n import java.util.function.BiConsumer;\n import java.util.function.LongSupplier;\n \n public class InboundPipeline implements Releasable {\n \n-    private static final ThreadLocal<ArrayList<Object>> fragmentList = ThreadLocal.withInitial(ArrayList::new);\n     private static final InboundMessage PING_MESSAGE = new InboundMessage(null, true);\n \n     private final LongSupplier relativeTimeInMillis;\n",
+                "insertion_line": 11,
+                "intent_verified": false,
+                "file_operation": "MODIFIED"
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+                "hunk_text": "@@ -61,80 +61,73 @@ \n     public void handleBytes(TcpChannel channel, ReleasableBytesReference reference) throws IOException {\n         if (uncaughtException != null) {\n+            reference.close();\n             throw new IllegalStateException(\"Pipeline state corrupted by uncaught exception\", uncaughtException);\n         }\n         try {\n-            doHandleBytes(channel, reference);\n+            channel.getChannelStats().markAccessed(relativeTimeInMillis.getAsLong());\n+            statsTracker.markBytesRead(reference.length());\n+            if (isClosed) {\n+                reference.close();\n+                return;\n+            }\n+            pending.add(reference);\n+            doHandleBytes(channel);\n         } catch (Exception e) {\n             uncaughtException = e;\n             throw e;\n         }\n     }\n \n-    public void doHandleBytes(TcpChannel channel, ReleasableBytesReference reference) throws IOException {\n-        channel.getChannelStats().markAccessed(relativeTimeInMillis.getAsLong());\n-        statsTracker.markBytesRead(reference.length());\n-        pending.add(reference.retain());\n-\n-        final ArrayList<Object> fragments = fragmentList.get();\n-        boolean continueHandling = true;\n-\n-        while (continueHandling && isClosed == false) {\n-            boolean continueDecoding = true;\n-            while (continueDecoding && pending.isEmpty() == false) {\n-                try (ReleasableBytesReference toDecode = getPendingBytes()) {\n-                    final int bytesDecoded = decoder.decode(toDecode, fragments::add);\n-                    if (bytesDecoded != 0) {\n-                        releasePendingBytes(bytesDecoded);\n-                        if (fragments.isEmpty() == false && endOfMessage(fragments.get(fragments.size() - 1))) {\n-                            continueDecoding = false;\n-                        }\n-                    } else {\n-                        continueDecoding = false;\n-                    }\n+    private void doHandleBytes(TcpChannel channel) throws IOException {\n+        do {\n+            CheckedConsumer<Object, IOException> decodeConsumer = f -> forwardFragment(channel, f);\n+            int bytesDecoded = decoder.channelRead(pending.peekFirst(), decodeConsumer);\n+            if (bytesDecoded == 0 && pending.size() > 1) {\n+                final ReleasableBytesReference[] bytesReferences = new ReleasableBytesReference[pending.size()];\n+                int index = 0;\n+                for (ReleasableBytesReference pendingReference : pending) {\n+                    bytesReferences[index] = pendingReference.retain();\n+                    ++index;\n+                }\n+                try (\n+                    ReleasableBytesReference toDecode = new ReleasableBytesReference(\n+                        CompositeBytesReference.of(bytesReferences),\n+                        () -> Releasables.closeExpectNoException(bytesReferences)\n+                    )\n+                ) {\n+                    bytesDecoded = decoder.channelRead(toDecode, decodeConsumer);\n                 }\n             }\n-\n-            if (fragments.isEmpty()) {\n-                continueHandling = false;\n+            if (bytesDecoded != 0) {\n+                releasePendingBytes(bytesDecoded);\n             } else {\n-                try {\n-                    forwardFragments(channel, fragments);\n-                } finally {\n-                    for (Object fragment : fragments) {\n-                        if (fragment instanceof ReleasableBytesReference) {\n-                            ((ReleasableBytesReference) fragment).close();\n-                        }\n-                    }\n-                    fragments.clear();\n-                }\n+                break;\n             }\n-        }\n+        } while (pending.isEmpty() == false);\n     }\n \n-    private void forwardFragments(TcpChannel channel, ArrayList<Object> fragments) throws IOException {\n-        for (Object fragment : fragments) {\n-            if (fragment instanceof Header) {\n-                headerReceived((Header) fragment);\n-            } else if (fragment instanceof Compression.Scheme) {\n-                assert aggregator.isAggregating();\n-                aggregator.updateCompressionScheme((Compression.Scheme) fragment);\n-            } else if (fragment == InboundDecoder.PING) {\n-                assert aggregator.isAggregating() == false;\n-                messageHandler.accept(channel, PING_MESSAGE);\n-            } else if (fragment == InboundDecoder.END_CONTENT) {\n-                assert aggregator.isAggregating();\n-                InboundMessage aggregated = aggregator.finishAggregation();\n-                try {\n-                    statsTracker.markMessageReceived();\n-                    messageHandler.accept(channel, aggregated);\n-                } finally {\n-                    aggregated.decRef();\n-                }\n-            } else {\n-                assert aggregator.isAggregating();\n-                assert fragment instanceof ReleasableBytesReference;\n-                aggregator.aggregate((ReleasableBytesReference) fragment);\n+    private void forwardFragment(TcpChannel channel, Object fragment) throws IOException {\n+        if (fragment instanceof Header) {\n+            headerReceived((Header) fragment);\n+        } else if (fragment instanceof Compression.Scheme) {\n+            assert aggregator.isAggregating();\n+            aggregator.updateCompressionScheme((Compression.Scheme) fragment);\n+        } else if (fragment == InboundDecoder.PING) {\n+            assert aggregator.isAggregating() == false;\n+            messageHandler.accept(channel, PING_MESSAGE);\n+        } else if (fragment == InboundDecoder.END_CONTENT) {\n+            assert aggregator.isAggregating();\n+            InboundMessage aggregated = aggregator.finishAggregation();\n+            try {\n+                statsTracker.markMessageReceived();\n+                messageHandler.accept(channel, aggregated);\n+            } finally {\n+                aggregated.decRef();\n             }\n+        } else {\n+            assert aggregator.isAggregating();\n+            assert fragment instanceof ReleasableBytesReference;\n+            aggregator.aggregate((ReleasableBytesReference) fragment);\n         }\n     }\n \n",
+                "insertion_line": 61,
+                "intent_verified": false,
+                "file_operation": "MODIFIED"
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+                "hunk_text": "@@ -142,24 +142,5 @@         aggregator.headerReceived(header);\n     }\n \n-    private static boolean endOfMessage(Object fragment) {\n-        return fragment == InboundDecoder.PING || fragment == InboundDecoder.END_CONTENT || fragment instanceof Exception;\n-    }\n-\n-    private ReleasableBytesReference getPendingBytes() {\n-        if (pending.size() == 1) {\n-            return pending.peekFirst().retain();\n-        } else {\n-            final ReleasableBytesReference[] bytesReferences = new ReleasableBytesReference[pending.size()];\n-            int index = 0;\n-            for (ReleasableBytesReference pendingReference : pending) {\n-                bytesReferences[index] = pendingReference.retain();\n-                ++index;\n-            }\n-            final Releasable releasable = () -> Releasables.closeExpectNoException(bytesReferences);\n-            return new ReleasableBytesReference(CompositeBytesReference.of(bytesReferences), releasable);\n-        }\n-    }\n-\n     private void releasePendingBytes(int bytesConsumed) {\n         int bytesToRelease = bytesConsumed;\n         while (bytesToRelease != 0) {\n",
+                "insertion_line": 142,
+                "intent_verified": false,
                 "file_operation": "MODIFIED"
               }
             ],
@@ -453,11 +433,29 @@
     "exact_developer_patch": false,
     "developer_patch_comparison": {
       "comparison_method": "file_state",
-      "compared_files": [],
-      "mismatched_files": [],
-      "developer_files": [],
-      "generated_files": [],
-      "error": "Failed to apply generated patch in temporary index: error: dev/null: does not exist in index\n\n\nerror: dev/null: does not exist in index\n"
+      "compared_files": [
+        "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+        "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+        "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java"
+      ],
+      "mismatched_files": [
+        "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java"
+      ],
+      "developer_files": [
+        "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+        "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+        "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java"
+      ],
+      "generated_files": [
+        "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+        "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+        "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java"
+      ],
+      "error": null
     },
     "status": "completed"
   }

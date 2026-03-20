@@ -26,12 +26,16 @@ import json
 import time
 import os
 import re
+import logging
 from langchain_core.messages import HumanMessage
 from state import AgentState
 from langgraph.prebuilt import create_react_agent
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from utils.llm_provider import get_llm
 from agents.reasoning_tools import ReasoningToolkit
+
+
+logger = logging.getLogger(__name__)
 
 _AGENT_SYSTEM = """You are an expert software engineer mapping code from a new mainline patch to an older target repository.
 You need to find the exact target file and target method corresponding to a modified mainline file and methods, determining the start and end lines.
@@ -120,6 +124,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
       - mapped_target_context:    { file_path: [{ hunk_index, mainline_method, target_file, target_method, start_line, end_line, code_snippet }, ...] }
     """
     print("Agent 2 (Structural Locator): Starting target location mapping...")
+    logger.info("Agent 2 start: structural locator node invoked")
 
     semantic_blueprint = state.get("semantic_blueprint")
     patch_analysis = state.get("patch_analysis", [])
@@ -151,6 +156,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         test_changes = []
 
     print(f"  Agent 2: {len(code_changes)} code file(s), {len(test_changes)} test file(s)")
+    logger.info("Hunk segregation complete: code_files=%d test_files=%d", len(code_changes), len(test_changes))
     trace += f"## Hunk Segregation\n- Code files: {len(code_changes)}\n- Test files: {len(test_changes)}\n\n"
 
     dependent_apis = set(semantic_blueprint.get("dependent_apis", []))
@@ -167,8 +173,10 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         # is actually needed (i.e., when Phase 1 git-based retrieval fails)
         
         toolkit = ReasoningToolkit(retriever, target_repo_path, mainline_repo_path, patch_analysis)
+        logger.debug("Retriever/toolkit initialized successfully")
     except Exception as e:
         print(f"  Agent 2: Warning — could not init retriever: {e}")
+        logger.exception("Retriever/toolkit initialization failed")
         retriever = None
         toolkit = None
 
@@ -191,6 +199,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     # Extract hunk_chain from semantic_blueprint
     hunk_chain = semantic_blueprint.get("hunk_chain", [])
     print(f"  Agent 2: Found {len(hunk_chain)} hunk(s) in hunk_chain")
+    logger.info("Processing hunk_chain: total_hunks=%d", len(hunk_chain))
     
     # Group hunks by file for efficient processing
     hunks_by_file: dict[str, list] = {}
@@ -200,10 +209,12 @@ async def structural_locator_node(state: AgentState, config) -> dict:
             if file not in hunks_by_file:
                 hunks_by_file[file] = []
             hunks_by_file[file].append(hunk)
+    logger.debug("Grouped hunks into %d file bucket(s)", len(hunks_by_file))
     
     # Process hunks grouped by file
     for mainline_file, file_hunks in hunks_by_file.items():
         print(f"  Agent 2: Locating target for {mainline_file} ({len(file_hunks)} hunk(s))...")
+        logger.info("Locating target file=%s hunks=%d", mainline_file, len(file_hunks))
         trace += f"### `{mainline_file}`\n\n"
         trace += f"**Hunks in this file**: {len(file_hunks)}\n\n"
         
@@ -212,12 +223,15 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         if toolkit:
             try:
                 git_candidates = toolkit.search_candidates(mainline_file)
+                logger.debug("Git candidate search returned %d candidate(s) for %s", len(git_candidates or []), mainline_file)
                 if git_candidates:
                     git_target = git_candidates[0]["file"]
                     print(f"  Agent 2: Git resolution found target: {git_target}")
+                    logger.info("Git resolution selected target=%s for file=%s", git_target, mainline_file)
                     trace += f"**Git Resolution**: Found `{git_target}`\n\n"
             except Exception as e:
                 print(f"  Agent 2: Git resolution failed: {e}")
+                logger.exception("Git resolution failed for file=%s", mainline_file)
                 trace += f"⚠️ Git resolution failed: {e}\n\n"
         
         # STEP 2: Extract target file (prefer git resolution result)
@@ -267,6 +281,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         llm_failed = False
         for attempt in range(2):
             try:
+                logger.debug("Invoking structural locator LLM for file=%s attempt=%d", mainline_file, attempt + 1)
                 result = await agent.ainvoke(input_data)
                 raw_content = result["messages"][-1].content
                 
@@ -287,6 +302,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         trace += f"⚠️ **LLM Mapping Extraction Failed**\n\nRaw Response:\n```\n{raw_content}\n```\n\n"
                         mapping_result = None
                         llm_failed = True
+                        logger.warning("LLM JSON parse failed for file=%s attempt=%d", mainline_file, attempt + 1)
                 
                 if mapping_result:
                     trace += f"**Agent Tool Steps:**\n\n"
@@ -300,6 +316,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 break
             except Exception as e:
                 print(f"  Agent 2: LLM call error (attempt {attempt+1}/2): {e}")
+                logger.exception("LLM call failed for file=%s attempt=%d", mainline_file, attempt + 1)
                 llm_failed = True
                 if attempt == 0:
                     print("  Waiting 30 seconds before retry...")
@@ -307,6 +324,12 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
         # STEP 3: Use LLM result if successful, otherwise fallback to git resolution
         if mapping_result and isinstance(mapping_result, dict):
+            logger.info(
+                "LLM mapping succeeded for file=%s mappings=%d consistency_entries=%d",
+                mainline_file,
+                len(mapping_result.get("mappings", [])),
+                len(mapping_result.get("consistency_map_entries", {})),
+            )
             # LLM provided detailed mappings
             for k, v in mapping_result.get("consistency_map_entries", {}).items():
                 consistency_map[k] = v
@@ -330,6 +353,13 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                     m = mappings[hunk_idx_in_hunks]
                 else:
                     # Not enough mappings returned by LLM - create default
+                    logger.warning(
+                        "LLM returned fewer mappings than hunks for file=%s (hunks=%d mappings=%d); synthesizing default mapping for hunk_index=%s",
+                        mainline_file,
+                        len(file_hunks),
+                        len(mappings),
+                        hunk_idx,
+                    )
                     m = {
                         "mainline_method": "<import>" if hunk_role == "declaration" else f"hunk_{hunk_idx}",
                         "target_file": target_file,
@@ -370,6 +400,12 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         elif git_candidates:
             # LLM failed, but git resolution succeeded — use it as fallback
             git_target = git_candidates[0]["file"]
+            logger.warning(
+                "Using git-only fallback mapping for file=%s target=%s llm_failed=%s",
+                mainline_file,
+                git_target,
+                llm_failed,
+            )
             trace += f"**Fallback**: Using git resolution result (LLM refinement failed).\n\n"
             
             if mainline_file not in mapped_target_context:
@@ -407,6 +443,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         else:
             trace += f"❌ Failed to locate target — neither LLM nor git resolution provided results.\n\n"
             print(f"  Agent 2: Could not map {mainline_file} — skipping.")
+            logger.error("Failed to map file=%s no LLM mapping and no git candidates", mainline_file)
 
     # ------------------------------------------------------------------
     # 3. Process test files
@@ -464,6 +501,12 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     print(f"Agent 2: Complete. Mapped {len(mapped_target_context)} file(s). "
           f"Total hunk mappings: {sum(len(v) for v in mapped_target_context.values())}. "
           f"ConsistencyMap has {len(consistency_map)} rename(s).")
+    logger.info(
+        "Agent 2 complete: mapped_files=%d total_hunk_mappings=%d consistency_map_entries=%d",
+        len(mapped_target_context),
+        sum(len(v) for v in mapped_target_context.values()),
+        len(consistency_map),
+    )
 
     return {
         "messages": [

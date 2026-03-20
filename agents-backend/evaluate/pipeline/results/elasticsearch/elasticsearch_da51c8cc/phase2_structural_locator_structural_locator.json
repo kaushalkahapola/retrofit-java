@@ -1,0 +1,133 @@
+{
+  "consistency_map": {
+    "decode": "channelRead",
+    "Consumer<Object>": "CheckedConsumer<Object, IOException>"
+  },
+  "mapped_target_context": {
+    "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<import>",
+        "target_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+        "target_method": "<import>",
+        "start_line": 15,
+        "end_line": 15,
+        "code_snippet": "import org.elasticsearch.common.bytes.ReleasableBytesReference;"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "channelRead",
+        "target_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+        "target_method": "channelRead",
+        "start_line": 51,
+        "end_line": 58,
+        "code_snippet": "    @Override\n    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {\n        final ByteBuf buffer = (ByteBuf) msg;\n        Netty4TcpChannel channel = ctx.channel().attr(Netty4Transport.CHANNEL_KEY).get();\n        activityTracker.startActivity();\n        try (ReleasableBytesReference reference = Netty4Utils.toReleasableBytesReference(buffer)) {\n            pipeline.handleBytes(channel, reference);\n        } finally {\n            activityTracker.stopActivity();\n        }\n    }"
+      }
+    ],
+    "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "NettyByteBufSizer",
+        "target_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+        "target_method": "NettyByteBufSizer",
+        "start_line": 17,
+        "end_line": 19,
+        "code_snippet": "public class NettyByteBufSizer extends MessageToMessageDecoder<ByteBuf> {\n\n    public static final NettyByteBufSizer INSTANCE = new NettyByteBufSizer();"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "decode",
+        "target_file": "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+        "target_method": "decode",
+        "start_line": 23,
+        "end_line": 33,
+        "code_snippet": "    @Override\n    protected void decode(ChannelHandlerContext ctx, ByteBuf buf, List<Object> out) {\n        int readableBytes = buf.readableBytes();\n        if (buf.capacity() >= 1024) {\n            ByteBuf resized = buf.discardReadBytes().capacity(readableBytes);\n            assert resized.readableBytes() == readableBytes;\n            out.add(resized.retain());\n        } else {\n            out.add(buf.retain());\n        }\n    }"
+      }
+    ],
+    "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<import>",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "target_method": "<import>",
+        "start_line": 18,
+        "end_line": 24,
+        "code_snippet": "import org.elasticsearch.common.recycler.Recycler;\nimport org.elasticsearch.common.unit.ByteSizeUnit;\nimport org.elasticsearch.common.unit.ByteSizeValue;\nimport org.elasticsearch.core.Releasable;\nimport org.elasticsearch.core.Releasables;\nimport java.io.IOException;\nimport java.io.StreamCorruptedException;\nimport java.util.function.Consumer;"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "decode",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "target_method": "decode",
+        "start_line": 56,
+        "end_line": 64,
+        "code_snippet": "public int decode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {\n    ensureOpen();\n    try {\n        return internalDecode(reference, fragmentConsumer);\n    } catch (Exception e) {\n        cleanDecodeState();\n        throw e;\n    }\n}"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "internalDecode",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "target_method": "internalDecode",
+        "start_line": 66,
+        "end_line": 133,
+        "code_snippet": "public int internalDecode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {\n    if (isOnHeader()) {\n        int messageLength = TcpTransport.readMessageLength(reference);\n        if (messageLength == -1) {\n            return 0;\n        } else if (messageLength == 0) {\n            fragmentConsumer.accept(PING);\n            return 6;\n        } else {\n            int headerBytesToRead = headerBytesToRead(reference, maxHeaderSize);\n            if (headerBytesToRead == 0) {\n                return 0;\n            } else {\n                totalNetworkSize = messageLength + TcpHeader.BYTES_REQUIRED_FOR_MESSAGE_SIZE;\n\n                Header header = readHeader(messageLength, reference, channelType);\n                bytesConsumed += headerBytesToRead;\n                if (header.isCompressed()) {\n                    isCompressed = true;\n                }\n                fragmentConsumer.accept(header);\n\n                if (isDone()) {\n                    finishMessage(fragmentConsumer);\n                }\n                return headerBytesToRead;\n            }\n        }\n    } else {\n        if (isCompressed && decompressor == null) {\n            // Attempt to initialize decompressor\n            TransportDecompressor decompressor = TransportDecompressor.getDecompressor(recycler, reference);\n            if (decompressor == null) {\n                return 0;\n            } else {\n                this.decompressor = decompressor;\n                fragmentConsumer.accept(this.decompressor.getScheme());\n            }\n        }\n        int remainingToConsume = totalNetworkSize - bytesConsumed;\n        int maxBytesToConsume = Math.min(reference.length(), remainingToConsume);\n        ReleasableBytesReference retainedContent;\n        if (maxBytesToConsume == remainingToConsume) {\n            retainedContent = reference.retainedSlice(0, maxBytesToConsume);\n        } else {\n            retainedContent = reference.retain();\n        }\n\n        int bytesConsumedThisDecode = 0;\n        if (decompressor != null) {\n            bytesConsumedThisDecode += decompress(retainedContent);\n            bytesConsumed += bytesConsumedThisDecode;\n            ReleasableBytesReference decompressed;\n            while ((decompressed = decompressor.pollDecompressedPage(isDone())) != null) {\n                fragmentConsumer.accept(decompressed);\n            }\n        } else {\n            bytesConsumedThisDecode += maxBytesToConsume;\n            bytesConsumed += maxBytesToConsume;\n            fragmentConsumer.accept(retainedContent);\n        }\n        if (isDone()) {\n            finishMessage(fragmentConsumer);\n        }\n\n        return bytesConsumedThisDecode;\n    }\n}"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "internalDecode",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "target_method": "internalDecode",
+        "start_line": 66,
+        "end_line": 133,
+        "code_snippet": "public int internalDecode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {\n    if (isOnHeader()) {\n        int messageLength = TcpTransport.readMessageLength(reference);\n        if (messageLength == -1) {\n            return 0;\n        } else if (messageLength == 0) {\n            fragmentConsumer.accept(PING);\n            return 6;\n        } else {\n            int headerBytesToRead = headerBytesToRead(reference, maxHeaderSize);\n            if (headerBytesToRead == 0) {\n                return 0;\n            } else {\n                totalNetworkSize = messageLength + TcpHeader.BYTES_REQUIRED_FOR_MESSAGE_SIZE;\n\n                Header header = readHeader(messageLength, reference, channelType);\n                bytesConsumed += headerBytesToRead;\n                if (header.isCompressed()) {\n                    isCompressed = true;\n                }\n                fragmentConsumer.accept(header);\n\n                if (isDone()) {\n                    finishMessage(fragmentConsumer);\n                }\n                return headerBytesToRead;\n            }\n        }\n    } else {\n        if (isCompressed && decompressor == null) {\n            // Attempt to initialize decompressor\n            TransportDecompressor decompressor = TransportDecompressor.getDecompressor(recycler, reference);\n            if (decompressor == null) {\n                return 0;\n            } else {\n                this.decompressor = decompressor;\n                fragmentConsumer.accept(this.decompressor.getScheme());\n            }\n        }\n        int remainingToConsume = totalNetworkSize - bytesConsumed;\n        int maxBytesToConsume = Math.min(reference.length(), remainingToConsume);\n        ReleasableBytesReference retainedContent;\n        if (maxBytesToConsume == remainingToConsume) {\n            retainedContent = reference.retainedSlice(0, maxBytesToConsume);\n        } else {\n            retainedContent = reference.retain();\n        }\n\n        int bytesConsumedThisDecode = 0;\n        if (decompressor != null) {\n            bytesConsumedThisDecode += decompress(retainedContent);\n            bytesConsumed += bytesConsumedThisDecode;\n            ReleasableBytesReference decompressed;\n            while ((decompressed = decompressor.pollDecompressedPage(isDone())) != null) {\n                fragmentConsumer.accept(decompressed);\n            }\n        } else {\n            bytesConsumedThisDecode += maxBytesToConsume;\n            bytesConsumed += maxBytesToConsume;\n            fragmentConsumer.accept(retainedContent);\n        }\n        if (isDone()) {\n            finishMessage(fragmentConsumer);\n        }\n\n        return bytesConsumedThisDecode;\n    }\n}"
+      },
+      {
+        "hunk_index": 5,
+        "mainline_method": "finishMessage",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "target_method": "finishMessage",
+        "start_line": 141,
+        "end_line": 144,
+        "code_snippet": "private void finishMessage(Consumer<Object> fragmentConsumer) {\n    cleanDecodeState();\n    fragmentConsumer.accept(END_CONTENT);\n}"
+      },
+      {
+        "hunk_index": 6,
+        "mainline_method": "decompress",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "target_method": "decompress",
+        "start_line": 157,
+        "end_line": 161,
+        "code_snippet": "private int decompress(ReleasableBytesReference content) throws IOException {\n    try (content) {\n        return decompressor.decompress(content);\n    }\n}"
+      }
+    ],
+    "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<class-level field>",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+        "target_method": "<class-level field>",
+        "start_line": 15,
+        "end_line": 15,
+        "code_snippet": "private static final ThreadLocal<ArrayList<Object>> fragmentList = ThreadLocal.withInitial(ArrayList::new);"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "doHandleBytes",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+        "target_method": "doHandleBytes",
+        "start_line": 61,
+        "end_line": 109,
+        "code_snippet": "public void doHandleBytes(TcpChannel channel, ReleasableBytesReference reference) throws IOException {\n    channel.getChannelStats().markAccessed(relativeTimeInMillis.getAsLong());\n    statsTracker.markBytesRead(reference.length());\n    pending.add(reference.retain());\n\n    final ArrayList<Object> fragments = fragmentList.get();\n    boolean continueHandling = true;\n\n    while (continueHandling && isClosed == false) {\n        boolean continueDecoding = true;\n        while (continueDecoding && pending.isEmpty() == false) {\n            try (ReleasableBytesReference toDecode = getPendingBytes()) {\n                final int bytesDecoded = decoder.decode(toDecode, fragments::add);\n                if (bytesDecoded != 0) {\n                    releasePendingBytes(bytesDecoded);\n                    if (fragments.isEmpty() == false && endOfMessage(fragments.get(fragments.size() - 1))) {\n                        continueDecoding = false;\n                    }\n                } else {\n                    continueDecoding = false;\n                }\n            }\n        }\n\n        if (fragments.isEmpty()) {\n            continueHandling = false;\n        } else {\n            try {\n                forwardFragments(channel, fragments);\n            } finally {\n                for (Object fragment : fragments) {\n                    if (fragment instanceof ReleasableBytesReference) {\n                        ((ReleasableBytesReference) fragment).close();\n                    }\n                }\n                fragments.clear();\n            }\n        }\n    }\n}"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "endOfMessage / getPendingBytes",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+        "target_method": "endOfMessage",
+        "start_line": 142,
+        "end_line": 161,
+        "code_snippet": "private static boolean endOfMessage(Object fragment) {\n    return fragment == InboundDecoder.PING || fragment == InboundDecoder.END_CONTENT || fragment instanceof Exception;\n}\n\nprivate ReleasableBytesReference getPendingBytes() {\n    if (pending.size() == 1) {\n        return pending.peekFirst().retain();\n    } else {\n        final ReleasableBytesReference[] bytesReferences = new ReleasableBytesReference[pending.size()];\n        int index = 0;\n        for (ReleasableBytesReference pendingReference : pending) {\n            bytesReferences[index] = pendingReference.retain();\n            ++index;\n        }\n        final Releasable releasable = () -> Releasables.closeExpectNoException(bytesReferences);\n        return new ReleasableBytesReference(CompositeBytesReference.of(bytesReferences), releasable);\n    }\n}"
+      }
+    ]
+  }
+}
