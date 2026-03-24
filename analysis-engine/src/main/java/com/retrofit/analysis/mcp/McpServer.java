@@ -9,6 +9,7 @@ import com.retrofit.analysis.tools.GetClassContextTool;
 import com.retrofit.analysis.tools.GetJavaVersionTool;
 import com.retrofit.analysis.tools.CompileTool;
 import com.retrofit.analysis.tools.SpotBugsTool;
+import com.retrofit.analysis.tools.GetStructuralAnalysisTool;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -28,18 +29,20 @@ public class McpServer {
     private final GetClassContextTool getClassContextTool;
     private final CompileTool compileTool;
     private final SpotBugsTool spotBugsTool;
+    private final GetStructuralAnalysisTool getStructuralAnalysisTool;
     private final ObjectMapper objectMapper;
     private final Map<String, SseEmitter> emitters = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     public McpServer(GetJavaVersionTool getJavaVersionTool, GetDependencyTool getDependencyTool,
             GetClassContextTool getClassContextTool, CompileTool compileTool, SpotBugsTool spotBugsTool,
-            ObjectMapper objectMapper) {
+            GetStructuralAnalysisTool getStructuralAnalysisTool, ObjectMapper objectMapper) {
         this.getJavaVersionTool = getJavaVersionTool;
         this.getDependencyTool = getDependencyTool;
         this.getClassContextTool = getClassContextTool;
         this.compileTool = compileTool;
         this.spotBugsTool = spotBugsTool;
+        this.getStructuralAnalysisTool = getStructuralAnalysisTool;
         this.objectMapper = objectMapper;
     }
 
@@ -208,6 +211,19 @@ public class McpServer {
         ArrayNode sbRequired = sbSchema.putArray("required");
         sbRequired.add("compiled_classes_paths");
 
+        // Tool: get_structural_analysis
+        ObjectNode strTool = tools.addObject();
+        strTool.put("name", "get_structural_analysis");
+        strTool.put("description", "Analyzes the structural properties of a Java file including classes, methods, fields, and call relationships");
+        ObjectNode strSchema = strTool.putObject("inputSchema");
+        strSchema.put("type", "object");
+        ObjectNode strProps = strSchema.putObject("properties");
+        strProps.putObject("target_repo_path").put("type", "string");
+        strProps.putObject("file_path").put("type", "string");
+        ArrayNode strRequired = strSchema.putArray("required");
+        strRequired.add("target_repo_path");
+        strRequired.add("file_path");
+
         return response;
     }
 
@@ -257,6 +273,11 @@ public class McpServer {
                     arguments.get("aux_classpath").forEach(node -> auxClasspath.add(node.asText()));
                 }
                 Map<String, Object> result = spotBugsTool.execute(compiledClassesPaths, sourcePath, auxClasspath);
+                return createToolResponse(id, result);
+            } else if ("get_structural_analysis".equals(toolName)) {
+                String repoPath = arguments.get("target_repo_path").asText();
+                String filePath = arguments.get("file_path").asText();
+                Map<String, Object> result = getStructuralAnalysisTool.execute(repoPath, filePath);
                 return createToolResponse(id, result);
             } else {
                 return createErrorResponse(id, -32601, "Tool not found: " + toolName);

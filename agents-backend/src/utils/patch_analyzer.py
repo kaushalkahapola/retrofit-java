@@ -110,7 +110,7 @@ class PatchAnalyzer:
                 # Reconstruct hunk header
                 lines.append(
                     f"@@ -{hunk.source_start},{hunk.source_length} "
-                    f"+{hunk.target_start},{hunk.target_length} @@"
+                    f"+{hunk.target_start},{hunk.target_length} @@\n"
                 )
                 for line in hunk:
                     if line.is_added:

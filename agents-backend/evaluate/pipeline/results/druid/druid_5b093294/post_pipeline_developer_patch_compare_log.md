@@ -13,21 +13,20 @@
 
 ### processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java
 
-<table>
-  <thead>
-    <tr><th>Hunk</th><th>Developer (Left)</th><th>Generated (Right)</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>1</td><td><pre><code class="language-diff">@@ -158,12 +158,17 @@ 
+#### Hunk 1
+
+Developer
+```diff
+@@ -158,12 +158,17 @@ 
      releaseLastBlockIfEmpty();
  
 +    final int idx = currentBlockNumber();
 +
 +    // The request cannot be satisfied by the available bytes in the allocator
-     if (bytes &gt; allocator.available()) {
+     if (bytes > allocator.available()) {
 -      return false;
 +      // Check if the last allocated block has enough memory to satisfy the request
-+      if (idx &lt; 0 || bytes + limits.getInt(idx) &gt; blockHolders.get(idx).get().getCapacity()) {
++      if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {
 +        // The request cannot be satisfied by the allocator and the last allocated block. Return false
 +        return false;
 +      }
@@ -35,19 +34,24 @@
  
 -    final int idx = currentBlockNumber();
 -
-     if (idx &lt; 0 || bytes + limits.getInt(idx) &gt; blockHolders.get(idx).get().getCapacity()) {
+     if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {
        // Allocation needed.
-       // Math.max(allocationSize, bytes) in case &quot;bytes&quot; is greater than SOFT_MAXIMUM_ALLOCATION_SIZE.
-</code></pre></td><td><pre><code class="language-diff">@@ -149,11 +149,16 @@ 
+       // Math.max(allocationSize, bytes) in case "bytes" is greater than SOFT_MAXIMUM_ALLOCATION_SIZE.
+
+```
+
+Generated
+```diff
+@@ -149,11 +149,16 @@ 
      releaseLastBlockIfEmpty();
  
 +    final int idx = currentBlockNumber();
 +
 +    // The request cannot be satisfied by the available bytes in the allocator
-     if (bytes &gt; allocator.available()) {
+     if (bytes > allocator.available()) {
 -      return false;
 +      // Check if the last allocated block has enough memory to satisfy the request
-+      if (idx &lt; 0 || bytes + limits.getInt(idx) &gt; blockHolders.get(idx).get().getCapacity()) {
++      if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {
 +        // The request cannot be satisfied by the allocator and the last allocated block. Return false
 +        return false;
 +      }
@@ -55,12 +59,22 @@
  
 -    final int idx = currentBlockNumber();
 -
-     if (idx &lt; 0 || bytes + limits.getInt(idx) &gt; blockHolders.get(idx).get().getCapacity()) {
+     if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {
        // Allocation needed.
-       // Math.max(allocationSize, bytes) in case &quot;bytes&quot; is greater than SOFT_MAXIMUM_ALLOCATION_SIZE.
-</code></pre></td></tr>
-  </tbody>
-</table>
+       // Math.max(allocationSize, bytes) in case "bytes" is greater than SOFT_MAXIMUM_ALLOCATION_SIZE.
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+--- developer+++ generated@@ -1,4 +1,4 @@-@@ -158,12 +158,17 @@ 
++@@ -149,11 +149,16 @@ 
+      releaseLastBlockIfEmpty();
+  
+ +    final int idx = currentBlockNumber();
+
+```
+
 
 
 ## Full Generated Patch (code-only)

@@ -12,6 +12,9 @@ from utils.llm_provider import get_llm
 from agents.validation_tools import ValidationToolkit
 from agents.hunk_generator import _extract_hunk_block
 
+# Test-suite compatibility shim for legacy patch target.
+ChatGoogleGenerativeAI = None
+
 _SYNTHESIZE_TEST_SYSTEM = """You are an expert Java test engineer.
 Your task is to write a single JUnit test method that specifically triggers a vulnerability."""
 
@@ -42,6 +45,23 @@ _ANALYZE_FAILURE_USER = """\
 Provide concise diagnosis and fix suggestion:"""
 
 MAX_VALIDATION_ATTEMPTS = 3
+
+
+def _format_transition_summary(transition_eval: dict) -> str:
+    if not transition_eval:
+        return "No transition evaluation available."
+
+    fail_to_pass = transition_eval.get("fail_to_pass", []) or []
+    newly_passing = transition_eval.get("newly_passing", []) or []
+    pass_to_fail = transition_eval.get("pass_to_fail", []) or []
+    reason = transition_eval.get("reason", "Unknown reason.")
+
+    return (
+        f"reason={reason}; "
+        f"fail->pass({len(fail_to_pass)}): {fail_to_pass}; "
+        f"newly_passing({len(newly_passing)}): {newly_passing}; "
+        f"pass->fail({len(pass_to_fail)}): {pass_to_fail}"
+    )
 
 async def _analyze_failure(step_name: str, error_output: str, state: AgentState) -> str:
     """Uses LLM to evaluate and explain a validation failure."""
@@ -189,13 +209,17 @@ async def validation_agent(state: AgentState, config) -> dict:
     # 3.0 Setup
     code_hunks = state.get("adapted_code_hunks", [])
     test_hunks = state.get("adapted_test_hunks", [])
+    developer_aux_hunks = state.get("developer_auxiliary_hunks", [])
     attempts = state.get("validation_attempts", 0)
     blueprint = state.get("semantic_blueprint", {})
     compile_only = state.get("compile_only", False)
-    # Temporary mode: skip compilation/static-analysis phases due environment constraints.
-    skip_compilation_checks = True
-    # Temporary mode: validation only checks whether hunks can be applied.
-    apply_only_validation = True
+    evaluation_full_workflow = state.get("evaluation_full_workflow", False)
+    phase_0_test_targets = state.get("phase_0_test_targets")
+    phase_0_baseline_test_result = state.get("phase_0_baseline_test_result")
+    # Optional runtime toggles for constrained runs.
+    skip_compilation_checks = state.get("skip_compilation_checks", False)
+    apply_only_validation = state.get("apply_only_validation", False)
+    effective_code_hunks = list(code_hunks) + list(developer_aux_hunks)
     
     if attempts >= MAX_VALIDATION_ATTEMPTS:
         print(f"  Agent 4: Max validation attempts ({MAX_VALIDATION_ATTEMPTS}) reached. Failing.")
@@ -205,7 +229,7 @@ async def validation_agent(state: AgentState, config) -> dict:
     toolkit.restore_repo_state()
     
     # Trace Initialization
-    unique_code_files = list(set([h.get("target_file") for h in code_hunks if h.get("target_file")]))
+    unique_code_files = list(set([h.get("target_file") for h in effective_code_hunks if h.get("target_file")]))
     unique_test_files = list(set([h.get("target_file") for h in test_hunks if h.get("target_file")]))
     
     validation_results = {}
@@ -221,23 +245,156 @@ async def validation_agent(state: AgentState, config) -> dict:
         "## Hunk Segregation",
         f"- Code files: {len(unique_code_files)}",
         f"- Test files: {len(unique_test_files)}",
+        f"- Developer auxiliary hunks: {len(developer_aux_hunks)}",
         "",
         "## Agent Tool Steps",
         ""
     ]
 
     def log_step(tool_name, params, output):
-        trace.append(f"  - `Agent calls {tool_name}` with `{json.dumps(params)}`")
+        trace.append(f"  - `Agent calls {tool_name}` with `{json.dumps(params, default=str)}`")
         # Truncate long outputs for trace readability
         out_str = str(output)
         if len(out_str) > 1000:
             out_str = out_str[:1000] + "... [TRUNCATED]"
         trace.append(f"  - `Tool: {tool_name}` -> {out_str}")
 
+    if evaluation_full_workflow:
+        print("  Agent 4: Evaluation full-workflow mode (apply -> build -> relevant tests)...")
+        res = toolkit.apply_adapted_hunks(effective_code_hunks, test_hunks)
+        log_step(
+            "apply_adapted_hunks",
+            {
+                "code_count": len(code_hunks),
+                "developer_aux_count": len(developer_aux_hunks),
+                "effective_code_count": len(effective_code_hunks),
+                "test_count": len(test_hunks),
+            },
+            res,
+        )
+
+        validation_results["hunk_application"] = {
+            "success": res["success"],
+            "raw": res["output"],
+        }
+
+        if not res["success"]:
+            analysis = await _analyze_failure("Hunk Application", res["output"], state)
+            validation_results["hunk_application"]["agent_evaluation"] = analysis
+            validation_results["hunk_application"]["error_context"] = analysis
+            trace.append(f"\n**Final Status: HUNK APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+            toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            return {
+                "validation_passed": False,
+                "validation_attempts": attempts + 1,
+                "validation_error_context": f"Hunk application failed: {analysis}",
+                "validation_results": validation_results,
+                "regeneration_hint": analysis,
+            }
+
+        build_res = toolkit.run_build_script()
+        log_step("run_build_script", {}, build_res)
+        validation_results["build"] = {
+            "success": build_res.get("success", False),
+            "raw": build_res.get("output", ""),
+        }
+        if not build_res.get("success", False):
+            analysis = await _analyze_failure("Build", build_res.get("output", ""), state)
+            validation_results["build"]["agent_evaluation"] = analysis
+            validation_results["build"]["error_context"] = analysis
+            trace.append(f"\n**Final Status: BUILD FAILED**\n\n**Agent Analysis:**\n{analysis}")
+            toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            return {
+                "validation_passed": False,
+                "validation_attempts": attempts + 1,
+                "validation_error_context": f"Build failed: {analysis}",
+                "validation_results": validation_results,
+                "regeneration_hint": analysis,
+            }
+
+        test_targets = phase_0_test_targets or toolkit.detect_relevant_test_targets(project="druid")
+        test_res = toolkit.run_relevant_tests(project="druid", target_info=test_targets)
+        log_step("run_relevant_tests", {"targets": test_targets}, test_res)
+        transition_eval = toolkit.evaluate_test_state_transition(phase_0_baseline_test_result, test_res)
+        transition_summary = _format_transition_summary(transition_eval)
+        log_step(
+            "evaluate_test_state_transition",
+            {
+                "baseline_available": bool(phase_0_baseline_test_result),
+                "baseline_mode": (phase_0_baseline_test_result or {}).get("mode", "none"),
+            },
+            transition_eval,
+        )
+
+        validation_results["test_target_detection"] = {
+            "success": True,
+            "raw": test_targets,
+        }
+        validation_results["tests"] = {
+            "success": test_res.get("success", False),
+            "raw": test_res.get("output", ""),
+            "mode": test_res.get("mode", "unknown"),
+            "state_transition": transition_eval,
+        }
+
+        if test_res.get("compile_error", False):
+            analysis = await _analyze_failure("Relevant Tests (Compile Error)", test_res.get("output", ""), state)
+            validation_results["tests"]["agent_evaluation"] = analysis
+            validation_results["tests"]["error_context"] = analysis
+            trace.append(f"\n**Final Status: TEST EXECUTION FAILED (COMPILE ERROR)**\n\n**Agent Analysis:**\n{analysis}")
+            toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            return {
+                "validation_passed": False,
+                "validation_attempts": attempts + 1,
+                "validation_error_context": f"Tests failed to execute: {analysis}",
+                "validation_results": validation_results,
+                "regeneration_hint": analysis,
+            }
+
+        if not transition_eval.get("valid_backport_signal", False):
+            analysis = (
+                "Relevant-test state transition check failed. "
+                f"Transition summary: {transition_summary}"
+            )
+            validation_results["tests"]["agent_evaluation"] = analysis
+            validation_results["tests"]["error_context"] = analysis
+            trace.append(
+                "\n**Final Status: TEST STATE TRANSITION FAILED**\n\n"
+                f"**Transition Summary:**\n{transition_summary}\n\n"
+                f"**Transition Evaluation:**\n{json.dumps(transition_eval, default=str)}"
+            )
+            toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            return {
+                "validation_passed": False,
+                "validation_attempts": attempts + 1,
+                "validation_error_context": analysis,
+                "validation_results": validation_results,
+                "regeneration_hint": analysis,
+            }
+
+        validation_results["tests"]["agent_evaluation"] = (
+            "Relevant-test transition check passed: no pass->fail regressions and "
+            "at least one fail->pass or newly passing test observed. "
+            f"Transition summary: {transition_summary}"
+        )
+
+        trace.append(
+            "\n**Final Status: VALIDATION PASSED (FULL EVALUATION WORKFLOW)**\n\n"
+            f"**Transition Summary:**\n{transition_summary}"
+        )
+        toolkit.write_trace("\n".join(trace), "validation_trace.md")
+        return {
+            "validation_passed": True,
+            "validation_attempts": attempts + 1,
+            "validation_error_context": "",
+            "validation_results": validation_results,
+            "phase_0_transition_evaluation": transition_eval,
+        }
+
     if apply_only_validation:
         print("  Agent 4: Apply-only mode - checking patch application only...")
-        res = toolkit.apply_adapted_hunks(code_hunks, test_hunks)
-        log_step("apply_adapted_hunks", {"code_count": len(code_hunks), "test_count": len(test_hunks)}, res)
+        res = toolkit.apply_adapted_hunks(effective_code_hunks, test_hunks)
+        log_step("apply_adapted_hunks", {"code_count": len(effective_code_hunks), "test_count": len(test_hunks)}, res)
 
         validation_results["hunk_application"] = {
             "success": res["success"],
@@ -282,8 +439,8 @@ async def validation_agent(state: AgentState, config) -> dict:
     # Compile-Only Mode (Streamlined - Apply patch and compile changed files only)
     if compile_only:
         print("  Agent 4: Streamlined mode - applying patch and compiling changed files only...")
-        res = toolkit.apply_adapted_hunks(code_hunks, test_hunks)
-        log_step("apply_adapted_hunks", {"code_count": len(code_hunks), "test_count": len(test_hunks)}, res)
+        res = toolkit.apply_adapted_hunks(effective_code_hunks, test_hunks)
+        log_step("apply_adapted_hunks", {"code_count": len(effective_code_hunks), "test_count": len(test_hunks)}, res)
 
         validation_results["hunk_application"] = {
             "success": res["success"],
@@ -481,7 +638,11 @@ async def validation_agent(state: AgentState, config) -> dict:
         }
 
     if res2["success"]:
-        analysis = "Test passed unexpectedly before fix. The synthesized test does not reproduce the issue. The test needs to be rewritten to properly trigger the vulnerability condition."
+        analysis = (
+            "Test passed unexpectedly BEFORE the fix was applied. "
+            "The synthesized test does not reproduce the issue and must be rewritten "
+            "to properly trigger the vulnerability condition."
+        )
         validation_results["failure_confirmation"]["agent_evaluation"] = analysis
         validation_results["failure_confirmation"]["error_context"] = analysis
         trace.append(f"\n**Final Status: INVALID TEST (PASSED UNEXPECTEDLY)**\n\n**Agent Analysis:**\n{analysis}")
@@ -502,8 +663,8 @@ async def validation_agent(state: AgentState, config) -> dict:
     # 3.4 Phase 3: Patch Application
     print("  Agent 4: Phase 3 — Patch Application (Applying code fix)...")
     toolkit.restore_repo_state() # Cleanup buggy tests before full applied
-    res3 = toolkit.apply_adapted_hunks(code_hunks=code_hunks, test_hunks=test_hunks)
-    log_step("apply_adapted_hunks (full)", {"code_count": len(code_hunks), "test_count": len(test_hunks)}, res3)
+    res3 = toolkit.apply_adapted_hunks(code_hunks=effective_code_hunks, test_hunks=test_hunks)
+    log_step("apply_adapted_hunks (full)", {"code_count": len(effective_code_hunks), "test_count": len(test_hunks)}, res3)
 
     validation_results["patch_application"] = {
         "success": res3["success"],
@@ -540,15 +701,16 @@ async def validation_agent(state: AgentState, config) -> dict:
 
     if not res4["success"]:
         analysis = await _analyze_failure("Targeted Verification", res4["output"], state)
+        failure_context = f"tests failed or compile aborted: {analysis}"
         validation_results["targeted_verification"]["agent_evaluation"] = analysis
-        validation_results["targeted_verification"]["error_context"] = analysis
+        validation_results["targeted_verification"]["error_context"] = failure_context
         trace.append(f"\n**Final Status: VERIFICATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
         toolkit.restore_repo_state()
         return {
             "validation_passed": False,
             "validation_attempts": attempts + 1,
-            "validation_error_context": analysis,
+            "validation_error_context": failure_context,
             "adapted_test_hunks": test_hunks,
             "validation_results": validation_results,
             "regeneration_hint": analysis

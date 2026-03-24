@@ -98,12 +98,20 @@ class AgentState(TypedDict):
     skip_phase_0: bool               # If True, skip phase 0 and go directly to context analyzer
     compile_only: bool               # If True, validation only applies patch and compiles (no tests)
     with_test_changes: bool          # If False (default), ignore test file changes/hunks in all phases
+    apply_only_validation: bool      # If True, validation only checks hunk application
+    skip_compilation_checks: bool    # If True, compile-only mode skips compilation/static checks
+    evaluation_full_workflow: bool   # If True, run full eval flow in validation (apply+build+tests)
 
     # --- Phase 0: Pre-computed analysis ---
     patch_analysis: list             # List[FileChange] — from PatchAnalyzer
 
     # --- Phase 0 fast-path result ---
     fast_path_success: bool          # True if git apply --check & tests passed cleanly
+    phase_0_test_targets: dict       # Relevant targets selected for baseline/post test runs
+    phase_0_baseline_test_result: dict  # Test result on parent commit with developer test-only changes
+    phase_0_post_patch_test_result: dict  # Test result after applying candidate patch
+    phase_0_transition_evaluation: dict   # Baseline->post transition decision details
+    use_phase_0_cache: bool          # If True, Phase 0 may reuse cached evaluation outputs
 
     # --- Agent 1 (Context Analyzer) outputs ---
     semantic_blueprint: Optional[SemanticBlueprint]  # Blueprint of why/how the patch works
@@ -119,6 +127,7 @@ class AgentState(TypedDict):
     # --- Agent 3 (Hunk Generator) outputs ---
     adapted_code_hunks: list[AdaptedHunk]  # Generated/adapted fix patch hunks
     adapted_test_hunks: list[AdaptedHunk]  # Generated/adapted test patch hunks
+    developer_auxiliary_hunks: list[AdaptedHunk]  # Developer backport test/non-Java hunks merged in phase 4
 
     # --- Agent 4 (Validation) feedback ---
     validation_attempts: int         # Counter for "Prove Red, Make Green" retry loop

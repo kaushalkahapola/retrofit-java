@@ -5,6 +5,9 @@ import os
 import subprocess
 import json
 import re
+import glob
+import shutil
+import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -87,6 +90,521 @@ class ValidationToolkit:
     def __init__(self, target_repo_path: str):
         self.target_repo_path = target_repo_path
         self.client = get_client()
+
+    def _is_druid_project(self) -> bool:
+        return os.path.basename(self.target_repo_path).strip().lower() == "druid"
+
+    def _find_maven_module_for_path(self, rel_path: str) -> str:
+        """Find nearest parent directory containing pom.xml for a repo-relative path."""
+        head = (rel_path or "").replace("\\", "/")
+        while head:
+            head, _ = os.path.split(head)
+            if os.path.exists(os.path.join(self.target_repo_path, head, "pom.xml")):
+                return head
+        return ""
+
+    def _clear_previous_junit_reports(self) -> None:
+        """Remove stale JUnit XML files so each run reflects only current execution."""
+        try:
+            for xml_path in glob.glob(
+                os.path.join(self.target_repo_path, "**", "surefire-reports", "TEST-*.xml"),
+                recursive=True,
+            ):
+                try:
+                    os.remove(xml_path)
+                except Exception:
+                    pass
+
+            aggregate_dir = os.path.join(self.target_repo_path, "build", "all-test-results")
+            if os.path.isdir(aggregate_dir):
+                shutil.rmtree(aggregate_dir, ignore_errors=True)
+        except Exception:
+            # Best effort cleanup only.
+            pass
+
+    def _collect_junit_xml_paths(self) -> list[str]:
+        """Collect JUnit XML report file paths from common Maven/Gradle output locations."""
+        paths = set(
+            glob.glob(
+                os.path.join(self.target_repo_path, "**", "surefire-reports", "TEST-*.xml"),
+                recursive=True,
+            )
+        )
+        paths.update(
+            glob.glob(
+                os.path.join(self.target_repo_path, "build", "all-test-results", "TEST-*.xml"),
+                recursive=True,
+            )
+        )
+        return sorted(paths)
+
+    def _detect_project_name(self) -> str:
+        return os.path.basename(self.target_repo_path).strip().lower()
+
+    def _extract_test_state_with_project_helper(
+        self,
+        target_info: Optional[Dict[str, Any]] = None,
+        console_output: str = "",
+    ) -> Dict[str, Any] | None:
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        helper_script = os.path.join(root_dir, "evaluate", "helpers", "collect_test_results.py")
+        if not os.path.exists(helper_script):
+            return None
+
+        info = target_info or {}
+        target_classes = [
+            t.split(":", 1)[1]
+            for t in (info.get("test_targets") or [])
+            if ":" in t
+        ]
+        target_classes_arg = ",".join(sorted(set(target_classes)))
+
+        console_file = os.path.join(self.target_repo_path, "build", "test-console.log")
+        try:
+            os.makedirs(os.path.dirname(console_file), exist_ok=True)
+            with open(console_file, "w", encoding="utf-8") as f:
+                f.write(console_output or "")
+        except Exception:
+            console_file = ""
+
+        cmd = [
+            "python3",
+            helper_script,
+            "--project",
+            self._detect_project_name(),
+            "--repo",
+            self.target_repo_path,
+            "--target-classes",
+            target_classes_arg,
+        ]
+        if console_file:
+            cmd.extend(["--console-file", console_file])
+
+        result = self._run_cmd_capture(cmd, cwd=self.target_repo_path)
+        if not result.get("success"):
+            return None
+
+        try:
+            return json.loads(result.get("output", "{}"))
+        except json.JSONDecodeError:
+            return None
+
+    def _extract_test_state(self, target_info: Optional[Dict[str, Any]] = None, console_output: str = "") -> Dict[str, Any]:
+        """
+        Parse JUnit XML files and return test-case and class-level statuses.
+
+        Status values: passed | failed | error | skipped
+        """
+        helper_state = self._extract_test_state_with_project_helper(target_info=target_info, console_output=console_output)
+        if helper_state is not None:
+            return helper_state
+
+        info = target_info or {}
+        target_classes = {
+            t.split(":", 1)[1]
+            for t in (info.get("test_targets") or [])
+            if ":" in t
+        }
+
+        xml_paths = self._collect_junit_xml_paths()
+        test_case_status: dict[str, str] = {}
+        class_status_acc: dict[str, list[str]] = {}
+
+        for xml_path in xml_paths:
+            try:
+                tree = ET.parse(xml_path)
+                root = tree.getroot()
+            except Exception:
+                continue
+
+            for case in root.findall(".//testcase"):
+                classname = (case.attrib.get("classname") or "").strip()
+                testname = (case.attrib.get("name") or "").strip()
+                if not classname or not testname:
+                    continue
+
+                if target_classes and classname not in target_classes:
+                    continue
+
+                if case.find("failure") is not None:
+                    status = "failed"
+                elif case.find("error") is not None:
+                    status = "error"
+                elif case.find("skipped") is not None:
+                    status = "skipped"
+                else:
+                    status = "passed"
+
+                test_key = f"{classname}#{testname}"
+                test_case_status[test_key] = status
+                class_status_acc.setdefault(classname, []).append(status)
+
+        class_status: dict[str, str] = {}
+        for classname, statuses in class_status_acc.items():
+            if any(s in {"failed", "error"} for s in statuses):
+                class_status[classname] = "failed"
+            elif all(s == "skipped" for s in statuses):
+                class_status[classname] = "skipped"
+            else:
+                class_status[classname] = "passed"
+
+        return {
+            "xml_reports": xml_paths,
+            "target_classes": sorted(target_classes),
+            "test_cases": test_case_status,
+            "classes": class_status,
+            "summary": {
+                "passed": sum(1 for s in test_case_status.values() if s == "passed"),
+                "failed": sum(1 for s in test_case_status.values() if s in {"failed", "error"}),
+                "skipped": sum(1 for s in test_case_status.values() if s == "skipped"),
+                "total": len(test_case_status),
+            },
+        }
+
+    def evaluate_test_state_transition(
+        self,
+        baseline_test_result: Optional[Dict[str, Any]],
+        patched_test_result: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """
+        Evaluate whether patched tests represent a valid transition.
+
+        Valid iff:
+          - no pass -> fail transitions
+          - and at least one fail -> pass transition OR a newly observed passing test
+        """
+        baseline_state = (baseline_test_result or {}).get("test_state") or {}
+        patched_state = (patched_test_result or {}).get("test_state") or {}
+
+        baseline_cases = baseline_state.get("test_cases") or {}
+        patched_cases = patched_state.get("test_cases") or {}
+
+        # If no case-level data exists, use class-level status as fallback.
+        if not baseline_cases and not patched_cases:
+            baseline_cases = baseline_state.get("classes") or {}
+            patched_cases = patched_state.get("classes") or {}
+
+        fail_to_pass = sorted(
+            case
+            for case, old_status in baseline_cases.items()
+            if old_status in {"failed", "error"} and patched_cases.get(case) == "passed"
+        )
+        pass_to_fail = sorted(
+            case
+            for case, old_status in baseline_cases.items()
+            if old_status == "passed" and patched_cases.get(case) in {"failed", "error"}
+        )
+        newly_passing = sorted(
+            case
+            for case, new_status in patched_cases.items()
+            if case not in baseline_cases and new_status == "passed"
+        )
+
+        valid = (not pass_to_fail) and bool(fail_to_pass or newly_passing)
+
+        if pass_to_fail:
+            reason = "Invalid: Some tests regressed from pass to fail."
+        elif fail_to_pass or newly_passing:
+            reason = "Valid: Observed fail-to-pass and/or newly passing relevant tests with no regressions."
+        else:
+            reason = "Invalid: No fail-to-pass or newly passing relevant tests were observed."
+
+        return {
+            "valid_backport_signal": valid,
+            "fail_to_pass": fail_to_pass,
+            "pass_to_fail": pass_to_fail,
+            "newly_passing": newly_passing,
+            "baseline_total": len(baseline_cases),
+            "patched_total": len(patched_cases),
+            "reason": reason,
+        }
+
+    def _get_druid_helper_dir(self) -> str:
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        return os.path.join(root_dir, "evaluate", "helpers", "druid")
+
+    def _get_current_head(self) -> str:
+        res = self._run_cmd_capture(["git", "rev-parse", "--short", "HEAD"], cwd=self.target_repo_path)
+        if res.get("success"):
+            return (res.get("output") or "worktree").strip().splitlines()[0]
+        return "worktree"
+
+    def _ensure_druid_builder_image(self) -> tuple[str | None, str | None]:
+        helper_dir = self._get_druid_helper_dir()
+        dockerfile = os.path.join(helper_dir, "Dockerfile")
+        if not os.path.exists(dockerfile):
+            return None, f"Druid helper Dockerfile not found: {dockerfile}"
+
+        image_tag = os.getenv("DRUID_BUILDER_IMAGE_TAG", "retrofit-druid-builder:local")
+
+        inspect_res = self._run_cmd_capture(["docker", "image", "inspect", image_tag], cwd=self.target_repo_path)
+        if inspect_res.get("success"):
+            return image_tag, None
+
+        build_res = self._run_cmd_capture(
+            ["docker", "build", "-t", image_tag, "-f", dockerfile, helper_dir],
+            cwd=self.target_repo_path,
+        )
+        if not build_res.get("success"):
+            return None, f"Failed to build Druid helper image {image_tag}: {build_res.get('output', '')}"
+
+        return image_tag, None
+
+    def _run_cmd_capture(self, cmd: List[str], cwd: Optional[str] = None, env: Optional[dict] = None) -> Dict[str, Any]:
+        """Run a command and return success plus combined output."""
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=cwd or self.target_repo_path,
+                env=env,
+            )
+            output = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
+            return {
+                "success": result.returncode == 0,
+                "returncode": result.returncode,
+                "output": output,
+            }
+        except Exception as e:
+            return {"success": False, "returncode": 1, "output": str(e)}
+
+    def detect_relevant_test_targets(self, project: str = "") -> Dict[str, Any]:
+        """
+        Detect relevant test targets/modules from current worktree diff.
+
+        For Druid, delegates to evaluate helper script and returns:
+          {
+            "test_targets": ["module:pkg.ClassTest", ...],
+            "source_modules": ["processing", ...],
+            "all_modules": [...],
+            "raw": <helper_json>
+          }
+        """
+        normalized_project = (project or "").strip().lower()
+        if not normalized_project:
+            normalized_project = os.path.basename(self.target_repo_path).lower()
+
+        if normalized_project != "druid":
+            return {
+                "test_targets": [],
+                "source_modules": [],
+                "all_modules": [],
+                "raw": {},
+            }
+
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        helper_script = os.path.join(root_dir, "evaluate", "helpers", "druid", "get_test_targets.py")
+        if not os.path.exists(helper_script):
+            return {
+                "test_targets": [],
+                "source_modules": [],
+                "all_modules": [],
+                "raw": {"error": f"Helper script not found: {helper_script}"},
+            }
+
+        helper_res = self._run_cmd_capture(
+            ["python3", helper_script, "--repo", self.target_repo_path, "--worktree"],
+            cwd=self.target_repo_path,
+        )
+        if not helper_res.get("success"):
+            return {
+                "test_targets": [],
+                "source_modules": [],
+                "all_modules": [],
+                "raw": {"error": helper_res.get("output", "helper failed")},
+            }
+
+        try:
+            parsed = json.loads(helper_res.get("output", "{}"))
+        except json.JSONDecodeError:
+            parsed = {"error": f"Invalid helper JSON: {helper_res.get('output', '')}"}
+
+        test_targets = sorted(set((parsed.get("modified") or []) + (parsed.get("added") or [])))
+        source_modules = sorted(set(parsed.get("source_modules") or []))
+        all_modules = sorted(set(parsed.get("all_modules") or []))
+
+        return {
+            "test_targets": test_targets,
+            "source_modules": source_modules,
+            "all_modules": all_modules,
+            "raw": parsed,
+        }
+
+    def detect_relevant_test_targets_from_changed_files(self, changed_files: List[str]) -> Dict[str, Any]:
+        """
+        Infer relevant tests/modules directly from changed file paths.
+        This avoids relying on worktree diff state during Phase 0 baseline runs.
+        """
+        ignored_modules = {"web-console", "distribution", "docs", "examples"}
+
+        test_targets = set()
+        source_modules = set()
+        all_modules = set()
+
+        for rel_path in changed_files or []:
+            p = (rel_path or "").replace("\\", "/")
+            if not p:
+                continue
+
+            module_path = self._find_maven_module_for_path(p)
+            if not module_path or module_path in ignored_modules:
+                continue
+
+            all_modules.add(module_path)
+            if p.endswith(".java") and "src/main/java/" in p:
+                source_modules.add(module_path)
+
+            if p.endswith("Test.java") and "src/test/java/" in p:
+                try:
+                    class_path = p.split("src/test/java/", 1)[1]
+                    class_name = class_path.replace("/", ".").replace(".java", "")
+                    test_targets.add(f"{module_path}:{class_name}")
+                except Exception:
+                    continue
+
+        return {
+            "test_targets": sorted(test_targets),
+            "source_modules": sorted(source_modules),
+            "all_modules": sorted(all_modules),
+            "raw": {"source": "changed_files", "changed_files": sorted(set(changed_files or []))},
+        }
+
+    def run_relevant_tests(self, project: str = "", target_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Run relevant tests based on detected targets/modules.
+
+        Priority:
+          1) If exact test classes are known, run those in the corresponding modules.
+          2) Else run module-level tests for source-touched modules.
+          3) Else skip.
+        """
+        info = target_info or self.detect_relevant_test_targets(project)
+        test_targets = list(info.get("test_targets") or [])
+        source_modules = list(info.get("source_modules") or [])
+
+        if not test_targets and not source_modules:
+            return {
+                "success": True,
+                "compile_error": False,
+                "output": "No relevant test targets/modules detected.",
+                "failed_tests": [],
+                "mode": "skip",
+                "targets": info,
+                "test_state": {
+                    "xml_reports": [],
+                    "target_classes": [],
+                    "test_cases": {},
+                    "classes": {},
+                    "summary": {"passed": 0, "failed": 0, "skipped": 0, "total": 0},
+                },
+            }
+
+        self._clear_previous_junit_reports()
+
+        normalized_project = (project or "").strip().lower() or os.path.basename(self.target_repo_path).strip().lower()
+        if normalized_project == "druid":
+            helper_script = os.path.join(self._get_druid_helper_dir(), "run_tests.sh")
+            if os.path.exists(helper_script):
+                image_tag, image_err = self._ensure_druid_builder_image()
+                if image_tag:
+                    helper_env = os.environ.copy()
+                    helper_env.update(
+                        {
+                            "PROJECT_DIR": self.target_repo_path,
+                            "BUILDER_IMAGE_TAG": image_tag,
+                            "COMMIT_SHA": self._get_current_head(),
+                            "WORKTREE_MODE": "1",
+                            "TEST_TARGETS": " ".join(sorted(set(test_targets))) if test_targets else "NONE",
+                            "TEST_MODULES": ",".join(sorted(set(source_modules))) if source_modules else "",
+                        }
+                    )
+                    print(f"    Agent 4: Executing Druid helper test script: {helper_script}")
+                    result = self._run_cmd_capture(["bash", helper_script], cwd=self.target_repo_path, env=helper_env)
+                    output_text = result.get("output", "")
+                    return {
+                        "success": bool(result.get("success")),
+                        "compile_error": (not bool(result.get("success"))) and ("compilation error" in output_text.lower()),
+                        "output": output_text,
+                        "failed_tests": [],
+                        "mode": "druid-helper-script",
+                        "targets": info,
+                        "test_state": self._extract_test_state(info, output_text),
+                    }
+                else:
+                    print(f"    Agent 4 Warning: Druid helper image unavailable for tests. Falling back. Details: {image_err}")
+
+        is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
+        java_compat_args = ["-Djdk.security.manager.allow.argLine="]
+
+        if is_gradle:
+            cmd = ["gradle", "test"]
+            for t in test_targets:
+                try:
+                    _, cls = t.split(":", 1)
+                    cmd.extend(["--tests", cls])
+                except ValueError:
+                    continue
+            mode = "gradle-targeted" if test_targets else "gradle-module"
+        else:
+            module_set = set(source_modules)
+            test_classes = []
+            for t in test_targets:
+                try:
+                    module, cls = t.split(":", 1)
+                    if module:
+                        module_set.add(module)
+                    if cls:
+                        test_classes.append(cls)
+                except ValueError:
+                    continue
+
+            module_list = sorted(module_set)
+            if test_classes:
+                cmd = [
+                    "mvn", "test",
+                    "-pl", ",".join(module_list),
+                    "-am",
+                    f"-Dtest={','.join(sorted(set(test_classes)))}",
+                    "-DfailIfNoTests=false",
+                    "-Dmaven.javadoc.skip=true",
+                    "-Dcheckstyle.skip=true",
+                    "-Dpmd.skip=true",
+                    "-Dforbiddenapis.skip=true",
+                    "-Denforcer.skip=true",
+                ] + java_compat_args
+                mode = "maven-targeted"
+            else:
+                cmd = [
+                    "mvn", "test",
+                    "-pl", ",".join(module_list),
+                    "-am",
+                    "-DfailIfNoTests=false",
+                    "-Dmaven.javadoc.skip=true",
+                    "-Dcheckstyle.skip=true",
+                    "-Dpmd.skip=true",
+                    "-Dforbiddenapis.skip=true",
+                    "-Denforcer.skip=true",
+                ] + java_compat_args
+                mode = "maven-module"
+
+        print(f"    Agent 4: Executing relevant test command: {' '.join(cmd)}")
+        env = os.environ.copy()
+        resolved_java_home = _resolve_valid_java_home()
+        if resolved_java_home:
+            env["JAVA_HOME"] = resolved_java_home
+
+        cmd_res = self._run_cmd_capture(cmd, cwd=self.target_repo_path, env=env)
+        output_text = cmd_res.get("output", "")
+        return {
+            "success": bool(cmd_res.get("success")),
+            "compile_error": (not bool(cmd_res.get("success"))) and ("compilation error" in output_text.lower()),
+            "output": output_text,
+            "failed_tests": [],
+            "mode": mode,
+            "targets": info,
+            "test_state": self._extract_test_state(info, output_text),
+        }
 
     # ------------------------------------------------------------------
     # Existing Methods
@@ -505,7 +1023,7 @@ class ValidationToolkit:
                 using a resilient multi-pass strategy.
 
                 Strategy:
-                    1) Build one unified diff section per file with hunks in top-to-bottom order.
+                    1) Build one unified diff section per file with hunks in bottom-to-top order.
                     2) Try strict git apply with recount.
                     3) Retry git apply with whitespace-tolerant flags.
                     4) Fallback to GNU patch dry-run + apply (fuzzy matching/offset support).
@@ -540,16 +1058,16 @@ class ValidationToolkit:
                 hunks_by_file[target_file] = []
             hunks_by_file[target_file].append(h)
 
-        # Sort hunks within each file by insertion_line in natural patch order (lowest first).
+        # Sort hunks within each file bottom-to-top so earlier line numbers remain stable.
         for target_file in hunks_by_file:
             hunks_by_file[target_file].sort(
                 key=lambda h: h.get("insertion_line", 0),
-                reverse=False
+                reverse=True
             )
             insertion_lines = [h.get("insertion_line") for h in hunks_by_file[target_file]]
             print(
                 f"  Validation: {target_file} - applying {len(hunks_by_file[target_file])} "
-                f"hunk(s) in top-to-bottom order: {insertion_lines}"
+                f"hunk(s) in bottom-to-top order: {insertion_lines}"
             )
 
         # Build one patch section per file so offsets are resolved cumulatively.
@@ -700,22 +1218,86 @@ class ValidationToolkit:
         Detects if it's Maven (pom.xml) or Gradle (build.gradle).
         """
         is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
-        # Fix for Java 18+ / Java 25 security manager issues
-        java_compat_args = ["-Djdk.security.manager.allow.argLine="]
-        
-        cmd = ["gradle", "build", "-x", "test"] if is_gradle else ["mvn", "clean", "compile"] + java_compat_args
+        project_name = os.path.basename(self.target_repo_path).strip().lower()
+
+        if project_name == "druid":
+            helper_script = os.path.join(self._get_druid_helper_dir(), "run_build.sh")
+            if os.path.exists(helper_script):
+                image_tag, image_err = self._ensure_druid_builder_image()
+                if image_tag:
+                    helper_env = os.environ.copy()
+                    helper_env.update(
+                        {
+                            "PROJECT_DIR": self.target_repo_path,
+                            "BUILDER_IMAGE_TAG": image_tag,
+                            "COMMIT_SHA": self._get_current_head(),
+                            "WORKTREE_MODE": "1",
+                        }
+                    )
+                    print(f"    Agent 4: Executing Druid helper build script: {helper_script}")
+                    result = self._run_cmd_capture(["bash", helper_script], cwd=self.target_repo_path, env=helper_env)
+                    return {
+                        "success": bool(result.get("success")),
+                        "output": result.get("output", ""),
+                        "mode": "druid-helper-script",
+                    }
+                else:
+                    print(f"    Agent 4 Warning: Druid helper image unavailable. Falling back. Details: {image_err}")
+
+        if is_gradle:
+            cmd = ["gradle", "build", "-x", "test"]
+        else:
+            # Druid can fail on `mvn clean compile` because some modules depend on
+            # classifier artifacts (e.g., tests-jar) that are not produced at compile phase.
+            # Build only touched modules at package phase so required artifacts exist.
+            if project_name == "druid":
+                target_info = self.detect_relevant_test_targets(project="druid")
+                modules = sorted(set(target_info.get("all_modules") or target_info.get("source_modules") or []))
+                if modules:
+                    cmd = [
+                        "mvn", "clean", "package",
+                        "-pl", ",".join(modules),
+                        "-am",
+                        "-DskipTests",
+                        "-DskipITs",
+                        "-DfailIfNoTests=false",
+                        "-Dmaven.javadoc.skip=true",
+                        "-Dcheckstyle.skip=true",
+                        "-Dpmd.skip=true",
+                        "-Dforbiddenapis.skip=true",
+                        "-Denforcer.skip=true",
+                        "-Drat.skip=true",
+                        "-Dweb.console.skip=true",
+                    ]
+                else:
+                    cmd = [
+                        "mvn", "clean", "package",
+                        "-DskipTests",
+                        "-DskipITs",
+                        "-DfailIfNoTests=false",
+                        "-Dmaven.javadoc.skip=true",
+                        "-Dcheckstyle.skip=true",
+                        "-Dpmd.skip=true",
+                        "-Dforbiddenapis.skip=true",
+                        "-Denforcer.skip=true",
+                        "-Drat.skip=true",
+                        "-Dweb.console.skip=true",
+                        "-pl", "!:distribution",
+                    ]
+            else:
+                cmd = ["mvn", "clean", "compile"]
         
         try:
             print(f"    Agent 4: Executing build command: {' '.join(cmd)}")
             result = subprocess.run(
                 cmd,
-                capture_output=False, # Stream to stdout/stderr
+                capture_output=True,
                 text=True,
                 cwd=self.target_repo_path,
             )
             return {
                 "success": result.returncode == 0,
-                "output": "Build log streamed to console."
+                "output": ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
             }
         except Exception as e:
             return {"success": False, "output": f"Exception building repo: {e}"}
@@ -749,23 +1331,20 @@ class ValidationToolkit:
 
         try:
             print(f"    Agent 4: Executing test command: {' '.join(cmd)}")
-            # Use Popen to stream output if possible, or just run and let it print
             result = subprocess.run(
                 cmd,
-                capture_output=False, # Let it print to console
+                capture_output=True,
                 text=True,
                 cwd=self.target_repo_path,
             )
             success = result.returncode == 0
-            
-            # Since we didn't capture, we can't easily check for "COMPILATION ERROR" in output here
-            # but usually the return code is enough for Maven/Gradle.
-            # If we need to parse it, we'd need to capture AND print.
+            output = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
+            compile_error = (not success) and ("compilation error" in output.lower())
             
             return {
                 "success": success,
-                "compile_error": not success and result.returncode != 0, # Rough heuristic
-                "output": "Test log streamed to console.",
+                "compile_error": compile_error,
+                "output": output,
                 "failed_tests": []
             }
         except Exception as e:
@@ -805,14 +1384,7 @@ class ValidationToolkit:
         if not p:
             raise ValueError("target_file_path is empty")
 
-        full_path = os.path.join(self.target_repo_path, p)
-
-        file_exists = os.path.exists(full_path)
         normalized_op = (file_operation or "MODIFIED").upper()
-
-        # If metadata says MODIFIED but file is absent, treat as add fallback.
-        if normalized_op == "MODIFIED" and not file_exists:
-            normalized_op = "ADDED"
         
         # Ensure hunk_text is properly formatted
         if not hunk_text.startswith("@@"):
