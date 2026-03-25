@@ -282,7 +282,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         for attempt in range(2):
             try:
                 logger.debug("Invoking structural locator LLM for file=%s attempt=%d", mainline_file, attempt + 1)
-                result = await agent.ainvoke(input_data)
+                result = await agent.ainvoke(input_data, config={"recursion_limit": 5})
                 raw_content = result["messages"][-1].content
                 
                 text = raw_content.strip()

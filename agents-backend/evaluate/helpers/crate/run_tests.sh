@@ -56,7 +56,9 @@ if ${DOCKER_CMD} run --rm \
     "${IMAGE_TAG}" \
     bash -c "git config --global --add safe.directory /repo && \
     rm -rf /repo/build/all-test-results && \
-    ${MVN_CMD}; \
+    mkdir -p /root/.m2 && \
+    echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /root/.m2/toolchains.xml && \
+    ${MVN_CMD} --global-toolchains /root/.m2/toolchains.xml; \
     MVN_EXIT_CODE=\$?; \
     echo '--- Copying test reports ---'; \
     mkdir -p /repo/build/all-test-results; \
