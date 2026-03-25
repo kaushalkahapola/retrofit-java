@@ -3,7 +3,8 @@ set -e
 
 echo "=== Running Tests for ${COMMIT_SHA:0:7} ==="
 echo "Target: ${TEST_TARGETS}"
-BUILD_DIR="${BUILD_DIR:-${PROJECT_DIR}/build_outputs}"
+# BUILD_DIR must be outside PROJECT_DIR to avoid recursive Docker build context
+BUILD_DIR="${BUILD_DIR:-/tmp/crate-build-${COMMIT_SHA:0:7}}"
 mkdir -p "${BUILD_DIR}"
 
 IMAGE_TAG="${IMAGE_TAG:-crate-${BUILD_TYPE}-${COMMIT_SHA:0:7}}"
@@ -55,7 +56,6 @@ echo "--- Executing: ${MVN_CMD} ---"
 if ${DOCKER_CMD} run --rm \
     --dns=8.8.8.8 \
     -v "maven-cache-crate:/root/.m2" \
-    -v "${BUILD_DIR}:/repo/build_outputs" \
     -v "${PROJECT_DIR}:/repo" \
     -w /repo \
     "${IMAGE_TAG}" \
@@ -64,10 +64,7 @@ if ${DOCKER_CMD} run --rm \
     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /root/.m2/toolchains.xml && \
     ${MVN_CMD} --global-toolchains /root/.m2/toolchains.xml; \
     MVN_EXIT_CODE=\$?; \
-    echo '--- Copying test reports with rsync ---'; \
-    mkdir -p /repo/build_outputs/build; \
-    rsync -a --include='*/' --include='*.xml' --exclude='*' --include='**/target/surefire-reports/**' /repo/ /repo/build_outputs/build/ || echo 'Rsync failed'; \
-    echo '--- Test results copied ---'; \
+    echo '--- Test results are available in /repo/*/target/surefire-reports/ ---'; \
     exit \$MVN_EXIT_CODE"; then
     
     echo "✅ Tests Passed"

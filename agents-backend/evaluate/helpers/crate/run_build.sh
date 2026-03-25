@@ -3,7 +3,8 @@
 set -e # Exit on error
 
 echo "--- Building code for ${COMMIT_SHA:0:7} ---"
-BUILD_DIR="${BUILD_DIR:-${PROJECT_DIR}/build_outputs}"
+# BUILD_DIR must be outside PROJECT_DIR to avoid recursive Docker build context
+BUILD_DIR="${BUILD_DIR:-/tmp/crate-build-${COMMIT_SHA:0:7}}"
 mkdir -p "${BUILD_DIR}"
 
 echo "--- Changing directory to ${PROJECT_DIR} ---"
@@ -28,7 +29,9 @@ fi
 ${DOCKER_CMD} volume create maven-cache-crate 2>/dev/null || true
 
 echo "--- Building Docker image... ---"
-${DOCKER_CMD} build -t ${IMAGE_TAG} -f ${TOOLKIT_DIR}/Dockerfile .
+# Use the helper directory as the build context (contains only the Dockerfile), not PROJECT_DIR
+HELPER_DIR="${TOOLKIT_DIR:-$(dirname "$0")}"
+${DOCKER_CMD} build -t ${IMAGE_TAG} "${HELPER_DIR}"
 
 echo "--- Setting cache permissions... ---"
 ${DOCKER_CMD} run --rm -u root \
