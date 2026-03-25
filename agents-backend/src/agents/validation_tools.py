@@ -1224,15 +1224,16 @@ class ValidationToolkit:
         project_name = os.path.basename(self.target_repo_path).strip().lower()
 
         if project_name == "druid":
-            helper_script = os.path.join(self._get_druid_helper_dir(), "run_build.sh")
+            helper_script = os.path.join(self._get_project_helper_dir("druid"), "run_build.sh")
             if os.path.exists(helper_script):
-                image_tag, image_err = self._ensure_druid_builder_image()
+                image_tag, image_err = self._ensure_project_builder_image("druid")
                 if image_tag:
                     helper_env = os.environ.copy()
                     helper_env.update(
                         {
                             "PROJECT_DIR": self.target_repo_path,
                             "BUILDER_IMAGE_TAG": image_tag,
+                            "IMAGE_TAG": image_tag,
                             "COMMIT_SHA": self._get_current_head(),
                             "WORKTREE_MODE": "1",
                         }
@@ -1246,6 +1247,33 @@ class ValidationToolkit:
                     }
                 else:
                     print(f"    Agent 4 Warning: Druid helper image unavailable. Falling back. Details: {image_err}")
+        elif self._is_known_project_with_helper(project_name):
+            # Generic helper-based build for projects with a run_build.sh (e.g., crate)
+            helper_script = os.path.join(self._get_project_helper_dir(project_name), "run_build.sh")
+            if os.path.exists(helper_script):
+                image_tag, image_err = self._ensure_project_builder_image(project_name)
+                if image_tag:
+                    helper_env = os.environ.copy()
+                    helper_env.update(
+                        {
+                            "PROJECT_NAME": project_name,
+                            "PROJECT_DIR": self.target_repo_path,
+                            "TOOLKIT_DIR": self._get_project_helper_dir(project_name),
+                            "BUILDER_IMAGE_TAG": image_tag,
+                            "IMAGE_TAG": image_tag,
+                            "COMMIT_SHA": self._get_current_head(),
+                            "WORKTREE_MODE": "1",
+                        }
+                    )
+                    print(f"    Agent 4: Executing {project_name} helper build script: {helper_script}")
+                    result = self._run_cmd_capture(["bash", helper_script], cwd=self.target_repo_path, env=helper_env)
+                    return {
+                        "success": bool(result.get("success")),
+                        "output": result.get("output", ""),
+                        "mode": f"{project_name}-helper-script",
+                    }
+                else:
+                    print(f"    Agent 4 Warning: {project_name} helper image unavailable. Falling back. Details: {image_err}")
 
         if is_gradle:
             cmd = ["gradle", "build", "-x", "test"]
