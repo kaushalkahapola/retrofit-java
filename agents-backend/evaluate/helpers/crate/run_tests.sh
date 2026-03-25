@@ -53,18 +53,19 @@ echo "--- Executing: ${MVN_CMD} ---"
 if ${DOCKER_CMD} run --rm \
     --dns=8.8.8.8 \
     -v "maven-cache-crate:/root/.m2" \
+    -v "${BUILD_DIR}:/repo/build_outputs" \
     -v "${PROJECT_DIR}:/repo" \
     -w /repo \
     "${IMAGE_TAG}" \
     bash -c "git config --global --add safe.directory /repo && \
-    rm -rf /repo/build/all-test-results && \
     mkdir -p /root/.m2 && \
     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /root/.m2/toolchains.xml && \
     ${MVN_CMD} --global-toolchains /root/.m2/toolchains.xml; \
     MVN_EXIT_CODE=\$?; \
-    echo '--- Copying test reports ---'; \
-    mkdir -p /repo/build/all-test-results; \
-    find . -name 'TEST-*.xml' -exec cp {} /repo/build/all-test-results/ \;; \
+    echo '--- Copying test reports with rsync ---'; \
+    mkdir -p /repo/build_outputs/build; \
+    rsync -a --include='*/' --include='*.xml' --exclude='*' --include='**/target/surefire-reports/**' /repo/ /repo/build_outputs/build/ || echo 'Rsync failed'; \
+    echo '--- Test results copied ---'; \
     exit \$MVN_EXIT_CODE"; then
     
     echo "✅ Tests Passed"

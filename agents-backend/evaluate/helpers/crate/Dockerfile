@@ -1,4 +1,4 @@
-FROM maven:3.9-eclipse-temurin-23
+FROM maven:3.9-eclipse-temurin-24
 
 # Install necessary tools
 RUN apt-get update && apt-get install -y \

@@ -44,7 +44,10 @@ if ${DOCKER_CMD} run --rm \
     -v "${PROJECT_DIR}:/repo" \
     -w /repo \
     ${IMAGE_TAG} \
-    bash -c "git config --global --add safe.directory /repo && mvn clean install -DskipTests -T 1C"; then
+    bash -c "git config --global --add safe.directory /repo && \
+    mkdir -p /root/.m2 && \
+    echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /root/.m2/toolchains.xml && \
+    mvn clean install -DskipTests -T 1C --global-toolchains /root/.m2/toolchains.xml"; then
     echo "Success" > $BUILD_STATUS_FILE
 else
     echo "Fail" > $BUILD_STATUS_FILE
