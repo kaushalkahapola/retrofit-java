@@ -312,8 +312,9 @@ async def validation_agent(state: AgentState, config) -> dict:
                 "regeneration_hint": analysis,
             }
 
-        test_targets = phase_0_test_targets or toolkit.detect_relevant_test_targets(project="druid")
-        test_res = toolkit.run_relevant_tests(project="druid", target_info=test_targets)
+        inferred_project = os.path.basename(target_repo_path).strip().lower()
+        test_targets = phase_0_test_targets or toolkit.detect_relevant_test_targets(project=inferred_project)
+        test_res = toolkit.run_relevant_tests(project=inferred_project, target_info=test_targets)
         log_step("run_relevant_tests", {"targets": test_targets}, test_res)
         transition_eval = toolkit.evaluate_test_state_transition(phase_0_baseline_test_result, test_res)
         transition_summary = _format_transition_summary(transition_eval)
