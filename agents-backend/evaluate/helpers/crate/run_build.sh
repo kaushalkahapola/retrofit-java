@@ -10,9 +10,14 @@ mkdir -p "${BUILD_DIR}"
 echo "--- Changing directory to ${PROJECT_DIR} ---"
 cd "${PROJECT_DIR}"
 
-echo "--- Checking out commit... ---"
-git checkout -f ${COMMIT_SHA}
-git clean -fd
+# Only reset repo state when NOT in worktree/patch-applied mode.
+# When WORKTREE_MODE=1, the ValidationToolkit has already applied patches
+# to the working tree — do NOT wipe them with git checkout/clean.
+if [ "${WORKTREE_MODE:-0}" != "1" ]; then
+    echo "--- Checking out commit... ---"
+    git checkout -f ${COMMIT_SHA}
+    git clean -fd
+fi
 
 # Determine Docker command (with or without sudo)
 DOCKER_CMD="docker"
