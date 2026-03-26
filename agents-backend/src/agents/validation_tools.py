@@ -137,6 +137,13 @@ class ValidationToolkit:
                 recursive=True,
             )
         )
+        # Gradle test results (Elasticsearch, Spring Framework, etc.)
+        paths.update(
+            glob.glob(
+                os.path.join(self.target_repo_path, "**", "build", "test-results", "**", "TEST-*.xml"),
+                recursive=True,
+            )
+        )
         return sorted(paths)
 
     def _detect_project_name(self) -> str:
