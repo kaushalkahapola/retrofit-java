@@ -481,13 +481,14 @@ class ValidationToolkit:
 
             # Support both XXXTest.java (Crate/Druid) and TestXXX.java (HBase) patterns
             filename = os.path.basename(p)
-            is_test_file = (
-                p.endswith("Test.java") or  # XXXTest.java pattern
-                (filename.startswith("Test") and p.endswith(".java"))  # TestXXX.java pattern
-            )
-            if is_test_file and "src/test/java/" in p:
+            is_test_file = p.endswith(test_suffixes) or (filename.startswith("Test") and p.endswith(".java"))
+            
+            # Find the matching test directory
+            matched_test_dir = next((td for td in test_source_sets if td in p), None)
+            
+            if is_test_file and matched_test_dir:
                 try:
-                    class_path = p.split("src/test/java/", 1)[1]
+                    class_path = p.split(matched_test_dir, 1)[1]
                     class_name = class_path.replace("/", ".").replace(".java", "")
                     test_targets.add(f"{module_path}:{class_name}")
                 except Exception:
