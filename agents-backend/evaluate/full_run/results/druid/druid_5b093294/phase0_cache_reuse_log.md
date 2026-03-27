@@ -1,0 +1,5 @@
+# Phase 0 Cache Reuse
+
+- Cache file: /home/kaushal/retrofit-java/agents-backend/evaluate/full_run/phase0_cache/druid_3ba7badda390_5b0932947911.json
+- Reused targets: {'test_targets': ['extensions-core/multi-stage-query:org.apache.druid.msq.exec.MSQWindowTest', 'processing:org.apache.druid.frame.allocation.AppendableMemoryTest', 'processing:org.apache.druid.frame.write.FrameWriterTest'], 'source_modules': ['processing'], 'all_modules': ['extensions-core/multi-stage-query', 'processing'], 'raw': {'source': 'changed_files', 'changed_files': ['extensions-core/multi-stage-query/src/test/java/org/apache/druid/msq/exec/MSQWindowTest.java', 'extensions-core/multi-stage-query/src/test/java/org/apache/druid/msq/test/MSQTestBase.java', 'processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java', 'processing/src/test/java/org/apache/druid/frame/allocation/AppendableMemoryTest.java', 'processing/src/test/java/org/apache/druid/frame/write/FrameWriterTest.java']}}
+- Reused baseline mode: druid-helper-script

@@ -1,0 +1,13 @@
+{
+  "validation_passed": false,
+  "validation_attempts": 3,
+  "validation_error_context": "Hunk application failed: Root cause: The patch references `server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java`, which does not exist in the target branch, and the patch is malformed at line 164.\n\nFix suggestion: Ensure `LagStatsTest.java` exists or remove related hunks from the patch; also, regenerate the patch to fix formatting issues starting at line 164.",
+  "validation_results": {
+    "hunk_application": {
+      "success": false,
+      "raw": "[git-apply-strict] error: server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java: No such file or directory\n\n[git-apply-whitespace-tolerant] error: server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java: No such file or directory\n\n[gnu-patch-dry-run] patch: **** malformed patch at line 164: diff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
+      "agent_evaluation": "Root cause: The patch references `server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java`, which does not exist in the target branch, and the patch is malformed at line 164.\n\nFix suggestion: Ensure `LagStatsTest.java` exists or remove related hunks from the patch; also, regenerate the patch to fix formatting issues starting at line 164.",
+      "error_context": "Root cause: The patch references `server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java`, which does not exist in the target branch, and the patch is malformed at line 164.\n\nFix suggestion: Ensure `LagStatsTest.java` exists or remove related hunks from the patch; also, regenerate the patch to fix formatting issues starting at line 164."
+    }
+  }
+}

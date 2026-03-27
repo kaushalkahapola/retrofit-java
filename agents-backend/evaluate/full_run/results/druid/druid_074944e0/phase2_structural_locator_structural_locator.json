@@ -1,0 +1,25 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<import>",
+        "target_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+        "target_method": "<import>",
+        "start_line": 1,
+        "end_line": 33,
+        "code_snippet": "import org.apache.druid.server.coordination.DruidServerMetadata;\nimport java.util.ArrayList;\nimport java.util.Collections;\nimport java.util.List;"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "queryKernelConfig",
+        "target_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+        "target_method": "queryKernelConfig",
+        "start_line": 112,
+        "end_line": 154,
+        "code_snippet": "public ControllerQueryKernelConfig queryKernelConfig(\n    final String queryId,\n    final MSQSpec querySpec\n)\n{\n  final List<DruidServerMetadata> servers = serverView.getDruidServerMetadatas();\n  final List<String> workerIds = new ArrayList<>(servers.size());\n  for (final DruidServerMetadata server : servers) {\n    workerIds.add(WorkerId.fromDruidServerMetadata(server, queryId).toString());\n  }\n  Collections.shuffle(workerIds);\n  final ControllerMemoryParameters memoryParameters =\n      ControllerMemoryParameters.createProductionInstance(\n          memoryIntrospector,\n          workerIds.size()\n      );\n  final int maxConcurrentStages = MultiStageQueryContext.getMaxConcurrentStagesWithDefault(\n      querySpec.getQuery().context(),\n      DEFAULT_MAX_CONCURRENT_STAGES\n  );\n  return ControllerQueryKernelConfig\n      .builder()\n      .controllerHost(selfNode.getHostAndPortToUse())\n      .workerIds(workerIds)\n      .pipeline(maxConcurrentStages > 1)\n      .destination(TaskReportMSQDestination.instance())\n      .maxConcurrentStages(maxConcurrentStages)\n      .maxRetainedPartitionSketchBytes(memoryParameters.getPartitionStatisticsMaxRetainedBytes())\n      .workerContextMap(IndexerControllerContext.makeWorkerContextMap(querySpec, false, maxConcurrentStages))\n      .build();\n}"
+      }
+    ]
+  }
+}
