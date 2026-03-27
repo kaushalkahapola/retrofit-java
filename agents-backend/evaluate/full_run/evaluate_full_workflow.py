@@ -51,7 +51,7 @@ RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 PHASE0_CACHE_DIR = os.path.join(os.path.dirname(__file__), "phase0_cache")
 
 TARGET_PROJECTS = ["hbase"]
-MAX_PATCHES_PER_PROJECT = 5
+MAX_PATCHES_PER_PROJECT = 1
 
 
 def ensure_dirs() -> None:
