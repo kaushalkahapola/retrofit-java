@@ -1085,20 +1085,60 @@ class ValidationToolkit:
         for target_file in hunks_by_file:
             file_hunks = []
             file_operations = set()
+            old_file_path = None
+
             for h in hunks_by_file[target_file]:
                 hunk_text = h.get("hunk_text", "")
-                if not hunk_text:
+                file_op = (h.get("file_operation") or "MODIFIED").upper()
+
+                # Track the old path for renamed files
+                if file_op == "RENAMED":
+                    old_file_path = h.get("mainline_file")
+
+                # Skip hunks with empty text (structural operations handled separately)
+                if not hunk_text or not hunk_text.strip():
+                    # This is a structural operation with no hunks
+                    file_operations.add(file_op)
                     continue
+
                 file_hunks.append(hunk_text if hunk_text.endswith("\n") else hunk_text + "\n")
-                file_operations.add((h.get("file_operation") or "MODIFIED").upper())
+                file_operations.add(file_op)
+
+            # Determine the operation type
+            file_operation = next(iter(file_operations)) if len(file_operations) == 1 else "MODIFIED"
+
+            # Handle structural operations (no hunks)
+            if not file_hunks and file_operation in ["RENAMED", "ADDED", "DELETED"]:
+                try:
+                    patch_part = self._build_patch_file(
+                        target_file,
+                        "",  # Empty hunk_text for structural operations
+                        file_operation=file_operation,
+                        old_file_path=old_file_path
+                    )
+                    patch_parts.append(patch_part)
+                    if target_file not in applied_files:
+                        applied_files.append(target_file)
+                    print(f"  Validation: {file_operation} operation for {target_file}")
+                except ValueError as e:
+                    return {
+                        "success": False,
+                        "output": f"Invalid {file_operation} operation for {target_file}: {e}",
+                        "applied_files": [],
+                    }
+                continue
 
             if not file_hunks:
                 continue
 
             combined_hunks = "".join(file_hunks)
-            file_operation = next(iter(file_operations)) if len(file_operations) == 1 else "MODIFIED"
             try:
-                patch_part = self._build_patch_file(target_file, combined_hunks, file_operation=file_operation)
+                patch_part = self._build_patch_file(
+                    target_file,
+                    combined_hunks,
+                    file_operation=file_operation,
+                    old_file_path=old_file_path
+                )
                 patch_parts.append(patch_part)
                 if target_file not in applied_files:
                     applied_files.append(target_file)
@@ -1408,10 +1448,19 @@ class ValidationToolkit:
     # Private Helpers
     # ------------------------------------------------------------------
 
-    def _build_patch_file(self, target_file_path: str, hunk_text: str, file_operation: str = "MODIFIED") -> str:
+    def _build_patch_file(self, target_file_path: str, hunk_text: str, file_operation: str = "MODIFIED", old_file_path: str = None) -> str:
         """
         Wraps a hunk in a minimal unified diff file header so `git apply`
         can understand it. The hunk_text must already start with @@ ... @@.
+
+        For file-only operations (rename, pure add, pure delete) with no hunk_text,
+        generates an appropriate diff header without body hunks.
+
+        Args:
+            target_file_path: New path (for renames) or target path
+            hunk_text: Unified diff hunks (may be empty for structural operations)
+            file_operation: "ADDED" | "DELETED" | "MODIFIED" | "RENAMED"
+            old_file_path: Old path (for renames)
         """
         # Normalize path separators and strip optional diff prefixes.
         p = (target_file_path or "").strip().replace("\\", "/").lstrip("/")
@@ -1422,18 +1471,53 @@ class ValidationToolkit:
             raise ValueError("target_file_path is empty")
 
         normalized_op = (file_operation or "MODIFIED").upper()
-        
-        # Ensure hunk_text is properly formatted
+        old_p = (old_file_path or "").strip().replace("\\", "/").lstrip("/") if old_file_path else p
+        if old_p.startswith("a/") or old_p.startswith("b/"):
+            old_p = old_p[2:]
+
+        # Handle structural operations (no hunks)
+        if not hunk_text or not hunk_text.strip():
+            if normalized_op == "RENAMED":
+                header = (
+                    f"diff --git a/{old_p} b/{p}\n"
+                    f"similarity index 100%\n"
+                    f"rename from {old_p}\n"
+                    f"rename to {p}\n"
+                )
+                return header + "\n"
+            elif normalized_op == "ADDED":
+                header = (
+                    f"diff --git a/{p} b/{p}\n"
+                    f"new file mode 100644\n"
+                    f"index 0000000..0000000\n"
+                    f"--- /dev/null\n"
+                    f"+++ b/{p}\n"
+                )
+                return header + "\n"
+            elif normalized_op == "DELETED":
+                header = (
+                    f"diff --git a/{p} b/{p}\n"
+                    f"deleted file mode 100644\n"
+                    f"index 0000000..0000000\n"
+                    f"--- a/{p}\n"
+                    f"+++ /dev/null\n"
+                )
+                return header + "\n"
+            else:
+                # MODIFIED with no hunks doesn't make sense, but handle gracefully
+                raise ValueError(f"MODIFIED operation requires hunks, but hunk_text is empty")
+
+        # Normal case: file operation with hunks
         if not hunk_text.startswith("@@"):
             raise ValueError(f"Hunk must start with @@, got: {hunk_text[:50]}")
-        
+
         # Ensure hunk ends with newline if it doesn't already
         body = hunk_text if hunk_text.endswith("\n") else hunk_text + "\n"
-        
+
         # Add trailing newline for proper separation between files in combined patches
         if not body.endswith("\n\n"):
             body = body.rstrip("\n") + "\n"
-        
+
         if normalized_op == "ADDED":
             header = (
                 f"diff --git a/{p} b/{p}\n"
@@ -1457,5 +1541,5 @@ class ValidationToolkit:
                 f"--- a/{p}\n"
                 f"+++ b/{p}\n"
             )
-        
+
         return header + body

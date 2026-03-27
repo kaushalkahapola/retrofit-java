@@ -398,9 +398,10 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     # ------------------------------------------------------------------
     # Setup LLM
     llm = get_llm(temperature=0)
-    
+
     analyzer = PatchAnalyzer()
     raw_hunks_by_file = analyzer.extract_raw_hunks(patch_diff, with_test_changes=with_test_changes) if patch_diff else {}
+    file_only_ops = analyzer.extract_file_only_operations(patch_diff, with_test_changes=with_test_changes) if patch_diff else []
     toolkit = ValidationToolkit(target_repo_path) if target_repo_path else None
 
     fix_logic = semantic_blueprint.get("fix_logic", "")
@@ -634,6 +635,41 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 f"| `{target_test_file}` (test) | {hunk_idx} | "
                 f"{'✅' if dry_run_ok else '❌'} | — |\n"
             )
+
+    # ------------------------------------------------------------------
+    # File-only operations processing (rename, pure delete, etc.)
+    # ------------------------------------------------------------------
+    for op in file_only_ops:
+        file_path = op.get("file_path", "?")
+        change_type = op.get("change_type", "MODIFIED")
+        is_test = op.get("is_test_file", False)
+        new_path = op.get("new_path", file_path)
+
+        # Skip test file operations if not requested
+        if is_test and not with_test_changes:
+            continue
+
+        # Create a minimal AdaptedHunk for structural operations
+        # These have no hunk_text since they're metadata-only
+        hunk: AdaptedHunk = {
+            "target_file": new_path if change_type == "RENAMED" else file_path,
+            "mainline_file": file_path,
+            "hunk_text": "",  # No hunks for structural operations
+            "insertion_line": 0,
+            "intent_verified": True,  # No intent check needed for renames
+            "file_operation": change_type,
+        }
+
+        if is_test:
+            adapted_test_hunks.append(hunk)
+        else:
+            adapted_code_hunks.append(hunk)
+
+        trace += (
+            f"| `{new_path if change_type == 'RENAMED' else file_path}` "
+            f"({change_type}) | — | — | — |\n"
+        )
+        print(f"  Agent 3: Added {change_type} operation for {file_path}")
 
     # ------------------------------------------------------------------
     # Write trace and finalize
