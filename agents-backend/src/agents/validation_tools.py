@@ -1376,7 +1376,7 @@ class ValidationToolkit:
     def run_targeted_tests(self, test_classes: List[str]) -> Dict:
         """
         Runs specific unit tests in the target repository.
-        Detects Maven vs Gradle automatically.
+        Detects Maven vs Gradle automatically, or uses project helper script if available.
 
         Args:
             test_classes: List of test class names to run.
@@ -1386,6 +1386,42 @@ class ValidationToolkit:
         """
         if not test_classes:
             return {"success": True, "compile_error": False, "output": "No tests to run.", "failed_tests": []}
+
+        project_name = self._detect_project_name()
+        if self._is_known_project_with_helper(project_name):
+            helper_script = os.path.join(self._get_project_helper_dir(project_name), "run_tests.sh")
+            if os.path.exists(helper_script):
+                image_tag, image_err = self._ensure_project_builder_image(project_name)
+                if image_tag:
+                    helper_env = os.environ.copy()
+                    helper_env.update(
+                        {
+                            "PROJECT_NAME": project_name,
+                            "PROJECT_DIR": self.target_repo_path,
+                            "TOOLKIT_DIR": self._get_project_helper_dir(project_name),
+                            "BUILDER_IMAGE_TAG": image_tag,
+                            "IMAGE_TAG": image_tag,
+                            "COMMIT_SHA": self._get_current_head(),
+                            "WORKTREE_MODE": "1",
+                        }
+                    )
+                    
+                    cmd = ["bash", helper_script] + test_classes
+                    print(f"    Agent 4: Executing {project_name} helper test script: {' '.join(cmd)}")
+                    result = self._run_cmd_capture(cmd, cwd=self.target_repo_path, env=helper_env)
+                    
+                    success = bool(result.get("success"))
+                    output = result.get("output", "")
+                    compile_error = (not success) and ("compilation error" in output.lower() or "build failed with an exception" in output.lower())
+                    
+                    return {
+                        "success": success,
+                        "compile_error": compile_error,
+                        "output": output,
+                        "failed_tests": [],
+                    }
+                else:
+                    print(f"    Agent 4 Warning: {project_name} helper image unavailable for testing. Falling back. Details: {image_err}")
 
         is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
         
@@ -1401,7 +1437,7 @@ class ValidationToolkit:
             cmd = ["mvn", "test", f"-Dtest={test_args}"] + java_compat_args
 
         try:
-            print(f"    Agent 4: Executing test command: {' '.join(cmd)}")
+            print(f"    Agent 4: Executing fallback test command: {' '.join(cmd)}")
             result = subprocess.run(
                 cmd,
                 capture_output=True,
