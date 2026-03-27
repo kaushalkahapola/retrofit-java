@@ -440,3 +440,5 @@ temp_*
 agents-backend/tools/spotbugs/*.jar
 !agents-backend/tools/spotbugs/README.md
 agents-backend/*.md
+*.md
+!README.md

@@ -1,0 +1,21 @@
+{
+  "adapted_code_hunks": [
+    {
+      "target_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+      "mainline_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+      "hunk_text": "@@ -48,6 +48,7 @@\n import org.apache.druid.query.QueryContext;\n import org.apache.druid.server.DruidNode;\n import org.apache.druid.server.coordination.DruidServerMetadata;\n+import org.apache.druid.server.coordination.ServerType;\n \n import java.util.ArrayList;\n import java.util.Collections;\n",
+      "insertion_line": 48,
+      "intent_verified": false,
+      "file_operation": "MODIFIED"
+    },
+    {
+      "target_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+      "mainline_file": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+      "hunk_text": "@@ -112,7 +112,9 @@\n     // since the serverView is referenced shortly after the worker list is created.\n     final List<String> workerIds = new ArrayList<>(servers.size());\n     for (final DruidServerMetadata server : servers) {\n-      workerIds.add(WorkerId.fromDruidServerMetadata(server, queryId).toString());\n+    if (server.getType().equals(ServerType.HISTORICAL)) {\n+      workerIds.add(WorkerId.fromDruidServerMetadata(server, queryId).toString());\n+    }\n     }\n \n     // Shuffle workerIds, so we don't bias towards specific servers when running multiple queries concurrently. For any\n",
+      "insertion_line": 112,
+      "intent_verified": true,
+      "file_operation": "MODIFIED"
+    }
+  ],
+  "adapted_test_hunks": []
+}

@@ -1,4 +1,4 @@
-from typing import TypedDict, Annotated, Optional
+from typing import TypedDict, Annotated, Optional, NotRequired
 import operator
 from langchain_core.messages import BaseMessage
 
@@ -73,6 +73,9 @@ class AdaptedHunk(TypedDict):
     insertion_line: int     # Line number in target file where the hunk should anchor
     intent_verified: bool   # True if the blueprint validation LLM call passed
     file_operation: Optional[str]  # "ADDED" | "DELETED" | "MODIFIED" | "RENAMED"
+    old_target_file: NotRequired[Optional[str]]  # Resolved old path for rename operations
+    file_operation_required: NotRequired[bool]  # False when operation is already applied/not needed
+    path_resolution_reason: NotRequired[str]  # Trace hint for path decision
 
 
 # ---------------------------------------------------------------------------

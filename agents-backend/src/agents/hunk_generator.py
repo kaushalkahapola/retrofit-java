@@ -23,10 +23,12 @@ Key outputs to state:
 import re
 import json
 import os
+from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from state import AgentState, AdaptedHunk, SemanticBlueprint
 from utils.patch_analyzer import PatchAnalyzer
 from utils.llm_provider import get_llm
+from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from agents.validation_tools import ValidationToolkit
 
 
@@ -57,6 +59,9 @@ _HUNK_REWRITE_USER = """\
 ```java
 {target_method_body}
 ```
+
+## Current Imports in Target File (for import hunks only)
+{target_imports_context}
 
 ## ConsistencyMap (apply these renames to + lines)
 {consistency_map}
@@ -306,6 +311,52 @@ def _extract_added_lines(hunk_text: str) -> list[str]:
     return [line for line in lines[1:] if line.startswith("+")]
 
 
+def _is_import_only_hunk(hunk_text: str) -> bool:
+    """
+    Detects if a hunk contains ONLY import statements (no other code).
+    Used to identify hunks that should be handled conservatively without LLM rewriting.
+    """
+    if not hunk_text:
+        return False
+    lines = hunk_text.splitlines()
+    if not lines or not lines[0].startswith("@@"):
+        return False
+    
+    # Check if all non-header, non-whitespace lines are import statements or empty
+    for line in lines[1:]:
+        stripped = line.lstrip()
+        if not stripped:  # empty line
+            continue
+        if stripped.startswith("//"):  # comment
+            continue
+        # Check if line is an import statement (in any of +, -, or space formats)
+        content = stripped[1:].strip() if len(stripped) > 1 and stripped[0] in {'+', '-', ' '} else stripped
+        if content and not content.startswith("import "):
+            return False
+    
+    return True
+
+
+def _extract_imports_from_body(target_body: str) -> str:
+    """
+    Extracts all import statements from a Java file body snippet for reference.
+    This provides context to the LLM so it knows what imports already exist.
+    """
+    if not target_body:
+        return "(No imports found in target context)"
+    
+    imports = []
+    for line in target_body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("import "):
+            imports.append(stripped)
+    
+    if not imports:
+        return "(No imports found in target context)"
+    
+    return "Existing imports:\n- " + "\n- ".join(imports)
+
+
 def _stabilize_hunk_structure(base_hunk: str, candidate_hunk: str) -> str:
     """
     Keeps the original hunk structure and replaces only '+' lines with candidate '+'.
@@ -344,6 +395,247 @@ def _stabilize_hunk_structure(base_hunk: str, candidate_hunk: str) -> str:
     return stabilized
 
 
+def _normalize_rel_path(path: str) -> str:
+    p = (path or "").strip().replace("\\", "/").lstrip("/")
+    if p.startswith("a/") or p.startswith("b/"):
+        p = p[2:]
+    return p
+
+
+def _is_test_file(file_path: str) -> bool:
+    """
+    Simple heuristic to determine if a file is a test file.
+    """
+    lower_path = (file_path or "").lower()
+    return "test" in lower_path or lower_path.endswith("test.java")
+
+
+def _exists_file(repo_path: str, rel_path: str) -> bool:
+    if not repo_path or not rel_path:
+        return False
+    full_path = os.path.normpath(os.path.join(repo_path, _normalize_rel_path(rel_path)))
+    return os.path.isfile(full_path)
+
+
+def _exists_dir(repo_path: str, rel_path: str) -> bool:
+    if not repo_path:
+        return False
+    rel = _normalize_rel_path(rel_path)
+    full_path = os.path.normpath(os.path.join(repo_path, rel)) if rel else repo_path
+    return os.path.isdir(full_path)
+
+
+def _first_candidate_path(candidates: list[dict[str, Any]] | None) -> str | None:
+    for cand in candidates or []:
+        if not isinstance(cand, dict):
+            continue
+        p = cand.get("file") or cand.get("file_path") or cand.get("path")
+        if p:
+            return _normalize_rel_path(str(p))
+    return None
+
+
+def _find_candidate_target_path(
+    retriever: EnsembleRetriever | None,
+    file_path: str,
+    original_commit: str,
+) -> str | None:
+    if not retriever:
+        return None
+    p = _normalize_rel_path(file_path)
+    if not p:
+        return None
+    try:
+        candidates = retriever.find_candidates(p, original_commit or "HEAD")
+        return _first_candidate_path(candidates)
+    except Exception:
+        return None
+
+
+def _infer_target_directory_from_siblings(
+    mainline_file: str,
+    mainline_repo_path: str,
+    retriever: EnsembleRetriever | None,
+    original_commit: str,
+) -> str | None:
+    if not retriever or not mainline_repo_path:
+        return None
+
+    file_path = _normalize_rel_path(mainline_file)
+    parent = os.path.dirname(file_path)
+    if not parent:
+        return None
+
+    parent_abs = os.path.join(mainline_repo_path, parent)
+    if not os.path.isdir(parent_abs):
+        return None
+
+    sibling_dirs: list[str] = []
+    try:
+        for name in os.listdir(parent_abs):
+            if not name.endswith(".java"):
+                continue
+            sibling_rel = _normalize_rel_path(os.path.join(parent, name))
+            if sibling_rel == file_path:
+                continue
+            mapped = _find_candidate_target_path(retriever, sibling_rel, original_commit)
+            if mapped:
+                sibling_dirs.append(os.path.dirname(mapped))
+            if len(sibling_dirs) >= 3:
+                break
+    except Exception:
+        return None
+
+    if not sibling_dirs:
+        return None
+
+    return max(set(sibling_dirs), key=sibling_dirs.count)
+
+
+def _resolve_operation_plan(
+    *,
+    change_type: str,
+    mainline_file: str,
+    previous_mainline_file: str | None,
+    target_repo_path: str,
+    mainline_repo_path: str,
+    retriever: EnsembleRetriever | None,
+    original_commit: str,
+) -> dict[str, Any]:
+    op = (change_type or "MODIFIED").upper()
+    mainline_file = _normalize_rel_path(mainline_file)
+    previous_mainline_file = _normalize_rel_path(previous_mainline_file or "") or None
+
+    def resolve_existing(path_hint: str) -> str | None:
+        p = _normalize_rel_path(path_hint)
+        if p and _exists_file(target_repo_path, p):
+            return p
+        return _find_candidate_target_path(retriever, p, original_commit)
+
+    plan: dict[str, Any] = {
+        "target_file": mainline_file,
+        "old_target_file": None,
+        "effective_operation": op,
+        "operation_required": True,
+        "reason": "default",
+    }
+
+    if op == "ADDED":
+        target_file = mainline_file
+        parent_dir = os.path.dirname(target_file)
+        if parent_dir and not _exists_dir(target_repo_path, parent_dir):
+            inferred_dir = _infer_target_directory_from_siblings(
+                mainline_file=mainline_file,
+                mainline_repo_path=mainline_repo_path,
+                retriever=retriever,
+                original_commit=original_commit,
+            )
+            if inferred_dir:
+                target_file = _normalize_rel_path(os.path.join(inferred_dir, os.path.basename(mainline_file)))
+                plan["reason"] = "added_file_sibling_directory_inference"
+
+        existing_match = resolve_existing(target_file)
+        if existing_match:
+            plan.update(
+                {
+                    "target_file": existing_match,
+                    "effective_operation": "MODIFIED",
+                    "operation_required": True,
+                    "reason": "added_file_already_exists_in_target",
+                }
+            )
+            return plan
+
+        plan.update(
+            {
+                "target_file": target_file,
+                "effective_operation": "ADDED",
+                "operation_required": True,
+            }
+        )
+        return plan
+
+    if op == "DELETED":
+        delete_target = resolve_existing(mainline_file)
+        if not delete_target:
+            return {
+                "target_file": mainline_file,
+                "old_target_file": None,
+                "effective_operation": "DELETED",
+                "operation_required": False,
+                "reason": "delete_target_not_found",
+            }
+
+        return {
+            "target_file": delete_target,
+            "old_target_file": None,
+            "effective_operation": "DELETED",
+            "operation_required": _exists_file(target_repo_path, delete_target),
+            "reason": "delete_target_mapped",
+        }
+
+    if op == "RENAMED":
+        old_hint = previous_mainline_file or mainline_file
+        old_target = resolve_existing(old_hint)
+        new_target = mainline_file
+        new_parent = os.path.dirname(new_target)
+        if new_parent and not _exists_dir(target_repo_path, new_parent):
+            inferred_dir = _infer_target_directory_from_siblings(
+                mainline_file=mainline_file,
+                mainline_repo_path=mainline_repo_path,
+                retriever=retriever,
+                original_commit=original_commit,
+            )
+            if inferred_dir:
+                new_target = _normalize_rel_path(os.path.join(inferred_dir, os.path.basename(new_target)))
+
+        existing_new = resolve_existing(new_target)
+        if existing_new:
+            new_target = existing_new
+
+        old_exists = bool(old_target and _exists_file(target_repo_path, old_target))
+        new_exists = bool(new_target and _exists_file(target_repo_path, new_target))
+
+        if old_exists and not new_exists:
+            return {
+                "target_file": new_target,
+                "old_target_file": old_target,
+                "effective_operation": "RENAMED",
+                "operation_required": True,
+                "reason": "rename_required_old_exists_new_missing",
+            }
+        if not old_exists and new_exists:
+            return {
+                "target_file": new_target,
+                "old_target_file": old_target,
+                "effective_operation": "MODIFIED",
+                "operation_required": True,
+                "reason": "rename_already_applied_in_target",
+            }
+        if old_exists and new_exists:
+            return {
+                "target_file": new_target,
+                "old_target_file": old_target,
+                "effective_operation": "MODIFIED",
+                "operation_required": True,
+                "reason": "both_old_and_new_exist_skip_explicit_rename",
+            }
+        return {
+            "target_file": new_target,
+            "old_target_file": old_target,
+            "effective_operation": "RENAMED",
+            "operation_required": False,
+            "reason": "rename_no_viable_target",
+        }
+
+    # MODIFIED and fallback
+    mapped_target = resolve_existing(mainline_file)
+    if mapped_target:
+        plan["target_file"] = mapped_target
+        plan["reason"] = "modified_target_mapped"
+    return plan
+
+
 # ---------------------------------------------------------------------------
 # Core Agent Node
 # ---------------------------------------------------------------------------
@@ -369,6 +661,8 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     patch_analysis: list = state.get("patch_analysis") or []
     patch_diff: str = state.get("patch_diff") or ""
     target_repo_path: str = state.get("target_repo_path", "")
+    mainline_repo_path: str = state.get("mainline_repo_path", "")
+    original_commit: str = state.get("original_commit", "HEAD")
     validation_attempts: int = state.get("validation_attempts") or 0
     error_context: str = state.get("validation_error_context") or ""
     with_test_changes: bool = state.get("with_test_changes", False)
@@ -398,10 +692,17 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     # ------------------------------------------------------------------
     # Setup LLM
     llm = get_llm(temperature=0)
-    
+
     analyzer = PatchAnalyzer()
     raw_hunks_by_file = analyzer.extract_raw_hunks(patch_diff, with_test_changes=with_test_changes) if patch_diff else {}
+    file_only_ops = analyzer.extract_file_only_operations(patch_diff, with_test_changes=with_test_changes) if patch_diff else []
     toolkit = ValidationToolkit(target_repo_path) if target_repo_path else None
+    retriever = None
+    if target_repo_path and mainline_repo_path:
+        try:
+            retriever = EnsembleRetriever(mainline_repo_path, target_repo_path)
+        except Exception as e:
+            print(f"  Agent 3: Warning — retriever unavailable for file-op mapping: {e}")
 
     fix_logic = semantic_blueprint.get("fix_logic", "")
     dependent_apis = semantic_blueprint.get("dependent_apis", [])
@@ -446,6 +747,27 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     for change in code_changes:
         mainline_file = change.file_path if hasattr(change, "file_path") else change.get("file_path", "?")
         change_type = change.change_type if hasattr(change, "change_type") else change.get("change_type", "MODIFIED")
+        previous_mainline_file = (
+            change.previous_file_path
+            if hasattr(change, "previous_file_path")
+            else change.get("previous_file_path")
+        )
+        op_plan = _resolve_operation_plan(
+            change_type=change_type,
+            mainline_file=mainline_file,
+            previous_mainline_file=previous_mainline_file,
+            target_repo_path=target_repo_path,
+            mainline_repo_path=mainline_repo_path,
+            retriever=retriever,
+            original_commit=original_commit,
+        )
+
+        if not op_plan.get("operation_required", True) and not raw_hunks_by_file.get(mainline_file, []):
+            print(
+                f"  Agent 3: Skipping {change_type} for {mainline_file} "
+                f"(reason={op_plan.get('reason')})"
+            )
+            continue
         # Get list of mappings for this file (now returns list instead of single dict)
         mapped_ctx_list = mapped_target_context.get(mainline_file, [])
         raw_hunks = raw_hunks_by_file.get(mainline_file, [])
@@ -460,7 +782,10 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             # Get the mapping for this hunk (or reuse first one if not enough mappings)
             mapped_ctx = mapped_ctx_list[min(hunk_idx, len(mapped_ctx_list) - 1)]
             
-            target_file = mapped_ctx.get("target_file", mainline_file)
+            target_file = _normalize_rel_path(mapped_ctx.get("target_file", mainline_file))
+            planned_target_file = op_plan.get("target_file")
+            if planned_target_file:
+                target_file = planned_target_file
             insertion_line = mapped_ctx.get("start_line")
             target_body = mapped_ctx.get("code_snippet", "")
             raw_start_line = _extract_target_start_line(raw_hunk)
@@ -493,44 +818,51 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             # Deterministic symbol substitution pre-pass
             pre_rewritten = _rewrite_hunk_symbols(raw_hunk, consistency_map)
 
-            # LLM rewrite (up to 2 attempts)
-            adapted_hunk_text = None
-            for attempt in range(2):
-                # Use full method body context (no truncation)
-                # The LLM needs complete context to properly understand method structure,
-                # boundaries, and surrounding code patterns for accurate hunk adaptation.
-                # If token budget is a concern, this can be adjusted, but complete context
-                # produces more accurate hunks.
-                prompt = _HUNK_REWRITE_USER.format(
-                    mainline_hunk=pre_rewritten,
-                    target_method_body=target_body,  # Use full body, not truncated
-                    consistency_map=cm_formatted,
-                    fix_logic=fix_logic,
-                    dependent_apis=", ".join(dependent_apis),
-                    insertion_line=insertion_line,
-                    target_file=target_file,
-                    retry_context=retry_context_str,
-                )
-                try:
-                    response = await llm.ainvoke([
-                        SystemMessage(content=_HUNK_REWRITE_SYSTEM),
-                        HumanMessage(content=prompt),
-                    ])
-                    raw_content = response.content if hasattr(response, "content") else str(response)
-                    extracted = _extract_hunk_block(raw_content)
-                    if extracted:
-                        # Preserve original diff structure and allow model to vary only '+' lines.
-                        stabilized = _stabilize_hunk_structure(pre_rewritten, extracted)
-                        adapted_hunk_text = _adjust_hunk_header(stabilized, insertion_line)
-                        break
-                    print(f"    Agent 3: Hunk parse failed (attempt {attempt+1}/2)")
-                except Exception as e:
-                    print(f"    Agent 3: LLM error on hunk {hunk_idx} (attempt {attempt+1}/2): {e}")
-
-            if not adapted_hunk_text:
-                # Fallback: use the deterministic pre-rewrite with adjusted header
+            # For import-only hunks, skip LLM rewriting to avoid corruption
+            # Import statements are fragile and LLM tends to duplicate existing imports
+            if _is_import_only_hunk(raw_hunk):
                 adapted_hunk_text = _adjust_hunk_header(pre_rewritten, insertion_line)
-                print(f"    Agent 3: Fallback — using deterministic pre-rewrite for hunk {hunk_idx}")
+                print(f"    Agent 3: Skipped LLM rewrite for import-only hunk {hunk_idx}")
+            else:
+                # LLM rewrite (up to 2 attempts) for non-import hunks
+                adapted_hunk_text = None
+                for attempt in range(2):
+                    # Use full method body context (no truncation)
+                    # The LLM needs complete context to properly understand method structure,
+                    # boundaries, and surrounding code patterns for accurate hunk adaptation.
+                    # If token budget is a concern, this can be adjusted, but complete context
+                    # produces more accurate hunks.
+                    prompt = _HUNK_REWRITE_USER.format(
+                        mainline_hunk=pre_rewritten,
+                        target_method_body=target_body,  # Use full body, not truncated
+                        target_imports_context=_extract_imports_from_body(target_body),
+                        consistency_map=cm_formatted,
+                        fix_logic=fix_logic,
+                        dependent_apis=", ".join(dependent_apis),
+                        insertion_line=insertion_line,
+                        target_file=target_file,
+                        retry_context=retry_context_str,
+                    )
+                    try:
+                        response = await llm.ainvoke([
+                            SystemMessage(content=_HUNK_REWRITE_SYSTEM),
+                            HumanMessage(content=prompt),
+                        ])
+                        raw_content = response.content if hasattr(response, "content") else str(response)
+                        extracted = _extract_hunk_block(raw_content)
+                        if extracted:
+                            # Preserve original diff structure and allow model to vary only '+' lines.
+                            stabilized = _stabilize_hunk_structure(pre_rewritten, extracted)
+                            adapted_hunk_text = _adjust_hunk_header(stabilized, insertion_line)
+                            break
+                        print(f"    Agent 3: Hunk parse failed (attempt {attempt+1}/2)")
+                    except Exception as e:
+                        print(f"    Agent 3: LLM error on hunk {hunk_idx} (attempt {attempt+1}/2): {e}")
+
+                if not adapted_hunk_text:
+                    # Fallback: use the deterministic pre-rewrite with adjusted header
+                    adapted_hunk_text = _adjust_hunk_header(pre_rewritten, insertion_line)
+                    print(f"    Agent 3: Fallback — using deterministic pre-rewrite for hunk {hunk_idx}")
 
             # Dry-run validation
             dry_run_ok = False
@@ -553,7 +885,10 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 "hunk_text": adapted_hunk_text,
                 "insertion_line": insertion_line,
                 "intent_verified": intent_ok,
-                "file_operation": change_type,
+                "file_operation": op_plan.get("effective_operation", change_type),
+                "old_target_file": op_plan.get("old_target_file"),
+                "file_operation_required": op_plan.get("operation_required", True),
+                "path_resolution_reason": op_plan.get("reason", "unknown"),
             }
             adapted_code_hunks.append(hunk)
             trace += (
@@ -634,6 +969,65 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 f"| `{target_test_file}` (test) | {hunk_idx} | "
                 f"{'✅' if dry_run_ok else '❌'} | — |\n"
             )
+
+    # ------------------------------------------------------------------
+    # File-only operations processing (rename, pure delete, etc.)
+    # ------------------------------------------------------------------
+    for op in file_only_ops:
+        file_path = op.get("file_path", "?")
+        change_type = op.get("change_type", "MODIFIED")
+        is_test = op.get("is_test_file", False)
+        new_path = op.get("new_path", file_path)
+        previous_mainline_file = file_path if change_type == "RENAMED" else None
+
+        op_plan = _resolve_operation_plan(
+            change_type=change_type,
+            mainline_file=new_path if change_type == "RENAMED" else file_path,
+            previous_mainline_file=previous_mainline_file,
+            target_repo_path=target_repo_path,
+            mainline_repo_path=mainline_repo_path,
+            retriever=retriever,
+            original_commit=original_commit,
+        )
+
+        if not op_plan.get("operation_required", True):
+            print(
+                f"  Agent 3: Skipping structural {change_type} for {file_path} "
+                f"(reason={op_plan.get('reason')})"
+            )
+            continue
+
+        # Skip test file operations if not requested
+        if is_test and not with_test_changes:
+            continue
+
+        # Create a minimal AdaptedHunk for structural operations
+        # These have no hunk_text since they're metadata-only
+        hunk: AdaptedHunk = {
+            "target_file": op_plan.get("target_file") or (new_path if change_type == "RENAMED" else file_path),
+            "mainline_file": file_path,
+            "hunk_text": "",  # No hunks for structural operations
+            "insertion_line": 0,
+            "intent_verified": True,  # No intent check needed for renames
+            "file_operation": op_plan.get("effective_operation", change_type),
+            "old_target_file": op_plan.get("old_target_file"),
+            "file_operation_required": op_plan.get("operation_required", True),
+            "path_resolution_reason": op_plan.get("reason", "unknown"),
+        }
+
+        if is_test:
+            adapted_test_hunks.append(hunk)
+        else:
+            adapted_code_hunks.append(hunk)
+
+        trace += (
+            f"| `{hunk['target_file']}` "
+            f"({hunk['file_operation']}) | — | — | — |\n"
+        )
+        print(
+            f"  Agent 3: Added {hunk['file_operation']} operation for {file_path} "
+            f"(target={hunk['target_file']}, reason={hunk.get('path_resolution_reason')})"
+        )
 
     # ------------------------------------------------------------------
     # Write trace and finalize
