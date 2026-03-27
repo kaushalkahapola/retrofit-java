@@ -1,7 +1,0 @@
-{
-  "adapted_code_hunks": [],
-  "adapted_test_hunks": [],
-  "validation_passed": false,
-  "validation_attempts": 2,
-  "validation_error_context": "Agent 3 Early Exit: Agent 2 failed to map files. No source context available for hunk generation."
-}
