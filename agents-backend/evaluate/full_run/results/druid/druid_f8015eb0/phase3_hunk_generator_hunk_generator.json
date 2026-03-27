@@ -5,8 +5,11 @@
       "mainline_file": "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java",
       "hunk_text": "@@ -431,13 +431,6 @@\n     );\n   }\n \n-  @Override\n-  public long computeLagForAutoScaler()\n-  {\n-    LagStats lagStats = computeLagStats();\n-    return lagStats == null ? 0L : lagStats.getMaxLag();\n-  }\n-\n   private SeekableStreamDataSourceMetadata<String, String> createDataSourceMetadataWithClosedOrExpiredPartitions(\n       SeekableStreamDataSourceMetadata<String, String> currentMetadata,\n       Set<String> terminatedPartitionIds,\n",
       "insertion_line": 431,
-      "intent_verified": true,
-      "file_operation": "MODIFIED"
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     },
     {
       "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
@@ -14,15 +17,21 @@
       "hunk_text": "@@ -21,6 +21,8 @@\n \n import org.apache.commons.collections4.queue.CircularFifoQueue;\n import org.apache.druid.indexing.overlord.supervisor.SupervisorSpec;\n+import org.apache.druid.indexing.overlord.supervisor.autoscaler.AggregateFunction;\n+import org.apache.druid.indexing.overlord.supervisor.autoscaler.LagStats;\n import org.apache.druid.indexing.overlord.supervisor.autoscaler.SupervisorTaskAutoScaler;\n import org.apache.druid.indexing.seekablestream.supervisor.SeekableStreamSupervisor;\n import org.apache.druid.java.util.common.StringUtils;\n",
       "insertion_line": 21,
       "intent_verified": false,
-      "file_operation": "MODIFIED"
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     },
     {
       "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
       "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
-      "hunk_text": "@@ -151,8 +151,17 @@\n       LOCK.lock();\n       try {\n         if (!spec.isSuspended()) {\n-          long lag = supervisor.computeLagForAutoScaler();\n-          lagMetricsQueue.offer(lag > 0 ? lag : 0L);\n+          LagStats lagStats = supervisor.computeLagStats();\n+\n+          if (lagStats != null) {\n+            AggregateFunction aggregate = lagBasedAutoScalerConfig.getLagAggregate() == null ?\n+                                          lagStats.getAggregateForScaling() :\n+                                          lagBasedAutoScalerConfig.getLagAggregate();\n+            long lag = lagStats.getMetric(aggregate);\n+            lagMetricsQueue.offer(lag > 0 ? lag : 0L);\n+          } else {\n+            lagMetricsQueue.offer(0L);\n+          }\n           log.debug(\"Current lags for dataSource[%s] are [%s].\", dataSource, lagMetricsQueue);\n         } else {\n           log.warn(\"[%s] supervisor is suspended, skipping lag collection\", dataSource);\n",
-      "insertion_line": 151,
+      "hunk_text": "@@ -154,8 +154,17 @@\n       LOCK.lock();\n       try {\n         if (!spec.isSuspended()) {\n-          long lag = supervisor.computeLagForAutoScaler();\n-          lagMetricsQueue.offer(lag > 0 ? lag : 0L);\n+          LagStats lagStats = supervisor.computeLagStats();\n+\n+          if (lagStats != null) {\n+            AggregateFunction aggregate = lagBasedAutoScalerConfig.getLagAggregate() == null ?\n+                                          lagStats.getAggregateForScaling() :\n+                                          lagBasedAutoScalerConfig.getLagAggregate();\n+            long lag = lagStats.getMetric(aggregate);\n+            lagMetricsQueue.offer(lag > 0 ? lag : 0L);\n+          } else {\n+            lagMetricsQueue.offer(0L);\n+          }\n           log.debug(\"Current lags for dataSource[%s] are [%s].\", dataSource, lagMetricsQueue);\n         } else {\n           log.warn(\"[%s] supervisor is suspended, skipping lag collection\", dataSource);\n",
+      "insertion_line": 154,
       "intent_verified": true,
-      "file_operation": "MODIFIED"
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     },
     {
       "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
@@ -30,55 +39,76 @@
       "hunk_text": "@@ -23,6 +23,7 @@\n import com.fasterxml.jackson.annotation.JsonProperty;\n import org.apache.druid.indexing.overlord.supervisor.Supervisor;\n import org.apache.druid.indexing.overlord.supervisor.SupervisorSpec;\n+import org.apache.druid.indexing.overlord.supervisor.autoscaler.AggregateFunction;\n import org.apache.druid.indexing.overlord.supervisor.autoscaler.SupervisorTaskAutoScaler;\n import org.apache.druid.indexing.seekablestream.supervisor.SeekableStreamSupervisor;\n import org.apache.druid.java.util.emitter.service.ServiceEmitter;\n",
       "insertion_line": 23,
       "intent_verified": false,
-      "file_operation": "MODIFIED"
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     },
     {
       "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
       "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-      "hunk_text": "@@ -18,6 +18,7 @@\n   private final int scaleOutStep;\n   private final boolean enableTaskAutoScaler;\n   private final long minTriggerScaleActionFrequencyMillis;\n+private final AggregateFunction lagAggregate;\n \n   @JsonCreator\n   public LagBasedAutoScalerConfig(\n",
-      "insertion_line": 18,
-      "intent_verified": true,
-      "file_operation": "MODIFIED"
-    },
-    {
-      "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-      "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-      "hunk_text": "@@ -20,7 +20,8 @@\n           @Nullable @JsonProperty(\"scaleInStep\") Integer scaleInStep,\n           @Nullable @JsonProperty(\"scaleOutStep\") Integer scaleOutStep,\n           @Nullable @JsonProperty(\"enableTaskAutoScaler\") Boolean enableTaskAutoScaler,\n-          @Nullable @JsonProperty(\"minTriggerScaleActionFrequencyMillis\") Long minTriggerScaleActionFrequencyMillis\n+          @Nullable @JsonProperty(\"minTriggerScaleActionFrequencyMillis\") Long minTriggerScaleActionFrequencyMillis,\n+          @Nullable @JsonProperty(\"lagAggregate\") AggregateFunction lagAggregate\n   )\n   {\n     this.enableTaskAutoScaler = enableTaskAutoScaler != null ? enableTaskAutoScaler : false;\n",
-      "insertion_line": 20,
+      "hunk_text": "@@ -45,6 +45,7 @@\n   private final int scaleOutStep;\n   private final boolean enableTaskAutoScaler;\n   private final long minTriggerScaleActionFrequencyMillis;\n+  private final AggregateFunction lagAggregate;\n \n   @JsonCreator\n   public LagBasedAutoScalerConfig(\n",
+      "insertion_line": 45,
       "intent_verified": false,
-      "file_operation": "MODIFIED"
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     },
     {
       "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
       "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-      "hunk_text": "@@ -49,6 +49,7 @@\n     this.scaleInThreshold = scaleInThreshold != null ? scaleInThreshold : 1000000;\n     this.triggerScaleOutFractionThreshold = triggerScaleOutFractionThreshold != null ? triggerScaleOutFractionThreshold : 0.3;\n     this.triggerScaleInFractionThreshold = triggerScaleInFractionThreshold != null ? triggerScaleInFractionThreshold : 0.9;\n+this.lagAggregate = lagAggregate;\n \n     // Only do taskCountMax and taskCountMin check when autoscaler is enabled. So that users left autoConfig empty{} will not throw any exception and autoscaler is disabled.\n     // If autoscaler is disabled, no matter what configs are set, they are not used.\n",
-      "insertion_line": 49,
+      "hunk_text": "@@ -61,7 +61,8 @@\n           @Nullable @JsonProperty(\"scaleInStep\") Integer scaleInStep,\n           @Nullable @JsonProperty(\"scaleOutStep\") Integer scaleOutStep,\n           @Nullable @JsonProperty(\"enableTaskAutoScaler\") Boolean enableTaskAutoScaler,\n-          @Nullable @JsonProperty(\"minTriggerScaleActionFrequencyMillis\") Long minTriggerScaleActionFrequencyMillis\n+          @Nullable @JsonProperty(\"minTriggerScaleActionFrequencyMillis\") Long minTriggerScaleActionFrequencyMillis,\n+          @Nullable @JsonProperty(\"lagAggregate\") AggregateFunction lagAggregate\n   )\n   {\n     this.enableTaskAutoScaler = enableTaskAutoScaler != null ? enableTaskAutoScaler : false;\n",
+      "insertion_line": 61,
       "intent_verified": false,
-      "file_operation": "MODIFIED"
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     },
     {
       "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
       "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-      "hunk_text": "@@ -190,6 +190,13 @@\n     return minTriggerScaleActionFrequencyMillis;\n   }\n \n+  @com.fasterxml.jackson.annotation.JsonProperty\n+  @javax.annotation.Nullable\n+  public AggregateFunction getLagAggregate()\n+  {\n+    return lagAggregate;\n+  }\n+\n   @Override\n   public String toString()\n   {\n",
-      "insertion_line": 190,
-      "intent_verified": true,
-      "file_operation": "MODIFIED"
+      "hunk_text": "@@ -73,6 +73,7 @@\n     this.scaleInThreshold = scaleInThreshold != null ? scaleInThreshold : 1000000;\n     this.triggerScaleOutFractionThreshold = triggerScaleOutFractionThreshold != null ? triggerScaleOutFractionThreshold : 0.3;\n     this.triggerScaleInFractionThreshold = triggerScaleInFractionThreshold != null ? triggerScaleInFractionThreshold : 0.9;\n+    this.lagAggregate = lagAggregate != null ? lagAggregate : AggregateFunction.MAX;\n \n     // Only do taskCountMax and taskCountMin check when autoscaler is enabled. So that users left autoConfig empty{} will not throw any exception and autoscaler is disabled.\n     // If autoscaler is disabled, no matter what configs are set, they are not used.\n",
+      "insertion_line": 73,
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     },
     {
       "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
       "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
-      "hunk_text": "@@ -190,6 +190,7 @@\n             \", scaleActionPeriodMillis=\" + scaleActionPeriodMillis +\n             \", scaleInStep=\" + scaleInStep +\n             \", scaleOutStep=\" + scaleOutStep +\n+            \", lagAggregate=\" + lagAggregate +\n             '}';\n   }\n }\n",
-      "insertion_line": 190,
-      "intent_verified": true,
-      "file_operation": "MODIFIED"
+      "hunk_text": "@@ -186,6 +186,13 @@\n     return minTriggerScaleActionFrequencyMillis;\n   }\n \n+  @JsonProperty\n+  @Nullable\n+  public AggregateFunction getLagAggregate()\n+  {\n+    return lagAggregate;\n+  }\n+\n   @Override\n   public String toString()\n   {\n",
+      "insertion_line": 186,
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
+      "mainline_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
+      "hunk_text": "@@ -204,6 +204,7 @@\n             \", scaleActionPeriodMillis=\" + scaleActionPeriodMillis +\n             \", scaleInStep=\" + scaleInStep +\n             \", scaleOutStep=\" + scaleOutStep +\n+            \", lagAggregate=\" + lagAggregate +\n             '}';\n   }\n }\n",
+      "insertion_line": 204,
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     },
     {
       "target_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java",
       "mainline_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java",
       "hunk_text": "@@ -98,14 +98,5 @@\n    */\n   LagStats computeLagStats();\n \n-  /**\n-   * Used by AutoScaler to make scaling decisions.\n-   */\n-  default long computeLagForAutoScaler()\n-  {\n-    LagStats lagStats = computeLagStats();\n-    return lagStats == null ? 0L : lagStats.getTotalLag();\n-  }\n-\n   int getActiveTaskGroupsCount();\n }\n",
       "insertion_line": 98,
-      "intent_verified": true,
-      "file_operation": "MODIFIED"
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     },
     {
       "target_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java",
@@ -86,23 +116,32 @@
       "hunk_text": "@@ -1,1 +1,27 @@\n+/*\n+ * Licensed to the Apache Software Foundation (ASF) under one\n+ * or more contributor license agreements.  See the NOTICE file\n+ * distributed with this work for additional information\n+ * regarding copyright ownership.  The ASF licenses this file\n+ * to you under the Apache License, Version 2.0 (the\n+ * \"License\"); you may not use this file except in compliance\n+ * with the License.  You may obtain a copy of the License at\n+ *\n+ *   http://www.apache.org/licenses/LICENSE-2.0\n+ *\n+ * Unless required by applicable law or agreed to in writing,\n+ * software distributed under the License is distributed on an\n+ * \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY\n+ * KIND, either express or implied.  See the License for the\n+ * specific language governing permissions and limitations\n+ * under the License.\n+ */\n+\n+package org.apache.druid.indexing.overlord.supervisor.autoscaler;\n+\n+public enum AggregateFunction\n+{\n+  MAX,\n+  SUM,\n+  AVERAGE\n+}\n",
       "insertion_line": 1,
       "intent_verified": false,
-      "file_operation": "ADDED"
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "added_file_already_exists_in_target"
     },
     {
       "target_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
       "mainline_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
-      "hunk_text": "@@ -6,12 +6,19 @@\n   private final long maxLag;\n   private final long totalLag;\n   private final long avgLag;\n+  private final AggregateFunction aggregateForScaling;\n \n   public LagStats(long maxLag, long totalLag, long avgLag)\n+  {\n+    this(maxLag, totalLag, avgLag, AggregateFunction.SUM);\n+  }\n+\n+  public LagStats(long maxLag, long totalLag, long avgLag, AggregateFunction aggregateForScaling)\n   {\n     this.maxLag = maxLag;\n     this.totalLag = totalLag;\n     this.avgLag = avgLag;\n+    this.aggregateForScaling = aggregateForScaling == null ? AggregateFunction.SUM : aggregateForScaling;\n   }\n \n   public long getMaxLag()\n",
-      "insertion_line": 6,
+      "hunk_text": "@@ -25,12 +25,19 @@\n   private final long maxLag;\n   private final long totalLag;\n   private final long avgLag;\n+  private final AggregateFunction lagAggregate;\n \n   public LagStats(long maxLag, long totalLag, long avgLag)\n+  {\n+    this(maxLag, totalLag, avgLag, AggregateFunction.SUM);\n+  }\n+\n+  public LagStats(long maxLag, long totalLag, long avgLag, AggregateFunction lagAggregate)\n   {\n     this.maxLag = maxLag;\n     this.totalLag = totalLag;\n     this.avgLag = avgLag;\n+    this.lagAggregate = lagAggregate == null ? AggregateFunction.SUM : lagAggregate;\n   }\n \n   public long getMaxLag()\n",
+      "insertion_line": 25,
       "intent_verified": false,
-      "file_operation": "MODIFIED"
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     },
     {
       "target_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
       "mainline_file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
-      "hunk_text": "@@ -53,4 +53,26 @@\n   {\n     return avgLag;\n   }\n+\n+  /**\n+   * The preferred scaling metric that supervisor may specify to be used.\n+   * This could be overrided by the autscaler.\n+   */\n+  public AggregateFunction getAggregateForScaling()\n+  {\n+    return aggregateForScaling;\n+  }\n+\n+  public long getMetric(AggregateFunction metric)\n+  {\n+    switch (metric) {\n+      case MAX:\n+        return getMaxLag();\n+      case SUM:\n+        return getTotalLag();\n+      case AVERAGE:\n+        return getAvgLag();\n+    }\n+    throw new IllegalStateException(\"Unknown scale metric\");\n+  }\n }\n",
-      "insertion_line": 53,
+      "hunk_text": "@@ -54,4 +54,26 @@\n   {\n     return avgLag;\n   }\n+\n+  /**\n+   * The preferred scaling metric that supervisor may specify to be used.\n+   * This could be overrided by the autscaler.\n+   */\n+  public AggregateFunction getAggregateForScaling()\n+  {\n+    return aggregateForScaling;\n+  }\n+\n+  public long getMetric(AggregateFunction metric)\n+  {\n+    switch (metric) {\n+      case MAX:\n+        return getMaxLag();\n+      case SUM:\n+        return getTotalLag();\n+      case AVERAGE:\n+        return getAvgLag();\n+    }\n+    throw new IllegalStateException(\"Unknown scale metric\");\n+  }\n }\n",
+      "insertion_line": 54,
       "intent_verified": false,
-      "file_operation": "MODIFIED"
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     }
   ],
   "adapted_test_hunks": []

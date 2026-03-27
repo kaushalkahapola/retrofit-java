@@ -214,15 +214,20 @@ class TestHunkGeneratorNodeIntegration(unittest.IsolatedAsyncioTestCase):
             },
             "consistency_map": {},
             "mapped_target_context": {
-                "src/main/java/Foo.java": {
-                    "target_file": "src/main/java/Foo.java",
-                    "method": "process",
-                    "start_line": 10,
-                    "end_line": 15,
-                    "code_snippet": "public void process() { buf.read(); }",
-                },
+                "src/main/java/Foo.java": [
+                    {
+                        "target_file": "src/main/java/Foo.java",
+                        "target_method": "process",
+                        "mainline_method": "process",
+                        "start_line": 10,
+                        "end_line": 15,
+                        "code_snippet": "public void process() { buf.read(); }",
+                    }
+                ],
             },
             "target_repo_path": "/fake/target",
+            "mainline_repo_path": "/fake/mainline",
+            "original_commit": "HEAD",
             "validation_attempts": validation_attempts,
             "validation_error_context": error_context,
             "messages": [],
@@ -247,8 +252,9 @@ class TestHunkGeneratorNodeIntegration(unittest.IsolatedAsyncioTestCase):
         mock_toolkit = MagicMock()
         mock_toolkit.apply_hunk_dry_run.return_value = {"success": True, "output": "ok"}
 
-        with patch("agents.hunk_generator.ChatGoogleGenerativeAI", return_value=mock_llm), \
-             patch("agents.hunk_generator.ValidationToolkit", return_value=mock_toolkit):
+        with patch("agents.hunk_generator.get_llm", return_value=mock_llm), \
+               patch("agents.hunk_generator.EnsembleRetriever", side_effect=Exception("skip retriever in test")), \
+               patch("agents.hunk_generator.ValidationToolkit", return_value=mock_toolkit):
             result = await hunk_generator_node(state, {})
 
         self.assertIn("adapted_code_hunks", result)
@@ -277,8 +283,9 @@ class TestHunkGeneratorNodeIntegration(unittest.IsolatedAsyncioTestCase):
         mock_toolkit = MagicMock()
         mock_toolkit.apply_hunk_dry_run.return_value = {"success": True, "output": "ok"}
 
-        with patch("agents.hunk_generator.ChatGoogleGenerativeAI", return_value=mock_llm), \
-             patch("agents.hunk_generator.ValidationToolkit", return_value=mock_toolkit):
+        with patch("agents.hunk_generator.get_llm", return_value=mock_llm), \
+               patch("agents.hunk_generator.EnsembleRetriever", side_effect=Exception("skip retriever in test")), \
+               patch("agents.hunk_generator.ValidationToolkit", return_value=mock_toolkit):
             await hunk_generator_node(state, {})
 
         # Check that the error context string appears in at least one LLM call
@@ -294,8 +301,9 @@ class TestHunkGeneratorNodeIntegration(unittest.IsolatedAsyncioTestCase):
         mock_llm = AsyncMock()
         mock_toolkit = MagicMock()
 
-        with patch("agents.hunk_generator.ChatGoogleGenerativeAI", return_value=mock_llm), \
-             patch("agents.hunk_generator.ValidationToolkit", return_value=mock_toolkit):
+        with patch("agents.hunk_generator.get_llm", return_value=mock_llm), \
+               patch("agents.hunk_generator.EnsembleRetriever", side_effect=Exception("skip retriever in test")), \
+               patch("agents.hunk_generator.ValidationToolkit", return_value=mock_toolkit):
             result = await hunk_generator_node(state, {})
 
         self.assertEqual(result["adapted_code_hunks"], [])

@@ -74,9 +74,14 @@ index 0000000..1234567
 +    public void testApp() {
 +    }
 +}"""
+        # Test files are filtered out by default (with_test_changes=False)
         changes = self.analyzer.analyze(diff_text)
-        self.assertEqual(len(changes), 1)
-        self.assertTrue(changes[0].is_test_file)
+        self.assertEqual(len(changes), 0)
+
+        # But when explicitly including test changes, they should be included
+        changes_with_tests = self.analyzer.analyze(diff_text, with_test_changes=True)
+        self.assertEqual(len(changes_with_tests), 1)
+        self.assertTrue(changes_with_tests[0].is_test_file)
 
 
 class TestExtractRawHunks(unittest.TestCase):
@@ -87,7 +92,12 @@ class TestExtractRawHunks(unittest.TestCase):
         result = self.analyzer.extract_raw_hunks(SAMPLE_DIFF)
         self.assertIsInstance(result, dict)
         self.assertIn("src/main/java/com/example/App.java", result)
-        self.assertIn("src/test/java/com/example/AppTest.java", result)
+        # Test files are filtered out by default, so they won't be in the result
+        self.assertNotIn("src/test/java/com/example/AppTest.java", result)
+
+        # But when requesting test changes, they should be included
+        result_with_tests = self.analyzer.extract_raw_hunks(SAMPLE_DIFF, with_test_changes=True)
+        self.assertIn("src/test/java/com/example/AppTest.java", result_with_tests)
 
     def test_code_file_has_one_hunk(self):
         result = self.analyzer.extract_raw_hunks(SAMPLE_DIFF)
@@ -106,19 +116,48 @@ class TestExtractRawHunks(unittest.TestCase):
         self.assertIn("-", hunk)
 
     def test_test_file_has_one_hunk(self):
+        # Test files are filtered out by default
         result = self.analyzer.extract_raw_hunks(SAMPLE_DIFF)
-        test_hunks = result["src/test/java/com/example/AppTest.java"]
+        self.assertNotIn("src/test/java/com/example/AppTest.java", result)
+
+        # But when requesting test changes, the file should be there with one hunk
+        result_with_tests = self.analyzer.extract_raw_hunks(SAMPLE_DIFF, with_test_changes=True)
+        test_hunks = result_with_tests["src/test/java/com/example/AppTest.java"]
         self.assertGreaterEqual(len(test_hunks), 1)
 
     def test_hunk_segregation_via_analyze(self):
         """Verifies that is_test_file flag correctly separates code from test hunks."""
+        # Without test changes, only code files are included
         changes = self.analyzer.analyze(SAMPLE_DIFF)
         code = [c for c in changes if not c.is_test_file]
         tests = [c for c in changes if c.is_test_file]
         self.assertEqual(len(code), 1)
-        self.assertEqual(len(tests), 1)
+        self.assertEqual(len(tests), 0)
         self.assertEqual(code[0].file_path, "src/main/java/com/example/App.java")
-        self.assertEqual(tests[0].file_path, "src/test/java/com/example/AppTest.java")
+
+        # With test changes, both are included
+        changes_with_tests = self.analyzer.analyze(SAMPLE_DIFF, with_test_changes=True)
+        code_with_tests = [c for c in changes_with_tests if not c.is_test_file]
+        tests_with_tests = [c for c in changes_with_tests if c.is_test_file]
+        self.assertEqual(len(code_with_tests), 1)
+        self.assertEqual(len(tests_with_tests), 1)
+        self.assertEqual(tests_with_tests[0].file_path, "src/test/java/com/example/AppTest.java")
+
+    def test_rename_records_previous_file_path(self):
+        diff_text = """\
+diff --git a/src/main/java/com/example/LegacyFoo.java b/src/main/java/com/example/NewFoo.java
+similarity index 95%
+rename from src/main/java/com/example/LegacyFoo.java
+rename to src/main/java/com/example/NewFoo.java
+@@ -10,3 +10,3 @@ public class NewFoo {
+-    void readLegacy() {}
++    void readNew() {}
+ }"""
+        changes = self.analyzer.analyze(diff_text)
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(changes[0].change_type, "RENAMED")
+        self.assertEqual(changes[0].file_path, "src/main/java/com/example/NewFoo.java")
+        self.assertEqual(changes[0].previous_file_path, "src/main/java/com/example/LegacyFoo.java")
 
 
 if __name__ == "__main__":

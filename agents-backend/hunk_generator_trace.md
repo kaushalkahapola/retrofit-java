@@ -2,18 +2,16 @@
 
 | target_file | hunk_index | dry_run | intent_ok |
 |---|---|---|---|
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java` | 0 | ❌ | ✅ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java` | 0 | ❌ | ❌ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java` | 1 | ❌ | ❌ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java` | 2 | ❌ | ❌ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java` | 3 | ❌ | ✅ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java` | 4 | ❌ | ✅ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java` | 5 | ❌ | ❌ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java` | 6 | ❌ | ❌ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java` | 7 | ❌ | ✅ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java` | 8 | ❌ | ❌ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java` | 0 | ❌ | ❌ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java` | 1 | ❌ | ❌ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java` | 2 | ❌ | ✅ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java` | 3 | ❌ | ✅ |
-| `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java` | 4 | ❌ | ✅ |
+| `extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java` | 0 | ✅ | ❌ |
+| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java` | 0 | ✅ | ❌ |
+| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java` | 1 | ✅ | ✅ |
+| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 0 | ✅ | ❌ |
+| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 1 | ✅ | ❌ |
+| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 2 | ✅ | ❌ |
+| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 3 | ✅ | ❌ |
+| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 4 | ✅ | ❌ |
+| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 5 | ✅ | ❌ |
+| `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java` | 0 | ✅ | ❌ |
+| `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java` | 0 | ❌ | ❌ |
+| `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java` | 0 | ✅ | ❌ |
+| `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java` | 1 | ✅ | ❌ |

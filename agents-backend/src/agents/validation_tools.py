@@ -1048,6 +1048,12 @@ class ValidationToolkit:
         if not all_hunks:
             return {"success": False, "output": "No hunks to apply.", "applied_files": []}
 
+        def _normalize_rel_path(path: str) -> str:
+            p = (path or "").strip().replace("\\", "/").lstrip("/")
+            if p.startswith("a/") or p.startswith("b/"):
+                p = p[2:]
+            return p
+
         # Ensure all hunks have insertion_line set; fall back to hunk header parsing.
         for h in all_hunks:
             if not h.get("insertion_line"):
@@ -1062,10 +1068,66 @@ class ValidationToolkit:
         # Group hunks by target file, then sort each file's hunks in ascending line order.
         hunks_by_file = {}
         for h in all_hunks:
-            target_file = h.get("target_file", "unknown")
+            target_file = _normalize_rel_path(h.get("target_file", "unknown"))
+            h["target_file"] = target_file
             if target_file not in hunks_by_file:
                 hunks_by_file[target_file] = []
             hunks_by_file[target_file].append(h)
+
+        # Validate and correct file_operation based on actual file state in target repo
+        for h in all_hunks:
+            target_file = _normalize_rel_path(h.get("target_file", ""))
+            original_op = (h.get("file_operation", "MODIFIED") or "MODIFIED")
+
+            if h.get("file_operation_required") is False:
+                h["file_operation"] = None
+                continue
+            
+            # Normalize path: remove leading/trailing slashes and prefix
+            file_path_full = os.path.normpath(os.path.join(self.target_repo_path, target_file))
+            file_exists = os.path.exists(file_path_full) and os.path.isfile(file_path_full)
+            old_target_file = _normalize_rel_path(h.get("old_target_file") or h.get("mainline_file") or "")
+            old_file_path_full = os.path.normpath(os.path.join(self.target_repo_path, old_target_file)) if old_target_file else ""
+            old_exists = bool(old_target_file and os.path.isfile(old_file_path_full))
+            
+            corrected_op = original_op
+            if original_op.upper() == "ADDED" and file_exists:
+                # File already exists in target, should be MODIFIED
+                corrected_op = "MODIFIED"
+                print(f"  Validation: {target_file} marked ADDED but exists → correcting to MODIFIED")
+            elif original_op.upper() == "DELETED" and not file_exists:
+                # File doesn't exist in target, can't delete
+                corrected_op = None  # Mark for skipping
+                print(f"  Validation: {target_file} marked DELETED but doesn't exist → skipping")
+            elif original_op.upper() == "MODIFIED" and not file_exists:
+                # File doesn't exist but we have hunks for it, treat as ADDED
+                corrected_op = "ADDED"
+                print(f"  Validation: {target_file} marked MODIFIED but doesn't exist → correcting to ADDED")
+            elif original_op.upper() == "RENAMED":
+                if old_exists and not file_exists:
+                    corrected_op = "RENAMED"
+                elif not old_exists and file_exists:
+                    corrected_op = "MODIFIED"
+                    print(
+                        f"  Validation: {target_file} marked RENAMED but old path missing "
+                        f"({old_target_file}) → correcting to MODIFIED"
+                    )
+                elif old_exists and file_exists:
+                    corrected_op = "MODIFIED"
+                    print(
+                        f"  Validation: {target_file} marked RENAMED but old and new both exist "
+                        f"→ correcting to MODIFIED"
+                    )
+                else:
+                    corrected_op = None
+                    print(
+                        f"  Validation: {target_file} marked RENAMED but neither old nor new exists "
+                        f"→ skipping"
+                    )
+            
+            if corrected_op != original_op:
+                h["file_operation"] = corrected_op
+                h["_file_operation_corrected"] = True
 
         # Sort hunks within each file bottom-to-top so earlier line numbers remain stable.
         for target_file in hunks_by_file:
@@ -1085,20 +1147,90 @@ class ValidationToolkit:
         for target_file in hunks_by_file:
             file_hunks = []
             file_operations = set()
+            old_file_path = None
+            skip_file = False
+
             for h in hunks_by_file[target_file]:
                 hunk_text = h.get("hunk_text", "")
-                if not hunk_text:
+                file_op = h.get("file_operation")
+                
+                # Skip files marked for skipping (e.g., DELETED when file doesn't exist)
+                if file_op is None:
+                    skip_file = True
+                    break
+                
+                file_op = file_op.upper()
+
+                # Track the old path for renamed files
+                if file_op == "RENAMED":
+                    old_file_path = h.get("old_target_file") or h.get("mainline_file")
+
+                # Skip hunks with empty text (structural operations handled separately)
+                if not hunk_text or not hunk_text.strip():
+                    # This is a structural operation with no hunks
+                    file_operations.add(file_op)
                     continue
+
                 file_hunks.append(hunk_text if hunk_text.endswith("\n") else hunk_text + "\n")
-                file_operations.add((h.get("file_operation") or "MODIFIED").upper())
+                file_operations.add(file_op)
+
+            # Skip this file if it was marked for skipping
+            if skip_file:
+                print(f"  Validation: Skipping {target_file} (file state doesn't match operation)")
+                continue
+
+            # Determine the operation type
+            file_operation = next(iter(file_operations)) if len(file_operations) == 1 else "MODIFIED"
+
+            # Handle structural operations (no hunks)
+            if not file_hunks and file_operation in ["RENAMED", "ADDED", "DELETED"]:
+                try:
+                    if file_operation == "RENAMED":
+                        if not old_file_path:
+                            raise ValueError("old_file_path is required for RENAMED operation")
+                        src = os.path.normpath(os.path.join(self.target_repo_path, _normalize_rel_path(old_file_path)))
+                        dst = os.path.normpath(os.path.join(self.target_repo_path, target_file))
+                        if not os.path.exists(src):
+                            raise ValueError(f"rename source does not exist: {old_file_path}")
+                        os.makedirs(os.path.dirname(dst), exist_ok=True)
+                        os.replace(src, dst)
+                    elif file_operation == "DELETED":
+                        src = os.path.normpath(os.path.join(self.target_repo_path, target_file))
+                        if os.path.exists(src):
+                            os.remove(src)
+                    elif file_operation == "ADDED":
+                        dst = os.path.normpath(os.path.join(self.target_repo_path, target_file))
+                        os.makedirs(os.path.dirname(dst), exist_ok=True)
+                        if not os.path.exists(dst):
+                            with open(dst, "w", encoding="utf-8"):
+                                pass
+
+                    if target_file not in applied_files:
+                        applied_files.append(target_file)
+                    print(f"  Validation: {file_operation} operation for {target_file}")
+                except ValueError as e:
+                    return {
+                        "success": False,
+                        "output": f"Invalid {file_operation} operation for {target_file}: {e}",
+                        "applied_files": [],
+                    }
+                continue
 
             if not file_hunks:
                 continue
 
+            if file_operation == "ADDED":
+                dst = os.path.normpath(os.path.join(self.target_repo_path, target_file))
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+
             combined_hunks = "".join(file_hunks)
-            file_operation = next(iter(file_operations)) if len(file_operations) == 1 else "MODIFIED"
             try:
-                patch_part = self._build_patch_file(target_file, combined_hunks, file_operation=file_operation)
+                patch_part = self._build_patch_file(
+                    target_file,
+                    combined_hunks,
+                    file_operation=file_operation,
+                    old_file_path=old_file_path
+                )
                 patch_parts.append(patch_part)
                 if target_file not in applied_files:
                     applied_files.append(target_file)
@@ -1395,23 +1527,59 @@ class ValidationToolkit:
     def restore_repo_state(self) -> bool:
         """
         Restores the target repository to a clean state, reverting any uncommitted patches.
+        Handles git errors gracefully with fallback strategies.
         """
         try:
+            # Attempt to reset and clean with increasing aggressiveness
             subprocess.run(["git", "reset", "--hard"], cwd=self.target_repo_path, capture_output=True, check=True)
-            subprocess.run(["git", "clean", "-fd"], cwd=self.target_repo_path, capture_output=True, check=True)
+            
+            # Try initial git clean (most common case)
+            result = subprocess.run(
+                ["git", "clean", "-fd"], 
+                cwd=self.target_repo_path, 
+                capture_output=True
+            )
+            if result.returncode == 0:
+                return True
+            
+            # If git clean fails, try with force flag and ignore errors
+            result = subprocess.run(
+                ["git", "clean", "-ffdX"], 
+                cwd=self.target_repo_path, 
+                capture_output=True
+            )
+            if result.returncode == 0:
+                return True
+            
+            # If even that fails, log it but don't fail hard - try to continue anyway
+            print(f"ValidationToolkit: Warning - git clean had issues (exit code {result.returncode}). Continuing anyway.")
+            # This is not a hard failure; patch application may still succeed
             return True
+            
         except subprocess.CalledProcessError as e:
-            print(f"ValidationToolkit: Error restoring repo state: {e}")
+            print(f"ValidationToolkit: Error during git reset: {e}")
+            return False
+        except Exception as e:
+            print(f"ValidationToolkit: Unexpected error restoring repo state: {e}")
             return False
 
     # ------------------------------------------------------------------
     # Private Helpers
     # ------------------------------------------------------------------
 
-    def _build_patch_file(self, target_file_path: str, hunk_text: str, file_operation: str = "MODIFIED") -> str:
+    def _build_patch_file(self, target_file_path: str, hunk_text: str, file_operation: str = "MODIFIED", old_file_path: str = None) -> str:
         """
         Wraps a hunk in a minimal unified diff file header so `git apply`
         can understand it. The hunk_text must already start with @@ ... @@.
+
+        For file-only operations (rename, pure add, pure delete) with no hunk_text,
+        generates an appropriate diff header without body hunks.
+
+        Args:
+            target_file_path: New path (for renames) or target path
+            hunk_text: Unified diff hunks (may be empty for structural operations)
+            file_operation: "ADDED" | "DELETED" | "MODIFIED" | "RENAMED"
+            old_file_path: Old path (for renames)
         """
         # Normalize path separators and strip optional diff prefixes.
         p = (target_file_path or "").strip().replace("\\", "/").lstrip("/")
@@ -1422,18 +1590,53 @@ class ValidationToolkit:
             raise ValueError("target_file_path is empty")
 
         normalized_op = (file_operation or "MODIFIED").upper()
-        
-        # Ensure hunk_text is properly formatted
+        old_p = (old_file_path or "").strip().replace("\\", "/").lstrip("/") if old_file_path else p
+        if old_p.startswith("a/") or old_p.startswith("b/"):
+            old_p = old_p[2:]
+
+        # Handle structural operations (no hunks)
+        if not hunk_text or not hunk_text.strip():
+            if normalized_op == "RENAMED":
+                header = (
+                    f"diff --git a/{old_p} b/{p}\n"
+                    f"similarity index 100%\n"
+                    f"rename from {old_p}\n"
+                    f"rename to {p}\n"
+                )
+                return header + "\n"
+            elif normalized_op == "ADDED":
+                header = (
+                    f"diff --git a/{p} b/{p}\n"
+                    f"new file mode 100644\n"
+                    f"index 0000000..0000000\n"
+                    f"--- /dev/null\n"
+                    f"+++ b/{p}\n"
+                )
+                return header + "\n"
+            elif normalized_op == "DELETED":
+                header = (
+                    f"diff --git a/{p} b/{p}\n"
+                    f"deleted file mode 100644\n"
+                    f"index 0000000..0000000\n"
+                    f"--- a/{p}\n"
+                    f"+++ /dev/null\n"
+                )
+                return header + "\n"
+            else:
+                # MODIFIED with no hunks doesn't make sense, but handle gracefully
+                raise ValueError(f"MODIFIED operation requires hunks, but hunk_text is empty")
+
+        # Normal case: file operation with hunks
         if not hunk_text.startswith("@@"):
             raise ValueError(f"Hunk must start with @@, got: {hunk_text[:50]}")
-        
+
         # Ensure hunk ends with newline if it doesn't already
         body = hunk_text if hunk_text.endswith("\n") else hunk_text + "\n"
-        
+
         # Add trailing newline for proper separation between files in combined patches
         if not body.endswith("\n\n"):
             body = body.rstrip("\n") + "\n"
-        
+
         if normalized_op == "ADDED":
             header = (
                 f"diff --git a/{p} b/{p}\n"
@@ -1450,6 +1653,14 @@ class ValidationToolkit:
                 f"--- a/{p}\n"
                 f"+++ /dev/null\n"
             )
+        elif normalized_op == "RENAMED":
+            header = (
+                f"diff --git a/{old_p} b/{p}\n"
+                f"rename from {old_p}\n"
+                f"rename to {p}\n"
+                f"--- a/{old_p}\n"
+                f"+++ b/{p}\n"
+            )
         else:
             header = (
                 f"diff --git a/{p} b/{p}\n"
@@ -1457,5 +1668,5 @@ class ValidationToolkit:
                 f"--- a/{p}\n"
                 f"+++ b/{p}\n"
             )
-        
+
         return header + body

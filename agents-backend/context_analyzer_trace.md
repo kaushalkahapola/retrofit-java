@@ -1,143 +1,208 @@
 # Context Analyzer Trace
 
-## File: `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java`
+## File: `extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java`
 
-**Method focused**: `Unknown`
+**Method focused**: `computeLagForAutoScaler`
 **Hunk count**: 1
 
 **Agent Tool Steps:**
 
-**Patch Intent**: Ensure ExportResultsFrameProcessorFactory receives columnMappings to correctly handle column mapping during export.
+**Patch Intent**: Eliminate the computeLagForAutoScaler method to prevent misleading lag metrics.
 
-**Root Cause**: The ExportResultsFrameProcessorFactory was not being provided with columnMappings, potentially leading to incorrect or missing column mapping during export operations.
+**Root Cause**: The method computeLagForAutoScaler was incorrectly returning a lag value based on potentially null LagStats, which could lead to misleading metrics.
 
-**Fix Logic**: Added the columnMappings parameter to the ExportResultsFrameProcessorFactory constructor call, ensuring it receives the necessary column mapping information.
+**Fix Logic**: Removed the computeLagForAutoScaler method entirely, as it was deemed unnecessary.
 
-**Dependent APIs**: ExportResultsFrameProcessorFactory, columnMappings, resultFormat
+**Dependent APIs**: computeLagStats, LagStats
 
 **Hunk Chain**:
 
-  - H1 [core_fix]: Adds columnMappings as an argument to the ExportResultsFrameProcessorFactory constructor call.
+  - H1 [cleanup]: The computeLagForAutoScaler method is removed to avoid returning potentially misleading lag values.
+
+**Self-Reflection**: VERIFIED ✅
+
+## File: `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java`
+
+**Method focused**: `Unknown`
+**Hunk count**: 2
+
+**Agent Tool Steps:**
+
+  - `Tool: get_class_context` -> {'context': 'package org.apache.druid.indexing.seekablestream.supervisor.autoscaler;\n\n// Line 40\n...
+  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
+  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
+  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
+  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
+  - `Tool: read_file` -> /*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agre...
+  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
+  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
+  - `Tool: read_file` -> Error reading file indexing-service/src/main/java/org/apache/druid/indexing/overlord/supervisor/auto...
+  - `Tool: read_file` -> Error reading file indexing-service/src/main/java/org/apache/druid/indexing/overlord/supervisor/auto...
+**Patch Intent**: Ensure that lag metrics are collected safely by handling potential null values in lag statistics.
+
+**Root Cause**: The method computeLagForAutoScaler was not handling the case where lag statistics could be null, potentially leading to a NullPointerException.
+
+**Fix Logic**: Replaced the call to computeLagForAutoScaler with computeLagStats, and added a null check for lagStats before accessing its methods.
+
+**Dependent APIs**: computeLagStats, getAggregateForScaling, getMetric
+
+**Hunk Chain**:
+
+  - H1 [declaration]: Added imports for AggregateFunction and LagStats to the class.
+    → *These imports are necessary for the new functionality introduced in the next hunk.*
+  - H2 [core_fix]: Replaced the lag computation logic to use LagStats and added a null check.
 
 **Self-Reflection**: FAILED ❌ (used anyway)
 
-## File: `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java`
+## File: `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java`
 
-**Method focused**: `createRowSignatureForExport`
-**Hunk count**: 9
-
-**Agent Tool Steps:**
-
-**Patch Intent**: Ensure exported result columns are mapped, ordered, and typed consistently and explicitly using provided column mappings, preventing mismatches and upgrade-related errors.
-
-**Root Cause**: Exported result columns could be mismatched or inconsistent due to reliance on input row signature and lack of explicit column mapping, especially across upgrades or schema changes.
-
-**Fix Logic**: Introduced explicit column mapping via a ColumnMappings parameter, constructed a deterministic exportRowSignature and outputColumnNameToFrameColumnNumberMap, and updated export logic to use these for correct column ordering and type mapping; removed the static createRowSignatureForExport method.
-
-**Dependent APIs**: ColumnMappings, ColumnMapping, outputColumnNameToFrameColumnNumberMap, exportRowSignature, createRowSignatureForExport
-
-**Hunk Chain**:
-
-  - H1 [declaration]: Adds imports for Object2IntMap, Object2IntOpenHashMap, and column mapping classes.
-    → *These imports are prerequisites for using the new mapping structures and column mapping logic introduced in subsequent hunks.*
-  - H2 [declaration]: Removes unused QueryKitUtils import and adds imports for ColumnMapping and ColumnMappings.
-    → *Prepares for the use of ColumnMappings in the constructor and throughout the class, enabling explicit column mapping.*
-  - H3 [declaration]: Declares new fields: outputColumnNameToFrameColumnNumberMap and exportRowSignature.
-    → *These fields will be initialized in the constructor, which is updated in the next hunk to use column mappings.*
-  - H4 [propagation]: Updates the constructor to accept a ColumnMappings parameter.
-    → *Allows the constructor to receive explicit column mapping information, which is then used to build the new mapping and signature in the next hunk.*
-  - H5 [core_fix]: Initializes outputColumnNameToFrameColumnNumberMap and exportRowSignature in the constructor using ColumnMappings; throws if mappings are null.
-    → *With the new mapping and signature constructed, the rest of the code can now use these for correct export logic, making the old signature creation obsolete.*
-  - H6 [cleanup]: Removes the call to createRowSignatureForExport in exportFrame, relying on the new exportRowSignature field.
-    → *Removes dependency on the old static method, so the export logic can now use the new, explicit exportRowSignature.*
-  - H7 [refactor]: Changes selector creation to use frameReader.signature() instead of exportRowSignature.
-    → *Ensures selectors are created for all columns in the frame, setting up for the next hunk where the correct mapping is used to select values for export.*
-  - H8 [core_fix]: Updates row writing logic to use outputColumnNameToFrameColumnNumberMap for correct selector lookup and exportRowSignature for column names.
-    → *This is the main usage of the new mapping and signature; with this logic in place, the old static method is no longer needed.*
-  - H9 [cleanup]: Removes the now-obsolete static createRowSignatureForExport method.
-
-**Self-Reflection**: VERIFIED ✅
-
-## File: `extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java`
-
-**Method focused**: `getColumnMappings`
-**Hunk count**: 5
+**Method focused**: `getLagAggregate`
+**Hunk count**: 6
 
 **Agent Tool Steps:**
 
-**Patch Intent**: Enable the ExportResultsFrameProcessorFactory to accept, serialize, and propagate column mappings for export operations.
+**Patch Intent**: Introduce a lag aggregate function property to the LagBasedAutoScalerConfig class to enhance scaling decisions.
 
-**Root Cause**: The class did not support passing or serializing column mappings, which are necessary for correct export and downstream processing of query results.
+**Root Cause**: The class LagBasedAutoScalerConfig did not have a property to hold the lag aggregate function, which is necessary for scaling decisions.
 
-**Fix Logic**: Introduced a new nullable 'columnMappings' field, updated the constructor and serialization logic to handle it, added a getter with appropriate JSON annotations, and propagated the field to downstream processor creation.
+**Fix Logic**: Added a new field 'lagAggregate' of type AggregateFunction and updated the constructor and getter method to handle this new property.
 
-**Dependent APIs**: columnMappings, ColumnMappings, getColumnMappings, ExportResultsFrameProcessorFactory
+**Dependent APIs**: lagAggregate, AggregateFunction
 
 **Hunk Chain**:
 
-  - H1 [declaration]: Adds import for JsonInclude to support conditional JSON serialization.
-    → *Allows the use of @JsonInclude in subsequent code, which is needed for the new field.*
-  - H2 [declaration]: Adds import for ColumnMappings, the new type being introduced as a field.
-    → *Prepares for the declaration and use of the ColumnMappings field in the class.*
-  - H3 [declaration]: Declares the new nullable columnMappings field and updates the constructor to accept and assign it.
-    → *With the field declared and constructor updated, the next step is to expose it via a getter for serialization and access.*
-  - H4 [propagation]: Adds a getter for columnMappings with @JsonProperty and @JsonInclude to ensure it is serialized only when non-null.
-    → *Having exposed the field, the next step is to propagate it to the processor instantiation logic.*
-  - H5 [propagation]: Passes the columnMappings field to the downstream processor constructor, ensuring it is used in processing.
+  - H1 [declaration]: Imported the AggregateFunction class to be used in the configuration.
+    → *This import is necessary to declare the lagAggregate field in the next hunk.*
+  - H2 [declaration]: Declared a new private final field 'lagAggregate' of type AggregateFunction.
+    → *This declaration sets up the lagAggregate field to be initialized in the constructor in the next hunk.*
+  - H3 [core_fix]: Updated the constructor to accept an AggregateFunction parameter for lagAggregate.
+    → *This change allows the lagAggregate field to be initialized with a value passed during object construction, which is necessary for the next hunk.*
+  - H4 [core_fix]: Initialized the lagAggregate field with the value passed to the constructor.
+    → *This initialization ensures that the lagAggregate field holds the correct value, which is needed for the getter method in the next hunk.*
+  - H5 [propagation]: Added a getter method for the lagAggregate field to allow access to its value.
+    → *This getter method provides a way to retrieve the lagAggregate value, which is essential for any external components that need to use this property.*
+  - H6 [cleanup]: Updated the toString method to include the lagAggregate field in its output.
 
 **Self-Reflection**: VERIFIED ✅
+
+## File: `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java`
+
+**Method focused**: `computeLagForAutoScaler`
+**Hunk count**: 1
+
+**Agent Tool Steps:**
+
+  - `Tool: get_class_context` -> {'context': 'package org.apache.druid.indexing.overlord.supervisor;\n\n// Line 33\npublic interface ...
+  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
+  - `Tool: read_file` -> /*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agre...
+**Patch Intent**: To eliminate the risk of returning a lag value based on a null LagStats object.
+
+**Root Cause**: The method computeLagForAutoScaler was returning a lag value based on potentially null LagStats, which could lead to unexpected behavior if computeLagStats() fails or returns null.
+
+**Fix Logic**: Removed the computeLagForAutoScaler method entirely, which was handling a null LagStats improperly.
+
+**Dependent APIs**: computeLagStats, LagStats
+
+**Hunk Chain**:
+
+  - H1 [cleanup]: Removed the computeLagForAutoScaler method, which was returning a lag value based on a potentially null LagStats.
+
+**Self-Reflection**: FAILED ❌ (used anyway)
+
+## File: `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java`
+
+**Method focused**: `Foundation`
+**Hunk count**: 1
+
+**Agent Tool Steps:**
+
+  - `Tool: read_file` -> Error reading file server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/Agg...
+  - `Tool: get_class_context` -> {'error': 'File not found: server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autosc...
+**Patch Intent**: To define an enumeration for aggregate functions used in the autoscaler.
+
+**Root Cause**: The file AggregateFunction.java was missing, which is necessary for defining aggregate functions used in the autoscaler.
+
+**Fix Logic**: Created a new enum AggregateFunction with values MAX, SUM, and AVERAGE.
+
+**Dependent APIs**: AggregateFunction
+
+**Hunk Chain**:
+
+  - H1 [declaration]: Introduced a new enum AggregateFunction with constants for MAX, SUM, and AVERAGE.
+
+**Self-Reflection**: FAILED ❌ (used anyway)
+
+## File: `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java`
+
+**Method focused**: `getAggregateForScaling`
+**Hunk count**: 2
+
+**Agent Tool Steps:**
+
+  - `Tool: get_class_context` -> {'context': 'package org.apache.druid.indexing.overlord.supervisor.autoscaler;\n\n// Line 22\npublic...
+  - `Tool: get_class_context` -> {'context': 'package org.apache.druid.indexing.overlord.supervisor.autoscaler;\n\n// Line 22\npublic...
+**Patch Intent**: Introduce a flexible mechanism for specifying and retrieving the aggregation function used for scaling metrics.
+
+**Root Cause**: Lack of a mechanism to specify the aggregation function for scaling metrics in LagStats.
+
+**Fix Logic**: Added a new constructor to LagStats that accepts an AggregateFunction parameter and a method to retrieve the specified aggregate function.
+
+**Dependent APIs**: AggregateFunction, getAggregateForScaling, getMetric
+
+**Hunk Chain**:
+
+  - H1 [declaration]: Introduced a new constructor in LagStats that allows specifying an AggregateFunction for scaling.
+    → *This new constructor sets the aggregateForScaling field, which is necessary for the next hunk to provide a method that retrieves this value.*
+  - H2 [core_fix]: Added methods to get the specified aggregate function and to compute metrics based on the aggregation type.
+
+**Self-Reflection**: FAILED ❌ (used anyway)
 
 
 ## Consolidated Blueprint
 
-**Patch Intent**: Ensure exported result columns are mapped, ordered, and typed consistently and explicitly using provided column mappings, preventing mismatches and upgrade-related errors.
+**Patch Intent**: Introduce a lag aggregate function property to the LagBasedAutoScalerConfig class to enhance scaling decisions.
 
-- **Root Cause**: The ExportResultsFrameProcessorFactory was not being provided with columnMappings, potentially leading to incorrect or missing column mapping during export operations. | Exported result columns could be mismatched or inconsistent due to reliance on input row signature and lack of explicit column mapping, especially across upgrades or schema changes. | The class did not support passing or serializing column mappings, which are necessary for correct export and downstream processing of query results.
-- **Fix Logic**: Added the columnMappings parameter to the ExportResultsFrameProcessorFactory constructor call, ensuring it receives the necessary column mapping information. | Introduced explicit column mapping via a ColumnMappings parameter, constructed a deterministic exportRowSignature and outputColumnNameToFrameColumnNumberMap, and updated export logic to use these for correct column ordering and type mapping; removed the static createRowSignatureForExport method. | Introduced a new nullable 'columnMappings' field, updated the constructor and serialization logic to handle it, added a getter with appropriate JSON annotations, and propagated the field to downstream processor creation.
-- **Dependent APIs**: ['ExportResultsFrameProcessorFactory', 'columnMappings', 'resultFormat', 'ColumnMappings', 'ColumnMapping', 'outputColumnNameToFrameColumnNumberMap', 'exportRowSignature', 'createRowSignatureForExport', 'getColumnMappings']
+- **Root Cause**: The method computeLagForAutoScaler was incorrectly returning a lag value based on potentially null LagStats, which could lead to misleading metrics. | The method computeLagForAutoScaler was not handling the case where lag statistics could be null, potentially leading to a NullPointerException. | The class LagBasedAutoScalerConfig did not have a property to hold the lag aggregate function, which is necessary for scaling decisions. | The method computeLagForAutoScaler was returning a lag value based on potentially null LagStats, which could lead to unexpected behavior if computeLagStats() fails or returns null. | The file AggregateFunction.java was missing, which is necessary for defining aggregate functions used in the autoscaler. | Lack of a mechanism to specify the aggregation function for scaling metrics in LagStats.
+- **Fix Logic**: Removed the computeLagForAutoScaler method entirely, as it was deemed unnecessary. | Replaced the call to computeLagForAutoScaler with computeLagStats, and added a null check for lagStats before accessing its methods. | Added a new field 'lagAggregate' of type AggregateFunction and updated the constructor and getter method to handle this new property. | Removed the computeLagForAutoScaler method entirely, which was handling a null LagStats improperly. | Created a new enum AggregateFunction with values MAX, SUM, and AVERAGE. | Added a new constructor to LagStats that accepts an AggregateFunction parameter and a method to retrieve the specified aggregate function.
+- **Dependent APIs**: ['computeLagStats', 'LagStats', 'getAggregateForScaling', 'getMetric', 'lagAggregate', 'AggregateFunction']
 
 ### Full Hunk Chain (Cross-File)
 
-**[G1] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/exec/ControllerImpl.java — H1** `[core_fix]`
-  Adds columnMappings as an argument to the ExportResultsFrameProcessorFactory constructor call.
-**[G2] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java — H1** `[declaration]`
-  Adds imports for Object2IntMap, Object2IntOpenHashMap, and column mapping classes.
-  → These imports are prerequisites for using the new mapping structures and column mapping logic introduced in subsequent hunks.
-**[G3] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java — H2** `[declaration]`
-  Removes unused QueryKitUtils import and adds imports for ColumnMapping and ColumnMappings.
-  → Prepares for the use of ColumnMappings in the constructor and throughout the class, enabling explicit column mapping.
-**[G4] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java — H3** `[declaration]`
-  Declares new fields: outputColumnNameToFrameColumnNumberMap and exportRowSignature.
-  → These fields will be initialized in the constructor, which is updated in the next hunk to use column mappings.
-**[G5] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java — H4** `[propagation]`
-  Updates the constructor to accept a ColumnMappings parameter.
-  → Allows the constructor to receive explicit column mapping information, which is then used to build the new mapping and signature in the next hunk.
-**[G6] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java — H5** `[core_fix]`
-  Initializes outputColumnNameToFrameColumnNumberMap and exportRowSignature in the constructor using ColumnMappings; throws if mappings are null.
-  → With the new mapping and signature constructed, the rest of the code can now use these for correct export logic, making the old signature creation obsolete.
-**[G7] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java — H6** `[cleanup]`
-  Removes the call to createRowSignatureForExport in exportFrame, relying on the new exportRowSignature field.
-  → Removes dependency on the old static method, so the export logic can now use the new, explicit exportRowSignature.
-**[G8] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java — H7** `[refactor]`
-  Changes selector creation to use frameReader.signature() instead of exportRowSignature.
-  → Ensures selectors are created for all columns in the frame, setting up for the next hunk where the correct mapping is used to select values for export.
-**[G9] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java — H8** `[core_fix]`
-  Updates row writing logic to use outputColumnNameToFrameColumnNumberMap for correct selector lookup and exportRowSignature for column names.
-  → This is the main usage of the new mapping and signature; with this logic in place, the old static method is no longer needed.
-**[G10] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessor.java — H9** `[cleanup]`
-  Removes the now-obsolete static createRowSignatureForExport method.
-**[G11] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java — H1** `[declaration]`
-  Adds import for JsonInclude to support conditional JSON serialization.
-  → Allows the use of @JsonInclude in subsequent code, which is needed for the new field.
-**[G12] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java — H2** `[declaration]`
-  Adds import for ColumnMappings, the new type being introduced as a field.
-  → Prepares for the declaration and use of the ColumnMappings field in the class.
-**[G13] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java — H3** `[declaration]`
-  Declares the new nullable columnMappings field and updates the constructor to accept and assign it.
-  → With the field declared and constructor updated, the next step is to expose it via a getter for serialization and access.
-**[G14] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java — H4** `[propagation]`
-  Adds a getter for columnMappings with @JsonProperty and @JsonInclude to ensure it is serialized only when non-null.
-  → Having exposed the field, the next step is to propagate it to the processor instantiation logic.
-**[G15] extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/querykit/results/ExportResultsFrameProcessorFactory.java — H5** `[propagation]`
-  Passes the columnMappings field to the downstream processor constructor, ensuring it is used in processing.
+**[G1] extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java — H1** `[cleanup]`
+  The computeLagForAutoScaler method is removed to avoid returning potentially misleading lag values.
+**[G2] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java — H1** `[declaration]`
+  Added imports for AggregateFunction and LagStats to the class.
+  → These imports are necessary for the new functionality introduced in the next hunk.
+**[G3] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java — H2** `[core_fix]`
+  Replaced the lag computation logic to use LagStats and added a null check.
+**[G4] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java — H1** `[declaration]`
+  Imported the AggregateFunction class to be used in the configuration.
+  → This import is necessary to declare the lagAggregate field in the next hunk.
+**[G5] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java — H2** `[declaration]`
+  Declared a new private final field 'lagAggregate' of type AggregateFunction.
+  → This declaration sets up the lagAggregate field to be initialized in the constructor in the next hunk.
+**[G6] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java — H3** `[core_fix]`
+  Updated the constructor to accept an AggregateFunction parameter for lagAggregate.
+  → This change allows the lagAggregate field to be initialized with a value passed during object construction, which is necessary for the next hunk.
+**[G7] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java — H4** `[core_fix]`
+  Initialized the lagAggregate field with the value passed to the constructor.
+  → This initialization ensures that the lagAggregate field holds the correct value, which is needed for the getter method in the next hunk.
+**[G8] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java — H5** `[propagation]`
+  Added a getter method for the lagAggregate field to allow access to its value.
+  → This getter method provides a way to retrieve the lagAggregate value, which is essential for any external components that need to use this property.
+**[G9] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java — H6** `[cleanup]`
+  Updated the toString method to include the lagAggregate field in its output.
+**[G10] server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java — H1** `[cleanup]`
+  Removed the computeLagForAutoScaler method, which was returning a lag value based on a potentially null LagStats.
+**[G11] server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java — H1** `[declaration]`
+  Introduced a new enum AggregateFunction with constants for MAX, SUM, and AVERAGE.
+**[G12] server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java — H1** `[declaration]`
+  Introduced a new constructor in LagStats that allows specifying an AggregateFunction for scaling.
+  → This new constructor sets the aggregateForScaling field, which is necessary for the next hunk to provide a method that retrieves this value.
+**[G13] server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java — H2** `[core_fix]`
+  Added methods to get the specified aggregate function and to compute metrics based on the aggregation type.
 

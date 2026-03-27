@@ -113,6 +113,20 @@ class TestBuildPatchFile(unittest.TestCase):
         self.assertIn("@@ -5,3 +5,4 @@", result)
         self.assertIn("+    guard();", result)
 
+    def test_renamed_file_hunk_has_rename_headers(self):
+        toolkit = self._make_toolkit()
+        hunk = "@@ -1,1 +1,1 @@\n-old();\n+newCall();\n"
+        result = toolkit._build_patch_file(
+            "src/NewFoo.java",
+            hunk,
+            file_operation="RENAMED",
+            old_file_path="src/LegacyFoo.java",
+        )
+        self.assertIn("rename from src/LegacyFoo.java", result)
+        self.assertIn("rename to src/NewFoo.java", result)
+        self.assertIn("--- a/src/LegacyFoo.java", result)
+        self.assertIn("+++ b/src/NewFoo.java", result)
+
 
 class TestRunTargetedTests(unittest.TestCase):
     def _make_toolkit(self):

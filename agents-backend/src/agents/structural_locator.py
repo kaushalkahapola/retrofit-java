@@ -30,6 +30,13 @@ import logging
 from langchain_core.messages import HumanMessage
 from state import AgentState
 from langgraph.prebuilt import create_react_agent
+
+try:
+    from langgraph.errors import GraphRecursionError
+except ImportError:  # Compatibility fallback for older langgraph versions
+    class GraphRecursionError(Exception):
+        pass
+
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from utils.llm_provider import get_llm
 from agents.reasoning_tools import ReasoningToolkit
@@ -67,6 +74,23 @@ When you find it, output precisely this JSON:
 If a method cannot be found, set its target_file and target_method to null.
 Do not include markdown or explanations outside the JSON."""
 
+_DIRECT_MAPPING_SYSTEM = """You are an expert at mapping patch hunks to methods in an older codebase.
+Return ONLY valid JSON with this schema:
+{
+  "mappings": [
+    {
+      "mainline_method": "<methodName>",
+      "target_file": "<path/in/target/repo>",
+      "target_method": "<methodName or <import> or null>",
+      "start_line": <int or null>,
+      "end_line": <int or null>,
+      "code_snippet": "<string>"
+    }
+  ],
+  "consistency_map_entries": {"oldName": "newName"}
+}
+No markdown. No explanation. Only JSON."""
+
 
 # ---------------------------------------------------------------------------
 # Line-range parser for get_class_context output
@@ -103,6 +127,28 @@ def _extract_line_range(context_output) -> tuple[int | None, int | None, str]:
 
     # Fallback: raw string
     return None, None, str(context_output)
+
+
+def _parse_mapping_json(raw_content: str) -> dict | None:
+    """Extract and parse JSON mapping payload from potentially noisy LLM output."""
+    text = str(raw_content or "").strip()
+    if not text:
+        return None
+
+    json_match = re.search(r"\{.*\}", text, re.DOTALL)
+    if json_match:
+        text = json_match.group(0)
+
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        text_clean = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", text, flags=re.DOTALL).strip()
+        try:
+            parsed = json.loads(text_clean)
+            return parsed if isinstance(parsed, dict) else None
+        except json.JSONDecodeError:
+            return None
 
 
 # ---------------------------------------------------------------------------
@@ -282,28 +328,15 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         for attempt in range(2):
             try:
                 logger.debug("Invoking structural locator LLM for file=%s attempt=%d", mainline_file, attempt + 1)
-                result = await agent.ainvoke(input_data, config={"recursion_limit": 5})
+                result = await agent.ainvoke(input_data, config={"recursion_limit": 25})
                 raw_content = result["messages"][-1].content
-                
-                text = raw_content.strip()
-                # Find the first JSON-like object in the response
-                json_match = re.search(r"\{.*\}", text, re.DOTALL)
-                if json_match:
-                    text = json_match.group(0)
-                
-                try:
-                    mapping_result = json.loads(text)
-                except json.JSONDecodeError:
-                    # Try cleaning up markdown blocks if regex didn't get it perfectly
-                    text_clean = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", text, flags=re.DOTALL).strip()
-                    try:
-                        mapping_result = json.loads(text_clean)
-                    except json.JSONDecodeError:
-                        trace += f"⚠️ **LLM Mapping Extraction Failed**\n\nRaw Response:\n```\n{raw_content}\n```\n\n"
-                        mapping_result = None
-                        llm_failed = True
-                        logger.warning("LLM JSON parse failed for file=%s attempt=%d", mainline_file, attempt + 1)
-                
+                mapping_result = _parse_mapping_json(raw_content)
+
+                if not mapping_result:
+                    trace += f"⚠️ **LLM Mapping Extraction Failed**\n\nRaw Response:\n```\n{raw_content}\n```\n\n"
+                    llm_failed = True
+                    logger.warning("LLM JSON parse failed for file=%s attempt=%d", mainline_file, attempt + 1)
+
                 if mapping_result:
                     trace += f"**Agent Tool Steps:**\n\n"
                     for m in result.get("messages", []):
@@ -314,6 +347,45 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                                 trace += f"  - `Agent calls {tc['name']}` with `{json.dumps(tc['args'])}`\n"
                     trace += "\n"
                 break
+            except GraphRecursionError as e:
+                print(f"  Agent 2: Recursion limit reached in tool loop (attempt {attempt+1}/2): {e}")
+                logger.warning(
+                    "Recursion limit reached for file=%s attempt=%d; falling back to direct no-tool mapping",
+                    mainline_file,
+                    attempt + 1,
+                )
+                llm_failed = True
+
+                fallback_messages = [
+                    ("system", _DIRECT_MAPPING_SYSTEM),
+                    ("user", input_msg),
+                ]
+                try:
+                    fallback_resp = await llm.ainvoke(fallback_messages)
+                    fallback_content = getattr(fallback_resp, "content", str(fallback_resp))
+                    mapping_result = _parse_mapping_json(fallback_content)
+                    if mapping_result:
+                        trace += "**Fallback Mode**: direct no-tool LLM mapping used after recursion limit.\n\n"
+                        break
+                    trace += (
+                        "⚠️ **Fallback Mapping Extraction Failed**\n\n"
+                        f"Raw Response:\n```\n{fallback_content}\n```\n\n"
+                    )
+                    logger.warning(
+                        "Fallback direct mapping JSON parse failed for file=%s attempt=%d",
+                        mainline_file,
+                        attempt + 1,
+                    )
+                except Exception as fallback_exc:
+                    logger.exception(
+                        "Fallback direct mapping invocation failed for file=%s attempt=%d",
+                        mainline_file,
+                        attempt + 1,
+                    )
+                    trace += f"⚠️ Direct fallback mapping failed: {fallback_exc}\n\n"
+                if attempt == 0:
+                    print("  Waiting 30 seconds before retry...")
+                    time.sleep(30)
             except Exception as e:
                 print(f"  Agent 2: LLM call error (attempt {attempt+1}/2): {e}")
                 logger.exception("LLM call failed for file=%s attempt=%d", mainline_file, attempt + 1)
