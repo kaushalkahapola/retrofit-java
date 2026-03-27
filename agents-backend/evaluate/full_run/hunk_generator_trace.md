@@ -2,5 +2,6 @@
 
 | target_file | hunk_index | dry_run | intent_ok |
 |---|---|---|---|
-| `server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java` | 0 | ✅ | ❌ |
-| `server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java` | 1 | ✅ | ✅ |
+| `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java` | 0 | ✅ | ❌ |
+| `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java` | 1 | ✅ | ❌ |
+| `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java` | 2 | ✅ | ❌ |

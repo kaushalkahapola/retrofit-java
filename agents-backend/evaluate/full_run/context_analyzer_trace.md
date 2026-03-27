@@ -1,42 +1,47 @@
 # Context Analyzer Trace
 
-## File: `server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java`
+## File: `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java`
 
-**Method focused**: `Unknown`
-**Hunk count**: 2
+**Method focused**: `ParsingException`
+**Hunk count**: 3
 
 **Agent Tool Steps:**
 
-**Patch Intent**: Ensure that only equi-join conditions are considered as join edges in the join graph, while non-equi join conditions are treated as filters.
+**Patch Intent**: Enhance index pattern validation to prevent blank index patterns from causing parsing errors.
 
-**Root Cause**: Non-equi join conditions were being incorrectly treated as join edges, potentially leading to incorrect join graph construction and query planning.
+**Root Cause**: Lack of validation for blank index patterns in the index pattern parsing logic.
 
-**Fix Logic**: Added a check using isEquiJoin to ensure only equi-join conditions (i.e., join conditions based on equality) are treated as join edges; non-equi joins are now handled as filters.
+**Fix Logic**: Introduced a new validation method that checks for blank index patterns and throws a ParsingException with a specific error message.
 
-**Dependent APIs**: isEquiJoin, entry.getKey(), entry.getValue(), edgeCollector, filters
+**Dependent APIs**: ParsingException, InvalidIndexNameException, EsqlBaseParser.IndexPatternContext
 
 **Hunk Chain**:
 
-  - H1 [declaration]: Adds a static import for isEquiJoin from EquiJoinDetector.
-    → *This import enables the use of isEquiJoin in the subsequent logic, allowing the code to distinguish between equi-join and non-equi join conditions.*
-  - H2 [core_fix]: Modifies the conditional to require both a two-key entry and that the entry's value is an equi-join before treating it as a join edge; otherwise, it is added to filters.
+  - H1 [declaration]: Added a constant error message for blank index patterns and modified imports to include necessary utilities.
+    → *Sets up the error message needed for the new validation logic introduced in the next hunk.*
+  - H2 [core_fix]: Refactored the index pattern validation logic to use a new validate method that checks for blank patterns and throws exceptions appropriately.
+    → *Establishes the core validation logic that will be further refined in the next hunk.*
+  - H3 [propagation]: Introduced a new method to resolve and validate index names, ensuring that blank names are caught and handled correctly.
 
 **Self-Reflection**: VERIFIED ✅
 
 
 ## Consolidated Blueprint
 
-**Patch Intent**: Ensure that only equi-join conditions are considered as join edges in the join graph, while non-equi join conditions are treated as filters.
+**Patch Intent**: Enhance index pattern validation to prevent blank index patterns from causing parsing errors.
 
-- **Root Cause**: Non-equi join conditions were being incorrectly treated as join edges, potentially leading to incorrect join graph construction and query planning.
-- **Fix Logic**: Added a check using isEquiJoin to ensure only equi-join conditions (i.e., join conditions based on equality) are treated as join edges; non-equi joins are now handled as filters.
-- **Dependent APIs**: ['isEquiJoin', 'entry.getKey()', 'entry.getValue()', 'edgeCollector', 'filters']
+- **Root Cause**: Lack of validation for blank index patterns in the index pattern parsing logic.
+- **Fix Logic**: Introduced a new validation method that checks for blank index patterns and throws a ParsingException with a specific error message.
+- **Dependent APIs**: ['ParsingException', 'InvalidIndexNameException', 'EsqlBaseParser.IndexPatternContext']
 
 ### Full Hunk Chain (Cross-File)
 
-**[G1] server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java — H1** `[declaration]`
-  Adds a static import for isEquiJoin from EquiJoinDetector.
-  → This import enables the use of isEquiJoin in the subsequent logic, allowing the code to distinguish between equi-join and non-equi join conditions.
-**[G2] server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java — H2** `[core_fix]`
-  Modifies the conditional to require both a two-key entry and that the entry's value is an equi-join before treating it as a join edge; otherwise, it is added to filters.
+**[G1] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java — H1** `[declaration]`
+  Added a constant error message for blank index patterns and modified imports to include necessary utilities.
+  → Sets up the error message needed for the new validation logic introduced in the next hunk.
+**[G2] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java — H2** `[core_fix]`
+  Refactored the index pattern validation logic to use a new validate method that checks for blank patterns and throws exceptions appropriately.
+  → Establishes the core validation logic that will be further refined in the next hunk.
+**[G3] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java — H3** `[propagation]`
+  Introduced a new method to resolve and validate index names, ensuring that blank names are caught and handled correctly.
 

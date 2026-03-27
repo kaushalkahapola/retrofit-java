@@ -32,7 +32,7 @@ elif [ -n "${TEST_TARGETS:-}" ]; then
         module="${target%%:*}"
         cls="${target#*:}"
         # Convert Maven-style module path (with /) to Gradle project path (:).
-        gradle_module=":${module//\///:}"
+        gradle_module=":${module//\//:}"
         # Strip leading double-colon if module starts with /.
         gradle_module="${gradle_module//::/:}"
         if [ -n "${GRADLE_ARGS}" ]; then
@@ -48,7 +48,7 @@ elif [ -n "${TEST_MODULES:-}" ]; then
     GRADLE_ARGS=""
     IFS=',' read -ra MODS <<< "${TEST_MODULES}"
     for mod in "${MODS[@]}"; do
-        gradle_module=":${mod//\///:}"
+        gradle_module=":${mod//\//:}"
         gradle_module="${gradle_module//::/:}"
         GRADLE_ARGS="${GRADLE_ARGS} ${gradle_module}:test"
     done
