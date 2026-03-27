@@ -456,7 +456,13 @@ class ValidationToolkit:
             if p.endswith(".java") and "src/main/java/" in p:
                 source_modules.add(module_path)
 
-            if p.endswith("Test.java") and "src/test/java/" in p:
+            # Support both XXXTest.java (Crate/Druid) and TestXXX.java (HBase) patterns
+            filename = os.path.basename(p)
+            is_test_file = (
+                p.endswith("Test.java") or  # XXXTest.java pattern
+                (filename.startswith("Test") and p.endswith(".java"))  # TestXXX.java pattern
+            )
+            if is_test_file and "src/test/java/" in p:
                 try:
                     class_path = p.split("src/test/java/", 1)[1]
                     class_name = class_path.replace("/", ".").replace(".java", "")

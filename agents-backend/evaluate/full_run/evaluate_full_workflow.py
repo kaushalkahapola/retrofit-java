@@ -50,8 +50,8 @@ REPOS_DIR = os.path.join(BASE_DIR, "temp_repo_storage")
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 PHASE0_CACHE_DIR = os.path.join(os.path.dirname(__file__), "phase0_cache")
 
-TARGET_PROJECTS = ["crate"]
-MAX_PATCHES_PER_PROJECT = 5
+TARGET_PROJECTS = ["hbase"]
+MAX_PATCHES_PER_PROJECT = 3
 
 
 def ensure_dirs() -> None:
