@@ -95,13 +95,18 @@ class ValidationToolkit:
         project_dir = self._get_project_helper_dir(project)
         return os.path.isdir(project_dir)
 
-    def _find_maven_module_for_path(self, rel_path: str) -> str:
-        """Find nearest parent directory containing pom.xml for a repo-relative path."""
+    def _find_module_for_path(self, rel_path: str) -> str:
+        """Find nearest parent directory containing a build file for a repo-relative path."""
         head = (rel_path or "").replace("\\", "/")
         while head:
             head, _ = os.path.split(head)
-            if os.path.exists(os.path.join(self.target_repo_path, head, "pom.xml")):
-                return head
+            for build_file in ("pom.xml", "build.gradle", "build.gradle.kts"):
+                if os.path.exists(os.path.join(self.target_repo_path, head, build_file)):
+                    return head
+        # Check root
+        for build_file in ("pom.xml", "build.gradle", "build.gradle.kts"):
+            if os.path.exists(os.path.join(self.target_repo_path, build_file)):
+                return ""
         return ""
 
     def _clear_previous_junit_reports(self) -> None:
@@ -134,6 +139,13 @@ class ValidationToolkit:
         paths.update(
             glob.glob(
                 os.path.join(self.target_repo_path, "build", "all-test-results", "TEST-*.xml"),
+                recursive=True,
+            )
+        )
+        # Gradle test results (Elasticsearch, Spring Framework, etc.)
+        paths.update(
+            glob.glob(
+                os.path.join(self.target_repo_path, "**", "build", "test-results", "**", "TEST-*.xml"),
                 recursive=True,
             )
         )
@@ -437,34 +449,46 @@ class ValidationToolkit:
         Infer relevant tests/modules directly from changed file paths.
         This avoids relying on worktree diff state during Phase 0 baseline runs.
         """
-        ignored_modules = {"web-console", "distribution", "docs", "examples"}
+        ignored_modules = {"web-console", "distribution", "docs", "examples", "benchmarks", "qa"}
 
         test_targets = set()
         source_modules = set()
         all_modules = set()
+
+        test_source_sets = (
+            "/src/test/java/", "/src/internalClusterTest/java/", 
+            "/src/javaRestTest/java/", "/src/yamlRestTest/java/", 
+            "/src/integTest/java/", "/src/integrationTest/java/"
+        )
+        test_suffixes = ("Test.java", "Tests.java", "IT.java", "TestCase.java")
 
         for rel_path in changed_files or []:
             p = (rel_path or "").replace("\\", "/")
             if not p:
                 continue
 
-            module_path = self._find_maven_module_for_path(p)
-            if not module_path or module_path in ignored_modules:
+            module_path = self._find_module_for_path(p)
+            top_level = module_path.split("/")[0] if module_path else ""
+            if top_level in ignored_modules:
                 continue
 
-            all_modules.add(module_path)
+            if module_path:
+                all_modules.add(module_path)
+            
             if p.endswith(".java") and "src/main/java/" in p:
-                source_modules.add(module_path)
+                if module_path:
+                    source_modules.add(module_path)
 
             # Support both XXXTest.java (Crate/Druid) and TestXXX.java (HBase) patterns
             filename = os.path.basename(p)
-            is_test_file = (
-                p.endswith("Test.java") or  # XXXTest.java pattern
-                (filename.startswith("Test") and p.endswith(".java"))  # TestXXX.java pattern
-            )
-            if is_test_file and "src/test/java/" in p:
+            is_test_file = p.endswith(test_suffixes) or (filename.startswith("Test") and p.endswith(".java"))
+            
+            # Find the matching test directory
+            matched_test_dir = next((td for td in test_source_sets if td in p), None)
+            
+            if is_test_file and matched_test_dir:
                 try:
-                    class_path = p.split("src/test/java/", 1)[1]
+                    class_path = p.split(matched_test_dir, 1)[1]
                     class_name = class_path.replace("/", ".").replace(".java", "")
                     test_targets.add(f"{module_path}:{class_name}")
                 except Exception:
@@ -1414,7 +1438,7 @@ class ValidationToolkit:
                     print(f"    Agent 4 Warning: {project_name} helper image unavailable. Falling back. Details: {image_err}")
 
         if is_gradle:
-            cmd = ["gradle", "build", "-x", "test"]
+            cmd = ["gradle", "testClasses"]
         else:
             # Druid can fail on `mvn clean compile` because some modules depend on
             # classifier artifacts (e.g., tests-jar) that are not produced at compile phase.
@@ -1474,7 +1498,7 @@ class ValidationToolkit:
     def run_targeted_tests(self, test_classes: List[str]) -> Dict:
         """
         Runs specific unit tests in the target repository.
-        Detects Maven vs Gradle automatically.
+        Detects Maven vs Gradle automatically, or uses project helper script if available.
 
         Args:
             test_classes: List of test class names to run.
@@ -1484,6 +1508,42 @@ class ValidationToolkit:
         """
         if not test_classes:
             return {"success": True, "compile_error": False, "output": "No tests to run.", "failed_tests": []}
+
+        project_name = self._detect_project_name()
+        if self._is_known_project_with_helper(project_name):
+            helper_script = os.path.join(self._get_project_helper_dir(project_name), "run_tests.sh")
+            if os.path.exists(helper_script):
+                image_tag, image_err = self._ensure_project_builder_image(project_name)
+                if image_tag:
+                    helper_env = os.environ.copy()
+                    helper_env.update(
+                        {
+                            "PROJECT_NAME": project_name,
+                            "PROJECT_DIR": self.target_repo_path,
+                            "TOOLKIT_DIR": self._get_project_helper_dir(project_name),
+                            "BUILDER_IMAGE_TAG": image_tag,
+                            "IMAGE_TAG": image_tag,
+                            "COMMIT_SHA": self._get_current_head(),
+                            "WORKTREE_MODE": "1",
+                        }
+                    )
+                    
+                    cmd = ["bash", helper_script] + test_classes
+                    print(f"    Agent 4: Executing {project_name} helper test script: {' '.join(cmd)}")
+                    result = self._run_cmd_capture(cmd, cwd=self.target_repo_path, env=helper_env)
+                    
+                    success = bool(result.get("success"))
+                    output = result.get("output", "")
+                    compile_error = (not success) and ("compilation error" in output.lower() or "build failed with an exception" in output.lower())
+                    
+                    return {
+                        "success": success,
+                        "compile_error": compile_error,
+                        "output": output,
+                        "failed_tests": [],
+                    }
+                else:
+                    print(f"    Agent 4 Warning: {project_name} helper image unavailable for testing. Falling back. Details: {image_err}")
 
         is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
         
@@ -1499,7 +1559,7 @@ class ValidationToolkit:
             cmd = ["mvn", "test", f"-Dtest={test_args}"] + java_compat_args
 
         try:
-            print(f"    Agent 4: Executing test command: {' '.join(cmd)}")
+            print(f"    Agent 4: Executing fallback test command: {' '.join(cmd)}")
             result = subprocess.run(
                 cmd,
                 capture_output=True,
