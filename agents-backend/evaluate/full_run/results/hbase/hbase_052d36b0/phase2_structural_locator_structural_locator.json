@@ -1,0 +1,43 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "getFiles",
+        "target_file": "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java",
+        "target_method": "getFiles",
+        "start_line": 318,
+        "end_line": 318,
+        "code_snippet": "List<FileStatus> files = getFiles(fs, inputPath, startTime, endTime, conf);"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "getFiles",
+        "target_file": "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java",
+        "target_method": "getFiles",
+        "start_line": 349,
+        "end_line": 349,
+        "code_snippet": "private List<FileStatus> getFiles(FileSystem fs, Path dir, long startTime, long endTime, Configuration conf) throws IOException {"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "getFiles",
+        "target_file": "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java",
+        "target_method": "getFiles",
+        "start_line": 361,
+        "end_line": 361,
+        "code_snippet": "result.addAll(getFiles(fs, file.getPath(), startTime, endTime, conf));"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "listLocatedFileStatus",
+        "target_file": "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java",
+        "target_method": "listLocatedFileStatus",
+        "start_line": 396,
+        "end_line": 396,
+        "code_snippet": "private static RemoteIterator<LocatedFileStatus> listLocatedFileStatus(FileSystem fs, Path dir, Configuration conf) throws IOException {"
+      }
+    ]
+  }
+}

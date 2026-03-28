@@ -1,47 +1,42 @@
 # Structural Locator Trace
 
 ## Blueprint Summary
-- **Root Cause**: Lack of validation for blank index patterns in the index pattern parsing logic.
+- **Root Cause**: The method `serverToPreservationBoundaryTs` previously returned a map of server addresses to their preservation boundary timestamps, which was not compatible with the new `BackupBoundaries` structure. | The absence of a class to manage time boundaries for WAL file cleanup during backup operations, which could lead to improper deletion of WAL files and compromise backup integrity.
 
 ## Hunk Segregation
-- Code files: 1
+- Code files: 2
 - Test files: 0
 
 ## Code File Mappings
 
-### `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java`
+### `hbase-backup/src/main/java/org/apache/hadoop/hbase/backup/master/BackupLogCleaner.java`
 
-**Hunks in this file**: 3
+**Hunks in this file**: 9
 
-**Git Resolution**: Found `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java`
+**Git Resolution**: Found `hbase-backup/src/main/java/org/apache/hadoop/hbase/backup/master/BackupLogCleaner.java`
 
-**Agent Tool Steps:**
-
-  - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java", "focus_method": null}`
-  - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java", "focus_method": "visitIdentifier"}`
-  - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java", "focus_method": "validate"}`
-  - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java", "focus_method": "throwInvalidIndexNameException"}`
-  - `Tool: get_class_context` -> Error invoking tool 'get_class_context' with kwargs {'file_path': 'x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java', 'focus_method': None} with error:
- focu...
-  - `Tool: get_class_context` -> {"context": "package org.elasticsearch.xpack.esql.parser;\n\n// Line 32\nabstract class IdentifierBuilder extends AbstractBuilder {\n    // Line 53: protected static String quoteIdString(String unquot...
-  - `Tool: get_class_context` -> {"context": "package org.elasticsearch.xpack.esql.parser;\n\n// Line 32\nabstract class IdentifierBuilder extends AbstractBuilder {\n    // Line 53: protected static String quoteIdString(String unquot...
-  - `Tool: get_class_context` -> {"context": "package org.elasticsearch.xpack.esql.parser;\n\n// Line 32\nabstract class IdentifierBuilder extends AbstractBuilder {\n    // Line 53: protected static String quoteIdString(String unquot...
-  - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java", "focus_method": "validateIndexPattern"}`
-  - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java", "focus_method": "throwOnMixingSelectorWithCluster"}`
-  - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java", "focus_method": "resolveAndValidateIndex"}`
-  - `Tool: get_class_context` -> {"context": "package org.elasticsearch.xpack.esql.parser;\n\n// Line 32\nabstract class IdentifierBuilder extends AbstractBuilder {\n    // Line 53: protected static String quoteIdString(String unquot...
-  - `Tool: get_class_context` -> {"context": "package org.elasticsearch.xpack.esql.parser;\n\n// Line 32\nabstract class IdentifierBuilder extends AbstractBuilder {\n    // Line 53: protected static String quoteIdString(String unquot...
-  - `Tool: get_class_context` -> {"context": "package org.elasticsearch.xpack.esql.parser;\n\n// Line 32\nabstract class IdentifierBuilder extends AbstractBuilder {\n    // Line 53: protected static String quoteIdString(String unquot...
-  - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java", "focus_method": "resolveAndValidateIndex"}`
-  - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/IdentifierBuilder.java", "focus_method": "visitIndexPattern"}`
-  - `Tool: get_class_context` -> {"context": "package org.elasticsearch.xpack.esql.parser;\n\n// Line 32\nabstract class IdentifierBuilder extends AbstractBuilder {\n    // Line 53: protected static String quoteIdString(String unquot...
-  - `Tool: get_class_context` -> {"context": "package org.elasticsearch.xpack.esql.parser;\n\n// Line 32\nabstract class IdentifierBuilder extends AbstractBuilder {\n    // Line 53: protected static String quoteIdString(String unquot...
+**Fallback Mode**: direct no-tool LLM mapping used after recursion limit.
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 20–20 |
-| 2 | core_fix | `visitIdentifier` | `visitIdentifier` | 35–37 |
-| 3 | propagation | `validate` | `validateIndexPattern` | 147–198 |
+| 1 | declaration | `BackupLogCleaner` | `<import>` | 18–19 |
+| 2 | declaration | `BackupLogCleaner` | `<import>` | 32–34 |
+| 3 | cleanup | `BackupLogCleaner` | `<import>` | 41–41 |
+| 4 | declaration | `BackupLogCleaner` | `None` | 56–58 |
+| 5 | core_fix | `serverToPreservationBoundaryTs` | `serverToPreservationBoundaryTs` | 86–87 |
+| 6 | core_fix | `serverToPreservationBoundaryTs` | `serverToPreservationBoundaryTs` | 112–112 |
+| 7 | propagation | `BackupLogCleaner` | `serverToPreservationBoundaryTs` | 153–154 |
+| 8 | propagation | `BackupLogCleaner` | `canDeleteFile` | 165–166 |
+| 9 | core_fix | `canDeleteFile` | `canDeleteFile` | 200–201 |
+### `hbase-backup/src/main/java/org/apache/hadoop/hbase/backup/util/BackupBoundaries.java`
+
+**Hunks in this file**: 1
+
+**Fallback Mode**: direct no-tool LLM mapping used after recursion limit.
+
+| Hunk Idx | Role | Mainline Method | Target Method | Lines |
+|---|---|---|---|---|
+| 1 | core_fix | `BackupBoundaries` | `None` | 1–149 |
 ## Test File Mappings
 
 
