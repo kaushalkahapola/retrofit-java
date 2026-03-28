@@ -1,0 +1,49 @@
+{
+  "adapted_code_hunks": [
+    {
+      "target_file": "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java",
+      "mainline_file": "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java",
+      "hunk_text": "@@ -318,7 +318,7 @@\n     for (Path inputPath : inputPaths) {\n       FileSystem fs = inputPath.getFileSystem(conf);\n       try {\n-        List<FileStatus> files = getFiles(fs, inputPath, startTime, endTime);\n+        List<FileStatus> files = getFiles(fs, inputPath, startTime, endTime, conf);\n         allFiles.addAll(files);\n       } catch (FileNotFoundException e) {\n         if (ignoreMissing) {\n",
+      "insertion_line": 318,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java",
+      "mainline_file": "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java",
+      "hunk_text": "@@ -349,11 +349,11 @@\n    *                  equal to this value else we will filter out the file. If name does not seem to\n    *                  have a timestamp, we will just return it w/o filtering.\n    */\n-  private List<FileStatus> getFiles(FileSystem fs, Path dir, long startTime, long endTime)\n-    throws IOException {\n+  private List<FileStatus> getFiles(FileSystem fs, Path dir, long startTime, long endTime,\n+    Configuration conf) throws IOException {\n     List<FileStatus> result = new ArrayList<>();\n     LOG.debug(\"Scanning \" + dir.toString() + \" for WAL files\");\n-    RemoteIterator<LocatedFileStatus> iter = fs.listLocatedStatus(dir);\n+    RemoteIterator<LocatedFileStatus> iter = listLocatedFileStatus(fs, dir, conf);\n     if (!iter.hasNext()) {\n       return Collections.emptyList();\n     }\n",
+      "insertion_line": 349,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java",
+      "mainline_file": "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java",
+      "hunk_text": "@@ -361,7 +361,7 @@\n       LocatedFileStatus file = iter.next();\n       if (file.isDirectory()) {\n         // Recurse into sub directories\n-        result.addAll(getFiles(fs, file.getPath(), startTime, endTime));\n+        result.addAll(getFiles(fs, file.getPath(), startTime, endTime, conf));\n       } else {\n         addFile(result, file, startTime, endTime);\n       }\n",
+      "insertion_line": 361,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java",
+      "mainline_file": "hbase-mapreduce/src/main/java/org/apache/hadoop/hbase/mapreduce/WALInputFormat.java",
+      "hunk_text": "@@ -396,4 +396,28 @@\n     TaskAttemptContext context) throws IOException, InterruptedException {\n     return new WALKeyRecordReader();\n   }\n+\n+  /**\n+   * Attempts to return the {@link LocatedFileStatus} for the given directory. If the directory does\n+   * not exist, it will check if the directory is an archived log file and try to find it\n+   */\n+  private static RemoteIterator<LocatedFileStatus> listLocatedFileStatus(FileSystem fs, Path dir,\n+    Configuration conf) throws IOException {\n+    try {\n+      return fs.listLocatedStatus(dir);\n+    } catch (FileNotFoundException e) {\n+      if (AbstractFSWALProvider.isArchivedLogFile(dir)) {\n+        throw e;\n+      }\n+\n+      LOG.warn(\"Log file {} not found, trying to find it in archive directory.\", dir);\n+      Path archiveFile = AbstractFSWALProvider.findArchivedLog(dir, conf);\n+      if (archiveFile == null) {\n+        LOG.error(\"Did not find archive file for {}\", dir);\n+        throw e;\n+      }\n+\n+      return fs.listLocatedStatus(archiveFile);\n+    }\n+  }\n }\n",
+      "insertion_line": 396,
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "adapted_test_hunks": []
+}

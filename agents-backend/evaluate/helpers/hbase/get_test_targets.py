@@ -1,114 +1,127 @@
 #!/usr/bin/env python3
 import argparse
 import subprocess
+import sys
 import os
 import json
 
+# Modules known to be problematic or requiring complex environments
+BLACKLIST_MODULES = [
+    "hbase-assembly",
+    "hbase-archetypes",
+]
 
-IGNORED_MODULES = {"hbase-assembly", "hbase-archetypes"}
+def is_blacklisted(module_path):
+    for bad in BLACKLIST_MODULES:
+        if module_path == bad or module_path.startswith(bad + "/"):
+            return True
+    return False
 
+def find_module_for_file(repo, filepath):
+    """Find the Maven module (directory with pom.xml) for a given file."""
+    current_dir = os.path.dirname(filepath) if filepath else ""
+    
+    while current_dir:
+        pom_path = os.path.join(repo, current_dir, "pom.xml")
+        if os.path.exists(pom_path):
+            if not is_blacklisted(current_dir):
+                return current_dir
+            else:
+                return None  # Blacklisted module
+        parent = os.path.dirname(current_dir)
+        if parent == current_dir:
+            break
+        current_dir = parent
+    
+    return None
 
-def _find_maven_module(repo: str, rel_path: str) -> str:
-    """Find the nearest parent directory (from file path upward) that contains pom.xml."""
-    head = rel_path
-    while head:
-        head, _ = os.path.split(head)
-        if os.path.exists(os.path.join(repo, head, "pom.xml")):
-            return head
-    return ""
-
-
-def _parse_changed_entries(output: str) -> list[tuple[str, str]]:
-    entries: list[tuple[str, str]] = []
-    for line in output.strip().splitlines():
-        parts = line.split("\t", 1)
-        if len(parts) != 2:
-            continue
-        status = parts[0].strip()
-        file_path = parts[1].strip()
-        if not status or not file_path:
-            continue
-        entries.append((status, file_path))
-    return entries
+def extract_test_class(filepath):
+    """Extract the fully qualified test class name from a test file path."""
+    if "/src/test/java/" not in filepath:
+        return None
+    
+    try:
+        class_part = filepath.split("/src/test/java/")[1]
+        class_name = class_part.replace("/", ".").replace(".java", "")
+        return class_name
+    except:
+        return None
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True, help="Path to the git repository")
-    parser.add_argument("--commit", help="Commit hash to analyze")
-    parser.add_argument(
-        "--worktree",
-        action="store_true",
-        help="Analyze current worktree diff instead of a commit",
-    )
+    parser.add_argument("--commit", required=True, help="Commit hash to analyze")
     args = parser.parse_args()
 
-    if not args.commit and not args.worktree:
-        print(json.dumps({"modified": [], "added": [], "source_modules": [], "all_modules": []}))
-        return
-
     # 1. Get list of changed files with status
-    if args.worktree:
-        cmd = ["git", "diff", "--name-status", "--diff-filter=AMRT"]
-    else:
-        cmd = ["git", "diff-tree", "--no-commit-id", "--name-status", "-r", args.commit]
-
+    cmd = ["git", "diff-tree", "--no-commit-id", "--name-status", "-r", args.commit]
     try:
         output = subprocess.check_output(cmd, cwd=args.repo, text=True)
     except subprocess.CalledProcessError:
-        print(json.dumps({"modified": [], "added": [], "source_modules": [], "all_modules": []}))
+        print(json.dumps({"modified": [], "added": []}))
         return
 
     modified_tests = set()
     added_tests = set()
-    source_modules = set()
-    all_modules = set()
 
-    # 2. Analyze changes
-    for status, f in _parse_changed_entries(output):
-        module_path = _find_maven_module(args.repo, f)
-        if not module_path:
+    lines = output.strip().splitlines()
+    
+    # Process ALL files, but only extract test files
+    for line in lines:
+        parts = line.split('\t')
+        if not parts:
             continue
-        if module_path in IGNORED_MODULES:
-            continue
-        all_modules.add(module_path)
-
-        # Track touched source modules for module-level test execution fallback
-        if f.endswith(".java") and "src/main/java/" in f:
-            source_modules.add(module_path)
-
-        # Strict filtering: Only process Test files for targeted test class execution
-        # Support both XXXTest.java (Crate/Druid) and TestXXX.java (HBase) patterns
-        filename = os.path.basename(f)
-        is_test_file = (
-            f.endswith("Test.java") or  # XXXTest.java pattern
-            (filename.startswith("Test") and f.endswith(".java"))  # TestXXX.java pattern
-        )
-        if not is_test_file or "src/test/java/" not in f:
-            continue
-
-        # Extract class name
-        # Pattern: [module]/src/test/java/[package]/[Class]Test.java
-        if "src/test/java/" in f:
-            try:
-                class_path = f.split("src/test/java/")[1]
-                class_name = class_path.replace("/", ".").replace(".java", "")
-                
-                # Target format: module:class
-                target = f"{module_path}:{class_name}"
-                
-                if status == "A":
-                    added_tests.add(target)
-                else:
-                    modified_tests.add(target)
-            except Exception:
+            
+        status = parts[0]
+        
+        # Handle Renames (R) and Copies (C) which have 3 parts: status, old_path, new_path
+        if status.startswith('R') or status.startswith('C'):
+            if len(parts) >= 3:
+                filepath = parts[2]
+            else:
                 continue
+        else:
+            if len(parts) >= 2:
+                filepath = parts[1]
+            else:
+                continue
+        
+        filename = os.path.basename(filepath)
+        
+        # Only process test files
+        is_test_file = (
+            "/src/test/java/" in filepath and 
+            filepath.endswith(".java") and
+            (filename.startswith("Test") or filename.endswith("Test.java") or 
+             filename.endswith("Tests.java") or filename.endswith("IT.java"))
+        )
+        
+        if not is_test_file:
+            continue
+        
+        # Find module
+        module = find_module_for_file(args.repo, filepath)
+        if not module:
+            continue
+        
+        # Extract test class name
+        class_name = extract_test_class(filepath)
+        if not class_name:
+            # If we can't get the class, just use the module
+            test_target = module
+        else:
+            # Format: module:ClassName
+            test_target = f"{module}:{class_name}"
+        
+        if status == 'A':
+            added_tests.add(test_target)
+        else:
+            modified_tests.add(test_target)
 
-    # 3. Output JSON
+    # Output as JSON
     result = {
         "modified": sorted(list(modified_tests)),
-        "added": sorted(list(added_tests)),
-        "source_modules": sorted(list(source_modules)),
-        "all_modules": sorted(list(all_modules)),
+        "added": sorted(list(added_tests))
     }
     print(json.dumps(result))
 
