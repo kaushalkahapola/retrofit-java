@@ -50,7 +50,9 @@ def _phase0_cache_file(project: str, backport_commit: str, original_commit: str)
     return os.path.join(_phase0_cache_dir(), filename)
 
 
-def _load_phase0_cache(project: str, backport_commit: str, original_commit: str) -> dict | None:
+def _load_phase0_cache(
+    project: str, backport_commit: str, original_commit: str
+) -> dict | None:
     cache_file = _phase0_cache_file(project, backport_commit, original_commit)
     if not os.path.exists(cache_file):
         return None
@@ -61,7 +63,27 @@ def _load_phase0_cache(project: str, backport_commit: str, original_commit: str)
         return None
 
 
-def _save_phase0_cache(project: str, backport_commit: str, original_commit: str, payload: dict) -> None:
+def _is_phase0_cache_reusable(cached: dict | None) -> tuple[bool, str]:
+    payload = cached or {}
+    baseline = payload.get("phase_0_baseline_test_result") or {}
+    transition = payload.get("phase_0_transition_evaluation") or {}
+
+    baseline_mode = (baseline.get("mode") or "").strip().lower()
+    baseline_total = int(
+        (baseline.get("test_state") or {}).get("summary", {}).get("total", 0) or 0
+    )
+    transition_reason = (transition.get("reason") or "").strip().lower()
+
+    if baseline_mode == "baseline-apply-failed":
+        return False, "baseline-apply-failed"
+    if baseline_total == 0 and "no fail-to-pass or newly passing" in transition_reason:
+        return False, "empty-baseline-and-empty-transition"
+    return True, "ok"
+
+
+def _save_phase0_cache(
+    project: str, backport_commit: str, original_commit: str, payload: dict
+) -> None:
     cache_dir = _phase0_cache_dir()
     os.makedirs(cache_dir, exist_ok=True)
     cache_file = _phase0_cache_file(project, backport_commit, original_commit)
@@ -96,7 +118,9 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
     patch_path = state.get("patch_path")
     if not patch_path or not os.path.exists(patch_path):
         return {
-            "messages": [HumanMessage(content="Error: Patch file not found in Phase 0")],
+            "messages": [
+                HumanMessage(content="Error: Patch file not found in Phase 0")
+            ],
             "fast_path_success": False,
         }
 
@@ -107,8 +131,7 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
     all_changes = analyzer.analyze(diff_text, with_test_changes=True)
     # For agentic phases (1-4), evaluate only non-test Java code changes.
     java_code_changes = [
-        c for c in all_changes
-        if c.file_path.endswith(".java") and not c.is_test_file
+        c for c in all_changes if c.file_path.endswith(".java") and not c.is_test_file
     ]
 
     # ------------------------------------------------------------------
@@ -123,10 +146,19 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
 
     validation_toolkit = ValidationToolkit(target_repo_path)
     relevant_changed_files = [c.file_path for c in all_changes if c.file_path]
-    test_targets = validation_toolkit.detect_relevant_test_targets_from_changed_files(relevant_changed_files)
+    test_targets = validation_toolkit.detect_relevant_test_targets_from_changed_files(
+        relevant_changed_files
+    )
 
     if use_phase0_cache and experiment_mode and backport_commit and original_commit:
         cached = _load_phase0_cache(project_name, backport_commit, original_commit)
+        if cached:
+            reusable, reason = _is_phase0_cache_reusable(cached)
+            if not reusable:
+                print(
+                    f"Phase 0: Ignoring stale cache (reason={reason}); recomputing Phase 0."
+                )
+                cached = None
         if cached:
             cached_transition = cached.get("phase_0_transition_evaluation", {})
             transition_summary = _format_transition_summary(cached_transition)
@@ -143,9 +175,15 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
                 "patch_analysis": java_code_changes,
                 "patch_diff": diff_text,
                 "fast_path_success": bool(cached.get("fast_path_success", False)),
-                "phase_0_test_targets": cached.get("phase_0_test_targets", test_targets),
-                "phase_0_baseline_test_result": cached.get("phase_0_baseline_test_result", {}),
-                "phase_0_post_patch_test_result": cached.get("phase_0_post_patch_test_result", {}),
+                "phase_0_test_targets": cached.get(
+                    "phase_0_test_targets", test_targets
+                ),
+                "phase_0_baseline_test_result": cached.get(
+                    "phase_0_baseline_test_result", {}
+                ),
+                "phase_0_post_patch_test_result": cached.get(
+                    "phase_0_post_patch_test_result", {}
+                ),
                 "phase_0_transition_evaluation": cached_transition,
             }
 
@@ -157,12 +195,14 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
                 cwd=target_repo_path,
                 check=True,
                 capture_output=True,
-                text=True
+                text=True,
             )
         except subprocess.CalledProcessError as e:
             print(f"Phase 0: Checkout failed: {e.stderr}")
             return {
-                "messages": [HumanMessage(content=f"Phase 0 checkout error: {e.stderr}")],
+                "messages": [
+                    HumanMessage(content=f"Phase 0 checkout error: {e.stderr}")
+                ],
                 "fast_path_success": False,
                 "patch_analysis": java_code_changes,
                 "patch_diff": diff_text,
@@ -185,11 +225,17 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
     }
 
     developer_aux_hunks = state.get("developer_auxiliary_hunks", []) or []
-    developer_test_hunks = [h for h in developer_aux_hunks if "test" in (h.get("target_file", "").lower())]
+    developer_test_hunks = [
+        h for h in developer_aux_hunks if "test" in (h.get("target_file", "").lower())
+    ]
 
     if developer_test_hunks:
-        print("Phase 0: Building baseline by applying developer backport test hunks only...")
-        baseline_apply = validation_toolkit.apply_adapted_hunks(code_hunks=[], test_hunks=developer_test_hunks)
+        print(
+            "Phase 0: Building baseline by applying developer backport test hunks only..."
+        )
+        baseline_apply = validation_toolkit.apply_adapted_hunks(
+            code_hunks=[], test_hunks=developer_test_hunks
+        )
         if baseline_apply.get("success"):
             phase0_baseline_test_result = validation_toolkit.run_relevant_tests(
                 project=project_name,
@@ -228,16 +274,22 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
             ["git", "apply", "--check", patch_path],
             cwd=target_repo_path,
             capture_output=True,
-            text=True
+            text=True,
         )
-        is_applicable = (check_result.returncode == 0)
-        output = check_result.stdout if is_applicable else (check_result.stderr or check_result.stdout)
+        is_applicable = check_result.returncode == 0
+        output = (
+            check_result.stdout
+            if is_applicable
+            else (check_result.stderr or check_result.stdout)
+        )
     except Exception as e:
         is_applicable = False
         output = str(e)
 
     if is_applicable:
-        print("Phase 0: git apply --check SUCCEEDED. Attempting actual patch application and test run.")
+        print(
+            "Phase 0: git apply --check SUCCEEDED. Attempting actual patch application and test run."
+        )
 
         # Actually apply the patch
         patch_apply_result = None
@@ -251,16 +303,24 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
         except Exception as e:
             print(f"Phase 0: Exception during git apply: {e}")
             return {
-                "messages": [HumanMessage(content=f"Phase 0: Exception during git apply: {e}")],
+                "messages": [
+                    HumanMessage(content=f"Phase 0: Exception during git apply: {e}")
+                ],
                 "patch_analysis": java_code_changes,
                 "patch_diff": diff_text,
                 "fast_path_success": False,
             }
 
         if patch_apply_result is None or patch_apply_result.returncode != 0:
-            print(f"Phase 0: git apply failed: {patch_apply_result.stderr if patch_apply_result else 'Unknown error'}")
+            print(
+                f"Phase 0: git apply failed: {patch_apply_result.stderr if patch_apply_result else 'Unknown error'}"
+            )
             return {
-                "messages": [HumanMessage(content=f"Phase 0: git apply failed: {patch_apply_result.stderr if patch_apply_result else 'Unknown error'}")],
+                "messages": [
+                    HumanMessage(
+                        content=f"Phase 0: git apply failed: {patch_apply_result.stderr if patch_apply_result else 'Unknown error'}"
+                    )
+                ],
                 "patch_analysis": java_code_changes,
                 "patch_diff": diff_text,
                 "fast_path_success": False,
@@ -279,7 +339,12 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
                 "newly_passing": [],
             }
 
-            if use_phase0_cache and experiment_mode and backport_commit and original_commit:
+            if (
+                use_phase0_cache
+                and experiment_mode
+                and backport_commit
+                and original_commit
+            ):
                 _save_phase0_cache(
                     project_name,
                     backport_commit,
@@ -312,7 +377,9 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
                 "phase_0_transition_evaluation": transition_eval,
             }
 
-        test_result = validation_toolkit.run_relevant_tests(project=project_name, target_info=test_targets)
+        test_result = validation_toolkit.run_relevant_tests(
+            project=project_name, target_info=test_targets
+        )
         transition_eval = validation_toolkit.evaluate_test_state_transition(
             phase0_baseline_test_result,
             test_result,
@@ -320,9 +387,8 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
         transition_summary = _format_transition_summary(transition_eval)
         print(f"Phase 0: Transition summary -> {transition_summary}")
 
-        fast_path_success = (
-            not test_result.get("compile_error", False)
-            and bool(transition_eval.get("valid_backport_signal", False))
+        fast_path_success = not test_result.get("compile_error", False) and bool(
+            transition_eval.get("valid_backport_signal", False)
         )
 
         if use_phase0_cache and experiment_mode and backport_commit and original_commit:
@@ -341,9 +407,16 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
             )
 
         if fast_path_success:
-            print("Phase 0: Transition-based test validation passed. Fast-path success.")
+            print(
+                "Phase 0: Transition-based test validation passed. Fast-path success."
+            )
             # Build a simplified implementation plan for the validation agent
-            from utils.models import Step, CompatibilityAnalysis, FileMapping, ImplementationPlan
+            from utils.models import (
+                Step,
+                CompatibilityAnalysis,
+                FileMapping,
+                ImplementationPlan,
+            )
 
             mappings = [
                 FileMapping(
@@ -417,7 +490,9 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
             }
     else:
         hint = output[:200]
-        print(f"Phase 0: git apply --check FAILED. Escalating to full pipeline.\n  Hint: {hint}")
+        print(
+            f"Phase 0: git apply --check FAILED. Escalating to full pipeline.\n  Hint: {hint}"
+        )
         if use_phase0_cache and experiment_mode and backport_commit and original_commit:
             _save_phase0_cache(
                 project_name,

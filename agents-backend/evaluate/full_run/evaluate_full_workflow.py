@@ -84,6 +84,28 @@ def _load_phase0_cache(
         return None
 
 
+def _is_phase0_cache_reusable(cache_payload: dict[str, Any] | None) -> tuple[bool, str]:
+    """
+    Reject stale/poisoned Phase 0 cache entries that cannot provide meaningful
+    transition comparison data.
+    """
+    payload = cache_payload or {}
+    baseline = payload.get("phase_0_baseline_test_result") or {}
+    transition = payload.get("phase_0_transition_evaluation") or {}
+
+    baseline_mode = (baseline.get("mode") or "").strip().lower()
+    baseline_total = int(
+        (baseline.get("test_state") or {}).get("summary", {}).get("total", 0) or 0
+    )
+    transition_reason = (transition.get("reason") or "").strip().lower()
+
+    if baseline_mode == "baseline-apply-failed":
+        return False, "baseline-apply-failed"
+    if baseline_total == 0 and "no fail-to-pass or newly passing" in transition_reason:
+        return False, "empty-baseline-and-empty-transition"
+    return True, "ok"
+
+
 def run_cmd(cmd, cwd, env=None, timeout=None):
     try:
         result = subprocess.run(
@@ -356,17 +378,36 @@ def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) 
     hunks_by_file: dict[str, dict[str, Any]] = {}
     file_order: list[str] = []
 
+    def _norm(path: str | None) -> str:
+        p = (path or "").strip().replace("\\", "/")
+        if p.startswith("a/") or p.startswith("b/"):
+            p = p[2:]
+        if p == "dev/null":
+            return ""
+        return p
+
     for hunk in adapted_code_hunks or []:
-        target_file = hunk.get("target_file")
+        target_file = _norm(hunk.get("target_file"))
         if not target_file:
             continue
 
         if target_file not in hunks_by_file:
+            file_operation = (hunk.get("file_operation") or "MODIFIED").upper()
+            old_target_file = _norm(
+                hunk.get("old_target_file") or hunk.get("mainline_file")
+            )
             hunks_by_file[target_file] = {
-                "file_operation": hunk.get("file_operation") or "MODIFIED",
+                "file_operation": file_operation,
+                "old_target_file": old_target_file,
                 "hunks": [],
             }
             file_order.append(target_file)
+
+        # Prefer a non-empty old path if later hunks provide one.
+        existing_old = hunks_by_file[target_file].get("old_target_file") or ""
+        incoming_old = _norm(hunk.get("old_target_file") or hunk.get("mainline_file"))
+        if not existing_old and incoming_old:
+            hunks_by_file[target_file]["old_target_file"] = incoming_old
 
         hunks_by_file[target_file]["hunks"].append(hunk.get("hunk_text", ""))
 
@@ -374,17 +415,42 @@ def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) 
     for target_file in file_order:
         payload = hunks_by_file[target_file]
         op = (payload.get("file_operation") or "MODIFIED").upper()
+        old_target_file = _norm(payload.get("old_target_file")) or target_file
 
-        lines.append(f"diff --git a/{target_file} b/{target_file}")
-        if op == "ADDED":
+        if op == "RENAMED" and old_target_file and old_target_file != target_file:
+            lines.append(f"diff --git a/{old_target_file} b/{target_file}")
+            lines.append(f"rename from {old_target_file}")
+            lines.append(f"rename to {target_file}")
+            lines.append(f"--- a/{old_target_file}")
+            lines.append(f"+++ b/{target_file}")
+        else:
+            lines.append(f"diff --git a/{target_file} b/{target_file}")
+            if op == "ADDED":
+                lines.append("--- /dev/null")
+                lines.append(f"+++ b/{target_file}")
+            elif op == "DELETED":
+                lines.append(f"--- a/{target_file}")
+                lines.append("+++ /dev/null")
+            else:
+                lines.append(f"--- a/{target_file}")
+                lines.append(f"+++ b/{target_file}")
+
+        # If this is effectively an added file represented as MODIFIED, convert header.
+        if op == "MODIFIED":
+            has_full_create_hunk = any(
+                (h or "").lstrip().startswith("@@ -0,0 +")
+                for h in payload.get("hunks", [])
+            )
+            if has_full_create_hunk:
+                lines[-2:] = ["--- /dev/null", f"+++ b/{target_file}"]
+                op = "ADDED"
+
+        if op == "ADDED" and lines[-2] != "--- /dev/null":
             lines.append("--- /dev/null")
             lines.append(f"+++ b/{target_file}")
-        elif op == "DELETED":
+        elif op == "DELETED" and lines[-1] != "+++ /dev/null":
             lines.append(f"--- a/{target_file}")
             lines.append("+++ /dev/null")
-        else:
-            lines.append(f"--- a/{target_file}")
-            lines.append(f"+++ b/{target_file}")
 
         for hunk_text in payload.get("hunks", []):
             if not hunk_text:
@@ -674,8 +740,101 @@ def _extract_transition_eval_from_outputs(
     )
 
 
+def _extract_touched_test_classes(
+    phase_outputs: dict[str, Any], phase0_cache: dict[str, Any] | None = None
+) -> list[str]:
+    phase0_targets = (
+        phase_outputs.get("phase0", {})
+        .get("phase_0_optimistic", {})
+        .get("outputs", {})
+        .get("phase_0_test_targets", {})
+    )
+    if not phase0_targets and phase0_cache:
+        phase0_targets = phase0_cache.get("phase_0_test_targets", {})
+
+    targets = list((phase0_targets or {}).get("test_targets") or [])
+    classes = []
+    for item in targets:
+        if ":" in item:
+            classes.append(item.split(":", 1)[1].strip())
+        elif item:
+            classes.append(str(item).strip())
+
+    return sorted({c for c in classes if c})
+
+
+def _extract_baseline_and_patched_test_results(
+    phase_outputs: dict[str, Any], phase0_cache: dict[str, Any] | None = None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    phase0_outputs = (
+        phase_outputs.get("phase0", {}).get("phase_0_optimistic", {}).get("outputs", {})
+    )
+
+    baseline_result = (
+        phase0_outputs.get("phase_0_baseline_test_result")
+        or (phase0_cache or {}).get("phase_0_baseline_test_result")
+        or {}
+    )
+
+    patched_result = (
+        phase0_outputs.get("phase_0_post_patch_test_result")
+        or (
+            phase_outputs.get("phase4_validation", {})
+            .get("validation", {})
+            .get("outputs", {})
+            .get("validation_results", {})
+            .get("tests", {})
+        )
+        or (phase0_cache or {}).get("phase_0_post_patch_test_result")
+        or {}
+    )
+
+    return baseline_result, patched_result
+
+
+def _build_touched_test_state_markdown(
+    touched_classes: list[str],
+    baseline_result: dict[str, Any],
+    patched_result: dict[str, Any],
+) -> str:
+    if not touched_classes:
+        return "- Touched tests (from patch): []\n"
+
+    baseline_state = (baseline_result or {}).get("test_state") or {}
+    patched_state = (patched_result or {}).get("test_state") or {}
+
+    baseline_cases = baseline_state.get("test_cases") or {}
+    patched_cases = patched_state.get("test_cases") or {}
+    baseline_classes = baseline_state.get("classes") or {}
+    patched_classes = patched_state.get("classes") or {}
+
+    lines = [f"- Touched tests (from patch): {touched_classes}"]
+    for cls in touched_classes:
+        class_case_keys = sorted(
+            {
+                key
+                for key in set(baseline_cases.keys()) | set(patched_cases.keys())
+                if key.startswith(f"{cls}#")
+            }
+        )
+        if class_case_keys:
+            for key in class_case_keys:
+                old_status = baseline_cases.get(key, "absent")
+                new_status = patched_cases.get(key, "absent")
+                lines.append(f"  - {key}: baseline={old_status}, patched={new_status}")
+        else:
+            old_status = baseline_classes.get(cls, "absent")
+            new_status = patched_classes.get(cls, "absent")
+            lines.append(f"  - {cls}: baseline={old_status}, patched={new_status}")
+
+    return "\n".join(lines) + "\n"
+
+
 def _build_transition_summary_markdown(
-    transition_eval: dict[str, Any] | None, source_label: str
+    transition_eval: dict[str, Any] | None,
+    source_label: str,
+    phase_outputs: dict[str, Any] | None = None,
+    phase0_cache: dict[str, Any] | None = None,
 ) -> str:
     if not transition_eval:
         return "# Transition Summary\n\nNo transition evaluation available.\n"
@@ -685,6 +844,15 @@ def _build_transition_summary_markdown(
     pass_to_fail = transition_eval.get("pass_to_fail", []) or []
     reason = transition_eval.get("reason", "Unknown reason.")
     valid = bool(transition_eval.get("valid_backport_signal", False))
+    phase_outputs = phase_outputs or {}
+
+    touched_classes = _extract_touched_test_classes(phase_outputs, phase0_cache)
+    baseline_result, patched_result = _extract_baseline_and_patched_test_results(
+        phase_outputs, phase0_cache
+    )
+    touched_state_markdown = _build_touched_test_state_markdown(
+        touched_classes, baseline_result, patched_result
+    )
 
     return (
         "# Transition Summary\n\n"
@@ -694,6 +862,8 @@ def _build_transition_summary_markdown(
         f"- fail->pass ({len(fail_to_pass)}): {fail_to_pass}\n"
         f"- newly passing ({len(newly_passing)}): {newly_passing}\n"
         f"- pass->fail ({len(pass_to_fail)}): {pass_to_fail}\n"
+        "\n## Touched Test States\n"
+        f"{touched_state_markdown}"
     )
 
 
@@ -785,6 +955,24 @@ async def run_full_pipeline(
         phase0_cache = _load_phase0_cache(project, backport_commit, mainline_commit)
         phase0_cache_transition = None
         if phase0_cache:
+            reusable, reuse_reason = _is_phase0_cache_reusable(phase0_cache)
+            if not reusable:
+                print(
+                    f"[{project}/{patch_id}] Ignoring stale Phase 0 cache "
+                    f"(reason={reuse_reason}). Running fresh Phase 0."
+                )
+                save_pipeline_log(
+                    project,
+                    patch_id,
+                    "phase0_cache_reuse",
+                    "# Phase 0 Cache Reuse\n\n"
+                    f"- Cache file: {_phase0_cache_file(project, backport_commit, mainline_commit)}\n"
+                    "- Decision: ignored\n"
+                    f"- Reason: {reuse_reason}\n",
+                )
+                phase0_cache = None
+
+        if phase0_cache:
             print(
                 f"[{project}/{patch_id}] Found cached Phase 0 results. Skipping Phase 0 and reusing baseline test state."
             )
@@ -816,7 +1004,10 @@ async def run_full_pipeline(
                     patch_id,
                     "transition_summary",
                     _build_transition_summary_markdown(
-                        phase0_cache_transition, "phase0_cache"
+                        phase0_cache_transition,
+                        "phase0_cache",
+                        phase_outputs={},
+                        phase0_cache=phase0_cache,
                     ),
                 )
 
@@ -964,7 +1155,12 @@ async def run_full_pipeline(
             project,
             patch_id,
             "transition_summary",
-            _build_transition_summary_markdown(transition_eval, transition_source),
+            _build_transition_summary_markdown(
+                transition_eval,
+                transition_source,
+                phase_outputs=dict(phase_outputs),
+                phase0_cache=phase0_cache,
+            ),
         )
 
         results["phases"] = dict(phase_outputs)

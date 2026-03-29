@@ -1472,6 +1472,16 @@ class ValidationToolkit:
                 )
                 continue
 
+            # If any hunk in this file indicates rename lineage, preserve it for patch header.
+            if not old_file_path:
+                for h in hunks_by_file[target_file]:
+                    candidate_old = _normalize_rel_path(
+                        h.get("old_target_file") or h.get("mainline_file") or ""
+                    )
+                    if candidate_old and candidate_old != target_file:
+                        old_file_path = candidate_old
+                        break
+
             # Determine the operation type, preserving structural intent when mixed with content hunks.
             if len(file_operations) == 1:
                 file_operation = next(iter(file_operations))
@@ -1537,6 +1547,9 @@ class ValidationToolkit:
                 continue
 
             if file_operation == "ADDED":
+                dst = os.path.normpath(os.path.join(self.target_repo_path, target_file))
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+            elif file_operation == "RENAMED" and old_file_path:
                 dst = os.path.normpath(os.path.join(self.target_repo_path, target_file))
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
 
