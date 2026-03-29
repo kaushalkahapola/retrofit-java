@@ -3,6 +3,7 @@ Agent 4: The Verifier (Validation Loop)
 
 H-MABS Phase 4 — "Prove Red, Make Green" Loop
 """
+
 import json
 import os
 import re
@@ -47,6 +48,78 @@ Provide concise diagnosis and fix suggestion:"""
 MAX_VALIDATION_ATTEMPTS = 3
 
 
+def _classify_apply_failure(raw_output: str) -> tuple[str, list[str], list[dict]]:
+    """
+    Classify patch-application failures into coarse categories and extract file hints.
+    Returns: (category, retry_files, diagnostics)
+    """
+    text = str(raw_output or "")
+    text_lower = text.lower()
+
+    diagnostics: list[dict] = []
+    retry_files: set[str] = set()
+    category = "unknown"
+
+    file_patterns = [
+        r"error:\s+patch failed:\s+([^:\n]+):\d+",
+        r"error:\s+([^:\n]+):\s+patch does not apply",
+        r"error:\s+([^:\n]+):\s+No such file or directory",
+        r"new file\s+([^\s]+)\s+depends on old contents",
+    ]
+    for pattern in file_patterns:
+        for match in re.findall(pattern, text, flags=re.IGNORECASE):
+            p = (match or "").strip().replace("\\", "/")
+            if p and p != "dev/null":
+                retry_files.add(p)
+
+    if "no such file or directory" in text_lower:
+        category = "path_or_file_operation"
+        diagnostics.append(
+            {
+                "error_type": "missing_file",
+                "suggested_action": "remap",
+            }
+        )
+    if "depends on old contents" in text_lower:
+        category = "path_or_file_operation"
+        diagnostics.append(
+            {
+                "error_type": "rename_or_add_mismatch",
+                "suggested_action": "remap",
+            }
+        )
+    if "dev/null: does not exist in index" in text_lower:
+        category = "path_or_file_operation"
+        diagnostics.append(
+            {
+                "error_type": "invalid_add_delete_semantics",
+                "suggested_action": "remap",
+            }
+        )
+    if "malformed patch" in text_lower:
+        if category == "unknown":
+            category = "context_mismatch"
+        diagnostics.append(
+            {
+                "error_type": "malformed_patch",
+                "suggested_action": "regenerate_hunk",
+            }
+        )
+    if "patch does not apply" in text_lower and category == "unknown":
+        category = "context_mismatch"
+        diagnostics.append(
+            {
+                "error_type": "context_mismatch",
+                "suggested_action": "regenerate_hunk",
+            }
+        )
+
+    if category == "unknown":
+        category = "unknown"
+
+    return category, sorted(retry_files), diagnostics
+
+
 def _format_transition_summary(transition_eval: dict) -> str:
     if not transition_eval:
         return "No transition evaluation available."
@@ -63,82 +136,91 @@ def _format_transition_summary(transition_eval: dict) -> str:
         f"pass->fail({len(pass_to_fail)}): {pass_to_fail}"
     )
 
+
 async def _analyze_failure(step_name: str, error_output: str, state: AgentState) -> str:
     """Uses LLM to evaluate and explain a validation failure."""
     # Truncate long errors to save tokens
     if len(error_output) > 3000:
-        error_output = error_output[:1500] + "\n...[TRUNCATED]...\n" + error_output[-1500:]
-    
+        error_output = (
+            error_output[:1500] + "\n...[TRUNCATED]...\n" + error_output[-1500:]
+        )
+
     prompt = _ANALYZE_FAILURE_USER.format(
-        step_name=step_name,
-        error_output=error_output
+        step_name=step_name, error_output=error_output
     )
 
     llm = get_llm(
         temperature=0,
         provider=os.getenv("LLM_PROVIDER"),
-        model=os.getenv("LLM_MODEL", "gemini-2.0-flash")
+        model=os.getenv("LLM_MODEL", "gemini-2.0-flash"),
     )
 
     try:
-        response = await llm.ainvoke([
-            SystemMessage(content=_ANALYZE_FAILURE_SYSTEM),
-            HumanMessage(content=prompt)
-        ])
+        response = await llm.ainvoke(
+            [
+                SystemMessage(content=_ANALYZE_FAILURE_SYSTEM),
+                HumanMessage(content=prompt),
+            ]
+        )
         return response.content if hasattr(response, "content") else str(response)
     except Exception as e:
         return f"Analysis failed: {str(e)}"
 
-async def _synthesize_target_test(state: AgentState, toolkit: ValidationToolkit) -> list[AdaptedHunk]:
+
+async def _synthesize_target_test(
+    state: AgentState, toolkit: ValidationToolkit
+) -> list[AdaptedHunk]:
     """Phase 6: Test Synthesis"""
     print("  Agent 4: No test hunks provided. Synthesizing a vulnerability test...")
     blueprint = state.get("semantic_blueprint") or {}
     root_cause = blueprint.get("root_cause_hypothesis", "")
     fix_logic = blueprint.get("fix_logic", "")
-    
-    prompt = _SYNTHESIZE_TEST_USER.format(
-        root_cause=root_cause,
-        fix_logic=fix_logic
-    )
-    
+
+    prompt = _SYNTHESIZE_TEST_USER.format(root_cause=root_cause, fix_logic=fix_logic)
+
     llm = get_llm(temperature=0)
-    
+
     try:
-        response = await llm.ainvoke([
-            SystemMessage(content=_SYNTHESIZE_TEST_SYSTEM),
-            HumanMessage(content=prompt)
-        ])
-        raw_content = response.content if hasattr(response, "content") else str(response)
+        response = await llm.ainvoke(
+            [
+                SystemMessage(content=_SYNTHESIZE_TEST_SYSTEM),
+                HumanMessage(content=prompt),
+            ]
+        )
+        raw_content = (
+            response.content if hasattr(response, "content") else str(response)
+        )
         print(f"  Agent 4: Synthesized test (raw):\n{raw_content}")
         adapted_hunk_text = _extract_hunk_block(raw_content)
         print(f"  Agent 4: Extracted hunk text:\n{adapted_hunk_text}")
-        
+
         if adapted_hunk_text:
-            target_file = "src/test/java/SynthesizedVulnTest.java" # Fallback
+            target_file = "src/test/java/SynthesizedVulnTest.java"  # Fallback
             lines = adapted_hunk_text.splitlines()
             for line in lines:
                 if line.startswith("+++ b/"):
                     target_file = line[6:].strip()
                     break
-            
+
             # Repair header to avoid "corrupt patch" errors
             adapted_hunk_text = _repair_hunk_header(adapted_hunk_text)
-            
+
             # Dry run test synthesis
             dr = toolkit.apply_hunk_dry_run(target_file, adapted_hunk_text)
-            
+
             hunk: AdaptedHunk = {
                 "target_file": target_file,
                 "mainline_file": "synthesized",
                 "hunk_text": adapted_hunk_text,
                 "insertion_line": 1,
-                "intent_verified": True
+                "intent_verified": True,
             }
             return [hunk]
     except Exception as e:
         print(f"  Agent 4: Test synthesis failed: {e}")
-        
+
     return []
+
 
 def _extract_test_classes(test_hunks: list[AdaptedHunk]) -> list[str]:
     """Helper to extract class names from file paths."""
@@ -150,11 +232,12 @@ def _extract_test_classes(test_hunks: list[AdaptedHunk]) -> list[str]:
             parts = f.replace("\\", "/").split("/")
             if "java" in parts:
                 idx = parts.index("java")
-                cls_path = parts[idx+1:]
+                cls_path = parts[idx + 1 :]
                 cls_name = ".".join(cls_path).replace(".java", "")
                 if cls_name not in classes:
                     classes.append(cls_name)
     return classes
+
 
 def _repair_hunk_header(hunk_text: str) -> str:
     """
@@ -163,24 +246,24 @@ def _repair_hunk_header(hunk_text: str) -> str:
     """
     if not hunk_text:
         return hunk_text
-        
+
     lines = hunk_text.splitlines()
     if not lines or not lines[0].startswith("@@"):
         return hunk_text
-        
+
     header = lines[0]
     # Parse existing header: @@ -a,b +c,d @@  <optional context>
     m = re.match(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)", header)
     if not m:
         return hunk_text
-        
+
     start_src = int(m.group(1))
     start_tgt = int(m.group(3))
     ctx = m.group(5)
-    
+
     count_src = 0
     count_tgt = 0
-    
+
     for line in lines[1:]:
         if line.startswith(" "):
             count_src += 1
@@ -189,9 +272,10 @@ def _repair_hunk_header(hunk_text: str) -> str:
             count_src += 1
         elif line.startswith("+"):
             count_tgt += 1
-            
+
     new_header = f"@@ -{start_src if count_src > 0 else 0},{count_src} +{start_tgt},{count_tgt} @@{ctx}"
     return "\n".join([new_header] + lines[1:]) + "\n"
+
 
 async def validation_agent(state: AgentState, config) -> dict:
     """
@@ -199,13 +283,17 @@ async def validation_agent(state: AgentState, config) -> dict:
     Implements the 6-Phase Prove Red, Make Green loop.
     """
     print("Agent 4 (Validation): Starting 'Prove Red, Make Green' loop...")
-    
+
     target_repo_path = state.get("target_repo_path")
     if not target_repo_path:
-        return {"messages": [HumanMessage(content="Validation Agent Error: No target_repo_path.")]}
-        
+        return {
+            "messages": [
+                HumanMessage(content="Validation Agent Error: No target_repo_path.")
+            ]
+        }
+
     toolkit = ValidationToolkit(target_repo_path)
-    
+
     # 3.0 Setup
     code_hunks = state.get("adapted_code_hunks", [])
     test_hunks = state.get("adapted_test_hunks", [])
@@ -220,18 +308,26 @@ async def validation_agent(state: AgentState, config) -> dict:
     skip_compilation_checks = state.get("skip_compilation_checks", False)
     apply_only_validation = state.get("apply_only_validation", False)
     effective_code_hunks = list(code_hunks) + list(developer_aux_hunks)
-    
+
     if attempts >= MAX_VALIDATION_ATTEMPTS:
-        print(f"  Agent 4: Max validation attempts ({MAX_VALIDATION_ATTEMPTS}) reached. Failing.")
+        print(
+            f"  Agent 4: Max validation attempts ({MAX_VALIDATION_ATTEMPTS}) reached. Failing."
+        )
         return {"validation_passed": False}
-        
+
     # Ensure clean repo
     toolkit.restore_repo_state()
-    
+
     # Trace Initialization
-    unique_code_files = list(set([h.get("target_file") for h in effective_code_hunks if h.get("target_file")]))
-    unique_test_files = list(set([h.get("target_file") for h in test_hunks if h.get("target_file")]))
-    
+    unique_code_files = list(
+        set(
+            [h.get("target_file") for h in effective_code_hunks if h.get("target_file")]
+        )
+    )
+    unique_test_files = list(
+        set([h.get("target_file") for h in test_hunks if h.get("target_file")])
+    )
+
     validation_results = {}
 
     trace = [
@@ -248,11 +344,13 @@ async def validation_agent(state: AgentState, config) -> dict:
         f"- Developer auxiliary hunks: {len(developer_aux_hunks)}",
         "",
         "## Agent Tool Steps",
-        ""
+        "",
     ]
 
     def log_step(tool_name, params, output):
-        trace.append(f"  - `Agent calls {tool_name}` with `{json.dumps(params, default=str)}`")
+        trace.append(
+            f"  - `Agent calls {tool_name}` with `{json.dumps(params, default=str)}`"
+        )
         # Truncate long outputs for trace readability
         out_str = str(output)
         if len(out_str) > 1000:
@@ -260,7 +358,9 @@ async def validation_agent(state: AgentState, config) -> dict:
         trace.append(f"  - `Tool: {tool_name}` -> {out_str}")
 
     if evaluation_full_workflow:
-        print("  Agent 4: Evaluation full-workflow mode (apply -> build -> relevant tests)...")
+        print(
+            "  Agent 4: Evaluation full-workflow mode (apply -> build -> relevant tests)..."
+        )
         res = toolkit.apply_adapted_hunks(effective_code_hunks, test_hunks)
         log_step(
             "apply_adapted_hunks",
@@ -280,9 +380,19 @@ async def validation_agent(state: AgentState, config) -> dict:
 
         if not res["success"]:
             analysis = await _analyze_failure("Hunk Application", res["output"], state)
+            failure_category, retry_files, diagnostics = _classify_apply_failure(
+                res.get("output", "")
+            )
             validation_results["hunk_application"]["agent_evaluation"] = analysis
             validation_results["hunk_application"]["error_context"] = analysis
-            trace.append(f"\n**Final Status: HUNK APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+            validation_results["hunk_application"]["diagnostics"] = {
+                "category": failure_category,
+                "retry_files": retry_files,
+                "issues": diagnostics,
+            }
+            trace.append(
+                f"\n**Final Status: HUNK APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
+            )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
             return {
                 "validation_passed": False,
@@ -290,6 +400,8 @@ async def validation_agent(state: AgentState, config) -> dict:
                 "validation_error_context": f"Hunk application failed: {analysis}",
                 "validation_results": validation_results,
                 "regeneration_hint": analysis,
+                "validation_failure_category": failure_category,
+                "validation_retry_files": retry_files,
             }
 
         build_res = toolkit.run_build_script()
@@ -299,10 +411,14 @@ async def validation_agent(state: AgentState, config) -> dict:
             "raw": build_res.get("output", ""),
         }
         if not build_res.get("success", False):
-            analysis = await _analyze_failure("Build", build_res.get("output", ""), state)
+            analysis = await _analyze_failure(
+                "Build", build_res.get("output", ""), state
+            )
             validation_results["build"]["agent_evaluation"] = analysis
             validation_results["build"]["error_context"] = analysis
-            trace.append(f"\n**Final Status: BUILD FAILED**\n\n**Agent Analysis:**\n{analysis}")
+            trace.append(
+                f"\n**Final Status: BUILD FAILED**\n\n**Agent Analysis:**\n{analysis}"
+            )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
             return {
                 "validation_passed": False,
@@ -313,16 +429,24 @@ async def validation_agent(state: AgentState, config) -> dict:
             }
 
         inferred_project = os.path.basename(target_repo_path).strip().lower()
-        test_targets = phase_0_test_targets or toolkit.detect_relevant_test_targets(project=inferred_project)
-        test_res = toolkit.run_relevant_tests(project=inferred_project, target_info=test_targets)
+        test_targets = phase_0_test_targets or toolkit.detect_relevant_test_targets(
+            project=inferred_project
+        )
+        test_res = toolkit.run_relevant_tests(
+            project=inferred_project, target_info=test_targets
+        )
         log_step("run_relevant_tests", {"targets": test_targets}, test_res)
-        transition_eval = toolkit.evaluate_test_state_transition(phase_0_baseline_test_result, test_res)
+        transition_eval = toolkit.evaluate_test_state_transition(
+            phase_0_baseline_test_result, test_res
+        )
         transition_summary = _format_transition_summary(transition_eval)
         log_step(
             "evaluate_test_state_transition",
             {
                 "baseline_available": bool(phase_0_baseline_test_result),
-                "baseline_mode": (phase_0_baseline_test_result or {}).get("mode", "none"),
+                "baseline_mode": (phase_0_baseline_test_result or {}).get(
+                    "mode", "none"
+                ),
             },
             transition_eval,
         )
@@ -339,10 +463,14 @@ async def validation_agent(state: AgentState, config) -> dict:
         }
 
         if test_res.get("compile_error", False):
-            analysis = await _analyze_failure("Relevant Tests (Compile Error)", test_res.get("output", ""), state)
+            analysis = await _analyze_failure(
+                "Relevant Tests (Compile Error)", test_res.get("output", ""), state
+            )
             validation_results["tests"]["agent_evaluation"] = analysis
             validation_results["tests"]["error_context"] = analysis
-            trace.append(f"\n**Final Status: TEST EXECUTION FAILED (COMPILE ERROR)**\n\n**Agent Analysis:**\n{analysis}")
+            trace.append(
+                f"\n**Final Status: TEST EXECUTION FAILED (COMPILE ERROR)**\n\n**Agent Analysis:**\n{analysis}"
+            )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
             return {
                 "validation_passed": False,
@@ -395,89 +523,133 @@ async def validation_agent(state: AgentState, config) -> dict:
     if apply_only_validation:
         print("  Agent 4: Apply-only mode - checking patch application only...")
         res = toolkit.apply_adapted_hunks(effective_code_hunks, test_hunks)
-        log_step("apply_adapted_hunks", {"code_count": len(effective_code_hunks), "test_count": len(test_hunks)}, res)
+        log_step(
+            "apply_adapted_hunks",
+            {"code_count": len(effective_code_hunks), "test_count": len(test_hunks)},
+            res,
+        )
 
         validation_results["hunk_application"] = {
             "success": res["success"],
-            "raw": res["output"]
+            "raw": res["output"],
         }
 
         if not res["success"]:
             analysis = await _analyze_failure("Hunk Application", res["output"], state)
+            failure_category, retry_files, diagnostics = _classify_apply_failure(
+                res.get("output", "")
+            )
             validation_results["hunk_application"]["agent_evaluation"] = analysis
             validation_results["hunk_application"]["error_context"] = analysis
-            trace.append(f"\n**Final Status: HUNK APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+            validation_results["hunk_application"]["diagnostics"] = {
+                "category": failure_category,
+                "retry_files": retry_files,
+                "issues": diagnostics,
+            }
+            trace.append(
+                f"\n**Final Status: HUNK APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
+            )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
             return {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
                 "validation_error_context": f"Hunk application failed: {analysis}",
                 "validation_results": validation_results,
-                "regeneration_hint": analysis
+                "regeneration_hint": analysis,
+                "validation_failure_category": failure_category,
+                "validation_retry_files": retry_files,
             }
 
-        validation_results["hunk_application"]["agent_evaluation"] = "Hunks applied successfully to all target files."
+        validation_results["hunk_application"]["agent_evaluation"] = (
+            "Hunks applied successfully to all target files."
+        )
         validation_results["compilation"] = {
             "success": True,
             "raw": "Skipped by apply-only validation mode.",
-            "agent_evaluation": "Compilation step intentionally skipped."
+            "agent_evaluation": "Compilation step intentionally skipped.",
         }
         validation_results["spotbugs"] = {
             "success": True,
             "raw": "Skipped by apply-only validation mode.",
-            "agent_evaluation": "SpotBugs step intentionally skipped."
+            "agent_evaluation": "SpotBugs step intentionally skipped.",
         }
         trace.append("\n**Final Status: VALIDATION PASSED (APPLY-ONLY MODE)**")
-        trace.append("\n**Note:** Compilation, tests, and static-analysis phases are disabled.")
+        trace.append(
+            "\n**Note:** Compilation, tests, and static-analysis phases are disabled."
+        )
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
         return {
             "validation_passed": True,
             "validation_attempts": attempts + 1,
             "validation_error_context": "",
-            "validation_results": validation_results
+            "validation_results": validation_results,
         }
 
     # Compile-Only Mode (Streamlined - Apply patch and compile changed files only)
     if compile_only:
-        print("  Agent 4: Streamlined mode - applying patch and compiling changed files only...")
+        print(
+            "  Agent 4: Streamlined mode - applying patch and compiling changed files only..."
+        )
         res = toolkit.apply_adapted_hunks(effective_code_hunks, test_hunks)
-        log_step("apply_adapted_hunks", {"code_count": len(effective_code_hunks), "test_count": len(test_hunks)}, res)
+        log_step(
+            "apply_adapted_hunks",
+            {"code_count": len(effective_code_hunks), "test_count": len(test_hunks)},
+            res,
+        )
 
         validation_results["hunk_application"] = {
             "success": res["success"],
-            "raw": res["output"]
+            "raw": res["output"],
         }
 
         if not res["success"]:
             # Use LLM to analyze hunk application failure
             analysis = await _analyze_failure("Hunk Application", res["output"], state)
+            failure_category, retry_files, diagnostics = _classify_apply_failure(
+                res.get("output", "")
+            )
             validation_results["hunk_application"]["agent_evaluation"] = analysis
             validation_results["hunk_application"]["error_context"] = analysis
-            trace.append(f"\n**Final Status: HUNK APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+            validation_results["hunk_application"]["diagnostics"] = {
+                "category": failure_category,
+                "retry_files": retry_files,
+                "issues": diagnostics,
+            }
+            trace.append(
+                f"\n**Final Status: HUNK APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
+            )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
             return {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
                 "validation_error_context": f"Hunk application failed: {analysis}",
                 "validation_results": validation_results,
-                "regeneration_hint": analysis  # For hunk generator to use
+                "regeneration_hint": analysis,  # For hunk generator to use
+                "validation_failure_category": failure_category,
+                "validation_retry_files": retry_files,
             }
         else:
-            validation_results["hunk_application"]["agent_evaluation"] = "Hunks applied successfully to all target files."
+            validation_results["hunk_application"]["agent_evaluation"] = (
+                "Hunks applied successfully to all target files."
+            )
 
         if skip_compilation_checks:
             validation_results["compilation"] = {
                 "success": True,
                 "raw": "Skipped by configuration for environment-constrained runs.",
-                "agent_evaluation": "Compilation step intentionally skipped."
+                "agent_evaluation": "Compilation step intentionally skipped.",
             }
             validation_results["spotbugs"] = {
                 "success": True,
                 "raw": "Skipped by configuration for environment-constrained runs.",
-                "agent_evaluation": "Static analysis step intentionally skipped."
+                "agent_evaluation": "Static analysis step intentionally skipped.",
             }
-            trace.append("\n**Final Status: VALIDATION PASSED (COMPILATION/SPOTBUGS SKIPPED)**")
-            trace.append("\n**Note:** Compilation and static-analysis phases are disabled in this run mode.")
+            trace.append(
+                "\n**Final Status: VALIDATION PASSED (COMPILATION/SPOTBUGS SKIPPED)**"
+            )
+            trace.append(
+                "\n**Note:** Compilation and static-analysis phases are disabled in this run mode."
+            )
             passed = True
         else:
             applied_files = res.get("applied_files", [])
@@ -486,25 +658,31 @@ async def validation_agent(state: AgentState, config) -> dict:
 
             validation_results["compilation"] = {
                 "success": build_res.get("success"),
-                "raw": build_res.get("output", "")
+                "raw": build_res.get("output", ""),
             }
 
             if not build_res.get("success"):
                 # Use LLM to analyze compilation failure
-                analysis = await _analyze_failure("Compilation", build_res.get("output", ""), state)
+                analysis = await _analyze_failure(
+                    "Compilation", build_res.get("output", ""), state
+                )
                 validation_results["compilation"]["agent_evaluation"] = analysis
                 validation_results["compilation"]["error_context"] = analysis
-                trace.append(f"\n**Final Status: COMPILATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+                trace.append(
+                    f"\n**Final Status: COMPILATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
+                )
                 toolkit.write_trace("\n".join(trace), "validation_trace.md")
                 return {
                     "validation_passed": False,
                     "validation_attempts": attempts + 1,
                     "validation_error_context": f"Compilation failed: {analysis}",
                     "validation_results": validation_results,
-                    "regeneration_hint": analysis  # For hunk generator to use
+                    "regeneration_hint": analysis,  # For hunk generator to use
                 }
             else:
-                validation_results["compilation"]["agent_evaluation"] = "All modified files compiled successfully."
+                validation_results["compilation"]["agent_evaluation"] = (
+                    "All modified files compiled successfully."
+                )
 
             # Run SpotBugs after successful compile
             print("  Agent 4: Running SpotBugs validation...")
@@ -514,18 +692,20 @@ async def validation_agent(state: AgentState, config) -> dict:
             # Use target_files for Maven SpotBugs optimization
             spotbugs_res = toolkit.run_spotbugs(
                 compiled_classes_paths=classes_paths,
-                source_path=os.path.join(state["target_repo_path"], "src", "main", "java"),
-                target_files=unique_code_files + unique_test_files
+                source_path=os.path.join(
+                    state["target_repo_path"], "src", "main", "java"
+                ),
+                target_files=unique_code_files + unique_test_files,
             )
             log_step("run_spotbugs", {"paths": classes_paths}, spotbugs_res)
 
             passed = spotbugs_res.get("success", True)
             spotbugs_output = spotbugs_res.get("output", "")
-            
+
             validation_results["spotbugs"] = {
                 "success": passed,
                 "raw": spotbugs_output,
-                "agent_evaluation": ""
+                "agent_evaluation": "",
             }
 
             if not passed:
@@ -533,9 +713,13 @@ async def validation_agent(state: AgentState, config) -> dict:
                 analysis = await _analyze_failure("SpotBugs", spotbugs_output, state)
                 validation_results["spotbugs"]["agent_evaluation"] = analysis
                 validation_results["spotbugs"]["error_context"] = analysis
-                trace.append(f"\n**Final Status: STATIC VALIDATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+                trace.append(
+                    f"\n**Final Status: STATIC VALIDATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
+                )
             else:
-                validation_results["spotbugs"]["agent_evaluation"] = "No high-severity bugs detected. Code passes static analysis."
+                validation_results["spotbugs"]["agent_evaluation"] = (
+                    "No high-severity bugs detected. Code passes static analysis."
+                )
                 trace.append(f"\n**Final Status: {'VALIDATION PASSED'}**")
 
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
@@ -543,8 +727,10 @@ async def validation_agent(state: AgentState, config) -> dict:
         return {
             "validation_passed": passed,
             "validation_attempts": attempts + 1,
-            "validation_error_context": spotbugs_res.get("output", "") if not passed else "",
-            "validation_results": validation_results
+            "validation_error_context": spotbugs_res.get("output", "")
+            if not passed
+            else "",
+            "validation_results": validation_results,
         }
 
     # Standard "Prove Red, Make Green" Loop
@@ -552,11 +738,15 @@ async def validation_agent(state: AgentState, config) -> dict:
     if not test_hunks:
         print("  Agent 4: No test hunks found. Synthesizing...")
         synthesized = await _synthesize_target_test(state, toolkit)
-        log_step("synthesize_target_test", {}, "Hunks generated" if synthesized else "Failed")
+        log_step(
+            "synthesize_target_test", {}, "Hunks generated" if synthesized else "Failed"
+        )
 
         validation_results["test_synthesis"] = {
             "success": bool(synthesized),
-            "raw": "Hunks generated" if synthesized else "Failed to synthesize a viable test case."
+            "raw": "Hunks generated"
+            if synthesized
+            else "Failed to synthesize a viable test case.",
         }
 
         if not synthesized:
@@ -564,20 +754,22 @@ async def validation_agent(state: AgentState, config) -> dict:
             analysis = await _analyze_failure("Test Synthesis", error_msg, state)
             validation_results["test_synthesis"]["agent_evaluation"] = analysis
             validation_results["test_synthesis"]["error_context"] = analysis
-            trace.append(f"\n**Final Status: TEST SYNTHESIS FAILED**\n\n**Agent Analysis:**\n{analysis}")
+            trace.append(
+                f"\n**Final Status: TEST SYNTHESIS FAILED**\n\n**Agent Analysis:**\n{analysis}"
+            )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
             return {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
                 "validation_error_context": analysis,
                 "validation_results": validation_results,
-                "regeneration_hint": analysis
+                "regeneration_hint": analysis,
             }
         test_hunks = synthesized
     else:
         validation_results["test_synthesis"] = {
             "success": True,
-            "agent_evaluation": "Test hunks provided from previous phase."
+            "agent_evaluation": "Test hunks provided from previous phase.",
         }
 
     test_classes = _extract_test_classes(test_hunks)
@@ -589,14 +781,16 @@ async def validation_agent(state: AgentState, config) -> dict:
 
     validation_results["test_application"] = {
         "success": res1["success"],
-        "raw": res1["output"]
+        "raw": res1["output"],
     }
 
     if not res1["success"]:
         analysis = await _analyze_failure("Test Application", res1["output"], state)
         validation_results["test_application"]["agent_evaluation"] = analysis
         validation_results["test_application"]["error_context"] = analysis
-        trace.append(f"\n**Final Status: TEST APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+        trace.append(
+            f"\n**Final Status: TEST APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
+        )
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
         toolkit.restore_repo_state()
         return {
@@ -605,10 +799,12 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_error_context": analysis,
             "adapted_test_hunks": test_hunks,
             "validation_results": validation_results,
-            "regeneration_hint": analysis
+            "regeneration_hint": analysis,
         }
     else:
-        validation_results["test_application"]["agent_evaluation"] = "Test hunks applied successfully."
+        validation_results["test_application"]["agent_evaluation"] = (
+            "Test hunks applied successfully."
+        )
 
     # 3.3 Phase 2: Failure Confirmation
     print("  Agent 4: Phase 2 — Failure Confirmation (Running targeted tests)...")
@@ -619,14 +815,18 @@ async def validation_agent(state: AgentState, config) -> dict:
     # because the test should fail before the fix.
     validation_results["failure_confirmation"] = {
         "success": not res2["success"] and not res2["compile_error"],
-        "raw": res2["output"]
+        "raw": res2["output"],
     }
 
     if res2["compile_error"]:
-        analysis = await _analyze_failure("Failure Confirmation (Compile)", res2["output"], state)
+        analysis = await _analyze_failure(
+            "Failure Confirmation (Compile)", res2["output"], state
+        )
         validation_results["failure_confirmation"]["agent_evaluation"] = analysis
         validation_results["failure_confirmation"]["error_context"] = analysis
-        trace.append(f"\n**Final Status: COMPILATION FAILED (PRE-FIX)**\n\n**Agent Analysis:**\n{analysis}")
+        trace.append(
+            f"\n**Final Status: COMPILATION FAILED (PRE-FIX)**\n\n**Agent Analysis:**\n{analysis}"
+        )
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
         toolkit.restore_repo_state()
         return {
@@ -635,7 +835,7 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_error_context": analysis,
             "adapted_test_hunks": test_hunks,
             "validation_results": validation_results,
-            "regeneration_hint": analysis
+            "regeneration_hint": analysis,
         }
 
     if res2["success"]:
@@ -646,7 +846,9 @@ async def validation_agent(state: AgentState, config) -> dict:
         )
         validation_results["failure_confirmation"]["agent_evaluation"] = analysis
         validation_results["failure_confirmation"]["error_context"] = analysis
-        trace.append(f"\n**Final Status: INVALID TEST (PASSED UNEXPECTEDLY)**\n\n**Agent Analysis:**\n{analysis}")
+        trace.append(
+            f"\n**Final Status: INVALID TEST (PASSED UNEXPECTEDLY)**\n\n**Agent Analysis:**\n{analysis}"
+        )
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
         toolkit.restore_repo_state()
         return {
@@ -655,28 +857,38 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_error_context": analysis,
             "adapted_test_hunks": test_hunks,
             "validation_results": validation_results,
-            "regeneration_hint": analysis
+            "regeneration_hint": analysis,
         }
 
-    validation_results["failure_confirmation"]["agent_evaluation"] = "Tests failed as expected before fix - vulnerability confirmed."
+    validation_results["failure_confirmation"]["agent_evaluation"] = (
+        "Tests failed as expected before fix - vulnerability confirmed."
+    )
     trace.append("**Failure Confirmed** (Tests failed as expected).\n")
-    
+
     # 3.4 Phase 3: Patch Application
     print("  Agent 4: Phase 3 — Patch Application (Applying code fix)...")
-    toolkit.restore_repo_state() # Cleanup buggy tests before full applied
-    res3 = toolkit.apply_adapted_hunks(code_hunks=effective_code_hunks, test_hunks=test_hunks)
-    log_step("apply_adapted_hunks (full)", {"code_count": len(effective_code_hunks), "test_count": len(test_hunks)}, res3)
+    toolkit.restore_repo_state()  # Cleanup buggy tests before full applied
+    res3 = toolkit.apply_adapted_hunks(
+        code_hunks=effective_code_hunks, test_hunks=test_hunks
+    )
+    log_step(
+        "apply_adapted_hunks (full)",
+        {"code_count": len(effective_code_hunks), "test_count": len(test_hunks)},
+        res3,
+    )
 
     validation_results["patch_application"] = {
         "success": res3["success"],
-        "raw": res3["output"]
+        "raw": res3["output"],
     }
 
     if not res3["success"]:
         analysis = await _analyze_failure("Patch Application", res3["output"], state)
         validation_results["patch_application"]["agent_evaluation"] = analysis
         validation_results["patch_application"]["error_context"] = analysis
-        trace.append(f"\n**Final Status: PATCH APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+        trace.append(
+            f"\n**Final Status: PATCH APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
+        )
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
         toolkit.restore_repo_state()
         return {
@@ -685,10 +897,12 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_error_context": analysis,
             "adapted_test_hunks": test_hunks,
             "validation_results": validation_results,
-            "regeneration_hint": analysis
+            "regeneration_hint": analysis,
         }
     else:
-        validation_results["patch_application"]["agent_evaluation"] = "Code and test hunks applied successfully."
+        validation_results["patch_application"]["agent_evaluation"] = (
+            "Code and test hunks applied successfully."
+        )
 
     # 3.5 Phase 4: Targeted Verification
     print("  Agent 4: Phase 4 — Targeted Verification (Making it Green)...")
@@ -697,15 +911,19 @@ async def validation_agent(state: AgentState, config) -> dict:
 
     validation_results["targeted_verification"] = {
         "success": res4["success"],
-        "raw": res4["output"]
+        "raw": res4["output"],
     }
 
     if not res4["success"]:
-        analysis = await _analyze_failure("Targeted Verification", res4["output"], state)
+        analysis = await _analyze_failure(
+            "Targeted Verification", res4["output"], state
+        )
         failure_context = f"tests failed or compile aborted: {analysis}"
         validation_results["targeted_verification"]["agent_evaluation"] = analysis
         validation_results["targeted_verification"]["error_context"] = failure_context
-        trace.append(f"\n**Final Status: VERIFICATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+        trace.append(
+            f"\n**Final Status: VERIFICATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
+        )
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
         toolkit.restore_repo_state()
         return {
@@ -714,10 +932,12 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_error_context": failure_context,
             "adapted_test_hunks": test_hunks,
             "validation_results": validation_results,
-            "regeneration_hint": analysis
+            "regeneration_hint": analysis,
         }
     else:
-        validation_results["targeted_verification"]["agent_evaluation"] = "All tests passed after fix application."
+        validation_results["targeted_verification"]["agent_evaluation"] = (
+            "All tests passed after fix application."
+        )
 
     trace.append("**Verification Successful** (Tests passed!).\n")
 
@@ -728,14 +948,18 @@ async def validation_agent(state: AgentState, config) -> dict:
 
     validation_results["full_compilation"] = {
         "success": build_res_full.get("success"),
-        "raw": build_res_full.get("output", "")
+        "raw": build_res_full.get("output", ""),
     }
 
     if not build_res_full.get("success"):
-        analysis = await _analyze_failure("Full Compilation", build_res_full.get("output", ""), state)
+        analysis = await _analyze_failure(
+            "Full Compilation", build_res_full.get("output", ""), state
+        )
         validation_results["full_compilation"]["agent_evaluation"] = analysis
         validation_results["full_compilation"]["error_context"] = analysis
-        trace.append(f"\n**Final Status: COMPILATION FAILED (PRE-SPOTBUGS)**\n\n**Agent Analysis:**\n{analysis}")
+        trace.append(
+            f"\n**Final Status: COMPILATION FAILED (PRE-SPOTBUGS)**\n\n**Agent Analysis:**\n{analysis}"
+        )
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
         toolkit.restore_repo_state()
         return {
@@ -744,28 +968,32 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_error_context": analysis,
             "adapted_test_hunks": test_hunks,
             "validation_results": validation_results,
-            "regeneration_hint": analysis
+            "regeneration_hint": analysis,
         }
     else:
-        validation_results["full_compilation"]["agent_evaluation"] = "Full project compilation successful."
+        validation_results["full_compilation"]["agent_evaluation"] = (
+            "Full project compilation successful."
+        )
 
     modules = build_res_full.get("modules", [])
     classes_paths = toolkit.get_module_class_paths(modules)
 
-    spotbugs_res = toolkit.run_spotbugs(compiled_classes_paths=classes_paths, source_path=os.path.join(target_repo_path, "src", "main", "java"))
+    spotbugs_res = toolkit.run_spotbugs(
+        compiled_classes_paths=classes_paths,
+        source_path=os.path.join(target_repo_path, "src", "main", "java"),
+    )
     log_step("run_spotbugs", {"paths": classes_paths}, spotbugs_res)
 
     passed = spotbugs_res.get("success", True)
-    validation_results["spotbugs"] = {
-        "success": passed,
-        "raw": str(spotbugs_res)
-    }
+    validation_results["spotbugs"] = {"success": passed, "raw": str(spotbugs_res)}
 
     if not passed:
         analysis = await _analyze_failure("SpotBugs", str(spotbugs_res), state)
         validation_results["spotbugs"]["agent_evaluation"] = analysis
         validation_results["spotbugs"]["error_context"] = analysis
-        trace.append(f"\n**Final Status: STATIC VALIDATION FAILED**\n\n**Agent Analysis:**\n{analysis}")
+        trace.append(
+            f"\n**Final Status: STATIC VALIDATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
+        )
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
         toolkit.restore_repo_state()
         return {
@@ -774,10 +1002,12 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_error_context": analysis,
             "adapted_test_hunks": test_hunks,
             "validation_results": validation_results,
-            "regeneration_hint": analysis
+            "regeneration_hint": analysis,
         }
     else:
-        validation_results["spotbugs"]["agent_evaluation"] = "No high-severity bugs detected. Code passes static analysis."
+        validation_results["spotbugs"]["agent_evaluation"] = (
+            "No high-severity bugs detected. Code passes static analysis."
+        )
 
     trace.append("**Static Validation Successful** (No high-severity bugs found).\n")
 
@@ -790,5 +1020,5 @@ async def validation_agent(state: AgentState, config) -> dict:
         "validation_attempts": attempts + 1,
         "adapted_test_hunks": test_hunks,
         "validation_results": validation_results,
-        "messages": [HumanMessage(content="Validation passed successfully.")]
+        "messages": [HumanMessage(content="Validation passed successfully.")],
     }

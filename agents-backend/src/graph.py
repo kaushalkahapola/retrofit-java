@@ -33,6 +33,7 @@ MAX_VALIDATION_ATTEMPTS = 3
 # Conditional routing functions
 # ---------------------------------------------------------------------------
 
+
 def route_start(state: AgentState) -> str:
     """
     Route from START: check if phase 0 should be skipped.
@@ -73,6 +74,24 @@ def route_validation(state: AgentState) -> str:
         return "END"
 
     if attempts < MAX_VALIDATION_ATTEMPTS:
+        failure_category = (
+            (state.get("validation_failure_category") or "").strip().lower()
+        )
+        latest_hunk_apply_failed = bool(
+            ((state.get("validation_results") or {}).get("hunk_application") or {}).get(
+                "success"
+            )
+            is False
+        )
+        if latest_hunk_apply_failed and failure_category in {
+            "path_or_file_operation",
+            "mapping_required",
+        }:
+            print(
+                f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
+                "path/file-operation issue. Routing back to structural_locator for remap."
+            )
+            return "structural_locator"
         print(
             f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}). "
             "Routing back to hunk_generator for retry."
@@ -93,11 +112,11 @@ def route_validation(state: AgentState) -> str:
 workflow = StateGraph(AgentState)
 
 # --- Register nodes ---
-workflow.add_node("phase_0_optimistic",  phase_0_optimistic)
-workflow.add_node("context_analyzer",    context_analyzer_node)
-workflow.add_node("structural_locator",  structural_locator_node)
-workflow.add_node("hunk_generator",      hunk_generator_node)
-workflow.add_node("validation",          validation_agent)
+workflow.add_node("phase_0_optimistic", phase_0_optimistic)
+workflow.add_node("context_analyzer", context_analyzer_node)
+workflow.add_node("structural_locator", structural_locator_node)
+workflow.add_node("hunk_generator", hunk_generator_node)
+workflow.add_node("validation", validation_agent)
 
 # --- Wire edges ---
 
@@ -116,22 +135,23 @@ workflow.add_conditional_edges(
     "phase_0_optimistic",
     route_phase_0,
     {
-        "END":              END,
+        "END": END,
         "context_analyzer": "context_analyzer",
     },
 )
 
 # Linear pipeline: Agent 1 -> Agent 2 -> Agent 3
-workflow.add_edge("context_analyzer",   "structural_locator")
+workflow.add_edge("context_analyzer", "structural_locator")
 workflow.add_edge("structural_locator", "hunk_generator")
-workflow.add_edge("hunk_generator",     "validation")
+workflow.add_edge("hunk_generator", "validation")
 
 # Validation feedback loop: pass -> END, fail -> retry Agent 3 or give up
 workflow.add_conditional_edges(
     "validation",
     route_validation,
     {
-        "END":           END,
+        "END": END,
+        "structural_locator": "structural_locator",
         "hunk_generator": "hunk_generator",
     },
 )

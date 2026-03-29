@@ -26,7 +26,9 @@ from typing import Any
 from unidiff import PatchSet
 
 # Add src to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+)
 
 from graph import app
 from utils.patch_analyzer import PatchAnalyzer
@@ -69,7 +71,9 @@ def _phase0_cache_file(project: str, backport_commit: str, original_commit: str)
     return os.path.join(PHASE0_CACHE_DIR, filename)
 
 
-def _load_phase0_cache(project: str, backport_commit: str, original_commit: str) -> dict[str, Any] | None:
+def _load_phase0_cache(
+    project: str, backport_commit: str, original_commit: str
+) -> dict[str, Any] | None:
     path = _phase0_cache_file(project, backport_commit, original_commit)
     if not os.path.exists(path):
         return None
@@ -157,11 +161,16 @@ def generate_developer_backport_patch(backport_commit, target_repo_path):
         timeout=300,
     )
     if not success:
-        return None, f"Failed to generate developer backport patch for {backport_commit}: {output}"
+        return (
+            None,
+            f"Failed to generate developer backport patch for {backport_commit}: {output}",
+        )
     return output, None
 
 
-def _build_auxiliary_hunks_from_developer_patch(patch_diff: str) -> list[dict[str, Any]]:
+def _build_auxiliary_hunks_from_developer_patch(
+    patch_diff: str,
+) -> list[dict[str, Any]]:
     """
     Build hunks for developer-owned changes that agentic system should not generate:
     - all test file hunks
@@ -173,23 +182,40 @@ def _build_auxiliary_hunks_from_developer_patch(patch_diff: str) -> list[dict[st
     patch_set = PatchSet(io.StringIO(patch_diff))
     hunks: list[dict[str, Any]] = []
 
+    def _norm_path(path: str | None) -> str:
+        p = (path or "").strip().replace("\\", "/")
+        if p.startswith("a/") or p.startswith("b/"):
+            p = p[2:]
+        if p == "dev/null":
+            return ""
+        return p
+
     for patched_file in patch_set:
-        file_path = patched_file.path
+        file_path = _norm_path(patched_file.path)
         include = _is_test_file(file_path) or (not file_path.lower().endswith(".java"))
         if not include:
             continue
 
-        if patched_file.is_added_file:
+        source_path = _norm_path(getattr(patched_file, "source_file", None))
+        target_path = (
+            _norm_path(getattr(patched_file, "target_file", None)) or file_path
+        )
+
+        if patched_file.is_rename or (
+            source_path and target_path and source_path != target_path
+        ):
+            op = "RENAMED"
+        elif patched_file.is_added_file:
             op = "ADDED"
         elif patched_file.is_removed_file:
             op = "DELETED"
-        elif patched_file.is_rename:
-            op = "RENAMED"
         else:
             op = "MODIFIED"
 
         for hunk in patched_file:
-            lines = [f"@@ -{hunk.source_start},{hunk.source_length} +{hunk.target_start},{hunk.target_length} @@\n"]
+            lines = [
+                f"@@ -{hunk.source_start},{hunk.source_length} +{hunk.target_start},{hunk.target_length} @@\n"
+            ]
             for line in hunk:
                 if line.is_added:
                     lines.append(f"+{line.value}")
@@ -204,12 +230,27 @@ def _build_auxiliary_hunks_from_developer_patch(patch_diff: str) -> list[dict[st
 
             hunks.append(
                 {
-                    "target_file": file_path,
-                    "mainline_file": file_path,
+                    "target_file": target_path,
+                    "mainline_file": target_path,
                     "hunk_text": hunk_text,
                     "insertion_line": hunk.target_start,
                     "intent_verified": True,
                     "file_operation": op,
+                    "old_target_file": source_path or None,
+                }
+            )
+
+        # Preserve pure structural file-operations with no hunks.
+        if len(list(patched_file)) == 0:
+            hunks.append(
+                {
+                    "target_file": target_path,
+                    "mainline_file": target_path,
+                    "hunk_text": "",
+                    "insertion_line": 0,
+                    "intent_verified": True,
+                    "file_operation": op,
+                    "old_target_file": source_path or None,
                 }
             )
 
@@ -217,7 +258,9 @@ def _build_auxiliary_hunks_from_developer_patch(patch_diff: str) -> list[dict[st
 
 
 def _build_hunk_comparison_markdown(adapted_code_hunks, developer_patch_diff, analyzer):
-    developer_hunks_by_file = analyzer.extract_raw_hunks(developer_patch_diff, with_test_changes=False)
+    developer_hunks_by_file = analyzer.extract_raw_hunks(
+        developer_patch_diff, with_test_changes=False
+    )
     developer_hunks_by_file = {
         file: hunks
         for file, hunks in developer_hunks_by_file.items()
@@ -231,7 +274,9 @@ def _build_hunk_comparison_markdown(adapted_code_hunks, developer_patch_diff, an
             generated_hunks_by_file[file] = []
         generated_hunks_by_file[file].append(hunk["hunk_text"])
 
-    all_files = set(generated_hunks_by_file.keys()) | set(developer_hunks_by_file.keys())
+    all_files = set(generated_hunks_by_file.keys()) | set(
+        developer_hunks_by_file.keys()
+    )
 
     markdown = ""
     for file in sorted(all_files):
@@ -418,10 +463,23 @@ def _normalize_content_for_code_line_compare(content: str | None) -> list[str] |
 
 def _apply_patch_with_temp_index(repo_path, patch_file_path, env):
     attempts = [
-        ["git", "apply", "--cached", "--recount", "--whitespace=nowarn", patch_file_path],
         [
-            "git", "apply", "--cached", "--recount", "--ignore-space-change",
-            "--ignore-whitespace", "--whitespace=nowarn", patch_file_path,
+            "git",
+            "apply",
+            "--cached",
+            "--recount",
+            "--whitespace=nowarn",
+            patch_file_path,
+        ],
+        [
+            "git",
+            "apply",
+            "--cached",
+            "--recount",
+            "--ignore-space-change",
+            "--ignore-whitespace",
+            "--whitespace=nowarn",
+            patch_file_path,
         ],
     ]
 
@@ -435,7 +493,9 @@ def _apply_patch_with_temp_index(repo_path, patch_file_path, env):
     return False, "\n\n".join(errors)
 
 
-def compare_generated_with_developer_patch(adapted_code_hunks, developer_patch_diff, backport_commit, target_repo_path):
+def compare_generated_with_developer_patch(
+    adapted_code_hunks, developer_patch_diff, backport_commit, target_repo_path
+):
     generated_patch_diff = _build_generated_patch_from_hunks(adapted_code_hunks or [])
     generated_files = sorted(
         {
@@ -445,7 +505,9 @@ def compare_generated_with_developer_patch(adapted_code_hunks, developer_patch_d
         }
     )
 
-    developer_files, files_err = _get_java_code_changed_files(backport_commit, target_repo_path)
+    developer_files, files_err = _get_java_code_changed_files(
+        backport_commit, target_repo_path
+    )
     if files_err:
         return {
             "exact_developer_patch": False,
@@ -456,10 +518,18 @@ def compare_generated_with_developer_patch(adapted_code_hunks, developer_patch_d
 
     files_to_compare = sorted(set((developer_files or []) + generated_files))
 
-    with tempfile.NamedTemporaryFile(prefix="git_index_", suffix=".tmp", delete=False) as index_file:
+    with tempfile.NamedTemporaryFile(
+        prefix="git_index_", suffix=".tmp", delete=False
+    ) as index_file:
         temp_index_path = index_file.name
 
-    with tempfile.NamedTemporaryFile(prefix="generated_eval_", suffix=".patch", delete=False, mode="w", encoding="utf-8") as patch_file:
+    with tempfile.NamedTemporaryFile(
+        prefix="generated_eval_",
+        suffix=".patch",
+        delete=False,
+        mode="w",
+        encoding="utf-8",
+    ) as patch_file:
         patch_file.write(generated_patch_diff)
         generated_patch_file = patch_file.name
 
@@ -482,7 +552,9 @@ def compare_generated_with_developer_patch(adapted_code_hunks, developer_patch_d
             }
 
         if generated_patch_diff.strip():
-            apply_ok, apply_err = _apply_patch_with_temp_index(target_repo_path, generated_patch_file, index_env)
+            apply_ok, apply_err = _apply_patch_with_temp_index(
+                target_repo_path, generated_patch_file, index_env
+            )
             if not apply_ok:
                 return {
                     "exact_developer_patch": False,
@@ -493,16 +565,24 @@ def compare_generated_with_developer_patch(adapted_code_hunks, developer_patch_d
 
         mismatched_files = []
         for rel_path in files_to_compare:
-            developer_blob = _get_blob_id_from_commit(target_repo_path, backport_commit, rel_path)
-            generated_blob = _get_blob_id_from_index(target_repo_path, rel_path, index_env)
+            developer_blob = _get_blob_id_from_commit(
+                target_repo_path, backport_commit, rel_path
+            )
+            generated_blob = _get_blob_id_from_index(
+                target_repo_path, rel_path, index_env
+            )
             if developer_blob == generated_blob:
                 continue
 
             developer_content = _get_blob_content(target_repo_path, developer_blob)
             generated_content = _get_blob_content(target_repo_path, generated_blob)
 
-            developer_normalized = _normalize_content_for_code_line_compare(developer_content)
-            generated_normalized = _normalize_content_for_code_line_compare(generated_content)
+            developer_normalized = _normalize_content_for_code_line_compare(
+                developer_content
+            )
+            generated_normalized = _normalize_content_for_code_line_compare(
+                generated_content
+            )
 
             if developer_normalized != generated_normalized:
                 mismatched_files.append(rel_path)
@@ -563,7 +643,9 @@ def save_pipeline_log(project, patch_id, phase_name, log_content):
     return log_file
 
 
-def _extract_transition_eval_from_outputs(phase_outputs: dict[str, Any]) -> dict[str, Any] | None:
+def _extract_transition_eval_from_outputs(
+    phase_outputs: dict[str, Any],
+) -> dict[str, Any] | None:
     phase0_eval = (
         phase_outputs.get("phase0", {})
         .get("phase_0_optimistic", {})
@@ -592,7 +674,9 @@ def _extract_transition_eval_from_outputs(phase_outputs: dict[str, Any]) -> dict
     )
 
 
-def _build_transition_summary_markdown(transition_eval: dict[str, Any] | None, source_label: str) -> str:
+def _build_transition_summary_markdown(
+    transition_eval: dict[str, Any] | None, source_label: str
+) -> str:
     if not transition_eval:
         return "# Transition Summary\n\nNo transition evaluation available.\n"
 
@@ -643,20 +727,28 @@ async def run_full_pipeline(
             return results
 
         print(f"[{project}/{patch_id}] Generating mainline patch...")
-        patch_path, patch_output = generate_mainline_patch(mainline_commit, mainline_repo_path)
+        patch_path, patch_output = generate_mainline_patch(
+            mainline_commit, mainline_repo_path
+        )
         if not patch_path:
             results["patch_generation_error"] = patch_output
             return results
 
-        developer_patch_diff, patch_err = generate_developer_backport_patch(backport_commit, target_repo_path)
+        developer_patch_diff, patch_err = generate_developer_backport_patch(
+            backport_commit, target_repo_path
+        )
         if patch_err:
             results["developer_patch_error"] = patch_err
             return results
 
         analyzer = PatchAnalyzer()
         full_patch_analysis = analyzer.analyze(patch_output, with_test_changes=True)
-        java_only_patch_analysis = [fc for fc in full_patch_analysis if _is_java_code_file(fc.file_path)]
-        developer_aux_hunks = _build_auxiliary_hunks_from_developer_patch(developer_patch_diff)
+        java_only_patch_analysis = [
+            fc for fc in full_patch_analysis if _is_java_code_file(fc.file_path)
+        ]
+        developer_aux_hunks = _build_auxiliary_hunks_from_developer_patch(
+            developer_patch_diff
+        )
 
         save_pipeline_log(
             project,
@@ -693,10 +785,16 @@ async def run_full_pipeline(
         phase0_cache = _load_phase0_cache(project, backport_commit, mainline_commit)
         phase0_cache_transition = None
         if phase0_cache:
-            print(f"[{project}/{patch_id}] Found cached Phase 0 results. Skipping Phase 0 and reusing baseline test state.")
+            print(
+                f"[{project}/{patch_id}] Found cached Phase 0 results. Skipping Phase 0 and reusing baseline test state."
+            )
             inputs["skip_phase_0"] = True
-            inputs["phase_0_test_targets"] = phase0_cache.get("phase_0_test_targets", {})
-            inputs["phase_0_baseline_test_result"] = phase0_cache.get("phase_0_baseline_test_result", {})
+            inputs["phase_0_test_targets"] = phase0_cache.get(
+                "phase_0_test_targets", {}
+            )
+            inputs["phase_0_baseline_test_result"] = phase0_cache.get(
+                "phase_0_baseline_test_result", {}
+            )
             phase0_cache_transition = phase0_cache.get("phase_0_transition_evaluation")
             phase0_cached_success = bool(phase0_cache.get("fast_path_success", False))
             save_pipeline_log(
@@ -710,12 +808,16 @@ async def run_full_pipeline(
             )
 
             if phase0_cached_success:
-                print(f"[{project}/{patch_id}] Cached Phase 0 fast-path success. Skipping agentic workflow.")
+                print(
+                    f"[{project}/{patch_id}] Cached Phase 0 fast-path success. Skipping agentic workflow."
+                )
                 save_pipeline_log(
                     project,
                     patch_id,
                     "transition_summary",
-                    _build_transition_summary_markdown(phase0_cache_transition, "phase0_cache"),
+                    _build_transition_summary_markdown(
+                        phase0_cache_transition, "phase0_cache"
+                    ),
                 )
 
                 results["phases"] = {
@@ -723,9 +825,15 @@ async def run_full_pipeline(
                         "phase_0_optimistic": {
                             "outputs": {
                                 "fast_path_success": True,
-                                "phase_0_test_targets": phase0_cache.get("phase_0_test_targets", {}),
-                                "phase_0_baseline_test_result": phase0_cache.get("phase_0_baseline_test_result", {}),
-                                "phase_0_post_patch_test_result": phase0_cache.get("phase_0_post_patch_test_result", {}),
+                                "phase_0_test_targets": phase0_cache.get(
+                                    "phase_0_test_targets", {}
+                                ),
+                                "phase_0_baseline_test_result": phase0_cache.get(
+                                    "phase_0_baseline_test_result", {}
+                                ),
+                                "phase_0_post_patch_test_result": phase0_cache.get(
+                                    "phase_0_post_patch_test_result", {}
+                                ),
                                 "phase_0_transition_evaluation": phase0_cache_transition,
                             }
                         }
@@ -743,11 +851,15 @@ async def run_full_pipeline(
                     "reason": "Skipped: cached Phase 0 fast-path success.",
                 }
 
-                results_file = os.path.join(RESULTS_DIR, project, patch_id, "pipeline_results.json")
+                results_file = os.path.join(
+                    RESULTS_DIR, project, patch_id, "pipeline_results.json"
+                )
                 with open(results_file, "w", encoding="utf-8") as f:
                     json.dump(results, f, indent=2, default=str)
 
-                print(f"[{project}/{patch_id}] Completed from cache without agentic workflow.")
+                print(
+                    f"[{project}/{patch_id}] Completed from cache without agentic workflow."
+                )
                 return results
 
         print(f"[{project}/{patch_id}] Running full workflow graph...")
@@ -759,8 +871,13 @@ async def run_full_pipeline(
             for node_name, node_output in output.items():
                 print(f"  Completed: {node_name}")
 
-                if isinstance(node_output, dict) and "adapted_code_hunks" in node_output:
-                    latest_adapted_code_hunks = node_output.get("adapted_code_hunks") or []
+                if (
+                    isinstance(node_output, dict)
+                    and "adapted_code_hunks" in node_output
+                ):
+                    latest_adapted_code_hunks = (
+                        node_output.get("adapted_code_hunks") or []
+                    )
 
                 if node_name in ["phase_0_optimistic"]:
                     current_phase = "phase0"
@@ -786,11 +903,19 @@ async def run_full_pipeline(
                         phase_data["outputs"][key] = value
 
                 if current_phase:
-                    save_agent_state(project, patch_id, current_phase, phase_data["outputs"], node_name)
+                    save_agent_state(
+                        project,
+                        patch_id,
+                        current_phase,
+                        phase_data["outputs"],
+                        node_name,
+                    )
                     phase_outputs[current_phase][node_name] = phase_data
 
         # Full comparison input: Java hunks generated by agents + developer-owned auxiliary hunks.
-        final_adapted_code_hunks = latest_adapted_code_hunks + (developer_aux_hunks or [])
+        final_adapted_code_hunks = latest_adapted_code_hunks + (
+            developer_aux_hunks or []
+        )
 
         comparison = compare_generated_with_developer_patch(
             adapted_code_hunks=final_adapted_code_hunks,
@@ -820,7 +945,9 @@ async def run_full_pipeline(
             f"- Mismatched files: {comparison.get('mismatched_files', [])}\n"
             f"- Error: {comparison.get('error')}\n\n"
             "## Hunk-by-Hunk Comparison\n\n"
-            + _build_hunk_comparison_markdown(final_adapted_code_hunks, developer_patch_diff, analyzer)
+            + _build_hunk_comparison_markdown(
+                final_adapted_code_hunks, developer_patch_diff, analyzer
+            )
             + "\n## Full Generated Patch (code-only)\n"
             f"```diff\n{comparison['generated_patch_diff']}\n```\n"
             "## Full Developer Backport Patch (full commit diff)\n"
@@ -843,7 +970,9 @@ async def run_full_pipeline(
         results["phases"] = dict(phase_outputs)
         results["status"] = "completed"
 
-        results_file = os.path.join(RESULTS_DIR, project, patch_id, "pipeline_results.json")
+        results_file = os.path.join(
+            RESULTS_DIR, project, patch_id, "pipeline_results.json"
+        )
         with open(results_file, "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2, default=str)
 
@@ -916,8 +1045,14 @@ async def main():
         print(f"[{project}/{patch_id}] Cleaning repositories...")
         for repo_path in [mainline_repo_path, target_repo_path]:
             if os.path.exists(repo_path):
-                subprocess.run(["git", "reset", "--hard", "HEAD"], cwd=repo_path, capture_output=True)
-                subprocess.run(["git", "clean", "-fd"], cwd=repo_path, capture_output=True)
+                subprocess.run(
+                    ["git", "reset", "--hard", "HEAD"],
+                    cwd=repo_path,
+                    capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "clean", "-fd"], cwd=repo_path, capture_output=True
+                )
 
         if not os.path.exists(mainline_repo_path):
             print(f"  ERROR: Repository not found at {mainline_repo_path}")

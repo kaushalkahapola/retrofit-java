@@ -120,11 +120,12 @@ Does the generated hunk correctly implement the fix logic? Answer YES or NO."""
 # Helper Functions
 # ---------------------------------------------------------------------------
 
+
 def _extract_hunk_block(raw: str) -> str | None:
     """
     Extracts the first unified diff hunk (@@-prefixed block) from an LLM response.
     Strips markdown fences if present. Returns None if no valid hunk found.
-    
+
     Important: Preserves all context lines and trailing whitespace needed for a valid patch.
     """
     if not raw:
@@ -259,7 +260,7 @@ def _adjust_hunk_header(hunk_text: str, target_start_line: int) -> str:
     removed_count = 0
     added_count = 0
     context_count = 0
-    
+
     for line in lines[1:]:
         if line.startswith("-"):
             removed_count += 1
@@ -268,18 +269,20 @@ def _adjust_hunk_header(hunk_text: str, target_start_line: int) -> str:
         elif line.startswith(" "):
             context_count += 1
         # Empty lines within the hunk body (just "") are part of the hunk, skip trailing empty
-    
+
     # Calculate the correct counts
     src_count = context_count + removed_count
     tgt_count = context_count + added_count
-    
+
     # Handle edge case: if counts are 0, default to 1
     if src_count == 0:
         src_count = 1
     if tgt_count == 0:
         tgt_count = 1
 
-    new_header = f"@@ -{target_start_line},{src_count} +{target_start_line},{tgt_count} @@{ctx}"
+    new_header = (
+        f"@@ -{target_start_line},{src_count} +{target_start_line},{tgt_count} @@{ctx}"
+    )
     return "\n".join([new_header] + lines[1:]) + "\n"
 
 
@@ -321,7 +324,7 @@ def _is_import_only_hunk(hunk_text: str) -> bool:
     lines = hunk_text.splitlines()
     if not lines or not lines[0].startswith("@@"):
         return False
-    
+
     # Check if all non-header, non-whitespace lines are import statements or empty
     for line in lines[1:]:
         stripped = line.lstrip()
@@ -330,10 +333,14 @@ def _is_import_only_hunk(hunk_text: str) -> bool:
         if stripped.startswith("//"):  # comment
             continue
         # Check if line is an import statement (in any of +, -, or space formats)
-        content = stripped[1:].strip() if len(stripped) > 1 and stripped[0] in {'+', '-', ' '} else stripped
+        content = (
+            stripped[1:].strip()
+            if len(stripped) > 1 and stripped[0] in {"+", "-", " "}
+            else stripped
+        )
         if content and not content.startswith("import "):
             return False
-    
+
     return True
 
 
@@ -344,16 +351,16 @@ def _extract_imports_from_body(target_body: str) -> str:
     """
     if not target_body:
         return "(No imports found in target context)"
-    
+
     imports = []
     for line in target_body.splitlines():
         stripped = line.strip()
         if stripped.startswith("import "):
             imports.append(stripped)
-    
+
     if not imports:
         return "(No imports found in target context)"
-    
+
     return "Existing imports:\n- " + "\n- ".join(imports)
 
 
@@ -478,7 +485,9 @@ def _infer_target_directory_from_siblings(
             sibling_rel = _normalize_rel_path(os.path.join(parent, name))
             if sibling_rel == file_path:
                 continue
-            mapped = _find_candidate_target_path(retriever, sibling_rel, original_commit)
+            mapped = _find_candidate_target_path(
+                retriever, sibling_rel, original_commit
+            )
             if mapped:
                 sibling_dirs.append(os.path.dirname(mapped))
             if len(sibling_dirs) >= 3:
@@ -531,7 +540,9 @@ def _resolve_operation_plan(
                 original_commit=original_commit,
             )
             if inferred_dir:
-                target_file = _normalize_rel_path(os.path.join(inferred_dir, os.path.basename(mainline_file)))
+                target_file = _normalize_rel_path(
+                    os.path.join(inferred_dir, os.path.basename(mainline_file))
+                )
                 plan["reason"] = "added_file_sibling_directory_inference"
 
         existing_match = resolve_existing(target_file)
@@ -587,7 +598,9 @@ def _resolve_operation_plan(
                 original_commit=original_commit,
             )
             if inferred_dir:
-                new_target = _normalize_rel_path(os.path.join(inferred_dir, os.path.basename(new_target)))
+                new_target = _normalize_rel_path(
+                    os.path.join(inferred_dir, os.path.basename(new_target))
+                )
 
         existing_new = resolve_existing(new_target)
         if existing_new:
@@ -640,6 +653,7 @@ def _resolve_operation_plan(
 # Core Agent Node
 # ---------------------------------------------------------------------------
 
+
 async def hunk_generator_node(state: AgentState, config) -> dict:
     """
     Agent 3 node function.
@@ -665,7 +679,9 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     original_commit: str = state.get("original_commit", "HEAD")
     validation_attempts: int = state.get("validation_attempts") or 0
     error_context: str = state.get("validation_error_context") or ""
+    retry_files_raw = state.get("validation_retry_files") or []
     with_test_changes: bool = state.get("with_test_changes", False)
+    retry_files = {_normalize_rel_path(p) for p in retry_files_raw if p}
 
     if not semantic_blueprint:
         msg = "Agent 3 Error: No semantic_blueprint in state. Agents 1 & 2 must run first."
@@ -680,12 +696,20 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     # Retry feedback injection
     retry_context_str = ""
     if validation_attempts > 0 and error_context:
+        retry_files_note = (
+            f"Impacted files from previous validation: {sorted(retry_files)}\n"
+            if retry_files
+            else ""
+        )
         retry_context_str = (
             f"## RETRY #{validation_attempts} — Previous Validation Failed\n"
             f"```\n{error_context[:600]}\n```\n"
+            f"{retry_files_note}"
             f"Adjust the hunk to fix the above error.\n"
         )
-        print(f"  Agent 3: Retry #{validation_attempts} — injecting validation error into prompts.")
+        print(
+            f"  Agent 3: Retry #{validation_attempts} — injecting validation error into prompts."
+        )
 
     # ------------------------------------------------------------------
     # Setup tools
@@ -694,15 +718,27 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     llm = get_llm(temperature=0)
 
     analyzer = PatchAnalyzer()
-    raw_hunks_by_file = analyzer.extract_raw_hunks(patch_diff, with_test_changes=with_test_changes) if patch_diff else {}
-    file_only_ops = analyzer.extract_file_only_operations(patch_diff, with_test_changes=with_test_changes) if patch_diff else []
+    raw_hunks_by_file = (
+        analyzer.extract_raw_hunks(patch_diff, with_test_changes=with_test_changes)
+        if patch_diff
+        else {}
+    )
+    file_only_ops = (
+        analyzer.extract_file_only_operations(
+            patch_diff, with_test_changes=with_test_changes
+        )
+        if patch_diff
+        else []
+    )
     toolkit = ValidationToolkit(target_repo_path) if target_repo_path else None
     retriever = None
     if target_repo_path and mainline_repo_path:
         try:
             retriever = EnsembleRetriever(mainline_repo_path, target_repo_path)
         except Exception as e:
-            print(f"  Agent 3: Warning — retriever unavailable for file-op mapping: {e}")
+            print(
+                f"  Agent 3: Warning — retriever unavailable for file-op mapping: {e}"
+            )
 
     fix_logic = semantic_blueprint.get("fix_logic", "")
     dependent_apis = semantic_blueprint.get("dependent_apis", [])
@@ -712,28 +748,50 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     # ------------------------------------------------------------------
     # Segregate changes
     # ------------------------------------------------------------------
-    code_changes = [fc for fc in patch_analysis
-                    if not (fc.is_test_file if hasattr(fc, "is_test_file") else fc.get("is_test_file", False))]
-    test_changes = [fc for fc in patch_analysis
-                    if (fc.is_test_file if hasattr(fc, "is_test_file") else fc.get("is_test_file", False))]
-    
+    code_changes = [
+        fc
+        for fc in patch_analysis
+        if not (
+            fc.is_test_file
+            if hasattr(fc, "is_test_file")
+            else fc.get("is_test_file", False)
+        )
+    ]
+    test_changes = [
+        fc
+        for fc in patch_analysis
+        if (
+            fc.is_test_file
+            if hasattr(fc, "is_test_file")
+            else fc.get("is_test_file", False)
+        )
+    ]
+
     # Filter test changes based on with_test_changes flag
     if not with_test_changes:
         test_changes = []
 
-    print(f"  Agent 3: {len(code_changes)} code file(s), {len(test_changes)} test file(s) to process.")
+    print(
+        f"  Agent 3: {len(code_changes)} code file(s), {len(test_changes)} test file(s) to process."
+    )
 
     # --- Early Exit: If Agent 2 produced no mappings and we're on a retry, abort ---
     # If there are code files but no mapped context, and this is a retry, don't loop endlessly.
     if code_changes and not mapped_target_context and validation_attempts > 0:
-        print(f"  Agent 3: Aborting retry — Agent 2 has no target context and retrying won't help.")
+        print(
+            f"  Agent 3: Aborting retry — Agent 2 has no target context and retrying won't help."
+        )
         return {
-            "messages": [HumanMessage(content="Agent 3: No target context from Agent 2. Cannot proceed.")],
+            "messages": [
+                HumanMessage(
+                    content="Agent 3: No target context from Agent 2. Cannot proceed."
+                )
+            ],
             "adapted_code_hunks": [],
             "adapted_test_hunks": [],
             "validation_passed": False,  # Signal validation failure to exit loop
             "validation_attempts": validation_attempts,
-            "validation_error_context": "Agent 3 Early Exit: Agent 2 failed to map files. No source context available for hunk generation."
+            "validation_error_context": "Agent 3 Early Exit: Agent 2 failed to map files. No source context available for hunk generation.",
         }
 
     adapted_code_hunks: list[AdaptedHunk] = []
@@ -745,8 +803,16 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     # Code hunk processing
     # ------------------------------------------------------------------
     for change in code_changes:
-        mainline_file = change.file_path if hasattr(change, "file_path") else change.get("file_path", "?")
-        change_type = change.change_type if hasattr(change, "change_type") else change.get("change_type", "MODIFIED")
+        mainline_file = (
+            change.file_path
+            if hasattr(change, "file_path")
+            else change.get("file_path", "?")
+        )
+        change_type = (
+            change.change_type
+            if hasattr(change, "change_type")
+            else change.get("change_type", "MODIFIED")
+        )
         previous_mainline_file = (
             change.previous_file_path
             if hasattr(change, "previous_file_path")
@@ -762,7 +828,9 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             original_commit=original_commit,
         )
 
-        if not op_plan.get("operation_required", True) and not raw_hunks_by_file.get(mainline_file, []):
+        if not op_plan.get("operation_required", True) and not raw_hunks_by_file.get(
+            mainline_file, []
+        ):
             print(
                 f"  Agent 3: Skipping {change_type} for {mainline_file} "
                 f"(reason={op_plan.get('reason')})"
@@ -772,17 +840,37 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
         mapped_ctx_list = mapped_target_context.get(mainline_file, [])
         raw_hunks = raw_hunks_by_file.get(mainline_file, [])
 
+        if retry_files:
+            candidate_paths = {
+                _normalize_rel_path(mainline_file),
+                _normalize_rel_path(op_plan.get("target_file") or ""),
+            }
+            if mapped_ctx_list:
+                candidate_paths.add(
+                    _normalize_rel_path(
+                        (mapped_ctx_list[0] or {}).get("target_file", "")
+                    )
+                )
+            if not any(p for p in candidate_paths if p in retry_files):
+                continue
+
         if not mapped_ctx_list:
-            print(f"  Agent 3: Skipping {mainline_file} — no target context from Agent 2.")
+            print(
+                f"  Agent 3: Skipping {mainline_file} — no target context from Agent 2."
+            )
             continue
 
-        print(f"  Agent 3: Processing {len(raw_hunks)} hunk(s) for {mainline_file} with {len(mapped_ctx_list)} mapping(s)")
+        print(
+            f"  Agent 3: Processing {len(raw_hunks)} hunk(s) for {mainline_file} with {len(mapped_ctx_list)} mapping(s)"
+        )
 
         for hunk_idx, raw_hunk in enumerate(raw_hunks):
             # Get the mapping for this hunk (or reuse first one if not enough mappings)
             mapped_ctx = mapped_ctx_list[min(hunk_idx, len(mapped_ctx_list) - 1)]
-            
-            target_file = _normalize_rel_path(mapped_ctx.get("target_file", mainline_file))
+
+            target_file = _normalize_rel_path(
+                mapped_ctx.get("target_file", mainline_file)
+            )
             planned_target_file = op_plan.get("target_file")
             if planned_target_file:
                 target_file = planned_target_file
@@ -791,27 +879,34 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             raw_start_line = _extract_target_start_line(raw_hunk)
             target_method = (mapped_ctx.get("target_method") or "").strip().lower()
             mainline_method = (mapped_ctx.get("mainline_method") or "").strip().lower()
-            is_declaration_or_class_hunk = (
-                target_method in {"<import>", "<class_declaration>"}
-                or mainline_method.startswith("<")
-            )
-            
+            is_declaration_or_class_hunk = target_method in {
+                "<import>",
+                "<class_declaration>",
+            } or mainline_method.startswith("<")
+
             # IMPROVEMENT: If insertion_line is None, try to extract from raw hunk header
             if insertion_line is None:
                 try:
                     # Parse @@ -X,Y +A,B @@ to get actual line numbers
-                    hunk_header_match = re.search(r'@@ -\d+(?:,\d+)? \+(\d+)', raw_hunk)
+                    hunk_header_match = re.search(r"@@ -\d+(?:,\d+)? \+(\d+)", raw_hunk)
                     if hunk_header_match:
                         insertion_line = int(hunk_header_match.group(1))
-                        print(f"  Agent 3: Extracted insertion_line {insertion_line} from hunk {hunk_idx} header")
+                        print(
+                            f"  Agent 3: Extracted insertion_line {insertion_line} from hunk {hunk_idx} header"
+                        )
                 except Exception as e:
-                    print(f"  Agent 3: Could not extract insertion_line from hunk {hunk_idx}: {e}")
+                    print(
+                        f"  Agent 3: Could not extract insertion_line from hunk {hunk_idx}: {e}"
+                    )
 
             # Declaration/class-level mappings often return coarse line anchors (e.g., 1).
             # Prefer raw hunk header anchor in those cases.
-            if raw_start_line and (is_declaration_or_class_hunk or (isinstance(insertion_line, int) and insertion_line <= 1)):
+            if raw_start_line and (
+                is_declaration_or_class_hunk
+                or (isinstance(insertion_line, int) and insertion_line <= 1)
+            ):
                 insertion_line = raw_start_line
-            
+
             # Default fallback
             insertion_line = insertion_line or 1
 
@@ -822,7 +917,9 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             # Import statements are fragile and LLM tends to duplicate existing imports
             if _is_import_only_hunk(raw_hunk):
                 adapted_hunk_text = _adjust_hunk_header(pre_rewritten, insertion_line)
-                print(f"    Agent 3: Skipped LLM rewrite for import-only hunk {hunk_idx}")
+                print(
+                    f"    Agent 3: Skipped LLM rewrite for import-only hunk {hunk_idx}"
+                )
             else:
                 # LLM rewrite (up to 2 attempts) for non-import hunks
                 adapted_hunk_text = None
@@ -844,25 +941,43 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         retry_context=retry_context_str,
                     )
                     try:
-                        response = await llm.ainvoke([
-                            SystemMessage(content=_HUNK_REWRITE_SYSTEM),
-                            HumanMessage(content=prompt),
-                        ])
-                        raw_content = response.content if hasattr(response, "content") else str(response)
+                        response = await llm.ainvoke(
+                            [
+                                SystemMessage(content=_HUNK_REWRITE_SYSTEM),
+                                HumanMessage(content=prompt),
+                            ]
+                        )
+                        raw_content = (
+                            response.content
+                            if hasattr(response, "content")
+                            else str(response)
+                        )
                         extracted = _extract_hunk_block(raw_content)
                         if extracted:
                             # Preserve original diff structure and allow model to vary only '+' lines.
-                            stabilized = _stabilize_hunk_structure(pre_rewritten, extracted)
-                            adapted_hunk_text = _adjust_hunk_header(stabilized, insertion_line)
+                            stabilized = _stabilize_hunk_structure(
+                                pre_rewritten, extracted
+                            )
+                            adapted_hunk_text = _adjust_hunk_header(
+                                stabilized, insertion_line
+                            )
                             break
-                        print(f"    Agent 3: Hunk parse failed (attempt {attempt+1}/2)")
+                        print(
+                            f"    Agent 3: Hunk parse failed (attempt {attempt + 1}/2)"
+                        )
                     except Exception as e:
-                        print(f"    Agent 3: LLM error on hunk {hunk_idx} (attempt {attempt+1}/2): {e}")
+                        print(
+                            f"    Agent 3: LLM error on hunk {hunk_idx} (attempt {attempt + 1}/2): {e}"
+                        )
 
                 if not adapted_hunk_text:
                     # Fallback: use the deterministic pre-rewrite with adjusted header
-                    adapted_hunk_text = _adjust_hunk_header(pre_rewritten, insertion_line)
-                    print(f"    Agent 3: Fallback — using deterministic pre-rewrite for hunk {hunk_idx}")
+                    adapted_hunk_text = _adjust_hunk_header(
+                        pre_rewritten, insertion_line
+                    )
+                    print(
+                        f"    Agent 3: Fallback — using deterministic pre-rewrite for hunk {hunk_idx}"
+                    )
 
             # Dry-run validation
             dry_run_ok = False
@@ -870,14 +985,18 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 dr = toolkit.apply_hunk_dry_run(target_file, adapted_hunk_text)
                 dry_run_ok = dr["success"]
                 if not dry_run_ok:
-                    print(f"    Agent 3: Dry-run failed for {target_file}[{hunk_idx}]: {dr['output'][:150]}")
+                    print(
+                        f"    Agent 3: Dry-run failed for {target_file}[{hunk_idx}]: {dr['output'][:150]}"
+                    )
             else:
                 dry_run_ok = True  # No toolkit → assume ok (local dev mode)
 
             # Blueprint intent check
             intent_ok = await _check_intent(llm, adapted_hunk_text, semantic_blueprint)
             if not intent_ok:
-                print(f"    Agent 3: Blueprint check failed for {target_file}[{hunk_idx}] — flagging.")
+                print(
+                    f"    Agent 3: Blueprint check failed for {target_file}[{hunk_idx}] — flagging."
+                )
 
             hunk: AdaptedHunk = {
                 "target_file": target_file,
@@ -900,25 +1019,39 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     # Test hunk processing
     # ------------------------------------------------------------------
     for change in test_changes:
-        mainline_test = change.file_path if hasattr(change, "file_path") else change.get("file_path", "?")
-        change_type = change.change_type if hasattr(change, "change_type") else change.get("change_type", "MODIFIED")
+        mainline_test = (
+            change.file_path
+            if hasattr(change, "file_path")
+            else change.get("file_path", "?")
+        )
+        change_type = (
+            change.change_type
+            if hasattr(change, "change_type")
+            else change.get("change_type", "MODIFIED")
+        )
         # Get list of mappings for this test file
         mapped_ctx_list = mapped_target_context.get(mainline_test, [])
         raw_hunks = raw_hunks_by_file.get(mainline_test, [])
 
         if not mapped_ctx_list:
-            print(f"  Agent 3: Skipping test {mainline_test} — no target test file (Agent 4 will synthesize).")
+            print(
+                f"  Agent 3: Skipping test {mainline_test} — no target test file (Agent 4 will synthesize)."
+            )
             continue
 
         # For test files, typically only one mapping
         mapped_ctx = mapped_ctx_list[0]
         target_test_file = mapped_ctx.get("target_file")
-        
+
         if not target_test_file:
-            print(f"  Agent 3: Skipping test {mainline_test} — target test file is null (Agent 4 will synthesize).")
+            print(
+                f"  Agent 3: Skipping test {mainline_test} — target test file is null (Agent 4 will synthesize)."
+            )
             continue
 
-        print(f"  Agent 3: Rewriting {len(raw_hunks)} test hunk(s) for {mainline_test} → {target_test_file}")
+        print(
+            f"  Agent 3: Rewriting {len(raw_hunks)} test hunk(s) for {mainline_test} → {target_test_file}"
+        )
 
         for hunk_idx, raw_hunk in enumerate(raw_hunks):
             pre_rewritten = _rewrite_hunk_symbols(raw_hunk, consistency_map)
@@ -933,18 +1066,28 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     retry_context=retry_context_str,
                 )
                 try:
-                    response = await llm.ainvoke([
-                        SystemMessage(content=_HUNK_REWRITE_SYSTEM),
-                        HumanMessage(content=prompt),
-                    ])
-                    raw_content = response.content if hasattr(response, "content") else str(response)
+                    response = await llm.ainvoke(
+                        [
+                            SystemMessage(content=_HUNK_REWRITE_SYSTEM),
+                            HumanMessage(content=prompt),
+                        ]
+                    )
+                    raw_content = (
+                        response.content
+                        if hasattr(response, "content")
+                        else str(response)
+                    )
                     extracted = _extract_hunk_block(raw_content)
                     if extracted:
                         adapted_hunk_text = extracted
                         break
-                    print(f"    Agent 3: Test hunk parse failed (attempt {attempt+1}/2)")
+                    print(
+                        f"    Agent 3: Test hunk parse failed (attempt {attempt + 1}/2)"
+                    )
                 except Exception as e:
-                    print(f"    Agent 3: LLM error on test hunk {hunk_idx} (attempt {attempt+1}/2): {e}")
+                    print(
+                        f"    Agent 3: LLM error on test hunk {hunk_idx} (attempt {attempt + 1}/2): {e}"
+                    )
 
             if not adapted_hunk_text:
                 adapted_hunk_text = pre_rewritten
@@ -1004,7 +1147,8 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
         # Create a minimal AdaptedHunk for structural operations
         # These have no hunk_text since they're metadata-only
         hunk: AdaptedHunk = {
-            "target_file": op_plan.get("target_file") or (new_path if change_type == "RENAMED" else file_path),
+            "target_file": op_plan.get("target_file")
+            or (new_path if change_type == "RENAMED" else file_path),
             "mainline_file": file_path,
             "hunk_text": "",  # No hunks for structural operations
             "insertion_line": 0,
@@ -1020,10 +1164,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
         else:
             adapted_code_hunks.append(hunk)
 
-        trace += (
-            f"| `{hunk['target_file']}` "
-            f"({hunk['file_operation']}) | — | — | — |\n"
-        )
+        trace += f"| `{hunk['target_file']}` ({hunk['file_operation']}) | — | — | — |\n"
         print(
             f"  Agent 3: Added {hunk['file_operation']} operation for {file_path} "
             f"(target={hunk['target_file']}, reason={hunk.get('path_resolution_reason')})"

@@ -41,39 +41,43 @@ def _clean_spotbugs_output(output: str) -> str:
     """
     if not output:
         return output
-    
-    lines = output.split('\n')
+
+    lines = output.split("\n")
     cleaned_lines = []
     in_missing_section = False
-    
+
     for line in lines:
         # Detect start of "missing classes" section
         if "The following classes needed for analysis were missing:" in line:
             in_missing_section = True
             continue
-        
+
         # Skip lines in missing classes section
         if in_missing_section:
             # End of missing section when we hit an empty line or a bug finding
-            if not line.strip() or re.match(r'^[HML]\s+[A-Z]', line):
+            if not line.strip() or re.match(r"^[HML]\s+[A-Z]", line):
                 in_missing_section = False
                 if not line.strip():
                     continue
             else:
                 continue
-        
+
         # Keep bug findings and summary lines
-        if re.match(r'^[HML]\s+[A-Z]', line) or not line.strip():
+        if re.match(r"^[HML]\s+[A-Z]", line) or not line.strip():
             cleaned_lines.append(line)
-    
-    result = '\n'.join(cleaned_lines)
-    
+
+    result = "\n".join(cleaned_lines)
+
     # Truncate if still too long (keep first and last findings)
     if len(result) > 5000:
-        parts = result.split('\n\n')
+        parts = result.split("\n\n")
         if len(parts) > 10:
-            result = '\n\n'.join(parts[:5]) + '\n\n...[TRUNCATED]...\n\n' + '\n\n'.join(parts[-5:])
-    
+            result = (
+                "\n\n".join(parts[:5])
+                + "\n\n...[TRUNCATED]...\n\n"
+                + "\n\n".join(parts[-5:])
+            )
+
     return result.strip() if result.strip() else "SpotBugs completed with no findings."
 
 
@@ -87,6 +91,7 @@ class ValidationToolkit:
         if not result.get("success") or result.get("compile_error"):
             self.restore_repo_state()
             return result
+
     def __init__(self, target_repo_path: str):
         self.target_repo_path = target_repo_path
         self.client = get_client()
@@ -101,7 +106,9 @@ class ValidationToolkit:
         while head:
             head, _ = os.path.split(head)
             for build_file in ("pom.xml", "build.gradle", "build.gradle.kts"):
-                if os.path.exists(os.path.join(self.target_repo_path, head, build_file)):
+                if os.path.exists(
+                    os.path.join(self.target_repo_path, head, build_file)
+                ):
                     return head
         # Check root
         for build_file in ("pom.xml", "build.gradle", "build.gradle.kts"):
@@ -113,7 +120,9 @@ class ValidationToolkit:
         """Remove stale JUnit XML files so each run reflects only current execution."""
         try:
             for xml_path in glob.glob(
-                os.path.join(self.target_repo_path, "**", "surefire-reports", "TEST-*.xml"),
+                os.path.join(
+                    self.target_repo_path, "**", "surefire-reports", "TEST-*.xml"
+                ),
                 recursive=True,
             ):
                 try:
@@ -121,7 +130,9 @@ class ValidationToolkit:
                 except Exception:
                     pass
 
-            aggregate_dir = os.path.join(self.target_repo_path, "build", "all-test-results")
+            aggregate_dir = os.path.join(
+                self.target_repo_path, "build", "all-test-results"
+            )
             if os.path.isdir(aggregate_dir):
                 shutil.rmtree(aggregate_dir, ignore_errors=True)
         except Exception:
@@ -132,20 +143,31 @@ class ValidationToolkit:
         """Collect JUnit XML report file paths from common Maven/Gradle output locations."""
         paths = set(
             glob.glob(
-                os.path.join(self.target_repo_path, "**", "surefire-reports", "TEST-*.xml"),
+                os.path.join(
+                    self.target_repo_path, "**", "surefire-reports", "TEST-*.xml"
+                ),
                 recursive=True,
             )
         )
         paths.update(
             glob.glob(
-                os.path.join(self.target_repo_path, "build", "all-test-results", "TEST-*.xml"),
+                os.path.join(
+                    self.target_repo_path, "build", "all-test-results", "TEST-*.xml"
+                ),
                 recursive=True,
             )
         )
         # Gradle test results (Elasticsearch, Spring Framework, etc.)
         paths.update(
             glob.glob(
-                os.path.join(self.target_repo_path, "**", "build", "test-results", "**", "TEST-*.xml"),
+                os.path.join(
+                    self.target_repo_path,
+                    "**",
+                    "build",
+                    "test-results",
+                    "**",
+                    "TEST-*.xml",
+                ),
                 recursive=True,
             )
         )
@@ -160,15 +182,15 @@ class ValidationToolkit:
         console_output: str = "",
     ) -> Dict[str, Any] | None:
         root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        helper_script = os.path.join(root_dir, "evaluate", "helpers", "collect_test_results.py")
+        helper_script = os.path.join(
+            root_dir, "evaluate", "helpers", "collect_test_results.py"
+        )
         if not os.path.exists(helper_script):
             return None
 
         info = target_info or {}
         target_classes = [
-            t.split(":", 1)[1]
-            for t in (info.get("test_targets") or [])
-            if ":" in t
+            t.split(":", 1)[1] for t in (info.get("test_targets") or []) if ":" in t
         ]
         target_classes_arg = ",".join(sorted(set(target_classes)))
 
@@ -202,21 +224,23 @@ class ValidationToolkit:
         except json.JSONDecodeError:
             return None
 
-    def _extract_test_state(self, target_info: Optional[Dict[str, Any]] = None, console_output: str = "") -> Dict[str, Any]:
+    def _extract_test_state(
+        self, target_info: Optional[Dict[str, Any]] = None, console_output: str = ""
+    ) -> Dict[str, Any]:
         """
         Parse JUnit XML files and return test-case and class-level statuses.
 
         Status values: passed | failed | error | skipped
         """
-        helper_state = self._extract_test_state_with_project_helper(target_info=target_info, console_output=console_output)
+        helper_state = self._extract_test_state_with_project_helper(
+            target_info=target_info, console_output=console_output
+        )
         if helper_state is not None:
             return helper_state
 
         info = target_info or {}
         target_classes = {
-            t.split(":", 1)[1]
-            for t in (info.get("test_targets") or [])
-            if ":" in t
+            t.split(":", 1)[1] for t in (info.get("test_targets") or []) if ":" in t
         }
 
         xml_paths = self._collect_junit_xml_paths()
@@ -268,7 +292,9 @@ class ValidationToolkit:
             "classes": class_status,
             "summary": {
                 "passed": sum(1 for s in test_case_status.values() if s == "passed"),
-                "failed": sum(1 for s in test_case_status.values() if s in {"failed", "error"}),
+                "failed": sum(
+                    1 for s in test_case_status.values() if s in {"failed", "error"}
+                ),
                 "skipped": sum(1 for s in test_case_status.values() if s == "skipped"),
                 "total": len(test_case_status),
             },
@@ -337,20 +363,32 @@ class ValidationToolkit:
         return os.path.join(root_dir, "evaluate", "helpers", project.strip().lower())
 
     def _get_current_head(self) -> str:
-        res = self._run_cmd_capture(["git", "rev-parse", "--short", "HEAD"], cwd=self.target_repo_path)
+        res = self._run_cmd_capture(
+            ["git", "rev-parse", "--short", "HEAD"], cwd=self.target_repo_path
+        )
         if res.get("success"):
             return (res.get("output") or "worktree").strip().splitlines()[0]
         return "worktree"
 
-    def _ensure_project_builder_image(self, project: str) -> tuple[str | None, str | None]:
+    def _ensure_project_builder_image(
+        self, project: str
+    ) -> tuple[str | None, str | None]:
         helper_dir = self._get_project_helper_dir(project)
         dockerfile = os.path.join(helper_dir, "Dockerfile")
         if not os.path.exists(dockerfile):
-            return None, f"Helper Dockerfile not found for project {project}: {dockerfile}"
+            return (
+                None,
+                f"Helper Dockerfile not found for project {project}: {dockerfile}",
+            )
 
-        image_tag = os.getenv(f"{project.upper()}_BUILDER_IMAGE_TAG", f"retrofit-{project.lower()}-builder:local")
+        image_tag = os.getenv(
+            f"{project.upper()}_BUILDER_IMAGE_TAG",
+            f"retrofit-{project.lower()}-builder:local",
+        )
 
-        inspect_res = self._run_cmd_capture(["docker", "image", "inspect", image_tag], cwd=self.target_repo_path)
+        inspect_res = self._run_cmd_capture(
+            ["docker", "image", "inspect", image_tag], cwd=self.target_repo_path
+        )
         if inspect_res.get("success"):
             return image_tag, None
 
@@ -359,11 +397,16 @@ class ValidationToolkit:
             cwd=self.target_repo_path,
         )
         if not build_res.get("success"):
-            return None, f"Failed to build helper image for {project} ({image_tag}): {build_res.get('output', '')}"
+            return (
+                None,
+                f"Failed to build helper image for {project} ({image_tag}): {build_res.get('output', '')}",
+            )
 
         return image_tag, None
 
-    def _run_cmd_capture(self, cmd: List[str], cwd: Optional[str] = None, env: Optional[dict] = None) -> Dict[str, Any]:
+    def _run_cmd_capture(
+        self, cmd: List[str], cwd: Optional[str] = None, env: Optional[dict] = None
+    ) -> Dict[str, Any]:
         """Run a command and return success plus combined output."""
         try:
             result = subprocess.run(
@@ -433,7 +476,9 @@ class ValidationToolkit:
         except json.JSONDecodeError:
             parsed = {"error": f"Invalid helper JSON: {helper_res.get('output', '')}"}
 
-        test_targets = sorted(set((parsed.get("modified") or []) + (parsed.get("added") or [])))
+        test_targets = sorted(
+            set((parsed.get("modified") or []) + (parsed.get("added") or []))
+        )
         source_modules = sorted(set(parsed.get("source_modules") or []))
         all_modules = sorted(set(parsed.get("all_modules") or []))
 
@@ -444,21 +489,33 @@ class ValidationToolkit:
             "raw": parsed,
         }
 
-    def detect_relevant_test_targets_from_changed_files(self, changed_files: List[str]) -> Dict[str, Any]:
+    def detect_relevant_test_targets_from_changed_files(
+        self, changed_files: List[str]
+    ) -> Dict[str, Any]:
         """
         Infer relevant tests/modules directly from changed file paths.
         This avoids relying on worktree diff state during Phase 0 baseline runs.
         """
-        ignored_modules = {"web-console", "distribution", "docs", "examples", "benchmarks", "qa"}
+        ignored_modules = {
+            "web-console",
+            "distribution",
+            "docs",
+            "examples",
+            "benchmarks",
+            "qa",
+        }
 
         test_targets = set()
         source_modules = set()
         all_modules = set()
 
         test_source_sets = (
-            "/src/test/java/", "/src/internalClusterTest/java/", 
-            "/src/javaRestTest/java/", "/src/yamlRestTest/java/", 
-            "/src/integTest/java/", "/src/integrationTest/java/"
+            "/src/test/java/",
+            "/src/internalClusterTest/java/",
+            "/src/javaRestTest/java/",
+            "/src/yamlRestTest/java/",
+            "/src/integTest/java/",
+            "/src/integrationTest/java/",
         )
         test_suffixes = ("Test.java", "Tests.java", "IT.java", "TestCase.java")
 
@@ -474,18 +531,20 @@ class ValidationToolkit:
 
             if module_path:
                 all_modules.add(module_path)
-            
+
             if p.endswith(".java") and "src/main/java/" in p:
                 if module_path:
                     source_modules.add(module_path)
 
             # Support both XXXTest.java (Crate/Druid) and TestXXX.java (HBase) patterns
             filename = os.path.basename(p)
-            is_test_file = p.endswith(test_suffixes) or (filename.startswith("Test") and p.endswith(".java"))
-            
+            is_test_file = p.endswith(test_suffixes) or (
+                filename.startswith("Test") and p.endswith(".java")
+            )
+
             # Find the matching test directory
             matched_test_dir = next((td for td in test_source_sets if td in p), None)
-            
+
             if is_test_file and matched_test_dir:
                 try:
                     class_path = p.split(matched_test_dir, 1)[1]
@@ -498,10 +557,15 @@ class ValidationToolkit:
             "test_targets": sorted(test_targets),
             "source_modules": sorted(source_modules),
             "all_modules": sorted(all_modules),
-            "raw": {"source": "changed_files", "changed_files": sorted(set(changed_files or []))},
+            "raw": {
+                "source": "changed_files",
+                "changed_files": sorted(set(changed_files or [])),
+            },
         }
 
-    def run_relevant_tests(self, project: str = "", target_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def run_relevant_tests(
+        self, project: str = "", target_info: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Run relevant tests based on detected targets/modules.
 
@@ -533,11 +597,17 @@ class ValidationToolkit:
 
         self._clear_previous_junit_reports()
 
-        normalized_project = (project or "").strip().lower() or self._detect_project_name()
+        normalized_project = (
+            project or ""
+        ).strip().lower() or self._detect_project_name()
         if self._is_known_project_with_helper(normalized_project):
-            helper_script = os.path.join(self._get_project_helper_dir(normalized_project), "run_tests.sh")
+            helper_script = os.path.join(
+                self._get_project_helper_dir(normalized_project), "run_tests.sh"
+            )
             if os.path.exists(helper_script):
-                image_tag, image_err = self._ensure_project_builder_image(normalized_project)
+                image_tag, image_err = self._ensure_project_builder_image(
+                    normalized_project
+                )
                 if image_tag:
                     helper_env = os.environ.copy()
                     helper_env.update(
@@ -545,19 +615,30 @@ class ValidationToolkit:
                             "PROJECT_NAME": normalized_project,
                             "PROJECT_DIR": self.target_repo_path,
                             "BUILDER_IMAGE_TAG": image_tag,
-                            "IMAGE_TAG": image_tag, # For backward compatibility with some scripts
+                            "IMAGE_TAG": image_tag,  # For backward compatibility with some scripts
                             "COMMIT_SHA": self._get_current_head(),
                             "WORKTREE_MODE": "1",
-                            "TEST_TARGETS": " ".join(sorted(set(test_targets))) if test_targets else "NONE",
-                            "TEST_MODULES": ",".join(sorted(set(source_modules))) if source_modules else "",
+                            "TEST_TARGETS": " ".join(sorted(set(test_targets)))
+                            if test_targets
+                            else "NONE",
+                            "TEST_MODULES": ",".join(sorted(set(source_modules)))
+                            if source_modules
+                            else "",
                         }
                     )
-                    print(f"    Agent 4: Executing {normalized_project} helper test script: {helper_script}")
-                    result = self._run_cmd_capture(["bash", helper_script], cwd=self.target_repo_path, env=helper_env)
+                    print(
+                        f"    Agent 4: Executing {normalized_project} helper test script: {helper_script}"
+                    )
+                    result = self._run_cmd_capture(
+                        ["bash", helper_script],
+                        cwd=self.target_repo_path,
+                        env=helper_env,
+                    )
                     output_text = result.get("output", "")
                     return {
                         "success": bool(result.get("success")),
-                        "compile_error": (not bool(result.get("success"))) and ("compilation error" in output_text.lower()),
+                        "compile_error": (not bool(result.get("success")))
+                        and ("compilation error" in output_text.lower()),
                         "output": output_text,
                         "failed_tests": [],
                         "mode": f"{normalized_project}-helper-script",
@@ -565,7 +646,9 @@ class ValidationToolkit:
                         "test_state": self._extract_test_state(info, output_text),
                     }
                 else:
-                    print(f"    Agent 4 Warning: {normalized_project} helper image unavailable for tests. Falling back. Details: {image_err}")
+                    print(
+                        f"    Agent 4 Warning: {normalized_project} helper image unavailable for tests. Falling back. Details: {image_err}"
+                    )
 
         is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
         java_compat_args = ["-Djdk.security.manager.allow.argLine="]
@@ -595,8 +678,10 @@ class ValidationToolkit:
             module_list = sorted(module_set)
             if test_classes:
                 cmd = [
-                    "mvn", "test",
-                    "-pl", ",".join(module_list),
+                    "mvn",
+                    "test",
+                    "-pl",
+                    ",".join(module_list),
                     "-am",
                     f"-Dtest={','.join(sorted(set(test_classes)))}",
                     "-DfailIfNoTests=false",
@@ -609,8 +694,10 @@ class ValidationToolkit:
                 mode = "maven-targeted"
             else:
                 cmd = [
-                    "mvn", "test",
-                    "-pl", ",".join(module_list),
+                    "mvn",
+                    "test",
+                    "-pl",
+                    ",".join(module_list),
                     "-am",
                     "-DfailIfNoTests=false",
                     "-Dmaven.javadoc.skip=true",
@@ -631,7 +718,8 @@ class ValidationToolkit:
         output_text = cmd_res.get("output", "")
         return {
             "success": bool(cmd_res.get("success")),
-            "compile_error": (not bool(cmd_res.get("success"))) and ("compilation error" in output_text.lower()),
+            "compile_error": (not bool(cmd_res.get("success")))
+            and ("compilation error" in output_text.lower()),
             "output": output_text,
             "failed_tests": [],
             "mode": mode,
@@ -648,50 +736,57 @@ class ValidationToolkit:
         Compiles the specified files using the Analysis Engine's compile tool.
         If it fails, falls back to module-level Maven/Gradle compilation.
         """
-        res = self.client.call_tool("compile", {
-            "target_repo_path": self.target_repo_path,
-            "file_paths": file_paths
-        })
-        
+        res = self.client.call_tool(
+            "compile",
+            {"target_repo_path": self.target_repo_path, "file_paths": file_paths},
+        )
+
         # Check if successful (handle both success and status=success)
         is_success = res.get("success") or res.get("status") == "success"
         if is_success:
-            return {"success": True, "output": res.get("output", "Targeted compilation successful.")}
-        
+            return {
+                "success": True,
+                "output": res.get("output", "Targeted compilation successful."),
+            }
+
         # If targeted compile fails, try module-level compile
-        print(f"    Agent 4: Targeted compile failed, falling back to module-level build...")
-        
+        print(
+            f"    Agent 4: Targeted compile failed, falling back to module-level build..."
+        )
+
         # Deduce module by finding closest build file for each file
         modules = set()
         is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
-        
+
         for fp in file_paths:
             # Find the directory containing the closest build file
             current_dir = os.path.dirname(fp)
             build_file = "build.gradle" if is_gradle else "pom.xml"
-            
+
             found_module = None
             while current_dir and current_dir != "":
-                if os.path.exists(os.path.join(self.target_repo_path, current_dir, build_file)):
+                if os.path.exists(
+                    os.path.join(self.target_repo_path, current_dir, build_file)
+                ):
                     found_module = current_dir
                     break
                 parent = os.path.dirname(current_dir)
-                if parent == current_dir: # Root
+                if parent == current_dir:  # Root
                     break
                 current_dir = parent
-            
+
             if found_module:
                 modules.add(found_module)
-        
+
         java_compat_args = ["-Djdk.security.manager.allow.argLine="]
-        
+
         if not modules:
             # Fallback to root build
             return self.run_build_script()
-            
+
         is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
         java_compat_args = ["-Djdk.security.manager.allow.argLine="]
-        
+
         if is_gradle:
             # Gradle: pass all tasks together
             gradle_tasks = []
@@ -706,17 +801,29 @@ class ValidationToolkit:
             # Skip FMPP and other slow plugins that aren't needed for basic compilation check
             # Force Java 21 for SpotBugs compatibility (Java 25 not supported by SpotBugs)
             # Skip forbiddenapis, checkstyle, and pmd to avoid version-specific check failures
-            cmd = ["mvn", "test-compile", "-pl", mod_list, "-am", "-DskipTests", "-Dfmpp.skip=true",
-                   "-Dmaven.compiler.release=21", "-Dmaven.compiler.source=21", "-Dmaven.compiler.target=21",
-                   "-Dforbiddenapis.skip=true", "-Dcheckstyle.skip=true", "-Dpmd.skip=true"] + java_compat_args
-            
+            cmd = [
+                "mvn",
+                "test-compile",
+                "-pl",
+                mod_list,
+                "-am",
+                "-DskipTests",
+                "-Dfmpp.skip=true",
+                "-Dmaven.compiler.release=21",
+                "-Dmaven.compiler.source=21",
+                "-Dmaven.compiler.target=21",
+                "-Dforbiddenapis.skip=true",
+                "-Dcheckstyle.skip=true",
+                "-Dpmd.skip=true",
+            ] + java_compat_args
+
         print(f"    Agent 4: Executing fallback build: {' '.join(cmd)}")
         try:
             compile_env = os.environ.copy()
             resolved_java_home = _resolve_valid_java_home()
             if resolved_java_home:
                 compile_env["JAVA_HOME"] = resolved_java_home
-            
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -725,12 +832,13 @@ class ValidationToolkit:
                 env=compile_env,
             )
             if result.returncode == 0:
-                return {"success": True, "output": "Module-level compilation successful.", "modules": list(modules)}
-            else:
                 return {
-                    "success": False,
-                    "output": result.stderr or result.stdout
+                    "success": True,
+                    "output": "Module-level compilation successful.",
+                    "modules": list(modules),
                 }
+            else:
+                return {"success": False, "output": result.stderr or result.stdout}
         except Exception as e:
             return {"success": False, "output": str(e)}
 
@@ -745,18 +853,22 @@ class ValidationToolkit:
             if os.path.exists(cp):
                 class_paths.append(cp)
             # Check Gradle
-            cp = os.path.join(self.target_repo_path, mod, "build", "classes", "java", "main")
+            cp = os.path.join(
+                self.target_repo_path, mod, "build", "classes", "java", "main"
+            )
             if os.path.exists(cp):
                 class_paths.append(cp)
-        
+
         # Also check root just in case
         root_maven = os.path.join(self.target_repo_path, "target", "classes")
         if os.path.exists(root_maven) and root_maven not in class_paths:
             class_paths.append(root_maven)
-        root_gradle = os.path.join(self.target_repo_path, "build", "classes", "java", "main")
+        root_gradle = os.path.join(
+            self.target_repo_path, "build", "classes", "java", "main"
+        )
         if os.path.exists(root_gradle) and root_gradle not in class_paths:
             class_paths.append(root_gradle)
-            
+
         return class_paths
 
     def get_project_classpath(self) -> List[str]:
@@ -764,22 +876,37 @@ class ValidationToolkit:
         Retrieves the project's classpath using Maven or Gradle.
         """
         is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
-        
+
         if is_gradle:
-            # For Gradle, use the 'dependencies' or similar task. 
+            # For Gradle, use the 'dependencies' or similar task.
             # A more robust way is to use a custom gradle script snippet.
             # For now, let's try to get a basic classpath.
-            cmd = ["gradle", "properties", "-q"] # This is a placeholder; getting classpath from gradle is harder
+            cmd = [
+                "gradle",
+                "properties",
+                "-q",
+            ]  # This is a placeholder; getting classpath from gradle is harder
             # For brevity and since most targets are Maven, we'll return empty for Gradle for now
             # or try to find common jar locations.
             return []
         else:
             # Maven: use dependency:build-classpath
             tmp_cp = os.path.join(tempfile.gettempdir(), "retrofit_cp.txt")
-            cmd = ["mvn", "dependency:build-classpath", f"-Dmdep.outputFile={tmp_cp}", "-DskipTests"]
+            cmd = [
+                "mvn",
+                "dependency:build-classpath",
+                f"-Dmdep.outputFile={tmp_cp}",
+                "-DskipTests",
+            ]
             try:
                 print(f"    Agent 4: Calculating project classpath...")
-                subprocess.run(cmd, cwd=self.target_repo_path, capture_output=True, text=True, check=True)
+                subprocess.run(
+                    cmd,
+                    cwd=self.target_repo_path,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
                 if os.path.exists(tmp_cp):
                     with open(tmp_cp, "r") as f:
                         cp_string = f.read().strip()
@@ -789,7 +916,12 @@ class ValidationToolkit:
                 print(f"    Agent 4 Warning: Failed to get classpath: {e}")
         return []
 
-    def run_spotbugs(self, compiled_classes_paths: List[str], source_path: Optional[str] = None, target_files: List[str] = None) -> Dict[str, Any]:
+    def run_spotbugs(
+        self,
+        compiled_classes_paths: List[str],
+        source_path: Optional[str] = None,
+        target_files: List[str] = None,
+    ) -> Dict[str, Any]:
         """
         Runs SpotBugs using direct JAR invocation with Java 21.
         Requires JAVA_HOME to be set to Java 21.
@@ -804,10 +936,18 @@ class ValidationToolkit:
         if target_files:
             for f in target_files:
                 if "src/main/java/" in f:
-                    cls = f.split("src/main/java/")[1].replace(".java", "").replace("/", ".")
+                    cls = (
+                        f.split("src/main/java/")[1]
+                        .replace(".java", "")
+                        .replace("/", ".")
+                    )
                     class_names.append(cls)
                 elif "src/test/java/" in f:
-                    cls = f.split("src/test/java/")[1].replace(".java", "").replace("/", ".")
+                    cls = (
+                        f.split("src/test/java/")[1]
+                        .replace(".java", "")
+                        .replace("/", ".")
+                    )
                     class_names.append(cls)
 
         # Direct JAR Invocation with SpotBugs 4.9.3
@@ -816,21 +956,28 @@ class ValidationToolkit:
         resolved_java_home = _resolve_valid_java_home()
 
         if os.path.exists(spotbugs_jar):
-            print(f"    Agent 4: Executing SpotBugs via direct JAR invocation ({spotbugs_jar})...")
+            print(
+                f"    Agent 4: Executing SpotBugs via direct JAR invocation ({spotbugs_jar})..."
+            )
             aux_cp = self.get_project_classpath()
 
             # Build the command for SpotBugs 4.9.3+ using wildcard classpath for dependencies
             # Uses Java 21 from JAVA_21_HOME env variable
             spotbugs_dir = os.path.dirname(spotbugs_jar)
-            java_bin = os.path.join(resolved_java_home, "bin", "java") if resolved_java_home else "java"
+            java_bin = (
+                os.path.join(resolved_java_home, "bin", "java")
+                if resolved_java_home
+                else "java"
+            )
             cmd = [
                 java_bin if os.path.exists(java_bin) else "java",
-                "-cp", os.path.join(spotbugs_dir, "*"),
+                "-cp",
+                os.path.join(spotbugs_dir, "*"),
                 "edu.umd.cs.findbugs.LaunchAppropriateUI",
                 "-textui",
                 "-effort:max",
                 "-low",  # Report all confidence levels (low, medium, high)
-                "-noClassOk"
+                "-noClassOk",
             ]
 
             if class_names:
@@ -853,7 +1000,9 @@ class ValidationToolkit:
                 cmd.append(p)
 
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=300
+                )
                 output = result.stdout + "\n" + result.stderr
                 # SpotBugs returns 0 if no bugs found, >0 if bugs found
                 passed = result.returncode == 0
@@ -863,22 +1012,33 @@ class ValidationToolkit:
 
                 # Check for critical errors that indicate the tool didn't run properly
                 # Ignore "Exception in thread" from missing classes (not a fatal error)
-                has_fatal_error = "Exception in thread" in output and "Could not instantiate" in output
-                has_fatal_error = has_fatal_error or ("Exception" in output and "ClassNotFoundException" in output)
-                has_fatal_error = has_fatal_error or ("Error" in output and "BUILD FAILURE" in output)
+                has_fatal_error = (
+                    "Exception in thread" in output
+                    and "Could not instantiate" in output
+                )
+                has_fatal_error = has_fatal_error or (
+                    "Exception" in output and "ClassNotFoundException" in output
+                )
+                has_fatal_error = has_fatal_error or (
+                    "Error" in output and "BUILD FAILURE" in output
+                )
 
                 if has_fatal_error:
-                    print(f"    Agent 4 Warning: JAR invocation encountered errors, falling back...")
+                    print(
+                        f"    Agent 4 Warning: JAR invocation encountered errors, falling back..."
+                    )
                 else:
                     return {
                         "success": passed,
                         "output": cleaned_output,  # Return cleaned output
                         "raw_output": output,  # Keep raw for debugging
                         "method": "direct-jar",
-                        "return_code": result.returncode
+                        "return_code": result.returncode,
                     }
             except subprocess.TimeoutExpired:
-                print(f"    Agent 4 Warning: Direct JAR SpotBugs timed out, falling back...")
+                print(
+                    f"    Agent 4 Warning: Direct JAR SpotBugs timed out, falling back..."
+                )
             except Exception as e:
                 print(f"    Agent 4 Warning: Direct JAR SpotBugs failed: {e}")
 
@@ -890,7 +1050,7 @@ class ValidationToolkit:
             resolved_java_home = _resolve_valid_java_home()
             if resolved_java_home:
                 maven_env["JAVA_HOME"] = resolved_java_home
-            
+
             cmd = [
                 "mvn",
                 "com.github.spotbugs:spotbugs-maven-plugin:4.9.0.0:spotbugs",
@@ -902,7 +1062,7 @@ class ValidationToolkit:
                 "-Dfmpp.skip=true",
                 "-Dforbiddenapis.skip=true",
                 "-Dcheckstyle.skip=true",
-                "-Dpmd.skip=true"
+                "-Dpmd.skip=true",
             ]
 
             # If we have specific modules from compilation, limit scope with -pl
@@ -913,10 +1073,14 @@ class ValidationToolkit:
                     if "target" in parts and "classes" in parts:
                         idx = parts.index("target")
                         if idx > 0:
-                            repo_parts = self.target_repo_path.replace("\\", "/").split("/")
+                            repo_parts = self.target_repo_path.replace("\\", "/").split(
+                                "/"
+                            )
                             module_parts = parts[:idx]
                             if len(module_parts) > len(repo_parts):
-                                relative_module = "/".join(module_parts[len(repo_parts):])
+                                relative_module = "/".join(
+                                    module_parts[len(repo_parts) :]
+                                )
                                 modules_to_scan.add(relative_module)
 
                 if modules_to_scan:
@@ -925,12 +1089,21 @@ class ValidationToolkit:
 
             print(f"    Agent 4: Executing SpotBugs via Maven plugin: {' '.join(cmd)}")
             try:
-                result = subprocess.run(cmd, cwd=self.target_repo_path, capture_output=True, text=True, timeout=600, env=maven_env)
+                result = subprocess.run(
+                    cmd,
+                    cwd=self.target_repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                    env=maven_env,
+                )
                 output = result.stdout + "\n" + result.stderr
 
                 # Check for execution errors
                 if "MojoExecutionException" in output or "BUILD FAILURE" in output:
-                    print(f"    Agent 4 Warning: Maven SpotBugs failed, trying full scan...")
+                    print(
+                        f"    Agent 4 Warning: Maven SpotBugs failed, trying full scan..."
+                    )
                     cmd_fallback = [
                         "mvn",
                         "com.github.spotbugs:spotbugs-maven-plugin:4.9.0.0:spotbugs",
@@ -942,10 +1115,19 @@ class ValidationToolkit:
                         "-Dfmpp.skip=true",
                         "-Dforbiddenapis.skip=true",
                         "-Dcheckstyle.skip=true",
-                        "-Dpmd.skip=true"
+                        "-Dpmd.skip=true",
                     ]
-                    print(f"    Agent 4: Executing full project SpotBugs scan: {' '.join(cmd_fallback)}")
-                    result = subprocess.run(cmd_fallback, cwd=self.target_repo_path, capture_output=True, text=True, timeout=600, env=maven_env)
+                    print(
+                        f"    Agent 4: Executing full project SpotBugs scan: {' '.join(cmd_fallback)}"
+                    )
+                    result = subprocess.run(
+                        cmd_fallback,
+                        cwd=self.target_repo_path,
+                        capture_output=True,
+                        text=True,
+                        timeout=600,
+                        env=maven_env,
+                    )
                     output = result.stdout + "\n" + result.stderr
 
                 # Check again for critical failures
@@ -955,7 +1137,7 @@ class ValidationToolkit:
                         "success": True,
                         "output": output,
                         "method": "maven-plugin-failed",
-                        "note": "SpotBugs execution failed, assuming clean by default"
+                        "note": "SpotBugs execution failed, assuming clean by default",
                     }
                 else:
                     # Parse output for bug count - SpotBugs Maven plugin outputs "Total bugs: X"
@@ -968,12 +1150,22 @@ class ValidationToolkit:
                             "success": passed,
                             "output": output,
                             "method": "maven-plugin",
-                            "bug_count": bug_count
+                            "bug_count": bug_count,
                         }
                     # Fallback: check for "No bugs found" or individual bug patterns
-                    has_bugs = "BUG:" in output or "High: " in output or "Medium: " in output
-                    passed = not has_bugs or "No bugs found" in output or "Total bugs: 0" in output
-                    return {"success": passed, "output": output, "method": "maven-plugin"}
+                    has_bugs = (
+                        "BUG:" in output or "High: " in output or "Medium: " in output
+                    )
+                    passed = (
+                        not has_bugs
+                        or "No bugs found" in output
+                        or "Total bugs: 0" in output
+                    )
+                    return {
+                        "success": passed,
+                        "output": output,
+                        "method": "maven-plugin",
+                    }
             except subprocess.TimeoutExpired:
                 print(f"    Agent 4 Warning: Maven SpotBugs timed out, falling back...")
             except Exception as e:
@@ -984,7 +1176,7 @@ class ValidationToolkit:
         aux_classpath = self.get_project_classpath()
         args = {
             "compiled_classes_paths": compiled_classes_paths,
-            "aux_classpath": aux_classpath
+            "aux_classpath": aux_classpath,
         }
         if source_path:
             args["source_path"] = source_path
@@ -1034,7 +1226,14 @@ class ValidationToolkit:
                 tmp_path = tmp.name
 
             result = subprocess.run(
-                ["git", "apply", "--check", "--recount", "--whitespace=nowarn", tmp_path],
+                [
+                    "git",
+                    "apply",
+                    "--check",
+                    "--recount",
+                    "--whitespace=nowarn",
+                    tmp_path,
+                ],
                 capture_output=True,
                 text=True,
                 cwd=self.target_repo_path,
@@ -1070,7 +1269,11 @@ class ValidationToolkit:
         """
         all_hunks = list(code_hunks) + list(test_hunks)
         if not all_hunks:
-            return {"success": False, "output": "No hunks to apply.", "applied_files": []}
+            return {
+                "success": False,
+                "output": "No hunks to apply.",
+                "applied_files": [],
+            }
 
         def _normalize_rel_path(path: str) -> str:
             p = (path or "").strip().replace("\\", "/").lstrip("/")
@@ -1078,56 +1281,107 @@ class ValidationToolkit:
                 p = p[2:]
             return p
 
-        # Ensure all hunks have insertion_line set; fall back to hunk header parsing.
-        for h in all_hunks:
+        def _is_full_file_creation_hunk(hunk_text: str) -> bool:
+            """
+            Heuristic: hunk contains only added lines (plus header), which usually
+            means a full-file create patch. If target file already exists, re-applying
+            this as MODIFIED is typically wrong and should be skipped.
+            """
+            if not hunk_text or not hunk_text.strip():
+                return False
+            lines = hunk_text.splitlines()
+            if not lines or not lines[0].startswith("@@"):
+                return False
+            body = lines[1:]
+            if not body:
+                return False
+            saw_added = False
+            for line in body:
+                if line.startswith("+"):
+                    saw_added = True
+                    continue
+                # Any context/removal means this is not a pure file-creation hunk.
+                if line.startswith(" ") or line.startswith("-"):
+                    return False
+            return saw_added
+
+        normalized_hunks = []
+
+        # Ensure all hunks have insertion_line set; normalize and preflight operations.
+        for raw_h in all_hunks:
+            h = dict(raw_h)
+            target_file = _normalize_rel_path(h.get("target_file", ""))
+            h["target_file"] = target_file
+
             if not h.get("insertion_line"):
                 hunk_text = h.get("hunk_text", "")
                 try:
-                    match = re.search(r'@@ -\d+(?:,\d+)? \+(\d+)', hunk_text)
+                    match = re.search(r"@@ -\d+(?:,\d+)? \+(\d+)", hunk_text)
                     if match:
                         h["insertion_line"] = int(match.group(1))
                 except Exception:
                     h["insertion_line"] = 0  # Fallback to 0 if extraction fails
-        
-        # Group hunks by target file, then sort each file's hunks in ascending line order.
-        hunks_by_file = {}
-        for h in all_hunks:
-            target_file = _normalize_rel_path(h.get("target_file", "unknown"))
-            h["target_file"] = target_file
-            if target_file not in hunks_by_file:
-                hunks_by_file[target_file] = []
-            hunks_by_file[target_file].append(h)
 
-        # Validate and correct file_operation based on actual file state in target repo
-        for h in all_hunks:
-            target_file = _normalize_rel_path(h.get("target_file", ""))
-            original_op = (h.get("file_operation", "MODIFIED") or "MODIFIED")
-
+            original_op = (h.get("file_operation", "MODIFIED") or "MODIFIED").upper()
             if h.get("file_operation_required") is False:
                 h["file_operation"] = None
+                normalized_hunks.append(h)
                 continue
-            
-            # Normalize path: remove leading/trailing slashes and prefix
-            file_path_full = os.path.normpath(os.path.join(self.target_repo_path, target_file))
-            file_exists = os.path.exists(file_path_full) and os.path.isfile(file_path_full)
-            old_target_file = _normalize_rel_path(h.get("old_target_file") or h.get("mainline_file") or "")
-            old_file_path_full = os.path.normpath(os.path.join(self.target_repo_path, old_target_file)) if old_target_file else ""
+
+            file_path_full = os.path.normpath(
+                os.path.join(self.target_repo_path, target_file)
+            )
+            file_exists = os.path.exists(file_path_full) and os.path.isfile(
+                file_path_full
+            )
+
+            old_target_file = _normalize_rel_path(
+                h.get("old_target_file") or h.get("mainline_file") or ""
+            )
+            h["old_target_file"] = old_target_file or None
+            old_file_path_full = (
+                os.path.normpath(os.path.join(self.target_repo_path, old_target_file))
+                if old_target_file
+                else ""
+            )
             old_exists = bool(old_target_file and os.path.isfile(old_file_path_full))
-            
+
+            hunk_text = h.get("hunk_text", "")
             corrected_op = original_op
-            if original_op.upper() == "ADDED" and file_exists:
-                # File already exists in target, should be MODIFIED
-                corrected_op = "MODIFIED"
-                print(f"  Validation: {target_file} marked ADDED but exists → correcting to MODIFIED")
-            elif original_op.upper() == "DELETED" and not file_exists:
-                # File doesn't exist in target, can't delete
-                corrected_op = None  # Mark for skipping
-                print(f"  Validation: {target_file} marked DELETED but doesn't exist → skipping")
-            elif original_op.upper() == "MODIFIED" and not file_exists:
-                # File doesn't exist but we have hunks for it, treat as ADDED
-                corrected_op = "ADDED"
-                print(f"  Validation: {target_file} marked MODIFIED but doesn't exist → correcting to ADDED")
-            elif original_op.upper() == "RENAMED":
+
+            if original_op == "ADDED" and file_exists:
+                # Full-file create hunks should be no-op if file already exists.
+                if _is_full_file_creation_hunk(hunk_text):
+                    corrected_op = None
+                    h["_skip_reason"] = "added_file_already_present_with_full_content"
+                    print(
+                        f"  Validation: {target_file} marked ADDED but already exists "
+                        "with full-create hunk → skipping"
+                    )
+                else:
+                    corrected_op = "MODIFIED"
+                    print(
+                        f"  Validation: {target_file} marked ADDED but exists → correcting to MODIFIED"
+                    )
+            elif original_op == "DELETED" and not file_exists:
+                corrected_op = None
+                print(
+                    f"  Validation: {target_file} marked DELETED but doesn't exist → skipping"
+                )
+            elif original_op == "MODIFIED" and not file_exists:
+                # If old path exists and differs, this is likely a rename flow.
+                if old_exists and old_target_file and old_target_file != target_file:
+                    corrected_op = "RENAMED"
+                    print(
+                        f"  Validation: {target_file} marked MODIFIED but missing; old path exists "
+                        f"({old_target_file}) → correcting to RENAMED"
+                    )
+                else:
+                    corrected_op = "ADDED"
+                    print(
+                        f"  Validation: {target_file} marked MODIFIED but doesn't exist → correcting to ADDED"
+                    )
+            elif original_op == "RENAMED":
                 if old_exists and not file_exists:
                     corrected_op = "RENAMED"
                 elif not old_exists and file_exists:
@@ -1140,26 +1394,37 @@ class ValidationToolkit:
                     corrected_op = "MODIFIED"
                     print(
                         f"  Validation: {target_file} marked RENAMED but old and new both exist "
-                        f"→ correcting to MODIFIED"
+                        "→ correcting to MODIFIED"
                     )
                 else:
                     corrected_op = None
                     print(
                         f"  Validation: {target_file} marked RENAMED but neither old nor new exists "
-                        f"→ skipping"
+                        "→ skipping"
                     )
-            
+
+            h["file_operation"] = corrected_op
             if corrected_op != original_op:
-                h["file_operation"] = corrected_op
                 h["_file_operation_corrected"] = True
+
+            normalized_hunks.append(h)
+
+        # Group hunks by target file, then sort each file's hunks in ascending line order.
+        hunks_by_file = {}
+        for h in normalized_hunks:
+            target_file = _normalize_rel_path(h.get("target_file", "unknown"))
+            if target_file not in hunks_by_file:
+                hunks_by_file[target_file] = []
+            hunks_by_file[target_file].append(h)
 
         # Sort hunks within each file bottom-to-top so earlier line numbers remain stable.
         for target_file in hunks_by_file:
             hunks_by_file[target_file].sort(
-                key=lambda h: h.get("insertion_line", 0),
-                reverse=True
+                key=lambda h: h.get("insertion_line", 0), reverse=True
             )
-            insertion_lines = [h.get("insertion_line") for h in hunks_by_file[target_file]]
+            insertion_lines = [
+                h.get("insertion_line") for h in hunks_by_file[target_file]
+            ]
             print(
                 f"  Validation: {target_file} - applying {len(hunks_by_file[target_file])} "
                 f"hunk(s) in bottom-to-top order: {insertion_lines}"
@@ -1177,12 +1442,12 @@ class ValidationToolkit:
             for h in hunks_by_file[target_file]:
                 hunk_text = h.get("hunk_text", "")
                 file_op = h.get("file_operation")
-                
+
                 # Skip files marked for skipping (e.g., DELETED when file doesn't exist)
                 if file_op is None:
                     skip_file = True
                     break
-                
+
                 file_op = file_op.upper()
 
                 # Track the old path for renamed files
@@ -1195,35 +1460,63 @@ class ValidationToolkit:
                     file_operations.add(file_op)
                     continue
 
-                file_hunks.append(hunk_text if hunk_text.endswith("\n") else hunk_text + "\n")
+                file_hunks.append(
+                    hunk_text if hunk_text.endswith("\n") else hunk_text + "\n"
+                )
                 file_operations.add(file_op)
 
             # Skip this file if it was marked for skipping
             if skip_file:
-                print(f"  Validation: Skipping {target_file} (file state doesn't match operation)")
+                print(
+                    f"  Validation: Skipping {target_file} (file state doesn't match operation)"
+                )
                 continue
 
-            # Determine the operation type
-            file_operation = next(iter(file_operations)) if len(file_operations) == 1 else "MODIFIED"
+            # Determine the operation type, preserving structural intent when mixed with content hunks.
+            if len(file_operations) == 1:
+                file_operation = next(iter(file_operations))
+            elif "RENAMED" in file_operations:
+                file_operation = "RENAMED"
+            elif "ADDED" in file_operations and "DELETED" not in file_operations:
+                file_operation = "ADDED"
+            elif "DELETED" in file_operations and "ADDED" not in file_operations:
+                file_operation = "DELETED"
+            else:
+                file_operation = "MODIFIED"
 
             # Handle structural operations (no hunks)
             if not file_hunks and file_operation in ["RENAMED", "ADDED", "DELETED"]:
                 try:
                     if file_operation == "RENAMED":
                         if not old_file_path:
-                            raise ValueError("old_file_path is required for RENAMED operation")
-                        src = os.path.normpath(os.path.join(self.target_repo_path, _normalize_rel_path(old_file_path)))
-                        dst = os.path.normpath(os.path.join(self.target_repo_path, target_file))
+                            raise ValueError(
+                                "old_file_path is required for RENAMED operation"
+                            )
+                        src = os.path.normpath(
+                            os.path.join(
+                                self.target_repo_path,
+                                _normalize_rel_path(old_file_path),
+                            )
+                        )
+                        dst = os.path.normpath(
+                            os.path.join(self.target_repo_path, target_file)
+                        )
                         if not os.path.exists(src):
-                            raise ValueError(f"rename source does not exist: {old_file_path}")
+                            raise ValueError(
+                                f"rename source does not exist: {old_file_path}"
+                            )
                         os.makedirs(os.path.dirname(dst), exist_ok=True)
                         os.replace(src, dst)
                     elif file_operation == "DELETED":
-                        src = os.path.normpath(os.path.join(self.target_repo_path, target_file))
+                        src = os.path.normpath(
+                            os.path.join(self.target_repo_path, target_file)
+                        )
                         if os.path.exists(src):
                             os.remove(src)
                     elif file_operation == "ADDED":
-                        dst = os.path.normpath(os.path.join(self.target_repo_path, target_file))
+                        dst = os.path.normpath(
+                            os.path.join(self.target_repo_path, target_file)
+                        )
                         os.makedirs(os.path.dirname(dst), exist_ok=True)
                         if not os.path.exists(dst):
                             with open(dst, "w", encoding="utf-8"):
@@ -1253,7 +1546,7 @@ class ValidationToolkit:
                     target_file,
                     combined_hunks,
                     file_operation=file_operation,
-                    old_file_path=old_file_path
+                    old_file_path=old_file_path,
                 )
                 patch_parts.append(patch_part)
                 if target_file not in applied_files:
@@ -1276,7 +1569,9 @@ class ValidationToolkit:
 
         return self._apply_patch_with_fallbacks(combined, applied_files)
 
-    def _apply_patch_with_fallbacks(self, patch_content: str, applied_files: list[str]) -> Dict:
+    def _apply_patch_with_fallbacks(
+        self, patch_content: str, applied_files: list[str]
+    ) -> Dict:
         """
         Apply patch content with increasingly permissive strategies.
         """
@@ -1299,8 +1594,13 @@ class ValidationToolkit:
                 (
                     "git-apply-whitespace-tolerant",
                     [
-                        "git", "apply", "--recount", "--ignore-space-change",
-                        "--ignore-whitespace", "--whitespace=nowarn", tmp_path,
+                        "git",
+                        "apply",
+                        "--recount",
+                        "--ignore-space-change",
+                        "--ignore-whitespace",
+                        "--whitespace=nowarn",
+                        tmp_path,
                     ],
                 ),
             ]
@@ -1325,12 +1625,25 @@ class ValidationToolkit:
                 all_errors.append(f"[{name}] {err.strip()}")
 
             patch_dry_run_cmd = [
-                "patch", "-p1", "--dry-run", "--batch", "--forward",
-                "--reject-file=-", "--ignore-whitespace", "-i", tmp_path,
+                "patch",
+                "-p1",
+                "--dry-run",
+                "--batch",
+                "--forward",
+                "--reject-file=-",
+                "--ignore-whitespace",
+                "-i",
+                tmp_path,
             ]
             patch_apply_cmd = [
-                "patch", "-p1", "--batch", "--forward",
-                "--reject-file=-", "--ignore-whitespace", "-i", tmp_path,
+                "patch",
+                "-p1",
+                "--batch",
+                "--forward",
+                "--reject-file=-",
+                "--ignore-whitespace",
+                "-i",
+                tmp_path,
             ]
 
             dry_run = subprocess.run(
@@ -1350,13 +1663,16 @@ class ValidationToolkit:
                 if patch_apply.returncode == 0:
                     return {
                         "success": True,
-                        "output": patch_apply.stdout or "Applied successfully via patch fallback.",
+                        "output": patch_apply.stdout
+                        or "Applied successfully via patch fallback.",
                         "applied_files": applied_files,
                         "apply_strategy": "gnu-patch-fallback",
                     }
 
                 self.restore_repo_state()
-                patch_err = patch_apply.stderr or patch_apply.stdout or "patch apply failed"
+                patch_err = (
+                    patch_apply.stderr or patch_apply.stdout or "patch apply failed"
+                )
                 all_errors.append(f"[gnu-patch-apply] {patch_err.strip()}")
             else:
                 patch_err = dry_run.stderr or dry_run.stdout or "patch dry-run failed"
@@ -1368,7 +1684,11 @@ class ValidationToolkit:
                 "applied_files": [],
             }
         except Exception as e:
-            return {"success": False, "output": f"Exception during apply: {e}", "applied_files": []}
+            return {
+                "success": False,
+                "output": f"Exception during apply: {e}",
+                "applied_files": [],
+            }
         finally:
             if tmp_path and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
@@ -1386,7 +1706,9 @@ class ValidationToolkit:
         project_name = os.path.basename(self.target_repo_path).strip().lower()
 
         if project_name == "druid":
-            helper_script = os.path.join(self._get_project_helper_dir("druid"), "run_build.sh")
+            helper_script = os.path.join(
+                self._get_project_helper_dir("druid"), "run_build.sh"
+            )
             if os.path.exists(helper_script):
                 image_tag, image_err = self._ensure_project_builder_image("druid")
                 if image_tag:
@@ -1400,18 +1722,28 @@ class ValidationToolkit:
                             "WORKTREE_MODE": "1",
                         }
                     )
-                    print(f"    Agent 4: Executing Druid helper build script: {helper_script}")
-                    result = self._run_cmd_capture(["bash", helper_script], cwd=self.target_repo_path, env=helper_env)
+                    print(
+                        f"    Agent 4: Executing Druid helper build script: {helper_script}"
+                    )
+                    result = self._run_cmd_capture(
+                        ["bash", helper_script],
+                        cwd=self.target_repo_path,
+                        env=helper_env,
+                    )
                     return {
                         "success": bool(result.get("success")),
                         "output": result.get("output", ""),
                         "mode": "druid-helper-script",
                     }
                 else:
-                    print(f"    Agent 4 Warning: Druid helper image unavailable. Falling back. Details: {image_err}")
+                    print(
+                        f"    Agent 4 Warning: Druid helper image unavailable. Falling back. Details: {image_err}"
+                    )
         elif self._is_known_project_with_helper(project_name):
             # Generic helper-based build for projects with a run_build.sh (e.g., crate)
-            helper_script = os.path.join(self._get_project_helper_dir(project_name), "run_build.sh")
+            helper_script = os.path.join(
+                self._get_project_helper_dir(project_name), "run_build.sh"
+            )
             if os.path.exists(helper_script):
                 image_tag, image_err = self._ensure_project_builder_image(project_name)
                 if image_tag:
@@ -1427,15 +1759,23 @@ class ValidationToolkit:
                             "WORKTREE_MODE": "1",
                         }
                     )
-                    print(f"    Agent 4: Executing {project_name} helper build script: {helper_script}")
-                    result = self._run_cmd_capture(["bash", helper_script], cwd=self.target_repo_path, env=helper_env)
+                    print(
+                        f"    Agent 4: Executing {project_name} helper build script: {helper_script}"
+                    )
+                    result = self._run_cmd_capture(
+                        ["bash", helper_script],
+                        cwd=self.target_repo_path,
+                        env=helper_env,
+                    )
                     return {
                         "success": bool(result.get("success")),
                         "output": result.get("output", ""),
                         "mode": f"{project_name}-helper-script",
                     }
                 else:
-                    print(f"    Agent 4 Warning: {project_name} helper image unavailable. Falling back. Details: {image_err}")
+                    print(
+                        f"    Agent 4 Warning: {project_name} helper image unavailable. Falling back. Details: {image_err}"
+                    )
 
         if is_gradle:
             cmd = ["gradle", "testClasses"]
@@ -1445,11 +1785,20 @@ class ValidationToolkit:
             # Build only touched modules at package phase so required artifacts exist.
             if project_name == "druid":
                 target_info = self.detect_relevant_test_targets(project="druid")
-                modules = sorted(set(target_info.get("all_modules") or target_info.get("source_modules") or []))
+                modules = sorted(
+                    set(
+                        target_info.get("all_modules")
+                        or target_info.get("source_modules")
+                        or []
+                    )
+                )
                 if modules:
                     cmd = [
-                        "mvn", "clean", "package",
-                        "-pl", ",".join(modules),
+                        "mvn",
+                        "clean",
+                        "package",
+                        "-pl",
+                        ",".join(modules),
                         "-am",
                         "-DskipTests",
                         "-DskipITs",
@@ -1464,7 +1813,9 @@ class ValidationToolkit:
                     ]
                 else:
                     cmd = [
-                        "mvn", "clean", "package",
+                        "mvn",
+                        "clean",
+                        "package",
                         "-DskipTests",
                         "-DskipITs",
                         "-DfailIfNoTests=false",
@@ -1475,11 +1826,12 @@ class ValidationToolkit:
                         "-Denforcer.skip=true",
                         "-Drat.skip=true",
                         "-Dweb.console.skip=true",
-                        "-pl", "!:distribution",
+                        "-pl",
+                        "!:distribution",
                     ]
             else:
                 cmd = ["mvn", "clean", "compile"]
-        
+
         try:
             print(f"    Agent 4: Executing build command: {' '.join(cmd)}")
             result = subprocess.run(
@@ -1490,7 +1842,9 @@ class ValidationToolkit:
             )
             return {
                 "success": result.returncode == 0,
-                "output": ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
+                "output": (
+                    (result.stdout or "") + "\n" + (result.stderr or "")
+                ).strip(),
             }
         except Exception as e:
             return {"success": False, "output": f"Exception building repo: {e}"}
@@ -1507,11 +1861,18 @@ class ValidationToolkit:
             {"success": bool, "compile_error": bool, "output": str, "failed_tests": list[str]}
         """
         if not test_classes:
-            return {"success": True, "compile_error": False, "output": "No tests to run.", "failed_tests": []}
+            return {
+                "success": True,
+                "compile_error": False,
+                "output": "No tests to run.",
+                "failed_tests": [],
+            }
 
         project_name = self._detect_project_name()
         if self._is_known_project_with_helper(project_name):
-            helper_script = os.path.join(self._get_project_helper_dir(project_name), "run_tests.sh")
+            helper_script = os.path.join(
+                self._get_project_helper_dir(project_name), "run_tests.sh"
+            )
             if os.path.exists(helper_script):
                 image_tag, image_err = self._ensure_project_builder_image(project_name)
                 if image_tag:
@@ -1527,15 +1888,22 @@ class ValidationToolkit:
                             "WORKTREE_MODE": "1",
                         }
                     )
-                    
+
                     cmd = ["bash", helper_script] + test_classes
-                    print(f"    Agent 4: Executing {project_name} helper test script: {' '.join(cmd)}")
-                    result = self._run_cmd_capture(cmd, cwd=self.target_repo_path, env=helper_env)
-                    
+                    print(
+                        f"    Agent 4: Executing {project_name} helper test script: {' '.join(cmd)}"
+                    )
+                    result = self._run_cmd_capture(
+                        cmd, cwd=self.target_repo_path, env=helper_env
+                    )
+
                     success = bool(result.get("success"))
                     output = result.get("output", "")
-                    compile_error = (not success) and ("compilation error" in output.lower() or "build failed with an exception" in output.lower())
-                    
+                    compile_error = (not success) and (
+                        "compilation error" in output.lower()
+                        or "build failed with an exception" in output.lower()
+                    )
+
                     return {
                         "success": success,
                         "compile_error": compile_error,
@@ -1543,10 +1911,12 @@ class ValidationToolkit:
                         "failed_tests": [],
                     }
                 else:
-                    print(f"    Agent 4 Warning: {project_name} helper image unavailable for testing. Falling back. Details: {image_err}")
+                    print(
+                        f"    Agent 4 Warning: {project_name} helper image unavailable for testing. Falling back. Details: {image_err}"
+                    )
 
         is_gradle = os.path.exists(os.path.join(self.target_repo_path, "build.gradle"))
-        
+
         # Fix for Java 18+ / Java 25 security manager issues
         java_compat_args = ["-Djdk.security.manager.allow.argLine="]
 
@@ -1569,19 +1939,19 @@ class ValidationToolkit:
             success = result.returncode == 0
             output = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
             compile_error = (not success) and ("compilation error" in output.lower())
-            
+
             return {
                 "success": success,
                 "compile_error": compile_error,
                 "output": output,
-                "failed_tests": []
+                "failed_tests": [],
             }
         except Exception as e:
             return {
                 "success": False,
                 "compile_error": False,
                 "output": f"Exception running tests: {e}",
-                "failed_tests": []
+                "failed_tests": [],
             }
 
     def restore_repo_state(self) -> bool:
@@ -1591,31 +1961,36 @@ class ValidationToolkit:
         """
         try:
             # Attempt to reset and clean with increasing aggressiveness
-            subprocess.run(["git", "reset", "--hard"], cwd=self.target_repo_path, capture_output=True, check=True)
-            
+            subprocess.run(
+                ["git", "reset", "--hard"],
+                cwd=self.target_repo_path,
+                capture_output=True,
+                check=True,
+            )
+
             # Try initial git clean (most common case)
             result = subprocess.run(
-                ["git", "clean", "-fd"], 
-                cwd=self.target_repo_path, 
-                capture_output=True
+                ["git", "clean", "-fd"], cwd=self.target_repo_path, capture_output=True
             )
             if result.returncode == 0:
                 return True
-            
+
             # If git clean fails, try with force flag and ignore errors
             result = subprocess.run(
-                ["git", "clean", "-ffdX"], 
-                cwd=self.target_repo_path, 
-                capture_output=True
+                ["git", "clean", "-ffdX"],
+                cwd=self.target_repo_path,
+                capture_output=True,
             )
             if result.returncode == 0:
                 return True
-            
+
             # If even that fails, log it but don't fail hard - try to continue anyway
-            print(f"ValidationToolkit: Warning - git clean had issues (exit code {result.returncode}). Continuing anyway.")
+            print(
+                f"ValidationToolkit: Warning - git clean had issues (exit code {result.returncode}). Continuing anyway."
+            )
             # This is not a hard failure; patch application may still succeed
             return True
-            
+
         except subprocess.CalledProcessError as e:
             print(f"ValidationToolkit: Error during git reset: {e}")
             return False
@@ -1627,7 +2002,13 @@ class ValidationToolkit:
     # Private Helpers
     # ------------------------------------------------------------------
 
-    def _build_patch_file(self, target_file_path: str, hunk_text: str, file_operation: str = "MODIFIED", old_file_path: str = None) -> str:
+    def _build_patch_file(
+        self,
+        target_file_path: str,
+        hunk_text: str,
+        file_operation: str = "MODIFIED",
+        old_file_path: str = None,
+    ) -> str:
         """
         Wraps a hunk in a minimal unified diff file header so `git apply`
         can understand it. The hunk_text must already start with @@ ... @@.
@@ -1650,7 +2031,11 @@ class ValidationToolkit:
             raise ValueError("target_file_path is empty")
 
         normalized_op = (file_operation or "MODIFIED").upper()
-        old_p = (old_file_path or "").strip().replace("\\", "/").lstrip("/") if old_file_path else p
+        old_p = (
+            (old_file_path or "").strip().replace("\\", "/").lstrip("/")
+            if old_file_path
+            else p
+        )
         if old_p.startswith("a/") or old_p.startswith("b/"):
             old_p = old_p[2:]
 
@@ -1684,7 +2069,9 @@ class ValidationToolkit:
                 return header + "\n"
             else:
                 # MODIFIED with no hunks doesn't make sense, but handle gracefully
-                raise ValueError(f"MODIFIED operation requires hunks, but hunk_text is empty")
+                raise ValueError(
+                    f"MODIFIED operation requires hunks, but hunk_text is empty"
+                )
 
         # Normal case: file operation with hunks
         if not hunk_text.startswith("@@"):
