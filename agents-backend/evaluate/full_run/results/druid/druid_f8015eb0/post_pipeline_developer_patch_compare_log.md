@@ -171,7 +171,7 @@ Developer
 
 Generated
 ```diff
-@@ -154,8 +154,17 @@
+@@ -156,8 +156,17 @@
        LOCK.lock();
        try {
          if (!spec.isSuspended()) {
@@ -180,10 +180,10 @@ Generated
 +          LagStats lagStats = supervisor.computeLagStats();
 +
 +          if (lagStats != null) {
-+            AggregateFunction aggregate = lagBasedAutoScalerConfig.getLagAggregate() == null ?
++            AggregateFunction lagAggregate = lagBasedAutoScalerConfig.getLagAggregate() == null ?
 +                                          lagStats.getAggregateForScaling() :
 +                                          lagBasedAutoScalerConfig.getLagAggregate();
-+            long lag = lagStats.getMetric(aggregate);
++            long lag = lagStats.getMetric(lagAggregate);
 +            lagMetricsQueue.offer(lag > 0 ? lag : 0L);
 +          } else {
 +            lagMetricsQueue.offer(0L);
@@ -197,10 +197,22 @@ Generated
 Developer -> Generated (Unified Diff)
 ```diff
 --- developer+++ generated@@ -1,4 +1,4 @@-@@ -154,8 +156,17 @@
-+@@ -154,8 +154,17 @@
++@@ -156,8 +156,17 @@
         LOCK.lock();
         try {
           if (!spec.isSuspended()) {
+@@ -7,10 +7,10 @@ +          LagStats lagStats = supervisor.computeLagStats();
+ +
+ +          if (lagStats != null) {
+-+            AggregateFunction aggregate = lagBasedAutoScalerConfig.getLagAggregate() == null ?
+++            AggregateFunction lagAggregate = lagBasedAutoScalerConfig.getLagAggregate() == null ?
+ +                                          lagStats.getAggregateForScaling() :
+ +                                          lagBasedAutoScalerConfig.getLagAggregate();
+-+            long lag = lagStats.getMetric(aggregate);
+++            long lag = lagStats.getMetric(lagAggregate);
+ +            lagMetricsQueue.offer(lag > 0 ? lag : 0L);
+ +          } else {
+ +            lagMetricsQueue.offer(0L);
 
 ```
 
@@ -342,7 +354,7 @@ Generated
      this.scaleInThreshold = scaleInThreshold != null ? scaleInThreshold : 1000000;
      this.triggerScaleOutFractionThreshold = triggerScaleOutFractionThreshold != null ? triggerScaleOutFractionThreshold : 0.3;
      this.triggerScaleInFractionThreshold = triggerScaleInFractionThreshold != null ? triggerScaleInFractionThreshold : 0.9;
-+    this.lagAggregate = AggregateFunction.MAX; // Default to MAX for lagAggregate
++    this.lagAggregate = lagAggregate != null ? lagAggregate : AggregateFunction.SUM;
  
      // Only do taskCountMax and taskCountMin check when autoscaler is enabled. So that users left autoConfig empty{} will not throw any exception and autoscaler is disabled.
      // If autoscaler is disabled, no matter what configs are set, they are not used.
@@ -357,7 +369,7 @@ Developer -> Generated (Unified Diff)
       this.triggerScaleOutFractionThreshold = triggerScaleOutFractionThreshold != null ? triggerScaleOutFractionThreshold : 0.3;
       this.triggerScaleInFractionThreshold = triggerScaleInFractionThreshold != null ? triggerScaleInFractionThreshold : 0.9;
 -+    this.lagAggregate = lagAggregate;
-++    this.lagAggregate = AggregateFunction.MAX; // Default to MAX for lagAggregate
+++    this.lagAggregate = lagAggregate != null ? lagAggregate : AggregateFunction.SUM;
   
       // Only do taskCountMax and taskCountMin check when autoscaler is enabled. So that users left autoConfig empty{} will not throw any exception and autoscaler is disabled.
       // If autoscaler is disabled, no matter what configs are set, they are not used.
@@ -620,7 +632,7 @@ Developer
 
 Generated
 ```diff
-@@ -24,12 +24,19 @@
+@@ -25,12 +25,19 @@
    private final long maxLag;
    private final long totalLag;
    private final long avgLag;
@@ -645,7 +657,9 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -2,19 +2,19 @@    private final long maxLag;
+--- developer+++ generated@@ -1,20 +1,20 @@-@@ -24,12 +24,19 @@
++@@ -25,12 +25,19 @@
+    private final long maxLag;
     private final long totalLag;
     private final long avgLag;
 -+  private final AggregateFunction aggregateForScaling;
@@ -706,13 +720,13 @@ Developer
 
 Generated
 ```diff
-@@ -29,4 +29,26 @@
+@@ -54,4 +54,26 @@
    {
      return avgLag;
    }
 +
 +  /**
-+   * The preferred scaling metric that supervisor may specify to be used.
++   * The preferred scaling metric that LagStatsTest may specify to be used.
 +   * This could be overrided by the autscaler.
 +   */
 +  public AggregateFunction getAggregateForScaling()
@@ -738,11 +752,18 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,4 +1,4 @@-@@ -46,4 +53,26 @@
-+@@ -29,4 +29,26 @@
+--- developer+++ generated@@ -1,10 +1,10 @@-@@ -46,4 +53,26 @@
++@@ -54,4 +54,26 @@
     {
       return avgLag;
     }
+ +
+ +  /**
+-+   * The preferred scaling metric that supervisor may specify to be used.
+++   * The preferred scaling metric that LagStatsTest may specify to be used.
+ +   * This could be overrided by the autscaler.
+ +   */
+ +  public AggregateFunction getAggregateForScaling()
 
 ```
 
@@ -859,7 +880,7 @@ diff --git a/indexing-service/src/main/java/org/apache/druid/indexing/seekablest
  import org.apache.druid.indexing.overlord.supervisor.autoscaler.SupervisorTaskAutoScaler;
  import org.apache.druid.indexing.seekablestream.supervisor.SeekableStreamSupervisor;
  import org.apache.druid.java.util.common.StringUtils;
-@@ -154,8 +154,17 @@
+@@ -156,8 +156,17 @@
        LOCK.lock();
        try {
          if (!spec.isSuspended()) {
@@ -868,10 +889,10 @@ diff --git a/indexing-service/src/main/java/org/apache/druid/indexing/seekablest
 +          LagStats lagStats = supervisor.computeLagStats();
 +
 +          if (lagStats != null) {
-+            AggregateFunction aggregate = lagBasedAutoScalerConfig.getLagAggregate() == null ?
++            AggregateFunction lagAggregate = lagBasedAutoScalerConfig.getLagAggregate() == null ?
 +                                          lagStats.getAggregateForScaling() :
 +                                          lagBasedAutoScalerConfig.getLagAggregate();
-+            long lag = lagStats.getMetric(aggregate);
++            long lag = lagStats.getMetric(lagAggregate);
 +            lagMetricsQueue.offer(lag > 0 ? lag : 0L);
 +          } else {
 +            lagMetricsQueue.offer(0L);
@@ -912,7 +933,7 @@ diff --git a/indexing-service/src/main/java/org/apache/druid/indexing/seekablest
      this.scaleInThreshold = scaleInThreshold != null ? scaleInThreshold : 1000000;
      this.triggerScaleOutFractionThreshold = triggerScaleOutFractionThreshold != null ? triggerScaleOutFractionThreshold : 0.3;
      this.triggerScaleInFractionThreshold = triggerScaleInFractionThreshold != null ? triggerScaleInFractionThreshold : 0.9;
-+    this.lagAggregate = AggregateFunction.MAX; // Default to MAX for lagAggregate
++    this.lagAggregate = lagAggregate != null ? lagAggregate : AggregateFunction.SUM;
  
      // Only do taskCountMax and taskCountMin check when autoscaler is enabled. So that users left autoConfig empty{} will not throw any exception and autoscaler is disabled.
      // If autoscaler is disabled, no matter what configs are set, they are not used.
@@ -990,7 +1011,7 @@ diff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/
 diff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java
 --- a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java
 +++ b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java
-@@ -24,12 +24,19 @@
+@@ -25,12 +25,19 @@
    private final long maxLag;
    private final long totalLag;
    private final long avgLag;
@@ -1010,13 +1031,13 @@ diff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/
    }
  
    public long getMaxLag()
-@@ -29,4 +29,26 @@
+@@ -54,4 +54,26 @@
    {
      return avgLag;
    }
 +
 +  /**
-+   * The preferred scaling metric that supervisor may specify to be used.
++   * The preferred scaling metric that LagStatsTest may specify to be used.
 +   * This could be overrided by the autscaler.
 +   */
 +  public AggregateFunction getAggregateForScaling()
