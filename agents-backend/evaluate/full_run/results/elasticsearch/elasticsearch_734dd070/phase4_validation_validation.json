@@ -1,0 +1,29 @@
+{
+  "validation_passed": false,
+  "validation_attempts": 3,
+  "validation_error_context": "Hunk application failed: The root cause of the failure is a malformed patch, likely due to a signature mismatch or incorrect line numbers in the hunk, as indicated by the error at line 38. The specific file involved is `DataNodeRequestSender.java`, particularly around the import statements. To fix this, regenerate the hunk by ensuring the patch is created against the latest version of the file, and verify that the line numbers and context match the current state of the code.",
+  "validation_results": {
+    "hunk_application": {
+      "success": false,
+      "raw": "[git-apply-strict] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:106\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[git-apply-whitespace-tolerant] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:106\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[gnu-patch-dry-run] patch: **** malformed patch at line 38: @@ -57,1 +57,21 @@-import java.util.LinkedHashMap;+import java.util.List;",
+      "agent_evaluation": "The root cause of the failure is a malformed patch, likely due to a signature mismatch or incorrect line numbers in the hunk, as indicated by the error at line 38. The specific file involved is `DataNodeRequestSender.java`, particularly around the import statements. To fix this, regenerate the hunk by ensuring the patch is created against the latest version of the file, and verify that the line numbers and context match the current state of the code.",
+      "error_context": "The root cause of the failure is a malformed patch, likely due to a signature mismatch or incorrect line numbers in the hunk, as indicated by the error at line 38. The specific file involved is `DataNodeRequestSender.java`, particularly around the import statements. To fix this, regenerate the hunk by ensuring the patch is created against the latest version of the file, and verify that the line numbers and context match the current state of the code.",
+      "diagnostics": {
+        "category": "context_mismatch",
+        "retry_files": [
+          "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java"
+        ],
+        "issues": [
+          {
+            "error_type": "malformed_patch",
+            "suggested_action": "regenerate_hunk"
+          }
+        ]
+      }
+    }
+  },
+  "validation_failure_category": "context_mismatch",
+  "validation_retry_files": [
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java"
+  ]
+}
