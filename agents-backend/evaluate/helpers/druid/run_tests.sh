@@ -84,7 +84,7 @@ if docker run --rm \
     bash -c "if [ \"${WORKTREE_MODE}\" != \"1\" ]; then git checkout -f ${COMMIT_SHA}; fi && \
              export MAVEN_OPTS=\"\${MAVEN_OPTS:-} -XX:ActiveProcessorCount=${MAX_CPU}\" && \
              rm -rf /repo/build/all-test-results && \
-             mvn test -T ${MAVEN_THREADS} ${MAVEN_ARGS} -DforkCount=${SUREFIRE_FORKS} -DreuseForks=true -DfailIfNoTests=false -Dmaven.javadoc.skip=true -Dcheckstyle.skip=true -Dpmd.skip=true -Dforbiddenapis.skip=true -Denforcer.skip=true -DskipITs; \
+             mvn test -T ${MAVEN_THREADS} ${MAVEN_ARGS} -DforkCount=${SUREFIRE_FORKS} -DreuseForks=true -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.javadoc.skip=true -Dcheckstyle.skip=true -Dpmd.skip=true -Dforbiddenapis.skip=true -Denforcer.skip=true -DskipITs; \
              MVN_EXIT_CODE=\$?; \
              mkdir -p /repo/build/all-test-results; \
              find . -name 'TEST-*.xml' -exec cp {} /repo/build/all-test-results/ \;; \
