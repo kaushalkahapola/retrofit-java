@@ -54,13 +54,15 @@ ${DOCKER_CMD} run --rm -u root \
 echo "--- Compiling with Gradle (assemble + testClasses, skip tests) ---"
 if ${DOCKER_CMD} run --rm \
     --dns=8.8.8.8 \
+    -e HOME=/tmp \
+    -e XDG_CONFIG_HOME=/tmp \
     -u "${HOST_UID}:${HOST_GID}" \
     -v "gradle-cache-es:/home/gradle/.gradle/caches" \
     -v "gradle-wrapper-es:/home/gradle/.gradle/wrapper" \
     -v "${PROJECT_DIR}:/repo" \
     -w /repo \
     "${IMAGE_TAG}" \
-    bash -c "git config --global --add safe.directory /repo && \
+    bash -c "git config --global --add safe.directory /repo || true; \
     ./gradlew classes testClasses \
         -x :benchmarks:classes \
         -x :benchmarks:testClasses \

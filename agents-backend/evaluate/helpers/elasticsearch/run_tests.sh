@@ -87,13 +87,15 @@ echo "--- Executing: ${GRADLE_CMD} ---"
 
 if ${DOCKER_CMD} run --rm \
     --dns=8.8.8.8 \
+    -e HOME=/tmp \
+    -e XDG_CONFIG_HOME=/tmp \
     -u "${HOST_UID}:${HOST_GID}" \
     -v "gradle-cache-es:/home/gradle/.gradle/caches" \
     -v "gradle-wrapper-es:/home/gradle/.gradle/wrapper" \
     -v "${PROJECT_DIR}:/repo" \
     -w /repo \
     "${IMAGE_TAG}" \
-    bash -c "git config --global --add safe.directory /repo && \
+    bash -c "git config --global --add safe.directory /repo || true; \
     mkdir -p /tmp/gradle-project-cache && \
     ${GRADLE_CMD}; \
     GRADLE_EXIT=\$?; \
