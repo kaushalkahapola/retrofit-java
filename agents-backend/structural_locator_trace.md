@@ -22,9 +22,9 @@
 |---|---|---|---|---|
 | 1 | declaration | `<import>` | `<import>` | 21–21 |
 | 2 | declaration | `<import>` | `<import>` | 41–42 |
-| 3 | core_fix | `order/related static methods and NODE_QUERY_ORDER` | `DataNodeRequestSender (class static fields and private static methods)` | 58–91 |
-| 4 | propagation | `sendRequestsForTargetShards` | `sendRequestsForTargetShards` | 127–127 |
-| 5 | propagation | `selectNodeRequests` | `selectNodeRequests` | 327–327 |
+| 3 | core_fix | `order` | `order` | 59–81 |
+| 4 | propagation | `sendRequests` | `sendRequests` | 128–129 |
+| 5 | propagation | `selectNodeRequests` | `selectNodeRequests` | 329–329 |
 ## Test File Mappings
 
 

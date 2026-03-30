@@ -3,7 +3,7 @@
   "patch_id": "elasticsearch_734dd070",
   "mainline_commit": "734dd070e719f0bac49953fbfb983fe8f19bd1de",
   "backport_commit": "c5a3eb86ffd964343865e2f48423f850f8f916ad",
-  "timestamp": "2026-03-30T08:26:49.494453",
+  "timestamp": "2026-03-30T08:47:00.376186",
   "phases": {
     "phase1_context_analyzer": {
       "context_analyzer": {
@@ -19,44 +19,44 @@
               "selectNodeRequests(TargetShards)",
               "LinkedHashMap"
             ],
-            "patch_intent_summary": "Ensure that requests to data nodes are sent in a consistent, prioritized order based on node roles to optimize query execution.",
+            "patch_intent_summary": "Ensure that requests to data nodes are sent in a deterministic, role-prioritized order to optimize query execution and resource utilization.",
             "hunk_chain": [
               {
                 "hunk_index": 1,
                 "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
                 "summary": "Imports DiscoveryNodeRole to access node role constants for ordering.",
                 "role": "declaration",
-                "connects_to_next": "Allows use of DiscoveryNodeRole constants in the new ordering logic introduced in the next hunks.",
+                "connects_to_next": "Allows use of DiscoveryNodeRole constants in the new ordering logic and static list introduced in the next hunk.",
                 "global_index": 1
               },
               {
                 "hunk_index": 2,
                 "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-                "summary": "Imports Comparator and LinkedHashMap to support custom sorting and ordered maps.",
+                "summary": "Imports Comparator and LinkedHashMap to support custom sorting and order-preserving maps.",
                 "role": "declaration",
-                "connects_to_next": "Enables the implementation of deterministic ordering and ordered map usage in subsequent code changes.",
+                "connects_to_next": "Enables the implementation of the core ordering logic and the use of ordered maps in subsequent hunks.",
                 "global_index": 2
               },
               {
                 "hunk_index": 3,
                 "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-                "summary": "Defines NODE_QUERY_ORDER and adds static methods to order shards by node role priority.",
+                "summary": "Defines NODE_QUERY_ORDER (node role priority list) and adds static methods to order shards by node role priority.",
                 "role": "core_fix",
-                "connects_to_next": "Provides the core ordering logic, which is then applied to the population of pendingShardIds in the next hunk.",
+                "connects_to_next": "Provides the core ordering mechanism that is then invoked in the main request scheduling logic in the next hunk.",
                 "global_index": 3
               },
               {
                 "hunk_index": 4,
                 "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-                "summary": "Replaces unordered addition of shard IDs to pendingShardIds with the new order() method, ensuring prioritized processing.",
+                "summary": "Replaces direct addition of shard IDs with a call to the new order() method, ensuring pendingShardIds are ordered by node role priority.",
                 "role": "propagation",
-                "connects_to_next": "Ensures that the ordering is respected when mapping nodes to shard IDs for request dispatch, which is handled in the next hunk.",
+                "connects_to_next": "Ensures that the pendingShardIds queue is populated in the correct order, which must be preserved when mapping nodes to shard IDs in the next hunk.",
                 "global_index": 4
               },
               {
                 "hunk_index": 5,
                 "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-                "summary": "Changes nodeToShardIds from HashMap to LinkedHashMap to preserve the deterministic order established earlier.",
+                "summary": "Changes nodeToShardIds from HashMap to LinkedHashMap to preserve the insertion order of nodes (and thus the role-prioritized order).",
                 "role": "propagation",
                 "connects_to_next": "",
                 "global_index": 5
@@ -101,25 +101,27 @@
                 "code_snippet": "import java.util.Comparator;\nimport java.util.LinkedHashMap;",
                 "surrounding_context": {
                   "before": [
-                    "import java.util.Collections;",
-                    "import java.util.HashMap;"
+                    "import java.util.ArrayList;",
+                    "import java.util.Collections;"
                   ],
                   "after": [
-                    "import java.util.List;",
-                    "import java.util.Map;"
+                    "import java.util.HashMap;",
+                    "import java.util.IdentityHashMap;"
                   ]
                 }
               },
               {
                 "hunk_index": 3,
-                "mainline_method": "order/related static methods and NODE_QUERY_ORDER",
+                "mainline_method": "order",
                 "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-                "target_method": "DataNodeRequestSender (class static fields and private static methods)",
-                "start_line": 58,
-                "end_line": 91,
+                "target_method": "order",
+                "start_line": 59,
+                "end_line": 81,
                 "code_snippet": "    /**\n     * Query order according to the\n     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n     */\n    private static final List<String> NODE_QUERY_ORDER = List.of(\n        DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()\n    );\n\n    private static List<ShardId> order(TargetShards targetShards) {\n        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();\n        var ordered = new ArrayList<>(targetShards.shards.keySet());\n        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));\n        return ordered;\n    }\n\n    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {\n        if (nodes.isEmpty()) {\n            return Integer.MAX_VALUE;\n        }\n        var order = 0;\n        for (var node : nodes) {\n            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));\n        }\n        return order;\n    }\n\n    private static int nodeOrder(DiscoveryNode node) {\n        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {\n            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {\n                return i;\n            }\n        }\n        return Integer.MAX_VALUE;\n    }",
                 "surrounding_context": {
                   "before": [
+                    " * and executing these computes on the data nodes.",
+                    " */",
                     "abstract class DataNodeRequestSender {"
                   ],
                   "after": [
@@ -130,19 +132,19 @@
               },
               {
                 "hunk_index": 4,
-                "mainline_method": "sendRequestsForTargetShards",
+                "mainline_method": "sendRequests",
                 "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-                "target_method": "sendRequestsForTargetShards",
-                "start_line": 127,
-                "end_line": 127,
-                "code_snippet": "pendingShardIds.addAll(order(targetShards));",
+                "target_method": "sendRequests",
+                "start_line": 128,
+                "end_line": 129,
+                "code_snippet": "                pendingShardIds.addAll(order(targetShards));",
                 "surrounding_context": {
                   "before": [
-                    "nodePermits.putIfAbsent(node, new Semaphore(1));",
-                    "}"
+                    "                }",
+                    "                // old: pendingShardIds.addAll(targetShards.shards.keySet());"
                   ],
                   "after": [
-                    "trySendingRequestsForPendingShards(targetShards, computeListener);"
+                    "                trySendingRequestsForPendingShards(targetShards, computeListener);"
                   ]
                 }
               },
@@ -151,16 +153,16 @@
                 "mainline_method": "selectNodeRequests",
                 "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
                 "target_method": "selectNodeRequests",
-                "start_line": 327,
-                "end_line": 327,
-                "code_snippet": "final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();",
+                "start_line": 329,
+                "end_line": 329,
+                "code_snippet": "        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();",
                 "surrounding_context": {
                   "before": [
-                    "private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {",
-                    "    assert sendingLock.isHeldByCurrentThread();"
+                    "    private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {",
+                    "        assert sendingLock.isHeldByCurrentThread();"
                   ],
                   "after": [
-                    "final Iterator<ShardId> shardsIt = pendingShardIds.iterator();"
+                    "        final Iterator<ShardId> shardsIt = pendingShardIds.iterator();"
                   ]
                 }
               }
@@ -199,8 +201,8 @@
             {
               "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
               "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-              "hunk_text": "@@ -58,6 +58,20 @@\n  * and executing these computes on the data nodes.\n  */\n abstract class DataNodeRequestSender {\n+\n+    /**\n+     * Query order according to the\n+     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n+     */\n+    private static final List<String> NODE_QUERY_ORDER = List.of(\n+        DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()\n+    );\n+\n     private final TransportService transportService;\n     private final Executor esqlExecutor;\n     private final CancellableTask rootTask;\n",
-              "insertion_line": 58,
+              "hunk_text": "@@ -59,6 +59,17 @@\n-* and executing these computes on the data nodes.\n- */\n abstract class DataNodeRequestSender {\n+\n+    /**\n+     * Query order according to the\n+     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n+     */\n+    private static final List<String> NODE_QUERY_ORDER = List.of(\n+        DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()\n+    );\n \n     private final ClusterService clusterService;\n     private final TransportService transportService;\n",
+              "insertion_line": 59,
               "intent_verified": false,
               "file_operation": "MODIFIED",
               "old_target_file": null,
@@ -210,8 +212,8 @@
             {
               "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
               "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-              "hunk_text": "@@ -127,12 +127,39 @@\n                         nodePermits.putIfAbsent(node, new Semaphore(1));\n                     }\n                 }\n-                pendingShardIds.addAll(targetShards.shards.keySet());\n+                pendingShardIds.addAll(order(targetShards));\n                 trySendingRequestsForPendingShards(targetShards, computeListener);\n             }\n         }, listener::onFailure));\n     }\n \n+    private static List<ShardId> order(TargetShards targetShards) {\n+        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();\n+        var ordered = new ArrayList<>(targetShards.shards.keySet());\n+        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));\n+        return ordered;\n+    }\n+\n+    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {\n+        if (nodes.isEmpty()) {\n+            return Integer.MAX_VALUE;\n+        }\n+        var order = 0;\n+        for (var node : nodes) {\n+            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));\n+        }\n+        return order;\n+    }\n+\n+    private static int nodeOrder(DiscoveryNode node) {\n+        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {\n+            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {\n+                return i;\n+            }\n+        }\n+        return Integer.MAX_VALUE;\n+    }\n+\n     private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {\n         changed.set(true);\n         final ActionListener<Void> listener = computeListener.acquireAvoid();\n",
-              "insertion_line": 127,
+              "hunk_text": "@@ -128,12 +128,6 @@\n ) {\n-                pendingShardIds.addAll(targetShards.shards.keySet());\n-                trySendingRequestsForPendingShards(targetShards, computeListener);\n-            }\n-        }, listener::onFailure));\n-    }\n-\n-    private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {\n-        changed.set(true);\n-        final ActionListener<Void> listener = computeListener.acquireAvoid();\n-        try {\n-            while (sendingLock.tryLock()) {\n+    pendingShardIds.addAll(order(targetShards));\n+    trySendingRequestsForPendingShards(targetShards, computeListener);\n+}\n+}, listener::onFailure));\n+}\n",
+              "insertion_line": 128,
               "intent_verified": false,
               "file_operation": "MODIFIED",
               "old_target_file": null,
@@ -221,8 +223,8 @@
             {
               "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
               "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-              "hunk_text": "@@ -327,7 +327,7 @@\n      */\n     private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {\n         assert sendingLock.isHeldByCurrentThread();\n-        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new HashMap<>();\n+        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();\n         final Iterator<ShardId> shardsIt = pendingShardIds.iterator();\n \n         while (shardsIt.hasNext()) {\n",
-              "insertion_line": 327,
+              "hunk_text": "@@ -329,7 +329,7 @@\n      */\n     private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {\n         assert sendingLock.isHeldByCurrentThread();\n-        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new HashMap<>();\n+        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();\n         final Iterator<ShardId> shardsIt = pendingShardIds.iterator();\n \n         while (shardsIt.hasNext()) {\n",
+              "insertion_line": 329,
               "intent_verified": false,
               "file_operation": "MODIFIED",
               "old_target_file": null,
@@ -240,13 +242,13 @@
         "outputs": {
           "validation_passed": false,
           "validation_attempts": 3,
-          "validation_error_context": "Hunk application failed: Root cause: The patch fails because `DataNodeRequestSender.java` and `DataNodeRequestSenderTests.java` already exist and their contents differ at or around line 127, causing hunk mismatches (likely due to code drift or prior changes).\n\nFiles/methods involved:  \n- `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java` (line 127)  \n- `x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java`\n\nFix suggestion: Manually reconcile and update the target files to match the expected context of the patch (especially around line 127), then regenerate the patch hunks against the current file versions to ensure clean application.",
+          "validation_error_context": "Hunk application failed: Root cause: The patch fails because the target file `DataNodeRequestSender.java` already exists and its contents at/around line 128 do not match the expected context, likely due to prior changes or divergence from the source branch (signature mismatch or code drift).\n\nFiles/methods involved: `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java` (line 128).\n\nFix suggestion: Rebase or manually synchronize `DataNodeRequestSender.java` with the source branch, then regenerate the patch hunks against the current file version to ensure context alignment.",
           "validation_results": {
             "hunk_application": {
               "success": false,
-              "raw": "[git-apply-strict] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:127\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[git-apply-whitespace-tolerant] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:127\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[gnu-patch-dry-run] The next patch would create the file x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java,\nwhich already exists!  Skipping patch.\n5 out of 5 hunks ignored\nThe next patch would create the file x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java,\nwhich already exists!  Skipping patch.\n8 out of 8 hunks ignored",
-              "agent_evaluation": "Root cause: The patch fails because `DataNodeRequestSender.java` and `DataNodeRequestSenderTests.java` already exist and their contents differ at or around line 127, causing hunk mismatches (likely due to code drift or prior changes).\n\nFiles/methods involved:  \n- `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java` (line 127)  \n- `x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java`\n\nFix suggestion: Manually reconcile and update the target files to match the expected context of the patch (especially around line 127), then regenerate the patch hunks against the current file versions to ensure clean application.",
-              "error_context": "Root cause: The patch fails because `DataNodeRequestSender.java` and `DataNodeRequestSenderTests.java` already exist and their contents differ at or around line 127, causing hunk mismatches (likely due to code drift or prior changes).\n\nFiles/methods involved:  \n- `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java` (line 127)  \n- `x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java`\n\nFix suggestion: Manually reconcile and update the target files to match the expected context of the patch (especially around line 127), then regenerate the patch hunks against the current file versions to ensure clean application.",
+              "raw": "[git-apply-strict] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:128\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[git-apply-whitespace-tolerant] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:128\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[gnu-patch-dry-run] The next patch would create the file x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java,\nwhich already exists!  Skipping patch.\n5 out of 5 hunks ignored\nThe next patch would create the file x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java,\nwhich already exists!  Skipping patch.\n8 out of 8 hunks ignored",
+              "agent_evaluation": "Root cause: The patch fails because the target file `DataNodeRequestSender.java` already exists and its contents at/around line 128 do not match the expected context, likely due to prior changes or divergence from the source branch (signature mismatch or code drift).\n\nFiles/methods involved: `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java` (line 128).\n\nFix suggestion: Rebase or manually synchronize `DataNodeRequestSender.java` with the source branch, then regenerate the patch hunks against the current file version to ensure context alignment.",
+              "error_context": "Root cause: The patch fails because the target file `DataNodeRequestSender.java` already exists and its contents at/around line 128 do not match the expected context, likely due to prior changes or divergence from the source branch (signature mismatch or code drift).\n\nFiles/methods involved: `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java` (line 128).\n\nFix suggestion: Rebase or manually synchronize `DataNodeRequestSender.java` with the source branch, then regenerate the patch hunks against the current file version to ensure context alignment.",
               "diagnostics": {
                 "category": "context_mismatch",
                 "retry_files": [

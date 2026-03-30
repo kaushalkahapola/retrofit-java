@@ -9,44 +9,44 @@
       "selectNodeRequests(TargetShards)",
       "LinkedHashMap"
     ],
-    "patch_intent_summary": "Ensure that requests to data nodes are sent in a consistent, prioritized order based on node roles to optimize query execution.",
+    "patch_intent_summary": "Ensure that requests to data nodes are sent in a deterministic, role-prioritized order to optimize query execution and resource utilization.",
     "hunk_chain": [
       {
         "hunk_index": 1,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
         "summary": "Imports DiscoveryNodeRole to access node role constants for ordering.",
         "role": "declaration",
-        "connects_to_next": "Allows use of DiscoveryNodeRole constants in the new ordering logic introduced in the next hunks.",
+        "connects_to_next": "Allows use of DiscoveryNodeRole constants in the new ordering logic and static list introduced in the next hunk.",
         "global_index": 1
       },
       {
         "hunk_index": 2,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Imports Comparator and LinkedHashMap to support custom sorting and ordered maps.",
+        "summary": "Imports Comparator and LinkedHashMap to support custom sorting and order-preserving maps.",
         "role": "declaration",
-        "connects_to_next": "Enables the implementation of deterministic ordering and ordered map usage in subsequent code changes.",
+        "connects_to_next": "Enables the implementation of the core ordering logic and the use of ordered maps in subsequent hunks.",
         "global_index": 2
       },
       {
         "hunk_index": 3,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Defines NODE_QUERY_ORDER and adds static methods to order shards by node role priority.",
+        "summary": "Defines NODE_QUERY_ORDER (node role priority list) and adds static methods to order shards by node role priority.",
         "role": "core_fix",
-        "connects_to_next": "Provides the core ordering logic, which is then applied to the population of pendingShardIds in the next hunk.",
+        "connects_to_next": "Provides the core ordering mechanism that is then invoked in the main request scheduling logic in the next hunk.",
         "global_index": 3
       },
       {
         "hunk_index": 4,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Replaces unordered addition of shard IDs to pendingShardIds with the new order() method, ensuring prioritized processing.",
+        "summary": "Replaces direct addition of shard IDs with a call to the new order() method, ensuring pendingShardIds are ordered by node role priority.",
         "role": "propagation",
-        "connects_to_next": "Ensures that the ordering is respected when mapping nodes to shard IDs for request dispatch, which is handled in the next hunk.",
+        "connects_to_next": "Ensures that the pendingShardIds queue is populated in the correct order, which must be preserved when mapping nodes to shard IDs in the next hunk.",
         "global_index": 4
       },
       {
         "hunk_index": 5,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Changes nodeToShardIds from HashMap to LinkedHashMap to preserve the deterministic order established earlier.",
+        "summary": "Changes nodeToShardIds from HashMap to LinkedHashMap to preserve the insertion order of nodes (and thus the role-prioritized order).",
         "role": "propagation",
         "connects_to_next": "",
         "global_index": 5

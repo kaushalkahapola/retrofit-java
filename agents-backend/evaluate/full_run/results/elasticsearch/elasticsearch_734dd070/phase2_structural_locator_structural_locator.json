@@ -29,25 +29,27 @@
         "code_snippet": "import java.util.Comparator;\nimport java.util.LinkedHashMap;",
         "surrounding_context": {
           "before": [
-            "import java.util.Collections;",
-            "import java.util.HashMap;"
+            "import java.util.ArrayList;",
+            "import java.util.Collections;"
           ],
           "after": [
-            "import java.util.List;",
-            "import java.util.Map;"
+            "import java.util.HashMap;",
+            "import java.util.IdentityHashMap;"
           ]
         }
       },
       {
         "hunk_index": 3,
-        "mainline_method": "order/related static methods and NODE_QUERY_ORDER",
+        "mainline_method": "order",
         "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "target_method": "DataNodeRequestSender (class static fields and private static methods)",
-        "start_line": 58,
-        "end_line": 91,
+        "target_method": "order",
+        "start_line": 59,
+        "end_line": 81,
         "code_snippet": "    /**\n     * Query order according to the\n     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n     */\n    private static final List<String> NODE_QUERY_ORDER = List.of(\n        DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()\n    );\n\n    private static List<ShardId> order(TargetShards targetShards) {\n        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();\n        var ordered = new ArrayList<>(targetShards.shards.keySet());\n        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));\n        return ordered;\n    }\n\n    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {\n        if (nodes.isEmpty()) {\n            return Integer.MAX_VALUE;\n        }\n        var order = 0;\n        for (var node : nodes) {\n            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));\n        }\n        return order;\n    }\n\n    private static int nodeOrder(DiscoveryNode node) {\n        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {\n            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {\n                return i;\n            }\n        }\n        return Integer.MAX_VALUE;\n    }",
         "surrounding_context": {
           "before": [
+            " * and executing these computes on the data nodes.",
+            " */",
             "abstract class DataNodeRequestSender {"
           ],
           "after": [
@@ -58,19 +60,19 @@
       },
       {
         "hunk_index": 4,
-        "mainline_method": "sendRequestsForTargetShards",
+        "mainline_method": "sendRequests",
         "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "target_method": "sendRequestsForTargetShards",
-        "start_line": 127,
-        "end_line": 127,
-        "code_snippet": "pendingShardIds.addAll(order(targetShards));",
+        "target_method": "sendRequests",
+        "start_line": 128,
+        "end_line": 129,
+        "code_snippet": "                pendingShardIds.addAll(order(targetShards));",
         "surrounding_context": {
           "before": [
-            "nodePermits.putIfAbsent(node, new Semaphore(1));",
-            "}"
+            "                }",
+            "                // old: pendingShardIds.addAll(targetShards.shards.keySet());"
           ],
           "after": [
-            "trySendingRequestsForPendingShards(targetShards, computeListener);"
+            "                trySendingRequestsForPendingShards(targetShards, computeListener);"
           ]
         }
       },
@@ -79,16 +81,16 @@
         "mainline_method": "selectNodeRequests",
         "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
         "target_method": "selectNodeRequests",
-        "start_line": 327,
-        "end_line": 327,
-        "code_snippet": "final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();",
+        "start_line": 329,
+        "end_line": 329,
+        "code_snippet": "        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();",
         "surrounding_context": {
           "before": [
-            "private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {",
-            "    assert sendingLock.isHeldByCurrentThread();"
+            "    private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {",
+            "        assert sendingLock.isHeldByCurrentThread();"
           ],
           "after": [
-            "final Iterator<ShardId> shardsIt = pendingShardIds.iterator();"
+            "        final Iterator<ShardId> shardsIt = pendingShardIds.iterator();"
           ]
         }
       }

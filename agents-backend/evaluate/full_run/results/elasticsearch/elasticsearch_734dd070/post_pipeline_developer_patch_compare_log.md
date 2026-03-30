@@ -146,9 +146,9 @@ Developer
 
 Generated
 ```diff
-@@ -58,6 +58,20 @@
-  * and executing these computes on the data nodes.
-  */
+@@ -59,6 +59,17 @@
+-* and executing these computes on the data nodes.
+- */
  abstract class DataNodeRequestSender {
 +
 +    /**
@@ -163,32 +163,33 @@ Generated
 +        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),
 +        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()
 +    );
-+
+ 
+     private final ClusterService clusterService;
      private final TransportService transportService;
-     private final Executor esqlExecutor;
-     private final CancellableTask rootTask;
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
 --- developer+++ generated@@ -1,7 +1,8 @@-@@ -60,6 +63,19 @@
-+@@ -58,6 +58,20 @@
-+  * and executing these computes on the data nodes.
-   */
+-  */
++@@ -59,6 +59,17 @@
++-* and executing these computes on the data nodes.
++- */
   abstract class DataNodeRequestSender {
 - 
 ++
  +    /**
  +     * Query order according to the
  +     * <a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html">node roles</a>.
-@@ -15,6 +16,6 @@ +        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()
+@@ -14,7 +15,6 @@ +        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),
+ +        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()
  +    );
- +
--     private final ClusterService clusterService;
+-+
++ 
+      private final ClusterService clusterService;
       private final TransportService transportService;
-      private final Executor esqlExecutor;
-+     private final CancellableTask rootTask;
+-     private final Executor esqlExecutor;
 
 ```
 
@@ -242,63 +243,87 @@ Developer
 
 Generated
 ```diff
-@@ -127,12 +127,39 @@
-                         nodePermits.putIfAbsent(node, new Semaphore(1));
-                     }
-                 }
+@@ -128,12 +128,6 @@
+ ) {
 -                pendingShardIds.addAll(targetShards.shards.keySet());
-+                pendingShardIds.addAll(order(targetShards));
-                 trySendingRequestsForPendingShards(targetShards, computeListener);
-             }
-         }, listener::onFailure));
-     }
- 
-+    private static List<ShardId> order(TargetShards targetShards) {
-+        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();
-+        var ordered = new ArrayList<>(targetShards.shards.keySet());
-+        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));
-+        return ordered;
-+    }
-+
-+    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {
-+        if (nodes.isEmpty()) {
-+            return Integer.MAX_VALUE;
-+        }
-+        var order = 0;
-+        for (var node : nodes) {
-+            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));
-+        }
-+        return order;
-+    }
-+
-+    private static int nodeOrder(DiscoveryNode node) {
-+        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {
-+            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {
-+                return i;
-+            }
-+        }
-+        return Integer.MAX_VALUE;
-+    }
-+
-     private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {
-         changed.set(true);
-         final ActionListener<Void> listener = computeListener.acquireAvoid();
+-                trySendingRequestsForPendingShards(targetShards, computeListener);
+-            }
+-        }, listener::onFailure));
+-    }
+-
+-    private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {
+-        changed.set(true);
+-        final ActionListener<Void> listener = computeListener.acquireAvoid();
+-        try {
+-            while (sendingLock.tryLock()) {
++    pendingShardIds.addAll(order(targetShards));
++    trySendingRequestsForPendingShards(targetShards, computeListener);
++}
++}, listener::onFailure));
++}
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,7 +1,7 @@-@@ -126,12 +142,39 @@
+--- developer+++ generated@@ -1,41 +1,18 @@-@@ -126,12 +142,39 @@
 -                     )
 -                 )
 -             ) {
-+@@ -127,12 +127,39 @@
-+                         nodePermits.putIfAbsent(node, new Semaphore(1));
-+                     }
-+                 }
++@@ -128,12 +128,6 @@
++ ) {
  -                pendingShardIds.addAll(targetShards.shards.keySet());
- +                pendingShardIds.addAll(order(targetShards));
-                  trySendingRequestsForPendingShards(targetShards, computeListener);
+-+                pendingShardIds.addAll(order(targetShards));
+-                 trySendingRequestsForPendingShards(targetShards, computeListener);
+-             }
+-         }, listener::onFailure));
+-     }
+- 
+-+    private static List<ShardId> order(TargetShards targetShards) {
+-+        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();
+-+        var ordered = new ArrayList<>(targetShards.shards.keySet());
+-+        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));
+-+        return ordered;
+-+    }
+-+
+-+    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {
+-+        if (nodes.isEmpty()) {
+-+            return Integer.MAX_VALUE;
+-+        }
+-+        var order = 0;
+-+        for (var node : nodes) {
+-+            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));
+-+        }
+-+        return order;
+-+    }
+-+
+-+    private static int nodeOrder(DiscoveryNode node) {
+-+        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {
+-+            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {
+-+                return i;
+-+            }
+-+        }
+-+        return Integer.MAX_VALUE;
+-+    }
+-+
+-     private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {
+-         changed.set(true);
+-         final ActionListener<Void> listener = computeListener.acquireAvoid();
++-                trySendingRequestsForPendingShards(targetShards, computeListener);
++-            }
++-        }, listener::onFailure));
++-    }
++-
++-    private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {
++-        changed.set(true);
++-        final ActionListener<Void> listener = computeListener.acquireAvoid();
++-        try {
++-            while (sendingLock.tryLock()) {
+++    pendingShardIds.addAll(order(targetShards));
+++    trySendingRequestsForPendingShards(targetShards, computeListener);
+++}
+++}, listener::onFailure));
+++}
 
 ```
 
@@ -320,7 +345,7 @@ Developer
 
 Generated
 ```diff
-@@ -327,7 +327,7 @@
+@@ -329,7 +329,7 @@
       */
      private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {
          assert sendingLock.isHeldByCurrentThread();
@@ -335,7 +360,7 @@ Generated
 Developer -> Generated (Unified Diff)
 ```diff
 --- developer+++ generated@@ -1,4 +1,4 @@-@@ -338,7 +381,7 @@
-+@@ -327,7 +327,7 @@
++@@ -329,7 +329,7 @@
        */
       private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {
           assert sendingLock.isHeldByCurrentThread();
@@ -740,9 +765,9 @@ diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugi
  import java.util.List;
  import java.util.Map;
  import java.util.Queue;
-@@ -58,6 +58,20 @@
-  * and executing these computes on the data nodes.
-  */
+@@ -59,6 +59,17 @@
+-* and executing these computes on the data nodes.
+- */
  abstract class DataNodeRequestSender {
 +
 +    /**
@@ -757,52 +782,28 @@ diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugi
 +        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),
 +        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()
 +    );
-+
-     private final TransportService transportService;
-     private final Executor esqlExecutor;
-     private final CancellableTask rootTask;
-@@ -127,12 +127,39 @@
-                         nodePermits.putIfAbsent(node, new Semaphore(1));
-                     }
-                 }
--                pendingShardIds.addAll(targetShards.shards.keySet());
-+                pendingShardIds.addAll(order(targetShards));
-                 trySendingRequestsForPendingShards(targetShards, computeListener);
-             }
-         }, listener::onFailure));
-     }
  
-+    private static List<ShardId> order(TargetShards targetShards) {
-+        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();
-+        var ordered = new ArrayList<>(targetShards.shards.keySet());
-+        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));
-+        return ordered;
-+    }
-+
-+    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {
-+        if (nodes.isEmpty()) {
-+            return Integer.MAX_VALUE;
-+        }
-+        var order = 0;
-+        for (var node : nodes) {
-+            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));
-+        }
-+        return order;
-+    }
-+
-+    private static int nodeOrder(DiscoveryNode node) {
-+        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {
-+            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {
-+                return i;
-+            }
-+        }
-+        return Integer.MAX_VALUE;
-+    }
-+
-     private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {
-         changed.set(true);
-         final ActionListener<Void> listener = computeListener.acquireAvoid();
-@@ -327,7 +327,7 @@
+     private final ClusterService clusterService;
+     private final TransportService transportService;
+@@ -128,12 +128,6 @@
+ ) {
+-                pendingShardIds.addAll(targetShards.shards.keySet());
+-                trySendingRequestsForPendingShards(targetShards, computeListener);
+-            }
+-        }, listener::onFailure));
+-    }
+-
+-    private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {
+-        changed.set(true);
+-        final ActionListener<Void> listener = computeListener.acquireAvoid();
+-        try {
+-            while (sendingLock.tryLock()) {
++    pendingShardIds.addAll(order(targetShards));
++    trySendingRequestsForPendingShards(targetShards, computeListener);
++}
++}, listener::onFailure));
++}
+@@ -329,7 +329,7 @@
       */
      private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {
          assert sendingLock.isHeldByCurrentThread();
