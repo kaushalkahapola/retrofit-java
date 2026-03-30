@@ -70,27 +70,22 @@ Developer
 
 Generated
 ```diff
-@@ -65,8 +65,7 @@
-                     break;
-                 }
-             }
--            // TODO: We can push down partial sorts where `pushableSorts.size() < orders.size()`, but that should involve benchmarks
--            if (pushableSorts.size() > 0 && pushableSorts.size() == orders.size()) {
-+            if (pushableSorts.isEmpty() == false) {
-                 return new PushableCompoundExec(evalExec, queryExec, pushableSorts);
-             }
-         }
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,4 +1,4 @@-@@ -189,8 +189,7 @@
-+@@ -65,8 +65,7 @@
-                      break;
-                  }
-              }
-
+--- developer+++ generated@@ -1,10 +1 @@-@@ -189,8 +189,7 @@
+-                     break;
+-                 }
+-             }
+--            // TODO: We can push down partial sorts where `pushableSorts.size() < orders.size()`, but that should involve benchmarks
+--            if (pushableSorts.size() > 0 && pushableSorts.size() == orders.size()) {
+-+            if (pushableSorts.isEmpty() == false) {
+-                 return new PushableCompoundExec(evalExec, queryExec, pushableSorts);
+-             }
+-         }
++*No hunk*
 ```
 
 
@@ -496,19 +491,6 @@ Developer -> Generated (Unified Diff)
 
 ## Full Generated Patch (code-only)
 ```diff
-diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java
---- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java
-+++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java
-@@ -65,8 +65,7 @@
-                     break;
-                 }
-             }
--            // TODO: We can push down partial sorts where `pushableSorts.size() < orders.size()`, but that should involve benchmarks
--            if (pushableSorts.size() > 0 && pushableSorts.size() == orders.size()) {
-+            if (pushableSorts.isEmpty() == false) {
-                 return new PushableCompoundExec(evalExec, queryExec, pushableSorts);
-             }
-         }
 diff --git a//dev/null b/docs/changelog/116043.yaml
 rename from /dev/null
 rename to docs/changelog/116043.yaml

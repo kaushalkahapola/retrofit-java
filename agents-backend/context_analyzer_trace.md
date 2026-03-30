@@ -1,43 +1,44 @@
 # Context Analyzer Trace
 
-## File: `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java`
+## File: `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java`
 
-**Method focused**: `Unknown`
-**Hunk count**: 1
+**Method focused**: `checkConditionExpressionDataType`
+**Hunk count**: 2
 
 **Agent Tool Steps:**
 
-  - `Tool: get_class_context` -> {'context': 'package org.elasticsearch.xpack.esql.optimizer.rules.physical.local;\n\n// Line 62\npub...
-  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
-  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
-  - `Tool: read_file` -> /*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contri...
-**Patch Intent**: Ensure that pushable sorts are correctly identified and utilized for optimization.
+  - `Tool: get_class_context` -> {'context': 'package org.elasticsearch.xpack.esql.analysis;\n\n// Line 55\npublic class Verifier {\n...
+  - `Tool: get_class_context` -> {'context': 'package org.elasticsearch.xpack.esql.analysis;\n\n// Line 55\npublic class Verifier {\n...
+**Patch Intent**: Ensure that condition expressions are validated to be of boolean type, preventing incorrect data types from being processed.
 
-**Root Cause**: Incorrect condition for checking if pushable sorts are available, which could lead to failing to push down sorts when they are present.
+**Root Cause**: The original code did not properly validate that the condition expression's data type is boolean, potentially allowing non-boolean types to be processed.
 
-**Fix Logic**: Replaced the condition checking for the size of pushableSorts with a check for whether pushableSorts is not empty.
+**Fix Logic**: Replaced the direct data type check with a call to the new method `checkConditionExpressionDataType`, which includes a check for NULL and BOOLEAN types.
 
-**Dependent APIs**: pushableSorts, PushableCompoundExec
+**Dependent APIs**: Expression, localFailures
 
 **Hunk Chain**:
 
-  - H1 [core_fix]: Changed the condition to check if pushableSorts is not empty instead of checking its size against orders.
+  - H1 [core_fix]: Introduced a new method `checkConditionExpressionDataType` to encapsulate the logic for checking the data type of condition expressions.
+    → *This new method centralizes the data type validation logic, which is then reused in the next hunk to maintain consistency.*
+  - H2 [propagation]: Replaced the direct data type check for the filter expression with a call to `checkConditionExpressionDataType`.
 
-**Self-Reflection**: VERIFIED ✅
+**Self-Reflection**: FAILED ❌ (used anyway)
 
 
 ## Consolidated Blueprint
 
-**Patch Intent**: Ensure that pushable sorts are correctly identified and utilized for optimization.
+**Patch Intent**: Ensure that condition expressions are validated to be of boolean type, preventing incorrect data types from being processed.
 
-- **Root Cause**: Incorrect condition for checking if pushable sorts are available, which could lead to failing to push down sorts when they are present.
-- **Fix Logic**: Replaced the condition checking for the size of pushableSorts with a check for whether pushableSorts is not empty.
-- **Dependent APIs**: ['pushableSorts', 'PushableCompoundExec']
+- **Root Cause**: The original code did not properly validate that the condition expression's data type is boolean, potentially allowing non-boolean types to be processed.
+- **Fix Logic**: Replaced the direct data type check with a call to the new method `checkConditionExpressionDataType`, which includes a check for NULL and BOOLEAN types.
+- **Dependent APIs**: ['Expression', 'localFailures']
 
 ### Full Hunk Chain (Cross-File)
 
-**[G1] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java — H1** `[core_fix]`
-  Changed the condition to check if pushableSorts is not empty instead of checking its size against orders.
+**[G1] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java — H1** `[core_fix]`
+  Introduced a new method `checkConditionExpressionDataType` to encapsulate the logic for checking the data type of condition expressions.
+  → This new method centralizes the data type validation logic, which is then reused in the next hunk to maintain consistency.
+**[G2] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java — H2** `[propagation]`
+  Replaced the direct data type check for the filter expression with a call to `checkConditionExpressionDataType`.
 

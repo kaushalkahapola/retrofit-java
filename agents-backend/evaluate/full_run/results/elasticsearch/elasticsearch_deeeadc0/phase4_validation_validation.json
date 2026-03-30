@@ -1,0 +1,29 @@
+{
+  "validation_passed": false,
+  "validation_attempts": 3,
+  "validation_error_context": "Hunk application failed: The root cause of the validation failure is that the patch is attempting to modify files that already exist and likely have different content or structure than expected, leading to conflicts. Specifically, the issues are in `Verifier.java`, `null.csv-spec`, `VerifierTests.java`, and `InTests.java`. To resolve this, regenerate the hunk by ensuring the target files are in a clean state (i.e., no uncommitted changes) and then reapply the patch, or manually adjust the files to match the expected state before applying the patch.",
+  "validation_results": {
+    "hunk_application": {
+      "success": false,
+      "raw": "[git-apply-strict] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java:243\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java: patch does not apply\n\n[git-apply-whitespace-tolerant] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java:243\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java: patch does not apply\n\n[gnu-patch-dry-run] The next patch would create the file x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java,\nwhich already exists!  Skipping patch.\n2 out of 2 hunks ignored\nThe next patch would create the file x-pack/plugin/esql/qa/testFixtures/src/main/resources/null.csv-spec,\nwhich already exists!  Skipping patch.\n1 out of 1 hunk ignored\nThe next patch would create the file x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java,\nwhich already exists!  Skipping patch.\n1 out of 1 hunk ignored\nThe next patch would create the file x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/expression/predicate/operator/comparison/InTests.java,\nwhich already exists!  Skipping patch.\n2 out of 2 hunks ignored",
+      "agent_evaluation": "The root cause of the validation failure is that the patch is attempting to modify files that already exist and likely have different content or structure than expected, leading to conflicts. Specifically, the issues are in `Verifier.java`, `null.csv-spec`, `VerifierTests.java`, and `InTests.java`. To resolve this, regenerate the hunk by ensuring the target files are in a clean state (i.e., no uncommitted changes) and then reapply the patch, or manually adjust the files to match the expected state before applying the patch.",
+      "error_context": "The root cause of the validation failure is that the patch is attempting to modify files that already exist and likely have different content or structure than expected, leading to conflicts. Specifically, the issues are in `Verifier.java`, `null.csv-spec`, `VerifierTests.java`, and `InTests.java`. To resolve this, regenerate the hunk by ensuring the target files are in a clean state (i.e., no uncommitted changes) and then reapply the patch, or manually adjust the files to match the expected state before applying the patch.",
+      "diagnostics": {
+        "category": "context_mismatch",
+        "retry_files": [
+          "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java"
+        ],
+        "issues": [
+          {
+            "error_type": "context_mismatch",
+            "suggested_action": "regenerate_hunk"
+          }
+        ]
+      }
+    }
+  },
+  "validation_failure_category": "context_mismatch",
+  "validation_retry_files": [
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java"
+  ]
+}

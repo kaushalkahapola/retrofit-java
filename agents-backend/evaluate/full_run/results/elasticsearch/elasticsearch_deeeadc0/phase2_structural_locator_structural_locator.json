@@ -1,0 +1,25 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "checkFilterConditionType",
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+        "target_method": "checkFilterConditionType",
+        "start_line": 237,
+        "end_line": 240,
+        "code_snippet": "checkConditionExpressionDataType(condition, localFailures);"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "checkConditionExpressionDataType",
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+        "target_method": "checkConditionExpressionDataType",
+        "start_line": 243,
+        "end_line": 250,
+        "code_snippet": "if (expression.dataType() != NULL && expression.dataType() != BOOLEAN) {\n    localFailures.add(fail(expression, \"Condition expression needs to be boolean, found [{}]\", expression.dataType()));"
+      }
+    ]
+  }
+}

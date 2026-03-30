@@ -1,0 +1,29 @@
+{
+  "validation_passed": false,
+  "validation_attempts": 3,
+  "validation_error_context": "Hunk application failed: The root cause of the backport validation failure is that the patch is attempting to modify existing files (`DataNodeRequestSender.java` and `DataNodeRequestSenderTests.java`) that have diverged from the expected state, likely due to prior changes or conflicts in the codebase. To resolve this, review the differences between the current files and the patch, then manually apply the necessary changes to regenerate the hunk, ensuring that the file signatures match the expected state before reapplying the patch.",
+  "validation_results": {
+    "hunk_application": {
+      "success": false,
+      "raw": "[git-apply-strict] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:123\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[git-apply-whitespace-tolerant] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:123\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[gnu-patch-dry-run] The next patch would create the file x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java,\nwhich already exists!  Skipping patch.\n5 out of 5 hunks ignored\nThe next patch would create the file x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java,\nwhich already exists!  Skipping patch.\n8 out of 8 hunks ignored",
+      "agent_evaluation": "The root cause of the backport validation failure is that the patch is attempting to modify existing files (`DataNodeRequestSender.java` and `DataNodeRequestSenderTests.java`) that have diverged from the expected state, likely due to prior changes or conflicts in the codebase. To resolve this, review the differences between the current files and the patch, then manually apply the necessary changes to regenerate the hunk, ensuring that the file signatures match the expected state before reapplying the patch.",
+      "error_context": "The root cause of the backport validation failure is that the patch is attempting to modify existing files (`DataNodeRequestSender.java` and `DataNodeRequestSenderTests.java`) that have diverged from the expected state, likely due to prior changes or conflicts in the codebase. To resolve this, review the differences between the current files and the patch, then manually apply the necessary changes to regenerate the hunk, ensuring that the file signatures match the expected state before reapplying the patch.",
+      "diagnostics": {
+        "category": "context_mismatch",
+        "retry_files": [
+          "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java"
+        ],
+        "issues": [
+          {
+            "error_type": "context_mismatch",
+            "suggested_action": "regenerate_hunk"
+          }
+        ]
+      }
+    }
+  },
+  "validation_failure_category": "context_mismatch",
+  "validation_retry_files": [
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java"
+  ]
+}
