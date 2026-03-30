@@ -300,10 +300,56 @@ class ValidationToolkit:
             },
         }
 
+    @staticmethod
+    def build_test_rename_map_from_aux_hunks(
+        developer_aux_hunks: List[Dict[str, Any]],
+    ) -> Dict[str, str]:
+        """
+        Extract a rename map {old_class_fqn: new_class_fqn} from developer
+        auxiliary hunks that represent RENAMED test files.
+
+        This is used by Phase 0 (and the validation agent) to map the baseline
+        test run (targeting the old class name that exists before the patch) to
+        the post-patch test run (targeting the new class name).
+        """
+        test_source_sets = (
+            "/src/test/java/",
+            "/src/internalClusterTest/java/",
+            "/src/javaRestTest/java/",
+            "/src/yamlRestTest/java/",
+            "/src/integTest/java/",
+            "/src/integrationTest/java/",
+        )
+
+        def _path_to_fqn(path: str) -> Optional[str]:
+            p = (path or "").replace("\\", "/")
+            matched = next((td for td in test_source_sets if td in p), None)
+            if not matched:
+                return None
+            try:
+                return p.split(matched, 1)[1].replace("/", ".").replace(".java", "")
+            except Exception:
+                return None
+
+        rename_map: Dict[str, str] = {}
+        for h in developer_aux_hunks or []:
+            if h.get("file_operation") != "RENAMED":
+                continue
+            old_path = h.get("old_target_file") or ""
+            new_path = h.get("target_file") or ""
+            if "test" not in new_path.lower() and "test" not in old_path.lower():
+                continue
+            old_fqn = _path_to_fqn(old_path)
+            new_fqn = _path_to_fqn(new_path)
+            if old_fqn and new_fqn and old_fqn != new_fqn:
+                rename_map[old_fqn] = new_fqn
+        return rename_map
+
     def evaluate_test_state_transition(
         self,
         baseline_test_result: Optional[Dict[str, Any]],
         patched_test_result: Optional[Dict[str, Any]],
+        rename_map: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """
         Evaluate whether patched tests represent a valid transition.
@@ -311,32 +357,100 @@ class ValidationToolkit:
         Valid iff:
           - no pass -> fail transitions
           - and at least one fail -> pass transition OR a newly observed passing test
+
+        Args:
+            baseline_test_result: Test result from the baseline run (pre-patch).
+            patched_test_result:  Test result from the post-patch run.
+            rename_map:           Optional dict mapping old_class_fqn -> new_class_fqn.
+                                  When provided, test cases from the old class (baseline)
+                                  are matched against the corresponding new class (patched)
+                                  for cross-class fail->pass and newly_passing detection.
+                                  This is needed when a test file is renamed in the patch
+                                  (e.g. SupervisorTest -> LagStatsTest).
         """
         baseline_state = (baseline_test_result or {}).get("test_state") or {}
         patched_state = (patched_test_result or {}).get("test_state") or {}
 
         baseline_cases = baseline_state.get("test_cases") or {}
         patched_cases = patched_state.get("test_cases") or {}
+        baseline_target_classes = set(baseline_state.get("target_classes") or [])
+        patched_target_classes = set(patched_state.get("target_classes") or [])
+        expected_target_classes = baseline_target_classes | patched_target_classes
 
         # If no case-level data exists, use class-level status as fallback.
         if not baseline_cases and not patched_cases:
             baseline_cases = baseline_state.get("classes") or {}
             patched_cases = patched_state.get("classes") or {}
 
+        # If relevant targets were requested but no target-level observations were
+        # collected in either run, treat this as inconclusive (usually runner routing
+        # or discovery issues), not as a semantic fail/pass signal.
+        if expected_target_classes and not baseline_cases and not patched_cases:
+            return {
+                "valid_backport_signal": False,
+                "fail_to_pass": [],
+                "pass_to_fail": [],
+                "newly_passing": [],
+                "baseline_total": 0,
+                "patched_total": 0,
+                "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs.",
+            }
+
+        # ------------------------------------------------------------------
+        # For fail->pass: check baseline keys (may be old_cls) against patched
+        # keys (may be new_cls) via rename_map translation.
+        # ------------------------------------------------------------------
+        def _translate_key(key: str, old_cls: str, new_cls: str) -> str:
+            """Replace the class prefix in a test-case key."""
+            if key == old_cls or key.startswith(old_cls + "#"):
+                return new_cls + key[len(old_cls) :]
+            # Also handle dot-separated method names (fallback)
+            if key.startswith(old_cls + "."):
+                return new_cls + key[len(old_cls) :]
+            return key
+
+        # For fail->pass: check baseline keys (may be old_cls) against patched keys (may be new_cls)
+        def _lookup_patched_status(baseline_key: str) -> Optional[str]:
+            if baseline_key in patched_cases:
+                return patched_cases[baseline_key]
+            if rename_map:
+                for old_cls, new_cls in rename_map.items():
+                    translated = _translate_key(baseline_key, old_cls, new_cls)
+                    if translated != baseline_key and translated in patched_cases:
+                        return patched_cases[translated]
+            return None
+
         fail_to_pass = sorted(
             case
             for case, old_status in baseline_cases.items()
-            if old_status in {"failed", "error"} and patched_cases.get(case) == "passed"
+            if old_status in {"failed", "error"}
+            and _lookup_patched_status(case) == "passed"
         )
         pass_to_fail = sorted(
             case
             for case, old_status in baseline_cases.items()
-            if old_status == "passed" and patched_cases.get(case) in {"failed", "error"}
+            if old_status == "passed"
+            and _lookup_patched_status(case) in {"failed", "error"}
         )
+
+        # For newly_passing: cases that appear in patched but not in baseline.
+        # When rename_map is present, also translate patched new_cls keys to old_cls
+        # and check whether they existed in baseline (they should be absent there).
+        def _baseline_key_for_patched(patched_key: str) -> str:
+            """Return the equivalent baseline key, accounting for renames."""
+            if rename_map:
+                for old_cls, new_cls in rename_map.items():
+                    reverse = _translate_key(patched_key, new_cls, old_cls)
+                    if reverse != patched_key:
+                        return reverse
+            return patched_key
+
         newly_passing = sorted(
             case
             for case, new_status in patched_cases.items()
-            if case not in baseline_cases and new_status == "passed"
+            if new_status == "passed"
+            and _baseline_key_for_patched(case) not in baseline_cases
+            and case not in baseline_cases
         )
 
         valid = (not pass_to_fail) and bool(fail_to_pass or newly_passing)

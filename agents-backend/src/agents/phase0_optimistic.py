@@ -78,6 +78,8 @@ def _is_phase0_cache_reusable(cached: dict | None) -> tuple[bool, str]:
         return False, "baseline-apply-failed"
     if baseline_total == 0 and "no fail-to-pass or newly passing" in transition_reason:
         return False, "empty-baseline-and-empty-transition"
+    if "inconclusive: relevant target tests were not observed" in transition_reason:
+        return False, "inconclusive-target-tests-not-observed"
     return True, "ok"
 
 
@@ -229,6 +231,16 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
         h for h in developer_aux_hunks if "test" in (h.get("target_file", "").lower())
     ]
 
+    # ------------------------------------------------------------------
+    # Build a rename map: old_class_fqn -> new_class_fqn.
+    # We keep this for cross-class transition matching (old -> new class names),
+    # but baseline/post test execution keeps the same detected targets.
+    # ------------------------------------------------------------------
+    test_rename_map: dict[str, str] = (
+        validation_toolkit.build_test_rename_map_from_aux_hunks(developer_aux_hunks)
+    )
+    baseline_test_targets = test_targets
+
     if developer_test_hunks:
         print(
             "Phase 0: Building baseline by applying developer backport test hunks only..."
@@ -239,7 +251,7 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
         if baseline_apply.get("success"):
             phase0_baseline_test_result = validation_toolkit.run_relevant_tests(
                 project=project_name,
-                target_info=test_targets,
+                target_info=baseline_test_targets,
             )
         else:
             phase0_baseline_test_result = {
@@ -383,6 +395,7 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
         transition_eval = validation_toolkit.evaluate_test_state_transition(
             phase0_baseline_test_result,
             test_result,
+            rename_map=test_rename_map or None,
         )
         transition_summary = _format_transition_summary(transition_eval)
         print(f"Phase 0: Transition summary -> {transition_summary}")

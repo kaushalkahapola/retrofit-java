@@ -103,6 +103,8 @@ def _is_phase0_cache_reusable(cache_payload: dict[str, Any] | None) -> tuple[boo
         return False, "baseline-apply-failed"
     if baseline_total == 0 and "no fail-to-pass or newly passing" in transition_reason:
         return False, "empty-baseline-and-empty-transition"
+    if "inconclusive: relevant target tests were not observed" in transition_reason:
+        return False, "inconclusive-target-tests-not-observed"
     return True, "ok"
 
 

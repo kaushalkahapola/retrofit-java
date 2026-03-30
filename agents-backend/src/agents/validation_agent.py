@@ -309,6 +309,12 @@ async def validation_agent(state: AgentState, config) -> dict:
     apply_only_validation = state.get("apply_only_validation", False)
     effective_code_hunks = list(code_hunks) + list(developer_aux_hunks)
 
+    # Build rename map for cross-class test transition matching
+    # (e.g. SupervisorTest -> LagStatsTest when a test file is renamed in the patch)
+    test_rename_map: dict = toolkit.build_test_rename_map_from_aux_hunks(
+        developer_aux_hunks
+    )
+
     if attempts >= MAX_VALIDATION_ATTEMPTS:
         print(
             f"  Agent 4: Max validation attempts ({MAX_VALIDATION_ATTEMPTS}) reached. Failing."
@@ -437,7 +443,7 @@ async def validation_agent(state: AgentState, config) -> dict:
         )
         log_step("run_relevant_tests", {"targets": test_targets}, test_res)
         transition_eval = toolkit.evaluate_test_state_transition(
-            phase_0_baseline_test_result, test_res
+            phase_0_baseline_test_result, test_res, rename_map=test_rename_map or None
         )
         transition_summary = _format_transition_summary(transition_eval)
         log_step(
