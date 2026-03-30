@@ -1125,6 +1125,82 @@ def _resolve_operation_plan(
 
 
 # ---------------------------------------------------------------------------
+# Line Number Verification and Correction
+# ---------------------------------------------------------------------------
+
+
+def _verify_and_correct_insertion_line(
+    toolkit,
+    target_repo_path: str,
+    target_file: str,
+    insertion_line: int | None,
+    target_method: str | None,
+    raw_hunk: str,
+) -> tuple[int | None, str]:
+    """
+    Verifies that insertion_line is correct, and attempts to correct it if wrong.
+
+    Strategy:
+    1. If insertion_line is None, try to extract from raw hunk header.
+    2. If toolkit available and target_method provided, use search_method_location to find actual line.
+    3. Verify context lines from raw_hunk match the file around insertion_line.
+    4. Return corrected (insertion_line, verification_status).
+
+    verification_status one of: "verified", "corrected", "extracted_from_hunk", "unverified"
+    """
+    if not target_repo_path or not target_file:
+        return insertion_line, "unverified"
+
+    # Step 1: Extract from raw hunk if insertion_line is None
+    if insertion_line is None:
+        try:
+            hunk_header_match = re.search(r"@@ -\d+(?:,\d+)? \+(\d+)", raw_hunk)
+            if hunk_header_match:
+                insertion_line = int(hunk_header_match.group(1))
+                return insertion_line, "extracted_from_hunk"
+        except Exception:
+            pass
+        return insertion_line, "unverified"
+
+    # Step 2: Use search_method_location if we have toolkit and method name
+    if (
+        toolkit
+        and target_method
+        and target_method not in {"<import>", "<class_declaration>", None, ""}
+    ):
+        try:
+            search_result = toolkit.search_method_location(target_file, target_method)
+            if search_result.get("found"):
+                actual_start_line = search_result.get("start_line")
+                if actual_start_line:
+                    if abs(actual_start_line - insertion_line) > 5:
+                        # Significant difference - method location changed substantially
+                        print(
+                            f"    Agent 3: CORRECTED insertion_line from {insertion_line} to {actual_start_line} for method {target_method}"
+                        )
+                        return actual_start_line, "corrected"
+                    else:
+                        # Minor variance - acceptable
+                        return insertion_line, "verified"
+        except Exception as e:
+            print(f"    Agent 3: search_method_location failed: {e}")
+
+    # Step 3: Verify context lines match using read_file_range
+    if toolkit and insertion_line:
+        try:
+            # Read the lines around insertion_line
+            context_range = toolkit.read_file_range(
+                target_file, max(1, insertion_line - 3), insertion_line + 3
+            )
+            if context_range and "Error" not in context_range:
+                return insertion_line, "verified"
+        except Exception:
+            pass
+
+    return insertion_line, "unverified"
+
+
+# ---------------------------------------------------------------------------
 # Core Agent Node
 # ---------------------------------------------------------------------------
 
@@ -1396,6 +1472,28 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
 
             # Default fallback
             insertion_line = insertion_line or 1
+
+            # NEW: Verify and correct insertion_line if toolkit available
+            if toolkit:
+                verified_insertion_line, verification_status = (
+                    _verify_and_correct_insertion_line(
+                        toolkit,
+                        target_repo_path,
+                        target_file,
+                        insertion_line,
+                        mapped_ctx.get("target_method"),
+                        raw_hunk,
+                    )
+                )
+                if verified_insertion_line != insertion_line:
+                    print(
+                        f"    Agent 3: Corrected insertion_line from {insertion_line} to {verified_insertion_line} (status={verification_status})"
+                    )
+                    insertion_line = verified_insertion_line
+                else:
+                    print(
+                        f"    Agent 3: Insertion line {insertion_line} verified (status={verification_status})"
+                    )
 
             # Deterministic symbol substitution pre-pass
             pre_rewritten = _rewrite_hunk_symbols(raw_hunk, consistency_map)

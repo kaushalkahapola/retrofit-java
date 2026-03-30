@@ -541,6 +541,158 @@ class ReasoningToolkit:
         except Exception as e:
             return f"Error reading file range: {e}"
 
+    def search_method_location(self, file_path: str, method_name: str) -> Dict:
+        """
+        Uses ripgrep-style search to find the actual line numbers of a method in the target file.
+        Returns a dict with: {method_name, start_line, end_line, confidence, context_lines}
+
+        This is smarter than get_class_context because it directly searches for the method
+        declaration and estimates boundaries using brace matching.
+        """
+        full_path = os.path.join(self.target_repo_path, file_path)
+        if not os.path.exists(full_path):
+            return {
+                "method_name": method_name,
+                "found": False,
+                "error": f"File not found: {file_path}",
+            }
+
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+
+            # Search for method declaration using regex pattern
+            # Matches: public/private/static/final void methodName(...) or return_type methodName(...)
+            method_pattern = re.compile(
+                rf"(?:public|private|protected|static|final|\s)+[\w<>\[\],\s]+\s+{re.escape(method_name)}\s*\(",
+                re.MULTILINE,
+            )
+
+            matches = []
+            for i, line in enumerate(lines):
+                if method_pattern.search(line):
+                    matches.append(i + 1)  # 1-indexed
+
+            if not matches:
+                return {
+                    "method_name": method_name,
+                    "found": False,
+                    "searched_lines": len(lines),
+                }
+
+            # Use first match as start line
+            start_line = matches[0]
+
+            # Estimate end line by counting braces (simple heuristic)
+            end_line = self._estimate_method_end_line(
+                lines, start_line - 1
+            )  # Convert to 0-indexed
+
+            # Get context around the method
+            context_before = [
+                line.strip() for line in lines[max(0, start_line - 4) : start_line - 1]
+            ]
+            context_after = [
+                line.strip()
+                for line in lines[
+                    min(len(lines), end_line) : min(len(lines), end_line + 3)
+                ]
+            ]
+
+            return {
+                "method_name": method_name,
+                "found": True,
+                "start_line": start_line,
+                "end_line": end_line,
+                "confidence": "high" if len(matches) == 1 else "medium",
+                "matches_found": len(matches),
+                "context_before": context_before,
+                "context_after": context_after,
+            }
+        except Exception as e:
+            return {"method_name": method_name, "found": False, "error": str(e)}
+
+    def _estimate_method_end_line(self, lines: list, method_start_idx: int) -> int:
+        """
+        Estimates where a method ends by counting opening and closing braces.
+        method_start_idx is 0-indexed position of the method declaration line.
+        """
+        if method_start_idx >= len(lines):
+            return method_start_idx + 1
+
+        # Find opening brace on or after the method declaration
+        brace_count = 0
+        found_opening = False
+
+        for i in range(method_start_idx, min(len(lines), method_start_idx + 100)):
+            line = lines[i]
+            for char in line:
+                if char == "{":
+                    brace_count += 1
+                    found_opening = True
+                elif char == "}":
+                    brace_count -= 1
+                    if found_opening and brace_count == 0:
+                        return i + 1  # 1-indexed
+
+        # Fallback: return approximate line count
+        return method_start_idx + 10
+
+    def search_code_pattern(
+        self, file_path: str, pattern: str, context_lines: int = 3
+    ) -> Dict:
+        """
+        Searches for a code pattern in a file using regex.
+        Useful for finding where specific code (like a method call) appears.
+
+        Returns a dict with: {pattern, found, matches: [{line_number, line_text, context_before, context_after}]}
+        """
+        full_path = os.path.join(self.target_repo_path, file_path)
+        if not os.path.exists(full_path):
+            return {
+                "pattern": pattern,
+                "found": False,
+                "error": f"File not found: {file_path}",
+            }
+
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+
+            regex = re.compile(pattern)
+            matches = []
+
+            for i, line in enumerate(lines):
+                if regex.search(line):
+                    context_before = [
+                        l.strip() for l in lines[max(0, i - context_lines) : i]
+                    ]
+                    context_after = [
+                        l.strip()
+                        for l in lines[
+                            min(len(lines), i + 1) : min(
+                                len(lines), i + context_lines + 1
+                            )
+                        ]
+                    ]
+                    matches.append(
+                        {
+                            "line_number": i + 1,  # 1-indexed
+                            "line_text": line.strip(),
+                            "context_before": context_before,
+                            "context_after": context_after,
+                        }
+                    )
+
+            return {
+                "pattern": pattern,
+                "found": len(matches) > 0,
+                "match_count": len(matches),
+                "matches": matches,
+            }
+        except Exception as e:
+            return {"pattern": pattern, "found": False, "error": str(e)}
+
     def get_tools(self):
 
         return [
@@ -614,5 +766,15 @@ class ReasoningToolkit:
                 func=self.read_file_range,
                 name="read_file_range",
                 description="Reads a specific range of lines from a file in the target repository. Lines are 1-indexed.",
+            ),
+            StructuredTool.from_function(
+                func=self.search_method_location,
+                name="search_method_location",
+                description="Searches for the actual line numbers of a method in a target file using pattern matching. Returns start_line, end_line, and confidence.",
+            ),
+            StructuredTool.from_function(
+                func=self.search_code_pattern,
+                name="search_code_pattern",
+                description="Searches for a code pattern (regex) in a file. Returns all matching line numbers and context around each match.",
             ),
         ]

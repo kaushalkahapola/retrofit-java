@@ -58,6 +58,10 @@ You have tools:
 - `read_file(file_path)`: Read a file from target repo if you need to manually inspect string matches.
 - `git_log_follow(file_path)`: Check git history for renames.
 - `read_file_range(file_path, start_line, end_line)`: Read a specific range of lines from a file in the target repo.
+- `search_method_location(file_path, method_name)`: Find the ACTUAL line numbers of a method using pattern matching. Returns start_line, end_line, and confidence. HIGHLY RECOMMENDED to use this to verify/correct start_line and end_line values.
+- `search_code_pattern(file_path, pattern)`: Search for a code pattern (regex) in a file. Useful when method names have changed slightly.
+
+IMPORTANT: After using get_class_context or LLM reasoning to get a method location, ALWAYS verify the start_line and end_line by using search_method_location to find the actual line numbers in the target file. This prevents incorrect insertion_line values that cause hunk application failures.
 
 Investigate to find where the mainline changes should be applied in the target repo.
 When you find it, output precisely this JSON:
@@ -334,6 +338,8 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 "git_log_follow",
                 "git_blame_lines",
                 "read_file_range",
+                "search_method_location",
+                "search_code_pattern",
             ]
         ]
         if toolkit
