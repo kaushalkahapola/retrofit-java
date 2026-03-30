@@ -735,9 +735,15 @@ class ValidationToolkit:
                             "TEST_TARGETS": " ".join(sorted(set(test_targets)))
                             if test_targets
                             else "NONE",
-                            "TEST_MODULES": ",".join(sorted(set(source_modules)))
-                            if source_modules
-                            else "",
+                            # If explicit class targets are available, helpers should
+                            # run those directly and not fall back to module mode.
+                            "TEST_MODULES": ""
+                            if test_targets
+                            else (
+                                ",".join(sorted(set(source_modules)))
+                                if source_modules
+                                else ""
+                            ),
                         }
                     )
                     print(
@@ -799,6 +805,7 @@ class ValidationToolkit:
                     "-am",
                     f"-Dtest={','.join(sorted(set(test_classes)))}",
                     "-DfailIfNoTests=false",
+                    "-Dsurefire.failIfNoSpecifiedTests=false",
                     "-Dmaven.javadoc.skip=true",
                     "-Dcheckstyle.skip=true",
                     "-Dpmd.skip=true",
@@ -814,6 +821,7 @@ class ValidationToolkit:
                     ",".join(module_list),
                     "-am",
                     "-DfailIfNoTests=false",
+                    "-Dsurefire.failIfNoSpecifiedTests=false",
                     "-Dmaven.javadoc.skip=true",
                     "-Dcheckstyle.skip=true",
                     "-Dpmd.skip=true",

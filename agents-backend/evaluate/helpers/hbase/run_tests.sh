@@ -2,16 +2,14 @@
 set -e
 
 echo "=== Running Tests for ${COMMIT_SHA:0:7} ==="
-echo "Target: ${TEST_TARGETS}"
+echo "Target: ${TEST_TARGETS:-}"
+echo "Modules: ${TEST_MODULES:-}"
 
 # 1. Configure Test Command
-if [ "${TEST_TARGETS}" == "ALL" ]; then
+if [ "${TEST_TARGETS:-}" == "ALL" ]; then
     echo "--- Running ALL tests (excluding blacklisted modules) ---"
     MAVEN_ARGS="-pl '!hbase-assembly,!hbase-archetypes'"
-elif [ "${TEST_TARGETS}" == "NONE" ]; then
-    echo "No relevant source code changes found. Skipping tests."
-    exit 0
-else
+elif [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ]; then
     # Check if we have granular targets (contain ':')
     if [[ "${TEST_TARGETS}" == *":"* ]]; then
         echo "--- Granular Test Mode: Running specific test classes ---"
@@ -65,6 +63,15 @@ else
         # Run all tests in specified modules, build dependencies
         MAVEN_ARGS="-pl ${COMMA_TARGETS} -am"
     fi
+elif [ -n "${TEST_MODULES:-}" ]; then
+    echo "--- Module Fallback Mode: Running all tests in TEST_MODULES ---"
+    MAVEN_ARGS="-pl ${TEST_MODULES} -am"
+elif [ "${TEST_TARGETS:-}" == "NONE" ]; then
+    echo "No relevant source code changes found. Skipping tests."
+    exit 0
+else
+    echo "No TEST_TARGETS or TEST_MODULES set. Skipping tests."
+    exit 0
 fi
 
 echo "--- Starting Test Execution ---"
@@ -84,10 +91,11 @@ if docker run --rm \
              echo 'Maven version:'; mvn --version; \
              echo 'Running: mvn test ${MAVEN_ARGS}'; \
              mvn test ${MAVEN_ARGS} \
-                 -DfailIfNoTests=false \
-                 -Dmaven.javadoc.skip=true \
-                 -Dcheckstyle.skip=true \
-                 -Dfindbugs.skip=true \
+                  -DfailIfNoTests=false \
+                  -Dsurefire.failIfNoSpecifiedTests=false \
+                  -Dmaven.javadoc.skip=true \
+                  -Dcheckstyle.skip=true \
+                  -Dfindbugs.skip=true \
                  -Dspotbugs.skip=true \
                  -Denforcer.skip=true; \
              MVN_EXIT_CODE=\$?; \
