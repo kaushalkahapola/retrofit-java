@@ -1,0 +1,68 @@
+{
+  "fast_path_success": false,
+  "phase_0_test_targets": {
+    "test_targets": [
+      "x-pack/plugin/esql:org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests"
+    ],
+    "source_modules": [
+      "x-pack/plugin/esql"
+    ],
+    "all_modules": [
+      "x-pack/plugin/esql"
+    ],
+    "raw": {
+      "source": "changed_files",
+      "changed_files": [
+        "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+        "x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java"
+      ]
+    }
+  },
+  "phase_0_baseline_test_result": {
+    "success": false,
+    "compile_error": false,
+    "output": "=== Running Elasticsearch Tests for d7fb0e2 ===\nTarget: x-pack/plugin/esql:org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests\n--- Using Docker Image: retrofit-elasticsearch-builder:local ---\ngradle-cache-es\ngradle-wrapper-es\n--- Executing: ./gradlew :x-pack:plugin:esql:test --tests \"org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests\" --no-daemon -Dbuild.docker=false -DfailIfNoTests=false ---\nTo honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.\nDaemon JVM discovery is an incubating feature.\nDaemon will be stopped at the end of the build \n--- Test results are available in build/test-results/ ---\n\u274c Tests Failed\n\n\nFAILURE: Build failed with an exception.\n\n* What went wrong:\nGradle could not start your build.\n> Could not create service of type BuildLifecycleController using ServicesProvider.createBuildLifecycleController().\n   > Could not create service of type BuildModelController using VintageBuildControllerProvider.createBuildModelController().\n      > Could not create service of type CrossBuildFileHashCache using BuildSessionServices.createCrossBuildFileHashCache().\n         > Could not open file hash cache (/repo/.gradle/8.14.1/fileHashes).\n            > Cannot create directory '/repo/.gradle/8.14.1/fileHashes'.\n\n* Try:\n> Run with --stacktrace option to get the stack trace.\n> Run with --info or --debug option to get more log output.\n> Run with --scan to get full insights.\n> Get more help at https://help.gradle.org.\n\nBUILD FAILED in 3s",
+    "failed_tests": [],
+    "mode": "elasticsearch-helper-script",
+    "targets": {
+      "test_targets": [
+        "x-pack/plugin/esql:org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests"
+      ],
+      "source_modules": [
+        "x-pack/plugin/esql"
+      ],
+      "all_modules": [
+        "x-pack/plugin/esql"
+      ],
+      "raw": {
+        "source": "changed_files",
+        "changed_files": [
+          "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java"
+        ]
+      }
+    },
+    "test_state": {
+      "xml_reports": [],
+      "target_classes": [
+        "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests"
+      ],
+      "test_cases": {},
+      "classes": {},
+      "summary": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "total": 0
+      }
+    }
+  },
+  "phase_0_post_patch_test_result": {},
+  "phase_0_transition_evaluation": {
+    "valid_backport_signal": false,
+    "reason": "Invalid: git apply --check failed. error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:17\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/Data",
+    "fail_to_pass": [],
+    "pass_to_fail": [],
+    "newly_passing": []
+  }
+}

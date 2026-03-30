@@ -1,0 +1,75 @@
+{
+  "fast_path_success": false,
+  "phase_0_test_targets": {
+    "test_targets": [
+      "x-pack/plugin/esql:org.elasticsearch.xpack.esql.optimizer.PhysicalPlanOptimizerTests"
+    ],
+    "source_modules": [
+      "x-pack/plugin/esql"
+    ],
+    "all_modules": [
+      "x-pack/plugin/esql"
+    ],
+    "raw": {
+      "source": "changed_files",
+      "changed_files": [
+        "docs/changelog/116043.yaml",
+        "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java",
+        "x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/PhysicalPlanOptimizerTests.java"
+      ]
+    }
+  },
+  "phase_0_baseline_test_result": {
+    "success": false,
+    "compile_error": false,
+    "output": "=== Running Elasticsearch Tests for fa62e94 ===\nTarget: x-pack/plugin/esql:org.elasticsearch.xpack.esql.optimizer.PhysicalPlanOptimizerTests\n--- Using Docker Image: retrofit-elasticsearch-builder:local ---\ngradle-cache-es\ngradle-wrapper-es\n--- Executing: ./gradlew :x-pack:plugin:esql:test --tests \"org.elasticsearch.xpack.esql.optimizer.PhysicalPlanOptimizerTests\" --no-daemon -Dbuild.docker=false -DfailIfNoTests=false ---\nTo honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.\nDaemon JVM discovery is an incubating feature.\nDaemon will be stopped at the end of the build \n--- Test results are available in build/test-results/ ---\n\u274c Tests Failed\n\n\nFAILURE: Build failed with an exception.\n\n* What went wrong:\nGradle could not start your build.\n> Could not create service of type BuildLifecycleController using ServicesProvider.createBuildLifecycleController().\n   > Could not create service of type BuildModelController using VintageBuildControllerProvider.createBuildModelController().\n      > Could not create service of type CrossBuildFileHashCache using BuildSessionServices.createCrossBuildFileHashCache().\n         > Could not open file hash cache (/repo/.gradle/8.14.1/fileHashes).\n            > Cannot create directory '/repo/.gradle/8.14.1/fileHashes'.\n\n* Try:\n> Run with --stacktrace option to get the stack trace.\n> Run with --info or --debug option to get more log output.\n> Run with --scan to get full insights.\n> Get more help at https://help.gradle.org.\n\nBUILD FAILED in 3s",
+    "failed_tests": [],
+    "mode": "elasticsearch-helper-script",
+    "targets": {
+      "test_targets": [
+        "x-pack/plugin/esql:org.elasticsearch.xpack.esql.optimizer.PhysicalPlanOptimizerTests"
+      ],
+      "source_modules": [
+        "x-pack/plugin/esql"
+      ],
+      "all_modules": [
+        "x-pack/plugin/esql"
+      ],
+      "raw": {
+        "source": "changed_files",
+        "changed_files": [
+          "docs/changelog/116043.yaml",
+          "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java",
+          "x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/PhysicalPlanOptimizerTests.java"
+        ]
+      }
+    },
+    "test_state": {
+      "xml_reports": [],
+      "target_classes": [
+        "org.elasticsearch.xpack.esql.optimizer.PhysicalPlanOptimizerTests"
+      ],
+      "test_cases": {},
+      "classes": {},
+      "summary": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "total": 0
+      }
+    }
+  },
+  "phase_0_post_patch_test_result": {},
+  "phase_0_transition_evaluation": {
+    "valid_backport_signal": false,
+    "reason": "Invalid: Build failed after patch apply.",
+    "fail_to_pass": [],
+    "pass_to_fail": [],
+    "newly_passing": []
+  },
+  "phase_0_build_result": {
+    "success": false,
+    "output": "--- Building Elasticsearch for fa62e94 ---\n--- Changing directory to /home/kaushal/retrofit-java/temp_repo_storage/elasticsearch ---\ngradle-cache-es\ngradle-wrapper-es\n--- Building Docker image: retrofit-elasticsearch-builder:local ---\n--- Setting cache permissions ---\n--- Compiling with Gradle (assemble + testClasses, skip tests) ---\nTo honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.\nDaemon JVM discovery is an incubating feature.\nDaemon will be stopped at the end of the build \n\nFAILURE: Build failed with an exception.\n\n* What went wrong:\nGradle could not start your build.\n> Could not create service of type BuildLifecycleController using ServicesProvider.createBuildLifecycleController().\n   > Could not create service of type BuildModelController using VintageBuildControllerProvider.createBuildModelController().\n      > Could not create service of type CrossBuildFileHashCache using BuildSessionServices.createCrossBuildFileHashCache().\n         > Could not open file hash cache (/repo/.gradle/8.14.1/fileHashes).\n            > Cannot create directory '/repo/.gradle/8.14.1/fileHashes'.\n\n* Try:\n> Run with --stacktrace option to get the stack trace.\n> Run with --info or --debug option to get more log output.\n> Run with --scan to get full insights.\n> Get more help at https://help.gradle.org.\n\nBUILD FAILED in 3s\n\u274c Build Failed\n\n#0 building with \"default\" instance using docker driver\n\n#1 [internal] load build definition from Dockerfile\n#1 transferring dockerfile: 1.37kB done\n#1 DONE 0.0s\n\n#2 [internal] load metadata for docker.io/library/eclipse-temurin:21-jdk-jammy\n#2 DONE 0.3s\n\n#3 [internal] load .dockerignore\n#3 transferring context: 2B done\n#3 DONE 0.0s\n\n#4 [1/7] FROM docker.io/library/eclipse-temurin:21-jdk-jammy@sha256:db76cc1ec33597273b26359c23ff1fc8d83a570ead897ce694e9d314e0014032\n#4 resolve docker.io/library/eclipse-temurin:21-jdk-jammy@sha256:db76cc1ec33597273b26359c23ff1fc8d83a570ead897ce694e9d314e0014032 0.0s done\n#4 DONE 0.0s\n\n#5 [5/7] RUN echo \"org.gradle.daemon=false\" >> /home/gradle/.gradle/gradle.properties &&     echo \"org.gradle.parallel=true\"  >> /home/gradle/.gradle/gradle.properties &&     echo \"org.gradle.caching=true\"   >> /home/gradle/.gradle/gradle.properties &&     echo \"org.gradle.jvmargs=-Xmx4g -XX:+UseG1GC\" >> /home/gradle/.gradle/gradle.properties\n#5 CACHED\n\n#6 [2/7] RUN apt-get update && apt-get install -y     git     rsync     && rm -rf /var/lib/apt/lists/*\n#6 CACHED\n\n#7 [3/7] RUN groupadd --gid 1000 gradle &&     useradd --uid 1000 --gid 1000 --shell /bin/bash --create-home gradle\n#7 CACHED\n\n#8 [6/7] RUN mkdir -p /repo && chown gradle:gradle /repo\n#8 CACHED\n\n#9 [4/7] RUN mkdir -p /home/gradle/.gradle &&     chown -R gradle:gradle /home/gradle/.gradle\n#9 CACHED\n\n#10 [7/7] WORKDIR /repo\n#10 CACHED\n\n#11 exporting to image\n#11 exporting layers done\n#11 exporting manifest sha256:349b160abe7f009dfae61b69b35fbe084d1867ebfc66c51a95e94db55dbb94eb done\n#11 exporting config sha256:17c0f197bc8438e722c82b83d61573c515e28484b4e6059b624e9ebe74b02ce2 done\n#11 exporting attestation manifest sha256:df565f3233d076c9bb8c88abd9a8912e5b23f5aff3fc925cb1c0330e39bec6b1 0.0s done\n#11 exporting manifest list sha256:8701e494b2bb0ebc1e537054caee3f0b9b4d522017ac2065cb0702f6fe742347\n#11 exporting manifest list sha256:8701e494b2bb0ebc1e537054caee3f0b9b4d522017ac2065cb0702f6fe742347 0.0s done\n#11 naming to docker.io/library/retrofit-elasticsearch-builder:local done\n#11 unpacking to docker.io/library/retrofit-elasticsearch-builder:local 0.0s done\n#11 DONE 0.1s",
+    "mode": "elasticsearch-helper-script"
+  }
+}
