@@ -333,6 +333,58 @@ def _extract_removed_lines(hunk_text: str) -> list[str]:
     return [line for line in lines[1:] if line.startswith("-")]
 
 
+def _count_context_lines(hunk_text: str) -> int:
+    """
+    Counts ' ' context lines in a unified diff hunk body.
+    """
+    if not hunk_text:
+        return 0
+    lines = hunk_text.splitlines()
+    if not lines:
+        return 0
+    return sum(1 for line in lines[1:] if line.startswith(" "))
+
+
+def _is_structurally_risky_candidate(
+    base_hunk: str,
+    candidate_hunk: str,
+    *,
+    operation: str,
+    is_import_hunk: bool,
+    is_declaration_or_class_hunk: bool,
+) -> bool:
+    """
+    Rejects aggressive fallback hunks that are likely to apply at the wrong
+    location (typically EOF) while still passing `git apply --check`.
+
+    Risk patterns for MODIFIED files:
+    - base has removals but candidate removes nothing
+    - declaration/import hunks lost all context anchors
+    - candidate is pure insertion despite base carrying context anchors
+    """
+    if (operation or "MODIFIED").upper() != "MODIFIED":
+        return False
+
+    base_removed = len(_extract_removed_lines(base_hunk))
+    cand_removed = len(_extract_removed_lines(candidate_hunk))
+    base_context = _count_context_lines(base_hunk)
+    cand_context = _count_context_lines(candidate_hunk)
+
+    # If base hunk replaces existing lines, candidate must preserve removals.
+    if base_removed > 0 and cand_removed == 0:
+        return True
+
+    # Import/class-level hunks are anchor-sensitive and should keep context.
+    if (is_import_hunk or is_declaration_or_class_hunk) and cand_context == 0:
+        return True
+
+    # Pure insertion fallback for a context-anchored base hunk is unsafe.
+    if base_context > 0 and cand_context == 0 and cand_removed == 0:
+        return True
+
+    return False
+
+
 def _to_context_free_hunk(hunk_text: str, target_start_line: int) -> str | None:
     """
     Build a context-free fallback hunk using only +/- lines.
@@ -1078,7 +1130,8 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
 
             # For import-only hunks, skip LLM rewriting to avoid corruption
             # Import statements are fragile and LLM tends to duplicate existing imports
-            if _is_import_only_hunk(raw_hunk):
+            is_import_hunk = _is_import_only_hunk(raw_hunk)
+            if is_import_hunk:
                 adapted_hunk_text = _adjust_hunk_header(pre_rewritten, insertion_line)
                 print(
                     f"    Agent 3: Skipped LLM rewrite for import-only hunk {hunk_idx}"
@@ -1175,21 +1228,38 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 deterministic_hunk = _adjust_hunk_header(pre_rewritten, insertion_line)
                 _push_candidate("deterministic", deterministic_hunk)
 
-                if (
+                effective_op = (
                     op_plan.get("effective_operation") or "MODIFIED"
-                ).upper() == "MODIFIED":
+                ).upper()
+
+                # Aggressive context-dropping fallbacks are unsafe for import/class
+                # declaration hunks because they often apply at EOF.
+                if (
+                    effective_op == "MODIFIED"
+                    and not is_import_hunk
+                    and not is_declaration_or_class_hunk
+                    and len(_extract_removed_lines(deterministic_hunk)) > 0
+                ):
                     _push_candidate(
                         "context-free",
                         _to_context_free_hunk(deterministic_hunk, insertion_line),
-                    )
-                    _push_candidate(
-                        "addition-only",
-                        _to_addition_only_hunk(deterministic_hunk, insertion_line),
                     )
 
                 last_err = ""
                 selected_label = "primary"
                 for label, candidate_hunk in candidates:
+                    if _is_structurally_risky_candidate(
+                        pre_rewritten,
+                        candidate_hunk,
+                        operation=effective_op,
+                        is_import_hunk=is_import_hunk,
+                        is_declaration_or_class_hunk=is_declaration_or_class_hunk,
+                    ):
+                        print(
+                            f"    Agent 3: Skipping risky fallback ({label}) "
+                            f"for {target_file}[{hunk_idx}]"
+                        )
+                        continue
                     dr = toolkit.apply_hunk_dry_run(target_file, candidate_hunk)
                     if dr["success"]:
                         adapted_hunk_text = candidate_hunk
