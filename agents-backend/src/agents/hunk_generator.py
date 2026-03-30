@@ -23,6 +23,7 @@ Key outputs to state:
 import re
 import json
 import os
+import difflib
 from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from state import AgentState, AdaptedHunk, SemanticBlueprint
@@ -318,6 +319,101 @@ def _extract_added_lines(hunk_text: str) -> list[str]:
     if not lines:
         return []
     return [line for line in lines[1:] if line.startswith("+")]
+
+
+def _extract_removed_lines(hunk_text: str) -> list[str]:
+    """
+    Returns all '-' body lines from a hunk (excluding the @@ header).
+    """
+    if not hunk_text:
+        return []
+    lines = hunk_text.splitlines()
+    if not lines:
+        return []
+    return [line for line in lines[1:] if line.startswith("-")]
+
+
+def _to_context_free_hunk(hunk_text: str, target_start_line: int) -> str | None:
+    """
+    Build a context-free fallback hunk using only +/- lines.
+
+    This helps when patch application fails due surrounding context drift while
+    the changed lines themselves are still valid.
+    """
+    if not hunk_text:
+        return None
+    lines = hunk_text.splitlines()
+    if not lines or not lines[0].startswith("@@"):
+        return None
+
+    body = [ln for ln in lines[1:] if ln.startswith("+") or ln.startswith("-")]
+    if not body:
+        return None
+
+    removed = sum(1 for ln in body if ln.startswith("-"))
+    added = sum(1 for ln in body if ln.startswith("+"))
+
+    src_count = removed
+    tgt_count = added
+
+    header = f"@@ -{target_start_line},{src_count} +{target_start_line},{tgt_count} @@"
+    out = "\n".join([header] + body)
+    if not out.endswith("\n"):
+        out += "\n"
+    return out
+
+
+def _to_addition_only_hunk(hunk_text: str, target_start_line: int) -> str | None:
+    """
+    Build an insertion-only fallback hunk from '+' lines.
+
+    This is the last resort when replacement hunks cannot be applied cleanly.
+    """
+    plus_lines = _extract_added_lines(hunk_text)
+    if not plus_lines:
+        return None
+    header = f"@@ -{target_start_line},0 +{target_start_line},{len(plus_lines)} @@"
+    out = "\n".join([header] + plus_lines)
+    if not out.endswith("\n"):
+        out += "\n"
+    return out
+
+
+def _is_suspicious_plus_rewrite(
+    base_hunk: str,
+    candidate_hunk: str,
+    consistency_map: dict,
+) -> bool:
+    """
+    Guardrail against semantic drift in LLM rewrites.
+
+    If a rewrite introduces unexpected numeric literals (common hallucination
+    pattern from PR numbers/issue IDs) or diverges too far from the base '+'
+    lines without any consistency-map pressure, prefer deterministic fallback.
+    """
+    base_plus = [ln[1:] for ln in _extract_added_lines(base_hunk)]
+    cand_plus = [ln[1:] for ln in _extract_added_lines(candidate_hunk)]
+
+    if not base_plus or len(base_plus) != len(cand_plus):
+        return False
+
+    base_text = "\n".join(base_plus)
+    cand_text = "\n".join(cand_plus)
+    if base_text == cand_text:
+        return False
+
+    base_nums = set(re.findall(r"\b\d+\b", base_text))
+    cand_nums = set(re.findall(r"\b\d+\b", cand_text))
+    unexpected_numeric = [n for n in (cand_nums - base_nums) if len(n) >= 4]
+    if unexpected_numeric:
+        return True
+
+    if not consistency_map:
+        similarity = difflib.SequenceMatcher(None, base_text, cand_text).ratio()
+        if similarity < 0.6:
+            return True
+
+    return False
 
 
 def _is_import_only_hunk(hunk_text: str) -> bool:
@@ -1029,6 +1125,16 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                             adapted_hunk_text = _adjust_hunk_header(
                                 stabilized, insertion_line
                             )
+                            if _is_suspicious_plus_rewrite(
+                                pre_rewritten, adapted_hunk_text, consistency_map
+                            ):
+                                adapted_hunk_text = _adjust_hunk_header(
+                                    pre_rewritten, insertion_line
+                                )
+                                print(
+                                    f"    Agent 3: Guardrail triggered on hunk {hunk_idx}; "
+                                    "reverting to deterministic rewrite"
+                                )
                             break
                         print(
                             f"    Agent 3: Hunk parse failed (attempt {attempt + 1}/2)"
@@ -1050,11 +1156,56 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             # Dry-run validation
             dry_run_ok = False
             if toolkit:
-                dr = toolkit.apply_hunk_dry_run(target_file, adapted_hunk_text)
-                dry_run_ok = dr["success"]
-                if not dry_run_ok:
+                candidates: list[tuple[str, str]] = []
+
+                def _push_candidate(label: str, htxt: str | None) -> None:
+                    if not htxt:
+                        return
+                    for _, existing in candidates:
+                        if existing == htxt:
+                            return
+                    candidates.append((label, htxt))
+
+                _push_candidate("primary", adapted_hunk_text)
+
+                # Conservative fallback sequence for context drift:
+                # 1) deterministic pre-rewrite
+                # 2) context-free (+/- only)
+                # 3) insertion-only (+ only)
+                deterministic_hunk = _adjust_hunk_header(pre_rewritten, insertion_line)
+                _push_candidate("deterministic", deterministic_hunk)
+
+                if (
+                    op_plan.get("effective_operation") or "MODIFIED"
+                ).upper() == "MODIFIED":
+                    _push_candidate(
+                        "context-free",
+                        _to_context_free_hunk(deterministic_hunk, insertion_line),
+                    )
+                    _push_candidate(
+                        "addition-only",
+                        _to_addition_only_hunk(deterministic_hunk, insertion_line),
+                    )
+
+                last_err = ""
+                selected_label = "primary"
+                for label, candidate_hunk in candidates:
+                    dr = toolkit.apply_hunk_dry_run(target_file, candidate_hunk)
+                    if dr["success"]:
+                        adapted_hunk_text = candidate_hunk
+                        dry_run_ok = True
+                        selected_label = label
+                        break
+                    last_err = dr.get("output", "")
+
+                if dry_run_ok and selected_label != "primary":
                     print(
-                        f"    Agent 3: Dry-run failed for {target_file}[{hunk_idx}]: {dr['output'][:150]}"
+                        f"    Agent 3: Dry-run fallback selected ({selected_label}) "
+                        f"for {target_file}[{hunk_idx}]"
+                    )
+                elif not dry_run_ok:
+                    print(
+                        f"    Agent 3: Dry-run failed for {target_file}[{hunk_idx}]: {last_err[:150]}"
                     )
             else:
                 dry_run_ok = True  # No toolkit → assume ok (local dev mode)
