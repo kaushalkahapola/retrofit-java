@@ -96,6 +96,31 @@ class ValidationToolkit:
         self.target_repo_path = target_repo_path
         self.client = get_client()
 
+    def read_file_range(self, file_path: str, start_line: int, end_line: int) -> str:
+        """
+        Reads a specific range of lines from a file in the target repository.
+        Useful for verifying context anchors before generating a patch.
+        Lines are 1-indexed.
+        """
+        full_path = os.path.join(self.target_repo_path, file_path)
+        if not os.path.exists(full_path):
+            return f"Error: File not found at {file_path}"
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+                # 1-indexed to 0-indexed conversion
+                start = max(0, start_line - 1)
+                end = min(len(lines), end_line)
+
+                selected_lines = lines[start:end]
+                result = []
+                for i, line in enumerate(selected_lines):
+                    result.append(f"{start + i + 1}: {line}")
+
+                return "".join(result) if result else "No lines in range."
+        except Exception as e:
+            return f"Error reading file range: {e}"
+
     def _is_known_project_with_helper(self, project: str) -> bool:
         project_dir = self._get_project_helper_dir(project)
         return os.path.isdir(project_dir)

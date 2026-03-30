@@ -1395,14 +1395,21 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             # --- New: Dynamic Context Verification ---
             if toolkit and insertion_line:
                 # Read lines around the insertion point to verify context
-                actual_context = toolkit.read_file_range(
-                    target_file, max(1, insertion_line - 3), insertion_line + 3
-                )
-                if actual_context and "Error" not in actual_context:
-                    print(
-                        f"    Agent 3: Verified target context for {target_file}:{insertion_line}"
+                # Use a try-except block to safely call read_file_range
+                try:
+                    actual_context = toolkit.read_file_range(
+                        target_file, max(1, insertion_line - 3), insertion_line + 3
                     )
-                    # In a real scenario, we could use this to refine insertion_line if it drifted
+                    if actual_context and "Error" not in actual_context:
+                        print(
+                            f"    Agent 3: Verified target context for {target_file}:{insertion_line}"
+                        )
+                except AttributeError:
+                    print(
+                        f"    Agent 3 Warning: toolkit does not support read_file_range"
+                    )
+                except Exception as e:
+                    print(f"    Agent 3 Warning: context verification failed: {e}")
 
             if is_import_hunk:
                 adapted_hunk_text = _adjust_hunk_header(pre_rewritten, insertion_line)
