@@ -1,44 +1,57 @@
 # Context Analyzer Trace
 
-## File: `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java`
+## File: `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java`
 
-**Method focused**: `checkConditionExpressionDataType`
-**Hunk count**: 2
+**Method focused**: `order`
+**Hunk count**: 5
 
 **Agent Tool Steps:**
 
-  - `Tool: get_class_context` -> {'context': 'package org.elasticsearch.xpack.esql.analysis;\n\n// Line 55\npublic class Verifier {\n...
-  - `Tool: get_class_context` -> {'context': 'package org.elasticsearch.xpack.esql.analysis;\n\n// Line 55\npublic class Verifier {\n...
-**Patch Intent**: Ensure that condition expressions are validated to be of boolean type, preventing incorrect data types from being processed.
+**Patch Intent**: To ensure that requests are sent to data nodes in an optimal order based on their roles.
 
-**Root Cause**: The original code did not properly validate that the condition expression's data type is boolean, potentially allowing non-boolean types to be processed.
+**Root Cause**: Lack of proper ordering of nodes based on their roles when sending requests, which could lead to inefficient query execution.
 
-**Fix Logic**: Replaced the direct data type check with a call to the new method `checkConditionExpressionDataType`, which includes a check for NULL and BOOLEAN types.
+**Fix Logic**: Introduced a new method to order nodes based on their roles and updated the request sending logic to use this ordering.
 
-**Dependent APIs**: Expression, localFailures
+**Dependent APIs**: DiscoveryNode, TargetShards
 
 **Hunk Chain**:
 
-  - H1 [core_fix]: Introduced a new method `checkConditionExpressionDataType` to encapsulate the logic for checking the data type of condition expressions.
-    → *This new method centralizes the data type validation logic, which is then reused in the next hunk to maintain consistency.*
-  - H2 [propagation]: Replaced the direct data type check for the filter expression with a call to `checkConditionExpressionDataType`.
+  - H1 [declaration]: Added import for DiscoveryNodeRole to access node roles.
+    → *This import is necessary for defining the NODE_QUERY_ORDER in the next hunk.*
+  - H2 [declaration]: Added imports for Comparator and LinkedHashMap to facilitate sorting and maintaining order.
+    → *These imports are required for implementing the ordering logic in the subsequent hunks.*
+  - H3 [declaration]: Defined a static list NODE_QUERY_ORDER that specifies the order of node roles for query execution.
+    → *This list is used in the new ordering methods introduced in the next hunk.*
+  - H4 [core_fix]: Implemented the order method to sort shards based on the roles of their corresponding nodes.
+    → *This method provides the core functionality needed to order the nodes, which is then utilized in the request sending logic.*
+  - H5 [cleanup]: Changed the map used to store node to shard ID mappings from HashMap to LinkedHashMap to maintain insertion order.
 
-**Self-Reflection**: FAILED ❌ (used anyway)
+**Self-Reflection**: VERIFIED ✅
 
 
 ## Consolidated Blueprint
 
-**Patch Intent**: Ensure that condition expressions are validated to be of boolean type, preventing incorrect data types from being processed.
+**Patch Intent**: To ensure that requests are sent to data nodes in an optimal order based on their roles.
 
-- **Root Cause**: The original code did not properly validate that the condition expression's data type is boolean, potentially allowing non-boolean types to be processed.
-- **Fix Logic**: Replaced the direct data type check with a call to the new method `checkConditionExpressionDataType`, which includes a check for NULL and BOOLEAN types.
-- **Dependent APIs**: ['Expression', 'localFailures']
+- **Root Cause**: Lack of proper ordering of nodes based on their roles when sending requests, which could lead to inefficient query execution.
+- **Fix Logic**: Introduced a new method to order nodes based on their roles and updated the request sending logic to use this ordering.
+- **Dependent APIs**: ['DiscoveryNode', 'TargetShards']
 
 ### Full Hunk Chain (Cross-File)
 
-**[G1] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java — H1** `[core_fix]`
-  Introduced a new method `checkConditionExpressionDataType` to encapsulate the logic for checking the data type of condition expressions.
-  → This new method centralizes the data type validation logic, which is then reused in the next hunk to maintain consistency.
-**[G2] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java — H2** `[propagation]`
-  Replaced the direct data type check for the filter expression with a call to `checkConditionExpressionDataType`.
+**[G1] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H1** `[declaration]`
+  Added import for DiscoveryNodeRole to access node roles.
+  → This import is necessary for defining the NODE_QUERY_ORDER in the next hunk.
+**[G2] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H2** `[declaration]`
+  Added imports for Comparator and LinkedHashMap to facilitate sorting and maintaining order.
+  → These imports are required for implementing the ordering logic in the subsequent hunks.
+**[G3] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H3** `[declaration]`
+  Defined a static list NODE_QUERY_ORDER that specifies the order of node roles for query execution.
+  → This list is used in the new ordering methods introduced in the next hunk.
+**[G4] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H4** `[core_fix]`
+  Implemented the order method to sort shards based on the roles of their corresponding nodes.
+  → This method provides the core functionality needed to order the nodes, which is then utilized in the request sending logic.
+**[G5] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H5** `[cleanup]`
+  Changed the map used to store node to shard ID mappings from HashMap to LinkedHashMap to maintain insertion order.
 

@@ -53,7 +53,7 @@ RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 PHASE0_CACHE_DIR = os.path.join(os.path.dirname(__file__), "phase0_cache")
 
 TARGET_PROJECTS = ["elasticsearch"]
-MAX_PATCHES_PER_PROJECT = None
+MAX_PATCHES_PER_PROJECT = 4
 
 
 def ensure_dirs() -> None:
