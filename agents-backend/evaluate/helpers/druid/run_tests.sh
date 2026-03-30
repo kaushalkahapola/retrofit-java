@@ -23,10 +23,7 @@ echo "Surefire forks: ${SUREFIRE_FORKS}"
 if [ "${TEST_TARGETS:-}" == "ALL" ]; then
     # Run standard unit tests for everything (skipping broken modules)
     MAVEN_ARGS="-pl '!web-console,!distribution'"
-elif [ "${TEST_TARGETS:-}" == "NONE" ]; then
-    echo "No relevant source code changes found. Skipping tests."
-    exit 0
-elif [ -n "${TEST_TARGETS:-}" ]; then
+elif [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ]; then
     # TEST_TARGETS is a space-separated list of "module:class"
     # Example: processing:org.apache.druid.FooTest server:org.apache.druid.BarTest
     # IMPORTANT: TEST_TARGETS must take precedence over TEST_MODULES.
@@ -61,6 +58,9 @@ elif [ -n "${TEST_TARGETS:-}" ]; then
 elif [ -n "${TEST_MODULES:-}" ]; then
     # Module-targeted fallback when no specific test classes are available.
     MAVEN_ARGS="-pl ${TEST_MODULES} -am"
+elif [ "${TEST_TARGETS:-}" == "NONE" ]; then
+    echo "No relevant source code changes found. Skipping tests."
+    exit 0
 else
     echo "No test targets/modules provided. Skipping tests."
     exit 0

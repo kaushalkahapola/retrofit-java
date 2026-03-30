@@ -21,10 +21,7 @@ echo "--- Using Docker Image: ${IMAGE_TAG} ---"
 #
 if [ "${TEST_TARGETS:-}" == "ALL" ]; then
     GRADLE_ARGS="test --no-daemon -Dbuild.docker=false"
-elif [ "${TEST_TARGETS:-}" == "NONE" ]; then
-    echo "No relevant test targets. Skipping tests."
-    exit 0
-elif [ -n "${TEST_TARGETS:-}" ]; then
+elif [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ]; then
     # Build a list of Gradle task args: ":module:test --tests ClassName" per target.
     GRADLE_ARGS=""
     for target in ${TEST_TARGETS}; do
@@ -53,6 +50,9 @@ elif [ -n "${TEST_MODULES:-}" ]; then
         GRADLE_ARGS="${GRADLE_ARGS} ${gradle_module}:test"
     done
     GRADLE_ARGS="${GRADLE_ARGS} --no-daemon -Dbuild.docker=false"
+elif [ "${TEST_TARGETS:-}" == "NONE" ]; then
+    echo "No relevant test targets. Skipping tests."
+    exit 0
 else
     echo "No TEST_TARGETS or TEST_MODULES set. Skipping tests."
     exit 0

@@ -14,10 +14,7 @@ echo "--- Using Docker Image: ${IMAGE_TAG} ---"
 # 1. Configure Test Command
 if [ "${TEST_TARGETS:-}" == "ALL" ]; then
     MAVEN_ARGS="-T 1C"
-elif [ "${TEST_TARGETS:-}" == "NONE" ]; then
-    echo "No relevant source code changes found. Skipping tests."
-    exit 0
-elif [ -n "${TEST_TARGETS:-}" ]; then
+elif [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ]; then
     # TEST_TARGETS is a space-separated list of "module:class"
     MODULES=""
     TESTS=""
@@ -33,8 +30,12 @@ elif [ -n "${TEST_TARGETS:-}" ]; then
 elif [ -n "${TEST_MODULES:-}" ]; then
     # Module-targeted fallback
     MAVEN_ARGS="-pl ${TEST_MODULES} -am"
+elif [ "${TEST_TARGETS:-}" == "NONE" ]; then
+    echo "No relevant source code changes found. Skipping tests."
+    exit 0
 else
-    MAVEN_ARGS=""
+    echo "No TEST_TARGETS or TEST_MODULES set. Skipping tests."
+    exit 0
 fi
 
 MVN_CMD="mvn test ${MAVEN_ARGS} -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.javadoc.skip=true -Dcheckstyle.skip=true -Dpmd.skip=true -Dforbiddenapis.skip=true -Denforcer.skip=true -DskipITs"
