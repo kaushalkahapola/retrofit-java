@@ -76,7 +76,7 @@ Generated
              }
 -            // TODO: We can push down partial sorts where `pushableSorts.size() < orders.size()`, but that should involve benchmarks
 -            if (pushableSorts.size() > 0 && pushableSorts.size() == orders.size()) {
-+            if (pushable.isEmpty() == false) {
++            if (pushableSorts.isEmpty() == false) {
                  return new PushableCompoundExec(evalExec, queryExec, pushableSorts);
              }
          }
@@ -85,18 +85,11 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,10 +1,10 @@-@@ -189,8 +189,7 @@
+--- developer+++ generated@@ -1,4 +1,4 @@-@@ -189,8 +189,7 @@
 +@@ -65,8 +65,7 @@
                       break;
                   }
               }
- -            // TODO: We can push down partial sorts where `pushableSorts.size() < orders.size()`, but that should involve benchmarks
- -            if (pushableSorts.size() > 0 && pushableSorts.size() == orders.size()) {
--+            if (pushableSorts.isEmpty() == false) {
-++            if (pushable.isEmpty() == false) {
-                  return new PushableCompoundExec(evalExec, queryExec, pushableSorts);
-              }
-          }
 
 ```
 
@@ -512,7 +505,7 @@ diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optim
              }
 -            // TODO: We can push down partial sorts where `pushableSorts.size() < orders.size()`, but that should involve benchmarks
 -            if (pushableSorts.size() > 0 && pushableSorts.size() == orders.size()) {
-+            if (pushable.isEmpty() == false) {
++            if (pushableSorts.isEmpty() == false) {
                  return new PushableCompoundExec(evalExec, queryExec, pushableSorts);
              }
          }

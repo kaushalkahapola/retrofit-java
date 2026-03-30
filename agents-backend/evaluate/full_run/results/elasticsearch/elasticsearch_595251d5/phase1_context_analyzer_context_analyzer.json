@@ -1,17 +1,17 @@
 {
   "semantic_blueprint": {
-    "root_cause_hypothesis": "Incorrect condition for checking if pushable sorts are available, potentially leading to missed optimization opportunities.",
+    "root_cause_hypothesis": "Incorrect condition for checking if pushable sorts are available, which could lead to failing to push down sorts when they are present.",
     "fix_logic": "Replaced the condition checking for the size of pushableSorts with a check for whether pushableSorts is not empty.",
     "dependent_apis": [
       "pushableSorts",
       "PushableCompoundExec"
     ],
-    "patch_intent_summary": "Ensure that pushable sorts are correctly identified to optimize query execution.",
+    "patch_intent_summary": "Ensure that pushable sorts are correctly identified and utilized for optimization.",
     "hunk_chain": [
       {
         "hunk_index": 1,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java",
-        "summary": "Changed the condition from checking the size of pushableSorts to checking if it is not empty.",
+        "summary": "Changed the condition to check if pushableSorts is not empty instead of checking its size against orders.",
         "role": "core_fix",
         "connects_to_next": "",
         "global_index": 1

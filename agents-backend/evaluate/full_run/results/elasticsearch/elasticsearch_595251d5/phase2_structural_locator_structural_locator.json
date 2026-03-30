@@ -9,7 +9,7 @@
         "target_method": "rule",
         "start_line": 65,
         "end_line": 68,
-        "code_snippet": "protected PhysicalPlan rule(TopNExec topNExec, LocalPhysicalOptimizerContext ctx) {\n    Pushable pushable = evaluatePushable(ctx.foldCtx(), topNExec, LucenePushdownPredicates.from(ctx.searchStats()));\n    return pushable.rewrite(topNExec);\n}"
+        "code_snippet": "protected PhysicalPlan rule(TopNExec topNExec, LocalPhysicalOptimizerContext ctx) {\n        Pushable pushable = evaluatePushable(ctx.foldCtx(), topNExec, LucenePushdownPredicates.from(ctx.searchStats()));\n        return pushable.rewrite(topNExec);\n    }"
       }
     ]
   }

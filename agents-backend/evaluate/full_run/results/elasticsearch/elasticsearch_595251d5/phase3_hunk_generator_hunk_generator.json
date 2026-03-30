@@ -3,7 +3,7 @@
     {
       "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java",
       "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java",
-      "hunk_text": "@@ -65,8 +65,7 @@\n                     break;\n                 }\n             }\n-            // TODO: We can push down partial sorts where `pushableSorts.size() < orders.size()`, but that should involve benchmarks\n-            if (pushableSorts.size() > 0 && pushableSorts.size() == orders.size()) {\n+            if (pushable.isEmpty() == false) {\n                 return new PushableCompoundExec(evalExec, queryExec, pushableSorts);\n             }\n         }\n",
+      "hunk_text": "@@ -65,8 +65,7 @@\n                     break;\n                 }\n             }\n-            // TODO: We can push down partial sorts where `pushableSorts.size() < orders.size()`, but that should involve benchmarks\n-            if (pushableSorts.size() > 0 && pushableSorts.size() == orders.size()) {\n+            if (pushableSorts.isEmpty() == false) {\n                 return new PushableCompoundExec(evalExec, queryExec, pushableSorts);\n             }\n         }\n",
       "insertion_line": 65,
       "intent_verified": true,
       "file_operation": "MODIFIED",

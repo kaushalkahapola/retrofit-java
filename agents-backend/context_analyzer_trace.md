@@ -1,57 +1,43 @@
 # Context Analyzer Trace
 
-## File: `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java`
+## File: `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java`
 
-**Method focused**: `order`
-**Hunk count**: 5
+**Method focused**: `Unknown`
+**Hunk count**: 1
 
 **Agent Tool Steps:**
 
-**Patch Intent**: To ensure that requests to data nodes are sent in an order that respects the roles of the nodes.
+  - `Tool: get_class_context` -> {'context': 'package org.elasticsearch.xpack.esql.optimizer.rules.physical.local;\n\n// Line 62\npub...
+  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
+  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
+  - `Tool: read_file` -> /*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contri...
+**Patch Intent**: Ensure that pushable sorts are correctly identified and utilized for optimization.
 
-**Root Cause**: Lack of proper ordering of nodes based on their roles when sending requests to data nodes.
+**Root Cause**: Incorrect condition for checking if pushable sorts are available, which could lead to failing to push down sorts when they are present.
 
-**Fix Logic**: Introduced a new method `order(TargetShards targetShards)` to sort the shards based on the roles of the nodes, and added a static list `NODE_QUERY_ORDER` to define the order of node roles.
+**Fix Logic**: Replaced the condition checking for the size of pushableSorts with a check for whether pushableSorts is not empty.
 
-**Dependent APIs**: DiscoveryNode, TargetShards, ShardId
+**Dependent APIs**: pushableSorts, PushableCompoundExec
 
 **Hunk Chain**:
 
-  - H1 [declaration]: Added import for `DiscoveryNodeRole` to access node role constants.
-    → *This import is necessary for defining the order of node roles in the next hunk.*
-  - H2 [declaration]: Added imports for `Comparator` and `LinkedHashMap` to facilitate sorting and maintaining insertion order.
-    → *These imports are required for implementing the sorting logic in the subsequent hunk.*
-  - H3 [declaration]: Declared a static list `NODE_QUERY_ORDER` that defines the order of node roles for query processing.
-    → *This list is used in the new ordering logic implemented in the next hunk.*
-  - H4 [core_fix]: Implemented the `order(TargetShards targetShards)` method to sort shards based on the roles of their corresponding nodes.
-    → *This method is called in the previous method to ensure that pending shard IDs are ordered correctly before sending requests.*
-  - H5 [cleanup]: Changed the type of `nodeToShardIds` from `HashMap` to `LinkedHashMap` to maintain the order of nodes when mapping them to shard IDs.
+  - H1 [core_fix]: Changed the condition to check if pushableSorts is not empty instead of checking its size against orders.
 
-**Self-Reflection**: FAILED ❌ (used anyway)
+**Self-Reflection**: VERIFIED ✅
 
 
 ## Consolidated Blueprint
 
-**Patch Intent**: To ensure that requests to data nodes are sent in an order that respects the roles of the nodes.
+**Patch Intent**: Ensure that pushable sorts are correctly identified and utilized for optimization.
 
-- **Root Cause**: Lack of proper ordering of nodes based on their roles when sending requests to data nodes.
-- **Fix Logic**: Introduced a new method `order(TargetShards targetShards)` to sort the shards based on the roles of the nodes, and added a static list `NODE_QUERY_ORDER` to define the order of node roles.
-- **Dependent APIs**: ['DiscoveryNode', 'TargetShards', 'ShardId']
+- **Root Cause**: Incorrect condition for checking if pushable sorts are available, which could lead to failing to push down sorts when they are present.
+- **Fix Logic**: Replaced the condition checking for the size of pushableSorts with a check for whether pushableSorts is not empty.
+- **Dependent APIs**: ['pushableSorts', 'PushableCompoundExec']
 
 ### Full Hunk Chain (Cross-File)
 
-**[G1] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H1** `[declaration]`
-  Added import for `DiscoveryNodeRole` to access node role constants.
-  → This import is necessary for defining the order of node roles in the next hunk.
-**[G2] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H2** `[declaration]`
-  Added imports for `Comparator` and `LinkedHashMap` to facilitate sorting and maintaining insertion order.
-  → These imports are required for implementing the sorting logic in the subsequent hunk.
-**[G3] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H3** `[declaration]`
-  Declared a static list `NODE_QUERY_ORDER` that defines the order of node roles for query processing.
-  → This list is used in the new ordering logic implemented in the next hunk.
-**[G4] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H4** `[core_fix]`
-  Implemented the `order(TargetShards targetShards)` method to sort shards based on the roles of their corresponding nodes.
-  → This method is called in the previous method to ensure that pending shard IDs are ordered correctly before sending requests.
-**[G5] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H5** `[cleanup]`
-  Changed the type of `nodeToShardIds` from `HashMap` to `LinkedHashMap` to maintain the order of nodes when mapping them to shard IDs.
+**[G1] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java — H1** `[core_fix]`
+  Changed the condition to check if pushableSorts is not empty instead of checking its size against orders.
 
