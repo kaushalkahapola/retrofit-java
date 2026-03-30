@@ -147,25 +147,78 @@ def _parse_mapping_json(raw_content: str) -> dict | None:
     if not text:
         return None
 
-    json_match = re.search(r"\{.*\}", text, re.DOTALL)
+    # Try to find JSON block
+    json_match = re.search(r"(\{.*\})", text, re.DOTALL)
     if json_match:
-        text = json_match.group(0)
+        text = json_match.group(1)
 
     try:
         parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    # Try stripping markdown
+    text_clean = re.sub(
+        r"```(?:json)?\n?(.*?)\n?```", r"\1", text, flags=re.DOTALL
+    ).strip()
+    try:
+        parsed = json.loads(text_clean)
         return parsed if isinstance(parsed, dict) else None
     except json.JSONDecodeError:
-        text_clean = re.sub(
-            r"```(?:json)?\n?(.*?)\n?```", r"\1", text, flags=re.DOTALL
-        ).strip()
-        try:
-            parsed = json.loads(text_clean)
-            return parsed if isinstance(parsed, dict) else None
-        except json.JSONDecodeError:
-            return None
+        return None
+
+
+def _get_context_around_lines(
+    toolkit: ReasoningToolkit,
+    file_path: str,
+    start: int | None,
+    end: int | None,
+    window: int = 5,
+) -> dict:
+    """
+    Helper to fetch lines before and after a range for Agent 3.
+    """
+    if not toolkit or start is None:
+        return {"before": [], "after": []}
+
+    try:
+        # Get lines before
+        before_start = max(1, start - window)
+        before_end = max(1, start - 1)
+        before_text = ""
+        if before_end >= before_start:
+            before_text = toolkit.read_file_range(file_path, before_start, before_end)
+
+        # Get lines after
+        # If end is None, assume it's same as start
+        actual_end = end if end is not None else start
+        after_start = actual_end + 1
+        after_end = actual_end + window
+        after_text = toolkit.read_file_range(file_path, after_start, after_end)
+
+        def _clean_read_range(text):
+            if "Error" in text or "No lines" in text:
+                return []
+            # read_file_range returns "line_num: content"
+            return [
+                line.split(": ", 1)[1] if ": " in line else line
+                for line in text.splitlines()
+            ]
+
+        return {
+            "before": _clean_read_range(before_text),
+            "after": _clean_read_range(after_text),
+        }
+    except Exception:
+        return {"before": [], "after": []}
 
 
 # ---------------------------------------------------------------------------
+# Core Agent Node
+# ---------------------------------------------------------------------------
+
 # Core Agent Node
 # ---------------------------------------------------------------------------
 
@@ -545,20 +598,30 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 )
 
                 # Append mapping for this hunk
-                mapped_target_context[mainline_file].append(
-                    {
-                        "hunk_index": hunk_idx,
-                        "mainline_method": m.get("mainline_method"),
-                        "target_file": m.get("target_file"),
-                        "target_method": m.get("target_method"),
-                        "start_line": m.get("start_line"),
-                        "end_line": m.get("end_line"),
-                        "code_snippet": m.get("code_snippet", ""),
-                        "surrounding_context": m.get(
-                            "surrounding_context", {"before": [], "after": []}
-                        ),
-                    }
-                )
+                mapping_entry = {
+                    "hunk_index": hunk_idx,
+                    "mainline_method": m.get("mainline_method"),
+                    "target_file": m.get("target_file"),
+                    "target_method": m.get("target_method"),
+                    "start_line": m.get("start_line"),
+                    "end_line": m.get("end_line"),
+                    "code_snippet": m.get("code_snippet", ""),
+                }
+
+                # Enrich with context if missing or empty
+                ctx = m.get("surrounding_context")
+                if not ctx or not ctx.get("before"):
+                    mapping_entry["surrounding_context"] = _get_context_around_lines(
+                        toolkit,
+                        m.get("target_file"),
+                        m.get("start_line"),
+                        m.get("end_line"),
+                    )
+                else:
+                    mapping_entry["surrounding_context"] = ctx
+
+                mapped_target_context[mainline_file].append(mapping_entry)
+
                 print(
                     f"  Agent 2: Mapped hunk {hunk_idx} ({m.get('mainline_method', '?')}) to {m.get('target_method', '?')} at lines {m.get('start_line', '?')}-{m.get('end_line', '?')}"
                 )

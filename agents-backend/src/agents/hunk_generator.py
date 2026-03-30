@@ -186,51 +186,58 @@ def _generate_hunk_from_bodies(
 ) -> str | None:
     """
     Generates a unified diff hunk between the old and new method bodies.
+    Ensures technical correctness of the unified diff format.
     """
     if not old_body and not new_body:
         return None
 
-    # difflib works best with line lists
-    old_lines = old_body.splitlines(keepends=True)
-    new_lines = new_body.splitlines(keepends=True)
+    # Ensure single trailing newline to avoid \ No newline at end of file
+    old_body_fixed = old_body.strip() + "\n"
+    new_body_fixed = new_body.strip() + "\n"
 
-    # Clean up empty bodies to avoid errors
-    if not old_lines and new_lines:
-        old_lines = ["\n"]
-    if not new_lines and old_lines:
-        new_lines = ["\n"]
+    old_lines = old_body_fixed.splitlines(keepends=True)
+    new_lines = new_body_fixed.splitlines(keepends=True)
 
-    diff = difflib.unified_diff(
-        old_lines, new_lines, fromfile=f"a/{target_file}", tofile=f"b/{target_file}"
+    # Generate diff with 3 lines of context
+    diff_gen = difflib.unified_diff(
+        old_lines,
+        new_lines,
+        fromfile=f"a/{target_file}",
+        tofile=f"b/{target_file}",
+        n=3,
     )
 
-    hunk_lines = []
-    # Skip the header lines (--- and +++)
-    for line in diff:
-        if line.startswith("---") or line.startswith("+++"):
-            continue
-        hunk_lines.append(line)
-
-    if not hunk_lines:
+    lines = list(diff_gen)
+    if not lines:
         return None
 
-    # Adjust the @@ header to use the actual start_line from Agent 2
-    # Unified diff output: @@ -1,10 +1,12 @@
-    res = []
-    for line in hunk_lines:
+    # Unified diff format has 2 header lines (--- and +++) before hunks
+    hunk_content = []
+    found_header = False
+    for line in lines:
         if line.startswith("@@"):
+            found_header = True
+            # Adjust the @@ header to use the actual start_line from Agent 2
             m = re.match(r"@@ -(\d+),?(\d+)? \+(\d+),?(\d+)? @@(.*)", line)
             if m:
-                # diff_start_src = int(m.group(1))
                 src_count = m.group(2) or "1"
-                # diff_start_tgt = int(m.group(3))
                 tgt_count = m.group(4) or "1"
-                ctx = m.group(5)
+                ctx_info = m.group(5)
                 # We anchor at the start_line provided by the locator
-                line = f"@@ -{start_line},{src_count} +{start_line},{tgt_count} @@{ctx}"
-        res.append(line)
+                # If start_line is 17, and diff says it starts at line 1 of the snippet,
+                # then 17 is correct.
+                line = f"@@ -{start_line},{src_count} +{start_line},{tgt_count} @@{ctx_info}\n"
 
-    return "".join(res)
+        if found_header:
+            # Ensure the line ends with a newline and has correct prefix
+            if not line.endswith("\n"):
+                line += "\n"
+            hunk_content.append(line)
+
+    if not hunk_content:
+        return None
+
+    return "".join(hunk_content)
 
 
 async def _check_intent(
@@ -1216,26 +1223,26 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         )
                         # Extract the code from the response
                         updated_body = raw_content.strip()
-                        if "```" in updated_body:
-                            # Use existing extractor to clean up markdown
-                            updated_body = (
-                                _extract_hunk_block(updated_body) or updated_body
-                            )
-                            # Note: _extract_hunk_block usually looks for @@, but here we want the body
-                            # If it didn't find @@, it might have returned None.
-                            # Let's refine this to just strip fences if they exist.
-                            if "```" in raw_content:
-                                lines = raw_content.splitlines()
-                                body_lines = []
-                                in_fence = False
-                                for line in lines:
-                                    if line.strip().startswith("```"):
-                                        in_fence = not in_fence
-                                        continue
-                                    if in_fence:
-                                        body_lines.append(line)
-                                if body_lines:
-                                    updated_body = "\n".join(body_lines)
+
+                        # Robust markdown code block extraction
+                        code_match = re.search(
+                            r"```(?:java|diff)?\n(.*?)```", raw_content, re.DOTALL
+                        )
+                        if code_match:
+                            updated_body = code_match.group(1).strip()
+                        elif "```" in raw_content:
+                            # Fallback extraction logic
+                            lines = raw_content.splitlines()
+                            body_lines = []
+                            in_fence = False
+                            for line in lines:
+                                if line.strip().startswith("```"):
+                                    in_fence = not in_fence
+                                    continue
+                                if in_fence:
+                                    body_lines.append(line)
+                            if body_lines:
+                                updated_body = "\n".join(body_lines)
 
                         if updated_body:
                             # Programmatically generate the hunk
