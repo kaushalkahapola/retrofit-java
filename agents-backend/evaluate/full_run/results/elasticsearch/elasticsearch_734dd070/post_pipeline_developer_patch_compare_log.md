@@ -5,9 +5,15 @@
 **Comparison Method**: file_state
 
 ## File State Comparison
-- Compared files: ['x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java']
-- Mismatched files: ['x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java']
-- Error: None
+- Compared files: []
+- Mismatched files: []
+- Error: Failed to apply generated patch in temporary index: error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:17
+error: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply
+
+
+error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:17
+error: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply
+
 
 ## Hunk-by-Hunk Comparison
 
@@ -30,22 +36,31 @@ Developer
 
 Generated
 ```diff
-@@ -17,0 +17,1 @@
+@@ -17,6 +17,7 @@
+ import org.elasticsearch.action.search.SearchShardsResponse;
+ import org.elasticsearch.action.support.TransportActions;
+ import org.elasticsearch.cluster.node.DiscoveryNode;
 +import org.elasticsearch.cluster.node.DiscoveryNodeRole;
+ import org.elasticsearch.common.breaker.CircuitBreakingException;
+ import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
+ import org.elasticsearch.compute.operator.DriverProfile;
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,8 +1,2 @@-@@ -18,6 +18,7 @@
+--- developer+++ generated@@ -1,8 +1,8 @@-@@ -18,6 +18,7 @@
 - import org.elasticsearch.action.search.ShardSearchFailure;
-- import org.elasticsearch.action.support.TransportActions;
-- import org.elasticsearch.cluster.node.DiscoveryNode;
-+@@ -17,0 +17,1 @@
++@@ -17,6 +17,7 @@
++ import org.elasticsearch.action.search.SearchShardsResponse;
+  import org.elasticsearch.action.support.TransportActions;
+  import org.elasticsearch.cluster.node.DiscoveryNode;
  +import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 - import org.elasticsearch.cluster.service.ClusterService;
-- import org.elasticsearch.common.breaker.CircuitBreakingException;
+  import org.elasticsearch.common.breaker.CircuitBreakingException;
 - import org.elasticsearch.common.util.Maps;
++ import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
++ import org.elasticsearch.compute.operator.DriverProfile;
 
 ```
 
@@ -71,28 +86,34 @@ Developer
 
 Generated
 ```diff
-@@ -37,0 +37,2 @@
+@@ -37,9 +37,11 @@
+ 
+ import java.util.ArrayList;
+ import java.util.Collections;
 +import java.util.Comparator;
+ import java.util.HashMap;
+ import java.util.IdentityHashMap;
+ import java.util.Iterator;
 +import java.util.LinkedHashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Queue;
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,13 +1,3 @@-@@ -38,10 +39,12 @@
-- 
-- import java.util.ArrayList;
-- import java.util.Collections;
-+@@ -37,0 +37,2 @@
+--- developer+++ generated@@ -1,10 +1,9 @@-@@ -38,10 +39,12 @@
++@@ -37,9 +37,11 @@
+  
+  import java.util.ArrayList;
+  import java.util.Collections;
  +import java.util.Comparator;
-- import java.util.HashMap;
+  import java.util.HashMap;
 - import java.util.HashSet;
-- import java.util.IdentityHashMap;
-- import java.util.Iterator;
+  import java.util.IdentityHashMap;
+  import java.util.Iterator;
  +import java.util.LinkedHashMap;
-- import java.util.List;
-- import java.util.Map;
-- import java.util.Queue;
 
 ```
 
@@ -125,7 +146,10 @@ Developer
 
 Generated
 ```diff
-@@ -57,0 +57,14 @@
+@@ -57,6 +57,20 @@
+  * and executing these computes on the data nodes.
+  */
+ abstract class DataNodeRequestSender {
 +
 +    /**
 +     * Query order according to the
@@ -140,26 +164,31 @@ Generated
 +        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()
 +    );
 +
+     private final TransportService transportService;
+     private final Executor esqlExecutor;
+     private final CancellableTask rootTask;
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,7 +1,5 @@-@@ -60,6 +63,19 @@
--  */
-- abstract class DataNodeRequestSender {
+--- developer+++ generated@@ -1,7 +1,8 @@-@@ -60,6 +63,19 @@
++@@ -57,6 +57,20 @@
++  * and executing these computes on the data nodes.
+   */
+  abstract class DataNodeRequestSender {
 - 
-+@@ -57,0 +57,14 @@
 ++
  +    /**
  +     * Query order according to the
  +     * <a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html">node roles</a>.
-@@ -15,6 +13,3 @@ +        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()
+@@ -15,6 +16,6 @@ +        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()
  +    );
  +
 -     private final ClusterService clusterService;
--     private final TransportService transportService;
--     private final Executor esqlExecutor;
+      private final TransportService transportService;
+      private final Executor esqlExecutor;
++     private final CancellableTask rootTask;
 
 ```
 
@@ -213,8 +242,17 @@ Developer
 
 Generated
 ```diff
-@@ -106,0 +106,28 @@
+@@ -106,12 +106,39 @@
+                         nodePermits.putIfAbsent(node, new Semaphore(1));
+                     }
+                 }
+-                pendingShardIds.addAll(targetShards.shards.keySet());
 +                pendingShardIds.addAll(order(targetShards));
+                 trySendingRequestsForPendingShards(targetShards, computeListener);
+             }
+         }, listener::onFailure));
+     }
+ 
 +    private static List<ShardId> order(TargetShards targetShards) {
 +        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();
 +        var ordered = new ArrayList<>(targetShards.shards.keySet());
@@ -242,32 +280,25 @@ Generated
 +        return Integer.MAX_VALUE;
 +    }
 +
+     private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {
+         changed.set(true);
+         final ActionListener<Void> listener = computeListener.acquireAvoid();
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,14 +1,5 @@-@@ -126,12 +142,39 @@
+--- developer+++ generated@@ -1,7 +1,7 @@-@@ -126,12 +142,39 @@
 -                     )
 -                 )
 -             ) {
---                pendingShardIds.addAll(targetShards.shards.keySet());
-+@@ -106,0 +106,28 @@
++@@ -106,12 +106,39 @@
++                         nodePermits.putIfAbsent(node, new Semaphore(1));
++                     }
++                 }
+ -                pendingShardIds.addAll(targetShards.shards.keySet());
  +                pendingShardIds.addAll(order(targetShards));
--                 trySendingRequestsForPendingShards(targetShards, computeListener);
--             }
--         }, listener::onFailure));
--     }
-- 
- +    private static List<ShardId> order(TargetShards targetShards) {
- +        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();
- +        var ordered = new ArrayList<>(targetShards.shards.keySet());
-@@ -36,6 +27,3 @@ +        return Integer.MAX_VALUE;
- +    }
- +
--     private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {
--         changed.set(true);
--         final ActionListener<Void> listener = computeListener.acquireAvoid();
+                  trySendingRequestsForPendingShards(targetShards, computeListener);
 
 ```
 
@@ -689,12 +720,30 @@ Developer -> Generated (Unified Diff)
 diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java
 --- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java
 +++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java
-@@ -17,0 +17,1 @@
+@@ -17,6 +17,7 @@
+ import org.elasticsearch.action.search.SearchShardsResponse;
+ import org.elasticsearch.action.support.TransportActions;
+ import org.elasticsearch.cluster.node.DiscoveryNode;
 +import org.elasticsearch.cluster.node.DiscoveryNodeRole;
-@@ -37,0 +37,2 @@
+ import org.elasticsearch.common.breaker.CircuitBreakingException;
+ import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
+ import org.elasticsearch.compute.operator.DriverProfile;
+@@ -37,9 +37,11 @@
+ 
+ import java.util.ArrayList;
+ import java.util.Collections;
 +import java.util.Comparator;
+ import java.util.HashMap;
+ import java.util.IdentityHashMap;
+ import java.util.Iterator;
 +import java.util.LinkedHashMap;
-@@ -57,0 +57,14 @@
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Queue;
+@@ -57,6 +57,20 @@
+  * and executing these computes on the data nodes.
+  */
+ abstract class DataNodeRequestSender {
 +
 +    /**
 +     * Query order according to the
@@ -709,8 +758,20 @@ diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugi
 +        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()
 +    );
 +
-@@ -106,0 +106,28 @@
+     private final TransportService transportService;
+     private final Executor esqlExecutor;
+     private final CancellableTask rootTask;
+@@ -106,12 +106,39 @@
+                         nodePermits.putIfAbsent(node, new Semaphore(1));
+                     }
+                 }
+-                pendingShardIds.addAll(targetShards.shards.keySet());
 +                pendingShardIds.addAll(order(targetShards));
+                 trySendingRequestsForPendingShards(targetShards, computeListener);
+             }
+         }, listener::onFailure));
+     }
+ 
 +    private static List<ShardId> order(TargetShards targetShards) {
 +        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();
 +        var ordered = new ArrayList<>(targetShards.shards.keySet());
@@ -738,6 +799,9 @@ diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugi
 +        return Integer.MAX_VALUE;
 +    }
 +
+     private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {
+         changed.set(true);
+         final ActionListener<Void> listener = computeListener.acquireAvoid();
 @@ -279,7 +279,7 @@
       */
      private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {

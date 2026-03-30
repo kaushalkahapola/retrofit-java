@@ -44,7 +44,7 @@
         "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
         "target_method": "selectNodeRequests",
         "start_line": 279,
-        "end_line": 323,
+        "end_line": 279,
         "code_snippet": "final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();"
       }
     ]
