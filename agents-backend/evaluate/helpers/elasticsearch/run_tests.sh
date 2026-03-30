@@ -71,7 +71,7 @@ fi
 ${DOCKER_CMD} volume create gradle-cache-es 2>/dev/null || true
 ${DOCKER_CMD} volume create gradle-wrapper-es 2>/dev/null || true
 
-GRADLE_CMD="./gradlew ${GRADLE_ARGS}"
+GRADLE_CMD="./gradlew ${GRADLE_ARGS} --project-cache-dir /tmp/gradle-project-cache"
 echo "--- Executing: ${GRADLE_CMD} ---"
 
 if ${DOCKER_CMD} run --rm \
@@ -83,6 +83,7 @@ if ${DOCKER_CMD} run --rm \
     -w /repo \
     "${IMAGE_TAG}" \
     bash -c "git config --global --add safe.directory /repo && \
+    mkdir -p /tmp/gradle-project-cache && \
     ${GRADLE_CMD}; \
     GRADLE_EXIT=\$?; \
     echo '--- Test results are available in build/test-results/ ---'; \
