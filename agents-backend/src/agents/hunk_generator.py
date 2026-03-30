@@ -392,6 +392,18 @@ def _extract_removed_lines(hunk_text: str) -> list[str]:
     return [line for line in lines[1:] if line.startswith("-")]
 
 
+def _count_context_lines(hunk_text: str) -> int:
+    """
+    Counts ' ' context lines in a unified diff hunk body.
+    """
+    if not hunk_text:
+        return 0
+    lines = hunk_text.splitlines()
+    if not lines:
+        return 0
+    return sum(1 for line in lines[1:] if line.startswith(" "))
+
+
 def _read_actual_body_from_file(
     target_repo_path: str,
     target_file: str,
