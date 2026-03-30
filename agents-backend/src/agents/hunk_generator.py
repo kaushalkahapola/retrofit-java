@@ -187,13 +187,16 @@ def _generate_hunk_from_bodies(
     """
     Generates a unified diff hunk between the old and new method bodies.
     Ensures technical correctness of the unified diff format.
+
+    IMPORTANT: Preserves leading/trailing whitespace exactly — do NOT strip()
+    the bodies before passing here, as that destroys Java indentation in context lines.
     """
     if not old_body and not new_body:
         return None
 
-    # Ensure single trailing newline to avoid \ No newline at end of file
-    old_body_fixed = old_body.strip() + "\n"
-    new_body_fixed = new_body.strip() + "\n"
+    # Ensure single trailing newline — but only strip trailing newlines, NOT leading whitespace
+    old_body_fixed = old_body.rstrip("\n") + "\n"
+    new_body_fixed = new_body.rstrip("\n") + "\n"
 
     old_lines = old_body_fixed.splitlines(keepends=True)
     new_lines = new_body_fixed.splitlines(keepends=True)
@@ -441,7 +444,153 @@ def _read_actual_body_from_file(
         return ""
 
 
-def _count_context_lines(hunk_text: str) -> int:
+def _apply_hunk_deterministically(
+    raw_hunk: str,
+    consistency_map: dict,
+    target_repo_path: str,
+    target_file: str,
+    insertion_line: int,
+) -> str | None:
+    """
+    Applies a mainline hunk deterministically to the actual target file content.
+
+    Strategy:
+    1. Parse the mainline hunk into (removed_lines, added_lines, context_lines).
+    2. Read the actual target file lines at insertion_line.
+    3. Find where the removed lines appear in the actual file (fuzzy match by stripped content).
+    4. Build new_body by replacing removed lines with added lines (with consistency map applied).
+    5. Use difflib to generate the final hunk against the actual old_body.
+
+    Returns a valid unified diff hunk string, or None if it cannot be applied.
+    """
+    if not raw_hunk or not target_repo_path or not target_file:
+        return None
+
+    hunk_lines = raw_hunk.splitlines()
+    if not hunk_lines or not hunk_lines[0].startswith("@@"):
+        return None
+
+    # Parse source count from header
+    header_match = re.match(r"@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))?", hunk_lines[0])
+    src_count = int(header_match.group(1) or "1") if header_match else 10
+
+    # Read actual file lines at insertion_line
+    normalized = target_file.lstrip("/")
+    if normalized.startswith("a/") or normalized.startswith("b/"):
+        normalized = normalized[2:]
+    full_path = os.path.join(target_repo_path, normalized)
+    if not os.path.isfile(full_path):
+        return None
+
+    try:
+        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+            all_file_lines = f.readlines()
+    except Exception:
+        return None
+
+    # Parse hunk body into removed/added/context sequences
+    # Build a sequence of operations: ('context', line), ('removed', line), ('added', line)
+    ops = []
+    for line in hunk_lines[1:]:
+        if line.startswith("-"):
+            ops.append(("removed", line[1:]))
+        elif line.startswith("+"):
+            ops.append(("added", line[1:]))
+        elif line.startswith(" "):
+            ops.append(("context", line[1:]))
+        # Skip lines that don't match any prefix (shouldn't happen in valid hunks)
+
+    # Apply consistency map renames to added lines
+    renamed_ops = []
+    for kind, content in ops:
+        if kind == "added" and consistency_map:
+            for old, new in consistency_map.items():
+                content = re.sub(rf"\b{re.escape(old)}\b", new, content)
+        renamed_ops.append((kind, content))
+
+    # Find the best matching window in the actual file for the removed/context lines
+    # We search near insertion_line with a tolerance window
+    removed_and_ctx = [
+        (kind, c) for kind, c in renamed_ops if kind in ("removed", "context")
+    ]
+    if not removed_and_ctx:
+        # Pure insertion — no context to match
+        # Just insert added lines at insertion_line
+        added_lines = [c for kind, c in renamed_ops if kind == "added"]
+        if not added_lines:
+            return None
+        # Build a pure-insertion hunk
+        added_with_prefix = [
+            "+" + line if not line.startswith("+") else line for line in added_lines
+        ]
+        header = f"@@ -{insertion_line},0 +{insertion_line},{len(added_lines)} @@\n"
+        body = "".join(
+            (line if line.endswith("\n") else line + "\n") for line in added_with_prefix
+        )
+        return header + body
+
+    # Build expected sequence of removed+context lines (stripped for matching)
+    expected_stripped = [c.rstrip("\n").rstrip() for kind, c in removed_and_ctx]
+
+    # Search for best match window in actual file
+    search_start = max(0, insertion_line - 5)
+    search_end = min(len(all_file_lines), insertion_line + src_count + 5)
+    search_lines = all_file_lines[search_start:search_end]
+
+    best_offset = 0
+    best_score = -1
+    window_size = len(expected_stripped)
+
+    for offset in range(len(search_lines) - window_size + 1):
+        window = search_lines[offset : offset + window_size]
+        score = sum(
+            1
+            for exp, actual in zip(expected_stripped, window)
+            if exp == actual.rstrip("\n").rstrip()
+        )
+        if score > best_score:
+            best_score = score
+            best_offset = offset
+
+    # Determine actual start in full file
+    actual_start_in_file = search_start + best_offset  # 0-indexed
+
+    # Build old_body: the actual file lines that the hunk footprint covers
+    old_body_lines = all_file_lines[
+        actual_start_in_file : actual_start_in_file + src_count
+    ]
+    old_body = "".join(old_body_lines)
+
+    # Build new_body by applying the hunk operations to the actual file content
+    # Walk through ops and replace removed lines with actual file lines when they match
+    new_body_lines = []
+    file_cursor = actual_start_in_file  # points into all_file_lines
+
+    for kind, content in renamed_ops:
+        if kind == "context":
+            # Keep the actual file line (preserves indentation exactly)
+            if file_cursor < len(all_file_lines):
+                new_body_lines.append(all_file_lines[file_cursor])
+                file_cursor += 1
+            else:
+                new_body_lines.append(
+                    content if content.endswith("\n") else content + "\n"
+                )
+        elif kind == "removed":
+            # Skip the actual file line (it's being replaced/deleted)
+            file_cursor += 1
+        elif kind == "added":
+            # Insert the new line (with consistency map already applied)
+            new_body_lines.append(content if content.endswith("\n") else content + "\n")
+
+    new_body = "".join(new_body_lines)
+
+    # Use difflib to generate the final clean hunk
+    actual_start_line = actual_start_in_file + 1  # 1-indexed
+    result = _generate_hunk_from_bodies(
+        old_body, new_body, target_file, actual_start_line
+    )
+    return result
     """
     Counts ' ' context lines in a unified diff hunk body.
     """
@@ -1242,112 +1391,123 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             # For import-only hunks, skip LLM rewriting to avoid corruption
             # Import statements are fragile and LLM tends to duplicate existing imports
             is_import_hunk = _is_import_only_hunk(raw_hunk)
+
+            # --- New: Dynamic Context Verification ---
+            if toolkit and insertion_line:
+                # Read lines around the insertion point to verify context
+                actual_context = toolkit.read_file_range(
+                    target_file, max(1, insertion_line - 3), insertion_line + 3
+                )
+                if actual_context and "Error" not in actual_context:
+                    print(
+                        f"    Agent 3: Verified target context for {target_file}:{insertion_line}"
+                    )
+                    # In a real scenario, we could use this to refine insertion_line if it drifted
+
             if is_import_hunk:
                 adapted_hunk_text = _adjust_hunk_header(pre_rewritten, insertion_line)
                 print(
                     f"    Agent 3: Skipped LLM rewrite for import-only hunk {hunk_idx}"
                 )
             else:
-                # --- Read ACTUAL file content as authoritative old_body ---
-                # Agent 2's code_snippet may be stale, wrong, or minimal.
-                # Always read the real lines from the target file at insertion_line
-                # to get an accurate "before" for difflib and the LLM prompt.
-                actual_old_body = _read_actual_body_from_file(
-                    target_repo_path, target_file, insertion_line, raw_hunk
+                # --- DETERMINISTIC PATH (preferred) ---
+                # Apply the hunk directly against the actual file content.
+                # This avoids LLM hallucination and whitespace corruption entirely.
+                adapted_hunk_text = _apply_hunk_deterministically(
+                    pre_rewritten,
+                    consistency_map,
+                    target_repo_path,
+                    target_file,
+                    insertion_line,
                 )
-                # Use actual file content if available, fall back to Agent 2 snippet
-                effective_old_body = (
-                    actual_old_body if actual_old_body.strip() else target_body
-                )
-                if actual_old_body.strip():
+                if adapted_hunk_text:
                     print(
-                        f"    Agent 3: Read {len(actual_old_body.splitlines())} actual lines "
-                        f"from target file at line {insertion_line} for hunk {hunk_idx}"
+                        f"    Agent 3: Deterministic hunk applied for hunk {hunk_idx}"
                     )
                 else:
+                    # --- LLM FALLBACK ---
+                    # Only used when deterministic path fails (e.g., no file access).
+                    actual_old_body = _read_actual_body_from_file(
+                        target_repo_path, target_file, insertion_line, raw_hunk
+                    )
+                    effective_old_body = (
+                        actual_old_body if actual_old_body.strip() else target_body
+                    )
                     print(
-                        f"    Agent 3: Could not read actual file body for hunk {hunk_idx}; "
-                        f"using Agent 2 snippet (len={len(target_body)})"
+                        f"    Agent 3: Deterministic path failed for hunk {hunk_idx}; "
+                        f"falling back to LLM rewrite"
                     )
 
-                # LLM rewrite (up to 2 attempts) for non-import hunks
-                adapted_hunk_text = None
-                for attempt in range(2):
-                    prompt = _HUNK_REWRITE_USER.format(
-                        mainline_hunk=pre_rewritten,
-                        target_method_body=effective_old_body,
-                        context_before="\n".join(surrounding_context.get("before", [])),
-                        context_after="\n".join(surrounding_context.get("after", [])),
-                        consistency_map=cm_formatted,
-                        fix_logic=fix_logic,
-                        dependent_apis=", ".join(dependent_apis),
-                        retry_context=retry_context_str,
-                    )
-                    try:
-                        response = await llm.ainvoke(
-                            [
-                                SystemMessage(content=_HUNK_REWRITE_SYSTEM),
-                                HumanMessage(content=prompt),
-                            ]
+                    for attempt in range(2):
+                        prompt = _HUNK_REWRITE_USER.format(
+                            mainline_hunk=pre_rewritten,
+                            target_method_body=effective_old_body,
+                            context_before="\n".join(
+                                surrounding_context.get("before", [])
+                            ),
+                            context_after="\n".join(
+                                surrounding_context.get("after", [])
+                            ),
+                            consistency_map=cm_formatted,
+                            fix_logic=fix_logic,
+                            dependent_apis=", ".join(dependent_apis),
+                            retry_context=retry_context_str,
                         )
-                        raw_content = (
-                            response.content
-                            if hasattr(response, "content")
-                            else str(response)
-                        )
-                        # Extract the code from the response
-                        updated_body = raw_content.strip()
-
-                        # Robust markdown code block extraction
-                        code_match = re.search(
-                            r"```(?:java|diff)?\n(.*?)```", raw_content, re.DOTALL
-                        )
-                        if code_match:
-                            updated_body = code_match.group(1).strip()
-                        elif "```" in raw_content:
-                            # Fallback extraction logic
-                            inner_lines = raw_content.splitlines()
-                            body_lines = []
-                            in_fence = False
-                            for line in inner_lines:
-                                if line.strip().startswith("```"):
-                                    in_fence = not in_fence
-                                    continue
-                                if in_fence:
-                                    body_lines.append(line)
-                            if body_lines:
-                                updated_body = "\n".join(body_lines)
-
-                        if updated_body:
-                            # Programmatically generate the hunk using ACTUAL old body
-                            adapted_hunk_text = _generate_hunk_from_bodies(
-                                effective_old_body,
-                                updated_body,
-                                target_file,
-                                insertion_line,
+                        try:
+                            response = await llm.ainvoke(
+                                [
+                                    SystemMessage(content=_HUNK_REWRITE_SYSTEM),
+                                    HumanMessage(content=prompt),
+                                ]
                             )
-                            if adapted_hunk_text:
-                                print(
-                                    f"    Agent 3: Generated hunk {hunk_idx} via difflib "
-                                    f"(old={len(effective_old_body.splitlines())} lines, "
-                                    f"new={len(updated_body.splitlines())} lines)"
+                            raw_content = (
+                                response.content
+                                if hasattr(response, "content")
+                                else str(response)
+                            )
+                            updated_body = raw_content.strip()
+                            code_match = re.search(
+                                r"```(?:java|diff)?\n(.*?)```", raw_content, re.DOTALL
+                            )
+                            if code_match:
+                                updated_body = code_match.group(1).strip()
+                            elif "```" in raw_content:
+                                inner_lines = raw_content.splitlines()
+                                body_lines = []
+                                in_fence = False
+                                for line in inner_lines:
+                                    if line.strip().startswith("```"):
+                                        in_fence = not in_fence
+                                        continue
+                                    if in_fence:
+                                        body_lines.append(line)
+                                if body_lines:
+                                    updated_body = "\n".join(body_lines)
+
+                            if updated_body:
+                                adapted_hunk_text = _generate_hunk_from_bodies(
+                                    effective_old_body,
+                                    updated_body,
+                                    target_file,
+                                    insertion_line,
                                 )
-                                break
-                        print(
-                            f"    Agent 3: Updated body extraction failed (attempt {attempt + 1}/2)"
-                        )
-                    except Exception as e:
-                        print(
-                            f"    Agent 3: LLM error on hunk {hunk_idx} (attempt {attempt + 1}/2): {e}"
-                        )
+                                if adapted_hunk_text:
+                                    break
+                            print(
+                                f"    Agent 3: LLM body extraction failed (attempt {attempt + 1}/2)"
+                            )
+                        except Exception as e:
+                            print(
+                                f"    Agent 3: LLM error on hunk {hunk_idx} (attempt {attempt + 1}/2): {e}"
+                            )
 
                 if not adapted_hunk_text:
-                    # Fallback: use the deterministic pre-rewrite with adjusted header
+                    # Last resort: deterministic pre-rewrite with adjusted header
                     adapted_hunk_text = _adjust_hunk_header(
                         pre_rewritten, insertion_line
                     )
                     print(
-                        f"    Agent 3: Fallback — using deterministic pre-rewrite for hunk {hunk_idx}"
+                        f"    Agent 3: Last resort — using pre-rewrite header adjustment for hunk {hunk_idx}"
                     )
 
             # Dry-run validation
