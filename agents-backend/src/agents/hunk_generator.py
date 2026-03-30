@@ -389,6 +389,58 @@ def _extract_removed_lines(hunk_text: str) -> list[str]:
     return [line for line in lines[1:] if line.startswith("-")]
 
 
+def _read_actual_body_from_file(
+    target_repo_path: str,
+    target_file: str,
+    insertion_line: int,
+    raw_hunk: str,
+) -> str:
+    """
+    Reads the ACTUAL lines from the target file around insertion_line,
+    sized to match the original hunk's footprint (context + removed lines).
+
+    This gives Agent 3 the true "old body" for programmatic diffing,
+    instead of relying on Agent 2's code_snippet which may be stale or wrong.
+
+    Returns the file content as a string, or empty string on failure.
+    """
+    if not target_repo_path or not target_file or insertion_line is None:
+        return ""
+
+    # Count how many lines the mainline hunk consumes on the source side
+    # (context lines + removed lines = @@ -X,N @@ source_count)
+    src_count = 0
+    if raw_hunk:
+        header_match = re.match(r"@@ -\d+(?:,(\d+))? \+\d+", raw_hunk)
+        if header_match:
+            src_count = int(header_match.group(1) or "1")
+
+    # Default window: if hunk has no source lines, use 10
+    if src_count <= 0:
+        src_count = 10
+
+    # Read the actual lines from the target file
+    # Normalize path: strip leading slashes and git diff prefixes (a/ or b/)
+    normalized = target_file.lstrip("/")
+    if normalized.startswith("a/") or normalized.startswith("b/"):
+        normalized = normalized[2:]
+    full_path = os.path.join(target_repo_path, normalized)
+    if not os.path.isfile(full_path):
+        return ""
+
+    try:
+        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+            all_lines = f.readlines()
+
+        start_idx = max(0, insertion_line - 1)
+        end_idx = min(len(all_lines), start_idx + src_count)
+        selected = all_lines[start_idx:end_idx]
+        return "".join(selected)
+    except Exception as e:
+        print(f"    Agent 3: _read_actual_body_from_file failed: {e}")
+        return ""
+
+
 def _count_context_lines(hunk_text: str) -> int:
     """
     Counts ' ' context lines in a unified diff hunk body.
@@ -1196,12 +1248,34 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     f"    Agent 3: Skipped LLM rewrite for import-only hunk {hunk_idx}"
                 )
             else:
+                # --- Read ACTUAL file content as authoritative old_body ---
+                # Agent 2's code_snippet may be stale, wrong, or minimal.
+                # Always read the real lines from the target file at insertion_line
+                # to get an accurate "before" for difflib and the LLM prompt.
+                actual_old_body = _read_actual_body_from_file(
+                    target_repo_path, target_file, insertion_line, raw_hunk
+                )
+                # Use actual file content if available, fall back to Agent 2 snippet
+                effective_old_body = (
+                    actual_old_body if actual_old_body.strip() else target_body
+                )
+                if actual_old_body.strip():
+                    print(
+                        f"    Agent 3: Read {len(actual_old_body.splitlines())} actual lines "
+                        f"from target file at line {insertion_line} for hunk {hunk_idx}"
+                    )
+                else:
+                    print(
+                        f"    Agent 3: Could not read actual file body for hunk {hunk_idx}; "
+                        f"using Agent 2 snippet (len={len(target_body)})"
+                    )
+
                 # LLM rewrite (up to 2 attempts) for non-import hunks
                 adapted_hunk_text = None
                 for attempt in range(2):
                     prompt = _HUNK_REWRITE_USER.format(
                         mainline_hunk=pre_rewritten,
-                        target_method_body=target_body,
+                        target_method_body=effective_old_body,
                         context_before="\n".join(surrounding_context.get("before", [])),
                         context_after="\n".join(surrounding_context.get("after", [])),
                         consistency_map=cm_formatted,
@@ -1232,10 +1306,10 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                             updated_body = code_match.group(1).strip()
                         elif "```" in raw_content:
                             # Fallback extraction logic
-                            lines = raw_content.splitlines()
+                            inner_lines = raw_content.splitlines()
                             body_lines = []
                             in_fence = False
-                            for line in lines:
+                            for line in inner_lines:
                                 if line.strip().startswith("```"):
                                     in_fence = not in_fence
                                     continue
@@ -1245,11 +1319,19 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                                 updated_body = "\n".join(body_lines)
 
                         if updated_body:
-                            # Programmatically generate the hunk
+                            # Programmatically generate the hunk using ACTUAL old body
                             adapted_hunk_text = _generate_hunk_from_bodies(
-                                target_body, updated_body, target_file, insertion_line
+                                effective_old_body,
+                                updated_body,
+                                target_file,
+                                insertion_line,
                             )
                             if adapted_hunk_text:
+                                print(
+                                    f"    Agent 3: Generated hunk {hunk_idx} via difflib "
+                                    f"(old={len(effective_old_body.splitlines())} lines, "
+                                    f"new={len(updated_body.splitlines())} lines)"
+                                )
                                 break
                         print(
                             f"    Agent 3: Updated body extraction failed (attempt {attempt + 1}/2)"
