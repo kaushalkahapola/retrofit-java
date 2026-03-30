@@ -1,50 +1,53 @@
 {
   "semantic_blueprint": {
-    "root_cause_hypothesis": "The method for ordering nodes for shard requests did not consider the roles of the nodes, potentially leading to inefficient query execution.",
-    "fix_logic": "Introduced a new method to order shards based on the roles of the nodes, ensuring that requests are sent to the most appropriate nodes first.",
+    "root_cause_hypothesis": "Requests to data nodes were not ordered by node role priority, potentially leading to suboptimal query routing and performance.",
+    "fix_logic": "Introduced a deterministic ordering of shard requests based on node roles by defining a node role priority list, sorting shards accordingly, and ensuring request maps preserve this order.",
     "dependent_apis": [
-      "DiscoveryNode",
-      "TargetShards"
+      "DiscoveryNodeRole",
+      "order(TargetShards)",
+      "NODE_QUERY_ORDER",
+      "selectNodeRequests(TargetShards)",
+      "LinkedHashMap"
     ],
-    "patch_intent_summary": "To improve the efficiency of shard request handling by ordering nodes based on their roles.",
+    "patch_intent_summary": "Ensure that requests to data nodes are sent in a consistent, prioritized order based on node roles to optimize query execution.",
     "hunk_chain": [
       {
         "hunk_index": 1,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Added import for DiscoveryNodeRole to access node roles.",
+        "summary": "Imports DiscoveryNodeRole to access node role constants for ordering.",
         "role": "declaration",
-        "connects_to_next": "This import is necessary for defining the order of nodes based on their roles in the next hunk.",
+        "connects_to_next": "Allows use of DiscoveryNodeRole constants in the new ordering logic introduced in the next hunks.",
         "global_index": 1
       },
       {
         "hunk_index": 2,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Added imports for Comparator and LinkedHashMap to facilitate sorting and maintaining order.",
+        "summary": "Imports Comparator and LinkedHashMap to support custom sorting and ordered maps.",
         "role": "declaration",
-        "connects_to_next": "These imports are required for implementing the ordering logic in the subsequent hunk.",
+        "connects_to_next": "Enables the implementation of deterministic ordering and ordered map usage in subsequent code changes.",
         "global_index": 2
       },
       {
         "hunk_index": 3,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Defined a static list of node roles to establish a query order for nodes.",
-        "role": "declaration",
-        "connects_to_next": "This list provides the basis for the ordering logic that will be implemented in the next hunk.",
+        "summary": "Defines NODE_QUERY_ORDER and adds static methods to order shards by node role priority.",
+        "role": "core_fix",
+        "connects_to_next": "Provides the core ordering logic, which is then applied to the population of pendingShardIds in the next hunk.",
         "global_index": 3
       },
       {
         "hunk_index": 4,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Implemented the order method to sort shards based on the roles of their corresponding nodes.",
-        "role": "core_fix",
-        "connects_to_next": "This method is called in the next hunk to ensure that pending shard IDs are ordered correctly before sending requests.",
+        "summary": "Replaces unordered addition of shard IDs to pendingShardIds with the new order() method, ensuring prioritized processing.",
+        "role": "propagation",
+        "connects_to_next": "Ensures that the ordering is respected when mapping nodes to shard IDs for request dispatch, which is handled in the next hunk.",
         "global_index": 4
       },
       {
         "hunk_index": 5,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Changed the map used for node to shard IDs from HashMap to LinkedHashMap to maintain insertion order.",
-        "role": "cleanup",
+        "summary": "Changes nodeToShardIds from HashMap to LinkedHashMap to preserve the deterministic order established earlier.",
+        "role": "propagation",
         "connects_to_next": "",
         "global_index": 5
       }

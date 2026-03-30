@@ -7,51 +7,51 @@
 
 **Agent Tool Steps:**
 
-**Patch Intent**: To improve the efficiency of shard request handling by ordering nodes based on their roles.
+**Patch Intent**: Ensure that requests to data nodes are sent in a consistent, prioritized order based on node roles to optimize query execution.
 
-**Root Cause**: The method for ordering nodes for shard requests did not consider the roles of the nodes, potentially leading to inefficient query execution.
+**Root Cause**: Requests to data nodes were not ordered by node role priority, potentially leading to suboptimal query routing and performance.
 
-**Fix Logic**: Introduced a new method to order shards based on the roles of the nodes, ensuring that requests are sent to the most appropriate nodes first.
+**Fix Logic**: Introduced a deterministic ordering of shard requests based on node roles by defining a node role priority list, sorting shards accordingly, and ensuring request maps preserve this order.
 
-**Dependent APIs**: DiscoveryNode, TargetShards
+**Dependent APIs**: DiscoveryNodeRole, order(TargetShards), NODE_QUERY_ORDER, selectNodeRequests(TargetShards), LinkedHashMap
 
 **Hunk Chain**:
 
-  - H1 [declaration]: Added import for DiscoveryNodeRole to access node roles.
-    → *This import is necessary for defining the order of nodes based on their roles in the next hunk.*
-  - H2 [declaration]: Added imports for Comparator and LinkedHashMap to facilitate sorting and maintaining order.
-    → *These imports are required for implementing the ordering logic in the subsequent hunk.*
-  - H3 [declaration]: Defined a static list of node roles to establish a query order for nodes.
-    → *This list provides the basis for the ordering logic that will be implemented in the next hunk.*
-  - H4 [core_fix]: Implemented the order method to sort shards based on the roles of their corresponding nodes.
-    → *This method is called in the next hunk to ensure that pending shard IDs are ordered correctly before sending requests.*
-  - H5 [cleanup]: Changed the map used for node to shard IDs from HashMap to LinkedHashMap to maintain insertion order.
+  - H1 [declaration]: Imports DiscoveryNodeRole to access node role constants for ordering.
+    → *Allows use of DiscoveryNodeRole constants in the new ordering logic introduced in the next hunks.*
+  - H2 [declaration]: Imports Comparator and LinkedHashMap to support custom sorting and ordered maps.
+    → *Enables the implementation of deterministic ordering and ordered map usage in subsequent code changes.*
+  - H3 [core_fix]: Defines NODE_QUERY_ORDER and adds static methods to order shards by node role priority.
+    → *Provides the core ordering logic, which is then applied to the population of pendingShardIds in the next hunk.*
+  - H4 [propagation]: Replaces unordered addition of shard IDs to pendingShardIds with the new order() method, ensuring prioritized processing.
+    → *Ensures that the ordering is respected when mapping nodes to shard IDs for request dispatch, which is handled in the next hunk.*
+  - H5 [propagation]: Changes nodeToShardIds from HashMap to LinkedHashMap to preserve the deterministic order established earlier.
 
-**Self-Reflection**: FAILED ❌ (used anyway)
+**Self-Reflection**: VERIFIED ✅
 
 
 ## Consolidated Blueprint
 
-**Patch Intent**: To improve the efficiency of shard request handling by ordering nodes based on their roles.
+**Patch Intent**: Ensure that requests to data nodes are sent in a consistent, prioritized order based on node roles to optimize query execution.
 
-- **Root Cause**: The method for ordering nodes for shard requests did not consider the roles of the nodes, potentially leading to inefficient query execution.
-- **Fix Logic**: Introduced a new method to order shards based on the roles of the nodes, ensuring that requests are sent to the most appropriate nodes first.
-- **Dependent APIs**: ['DiscoveryNode', 'TargetShards']
+- **Root Cause**: Requests to data nodes were not ordered by node role priority, potentially leading to suboptimal query routing and performance.
+- **Fix Logic**: Introduced a deterministic ordering of shard requests based on node roles by defining a node role priority list, sorting shards accordingly, and ensuring request maps preserve this order.
+- **Dependent APIs**: ['DiscoveryNodeRole', 'order(TargetShards)', 'NODE_QUERY_ORDER', 'selectNodeRequests(TargetShards)', 'LinkedHashMap']
 
 ### Full Hunk Chain (Cross-File)
 
 **[G1] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H1** `[declaration]`
-  Added import for DiscoveryNodeRole to access node roles.
-  → This import is necessary for defining the order of nodes based on their roles in the next hunk.
+  Imports DiscoveryNodeRole to access node role constants for ordering.
+  → Allows use of DiscoveryNodeRole constants in the new ordering logic introduced in the next hunks.
 **[G2] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H2** `[declaration]`
-  Added imports for Comparator and LinkedHashMap to facilitate sorting and maintaining order.
-  → These imports are required for implementing the ordering logic in the subsequent hunk.
-**[G3] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H3** `[declaration]`
-  Defined a static list of node roles to establish a query order for nodes.
-  → This list provides the basis for the ordering logic that will be implemented in the next hunk.
-**[G4] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H4** `[core_fix]`
-  Implemented the order method to sort shards based on the roles of their corresponding nodes.
-  → This method is called in the next hunk to ensure that pending shard IDs are ordered correctly before sending requests.
-**[G5] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H5** `[cleanup]`
-  Changed the map used for node to shard IDs from HashMap to LinkedHashMap to maintain insertion order.
+  Imports Comparator and LinkedHashMap to support custom sorting and ordered maps.
+  → Enables the implementation of deterministic ordering and ordered map usage in subsequent code changes.
+**[G3] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H3** `[core_fix]`
+  Defines NODE_QUERY_ORDER and adds static methods to order shards by node role priority.
+  → Provides the core ordering logic, which is then applied to the population of pendingShardIds in the next hunk.
+**[G4] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H4** `[propagation]`
+  Replaces unordered addition of shard IDs to pendingShardIds with the new order() method, ensuring prioritized processing.
+  → Ensures that the ordering is respected when mapping nodes to shard IDs for request dispatch, which is handled in the next hunk.
+**[G5] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H5** `[propagation]`
+  Changes nodeToShardIds from HashMap to LinkedHashMap to preserve the deterministic order established earlier.
 
