@@ -39,15 +39,14 @@ from agents.validation_tools import ValidationToolkit
 
 _HUNK_REWRITE_SYSTEM = """You are an expert Java patch adapter specializing in backporting security fixes.
 
-Your task is to rewrite a single unified diff hunk so it applies cleanly to an older version of a Java file.
+Your task is to adapt a mainline patch to an older version of a Java file.
 
-Rules (follow ALL of them strictly):
-1. Only modify the `+` lines (additions). Context lines (` ` prefixed) must stay unchanged.
-2. Apply every symbol rename from the ConsistencyMap exactly.
-3. Preserve the fix intent described in the SemanticBlueprint — this fix MUST still work.
-4. Adjust the @@ line numbers to match the target file's insertion_line.
-5. Output ONLY the unified diff hunk. Start with @@ and end with the last changed line.
-6. Do NOT include any explanation, markdown fences, or comments outside the hunk."""
+Rules:
+1. Preserve the fix intent described in the SemanticBlueprint.
+2. Apply every symbol rename from the ConsistencyMap.
+3. Output the FULL UPDATED BODY of the target method after the fix is applied.
+4. If this is an import hunk (indicated in the prompt), output the new import statements only.
+5. Do NOT include markdown fences, explanation, or comments outside the code."""
 
 
 _HUNK_REWRITE_USER = """\
@@ -56,29 +55,27 @@ _HUNK_REWRITE_USER = """\
 {mainline_hunk}
 ```
 
-## Target Method Body (where this hunk will be inserted)
+## Target Method Body (Current version in target repo)
 ```java
 {target_method_body}
 ```
 
-## Current Imports in Target File (for import hunks only)
-{target_imports_context}
+## Surrounding Context in Target File
+Before:
+{context_before}
+After:
+{context_after}
 
-## ConsistencyMap (apply these renames to + lines)
+## ConsistencyMap (apply these renames)
 {consistency_map}
 
 ## Fix Intent (SemanticBlueprint)
 - Fix Logic: {fix_logic}
 - Dependent APIs: {dependent_apis}
 
-## Insertion Point in Target File
-Line {insertion_line} in `{target_file}`
-
-## Developer Auxiliary Hunk Signals (tests/non-Java file ops)
-{developer_aux_context}
-
 {retry_context}
-Rewrite the hunk now. Output ONLY the unified diff block starting with @@."""
+Based on the mainline hunk, rewrite the "Target Method Body" to include the fix. 
+Output ONLY the full updated body of the method."""
 
 
 _TEST_HUNK_REWRITE_USER = """\
@@ -182,6 +179,58 @@ def _extract_hunk_block(raw: str) -> str | None:
     if not result.endswith("\n"):
         result += "\n"
     return result
+
+
+def _generate_hunk_from_bodies(
+    old_body: str, new_body: str, target_file: str, start_line: int
+) -> str | None:
+    """
+    Generates a unified diff hunk between the old and new method bodies.
+    """
+    if not old_body and not new_body:
+        return None
+
+    # difflib works best with line lists
+    old_lines = old_body.splitlines(keepends=True)
+    new_lines = new_body.splitlines(keepends=True)
+
+    # Clean up empty bodies to avoid errors
+    if not old_lines and new_lines:
+        old_lines = ["\n"]
+    if not new_lines and old_lines:
+        new_lines = ["\n"]
+
+    diff = difflib.unified_diff(
+        old_lines, new_lines, fromfile=f"a/{target_file}", tofile=f"b/{target_file}"
+    )
+
+    hunk_lines = []
+    # Skip the header lines (--- and +++)
+    for line in diff:
+        if line.startswith("---") or line.startswith("+++"):
+            continue
+        hunk_lines.append(line)
+
+    if not hunk_lines:
+        return None
+
+    # Adjust the @@ header to use the actual start_line from Agent 2
+    # Unified diff output: @@ -1,10 +1,12 @@
+    res = []
+    for line in hunk_lines:
+        if line.startswith("@@"):
+            m = re.match(r"@@ -(\d+),?(\d+)? \+(\d+),?(\d+)? @@(.*)", line)
+            if m:
+                # diff_start_src = int(m.group(1))
+                src_count = m.group(2) or "1"
+                # diff_start_tgt = int(m.group(3))
+                tgt_count = m.group(4) or "1"
+                ctx = m.group(5)
+                # We anchor at the start_line provided by the locator
+                line = f"@@ -{start_line},{src_count} +{start_line},{tgt_count} @@{ctx}"
+        res.append(line)
+
+    return "".join(res)
 
 
 async def _check_intent(
@@ -1091,6 +1140,9 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 target_file = planned_target_file
             insertion_line = mapped_ctx.get("start_line")
             target_body = mapped_ctx.get("code_snippet", "")
+            surrounding_context = mapped_ctx.get(
+                "surrounding_context", {"before": [], "after": []}
+            )
             raw_start_line = _extract_target_start_line(raw_hunk)
             target_method = (mapped_ctx.get("target_method") or "").strip().lower()
             mainline_method = (mapped_ctx.get("mainline_method") or "").strip().lower()
@@ -1140,21 +1192,14 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 # LLM rewrite (up to 2 attempts) for non-import hunks
                 adapted_hunk_text = None
                 for attempt in range(2):
-                    # Use full method body context (no truncation)
-                    # The LLM needs complete context to properly understand method structure,
-                    # boundaries, and surrounding code patterns for accurate hunk adaptation.
-                    # If token budget is a concern, this can be adjusted, but complete context
-                    # produces more accurate hunks.
                     prompt = _HUNK_REWRITE_USER.format(
                         mainline_hunk=pre_rewritten,
-                        target_method_body=target_body,  # Use full body, not truncated
-                        target_imports_context=_extract_imports_from_body(target_body),
+                        target_method_body=target_body,
+                        context_before="\n".join(surrounding_context.get("before", [])),
+                        context_after="\n".join(surrounding_context.get("after", [])),
                         consistency_map=cm_formatted,
                         fix_logic=fix_logic,
                         dependent_apis=", ".join(dependent_apis),
-                        insertion_line=insertion_line,
-                        target_file=target_file,
-                        developer_aux_context=aux_context,
                         retry_context=retry_context_str,
                     )
                     try:
@@ -1169,28 +1214,38 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                             if hasattr(response, "content")
                             else str(response)
                         )
-                        extracted = _extract_hunk_block(raw_content)
-                        if extracted:
-                            # Preserve original diff structure and allow model to vary only '+' lines.
-                            stabilized = _stabilize_hunk_structure(
-                                pre_rewritten, extracted
+                        # Extract the code from the response
+                        updated_body = raw_content.strip()
+                        if "```" in updated_body:
+                            # Use existing extractor to clean up markdown
+                            updated_body = (
+                                _extract_hunk_block(updated_body) or updated_body
                             )
-                            adapted_hunk_text = _adjust_hunk_header(
-                                stabilized, insertion_line
+                            # Note: _extract_hunk_block usually looks for @@, but here we want the body
+                            # If it didn't find @@, it might have returned None.
+                            # Let's refine this to just strip fences if they exist.
+                            if "```" in raw_content:
+                                lines = raw_content.splitlines()
+                                body_lines = []
+                                in_fence = False
+                                for line in lines:
+                                    if line.strip().startswith("```"):
+                                        in_fence = not in_fence
+                                        continue
+                                    if in_fence:
+                                        body_lines.append(line)
+                                if body_lines:
+                                    updated_body = "\n".join(body_lines)
+
+                        if updated_body:
+                            # Programmatically generate the hunk
+                            adapted_hunk_text = _generate_hunk_from_bodies(
+                                target_body, updated_body, target_file, insertion_line
                             )
-                            if _is_suspicious_plus_rewrite(
-                                pre_rewritten, adapted_hunk_text, consistency_map
-                            ):
-                                adapted_hunk_text = _adjust_hunk_header(
-                                    pre_rewritten, insertion_line
-                                )
-                                print(
-                                    f"    Agent 3: Guardrail triggered on hunk {hunk_idx}; "
-                                    "reverting to deterministic rewrite"
-                                )
-                            break
+                            if adapted_hunk_text:
+                                break
                         print(
-                            f"    Agent 3: Hunk parse failed (attempt {attempt + 1}/2)"
+                            f"    Agent 3: Updated body extraction failed (attempt {attempt + 1}/2)"
                         )
                     except Exception as e:
                         print(
