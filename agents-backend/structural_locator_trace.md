@@ -24,47 +24,83 @@
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | cleanup | `computeLagForAutoScaler` | `None` | None–None |
+| 1 | cleanup | `computeLagForAutoScaler` | `None` | 431–435 |
 ### `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java`
 
 **Hunks in this file**: 2
 
 **Git Resolution**: Found `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java`
 
-**Agent Tool Steps:**
-
-  - `Agent calls get_class_context` with `{"file_path": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java", "focus_method": "<import>"}`
-  - `Agent calls get_class_context` with `{"file_path": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java", "focus_method": "computeLagForAutoScaler"}`
-  - `Tool: get_class_context` -> {"context": "package org.apache.druid.indexing.seekablestream.supervisor.autoscaler;\n\n// Line 40\npublic class LagBasedAutoScaler implements SupervisorTaskAutoScaler {\n    // Line 42: private stati...
-  - `Tool: get_class_context` -> {"context": "package org.apache.druid.indexing.seekablestream.supervisor.autoscaler;\n\n// Line 40\npublic class LagBasedAutoScaler implements SupervisorTaskAutoScaler {\n    // Line 42: private stati...
-  - `Agent calls get_class_context` with `{"file_path": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java", "focus_method": "computeAndCollectLag"}`
-  - `Agent calls get_class_context` with `{"file_path": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java", "focus_method": "getAutoScalerConfig"}`
-  - `Tool: get_class_context` -> {"context": "package org.apache.druid.indexing.seekablestream.supervisor.autoscaler;\n\n// Line 40\npublic class LagBasedAutoScaler implements SupervisorTaskAutoScaler {\n    // Line 42: private stati...
-  - `Tool: get_class_context` -> {"context": "package org.apache.druid.indexing.seekablestream.supervisor.autoscaler;\n\n// Line 40\npublic class LagBasedAutoScaler implements SupervisorTaskAutoScaler {\n    // Line 42: private stati...
-  - `Agent calls get_class_context` with `{"file_path": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java", "focus_method": "getLagAggregate"}`
-  - `Agent calls get_class_context` with `{"file_path": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java", "focus_method": "getMetric"}`
-  - `Tool: get_class_context` -> {"context": "package org.apache.druid.indexing.seekablestream.supervisor.autoscaler;\n\n// Line 40\npublic class LagBasedAutoScaler implements SupervisorTaskAutoScaler {\n    // Line 42: private stati...
-  - `Tool: get_class_context` -> {"context": "package org.apache.druid.indexing.seekablestream.supervisor.autoscaler;\n\n// Line 40\npublic class LagBasedAutoScaler implements SupervisorTaskAutoScaler {\n    // Line 42: private stati...
-  - `Agent calls get_class_context` with `{"file_path": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java", "focus_method": "getAggregateForScaling"}`
-  - `Agent calls get_class_context` with `{"file_path": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagStats.java"}`
-  - `Tool: get_class_context` -> {"context": "package org.apache.druid.indexing.seekablestream.supervisor.autoscaler;\n\n// Line 40\npublic class LagBasedAutoScaler implements SupervisorTaskAutoScaler {\n    // Line 42: private stati...
-  - `Tool: get_class_context` -> {"error": "File not found: indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagStats.java"}...
-  - `Agent calls search_candidates` with `{"file_path": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagStats.java"}`
-  - `Tool: search_candidates` -> []...
-  - `Agent calls get_class_context` with `{"file_path": "indexing-service/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java"}`
-  - `Tool: get_class_context` -> {"error": "File not found: indexing-service/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java"}...
-  - `Agent calls git_log_follow` with `{"file_path": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagStats.java"}`
-  - `Tool: git_log_follow` -> No history found....
+**Fallback Mode**: direct no-tool LLM mapping used after recursion limit.
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 21–22 |
-| 2 | core_fix | `computeLagForAutoScaler` | `None` | None–None |
+| 1 | declaration | `LagBasedAutoScaler` | `<import>` | 21–23 |
+| 2 | core_fix | `LagBasedAutoScaler` | `computeLagForAutoScaler` | 154–166 |
 ### `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java`
 
 **Hunks in this file**: 6
 
 **Git Resolution**: Found `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java`
+
+⚠️ **Fallback Mapping Extraction Failed**
+
+Raw Response:
+```
+{
+  "mappings": [
+    {
+      "mainline_method": "LagBasedAutoScalerConfig",
+      "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
+      "target_method": "<import>",
+      "start_line": 23,
+      "end_line": 23,
+      "code_snippet": "import org.apache.druid.indexing.overlord.supervisor.autoscaler.AggregateFunction;"
+    },
+    {
+      "mainline_method": "LagBasedAutoScalerConfig",
+      "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
+      "target_method": null,
+      "start_line": 45,
+      "end_line": 46,
+      "code_snippet": "private final AggregateFunction lagAggregate;"
+    },
+    {
+      "mainline_method": "LagBasedAutoScalerConfig",
+      "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
+      "target_method": "LagBasedAutoScalerConfig",
+      "start_line": 61,
+      "end_line": 63,
+      "code_snippet": "@Nullable @JsonProperty(\"lagAggregate\") AggregateFunction lagAggregate"
+    },
+    {
+      "mainline_method": "LagBasedAutoScalerConfig",
+      "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
+      "target_method": null,
+      "start_line": 73,
+      "end_line": 76,
+      "code_snippet": "this.lagAggregate = lagAggregate;"
+    },
+    {
+      "mainline_method": "LagBasedAutoScalerConfig",
+      "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
+      "target_method": "getLagAggregate",
+      "start_line": 186,
+      "end_line": 190,
+      "code_snippet": "@JsonProperty\n@Nullable\npublic AggregateFunction getLagAggregate()"
+    },
+    {
+      "mainline_method": "LagBasedAutoScalerConfig",
+      "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
+      "target_method": "toString",
+      "start_line": 204,
+      "end_line": 215,
+      "code_snippet": ", lagAggregate=" + lagAggregate +"
+    }
+  ],
+  "consistency_map_entries": {}
+}
+```
 
 ⚠️ **Fallback Mapping Extraction Failed**
 
@@ -93,15 +129,15 @@ Raw Response:
       "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
       "target_method": "LagBasedAutoScalerConfig",
       "start_line": 61,
-      "end_line": 63,
-      "code_snippet": "@JsonCreator\n  public LagBasedAutoScalerConfig("
+      "end_line": 61,
+      "code_snippet": "@Nullable @JsonProperty(\"lagAggregate\") AggregateFunction lagAggregate"
     },
     {
       "mainline_method": "LagBasedAutoScalerConfig",
       "target_file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
       "target_method": null,
       "start_line": 73,
-      "end_line": 76,
+      "end_line": 73,
       "code_snippet": "this.lagAggregate = lagAggregate;"
     },
     {
@@ -110,7 +146,7 @@ Raw Response:
       "target_method": "getLagAggregate",
       "start_line": 186,
       "end_line": 190,
-      "code_snippet": "@JsonProperty\n  @Nullable\n  public AggregateFunction getLagAggregate()"
+      "code_snippet": "@JsonProperty\n@Nullable\npublic AggregateFunction getLagAggregate()"
     },
     {
       "mainline_method": "LagBasedAutoScalerConfig",
@@ -125,16 +161,8 @@ Raw Response:
 }
 ```
 
-**Fallback Mode**: direct no-tool LLM mapping used after recursion limit.
+**Fallback**: Using git resolution result (LLM refinement failed).
 
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | declaration | `LagBasedAutoScalerConfig` | `<import>` | 23–23 |
-| 2 | declaration | `LagBasedAutoScalerConfig` | `None` | 45–45 |
-| 3 | core_fix | `LagBasedAutoScalerConfig` | `LagBasedAutoScalerConfig` | 61–63 |
-| 4 | core_fix | `LagBasedAutoScalerConfig` | `None` | 73–76 |
-| 5 | propagation | `LagBasedAutoScalerConfig` | `getLagAggregate` | 186–190 |
-| 6 | cleanup | `LagBasedAutoScalerConfig` | `toString` | 204–215 |
 ### `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java`
 
 **Hunks in this file**: 1
@@ -147,9 +175,11 @@ Raw Response:
   - `Agent calls get_class_context` with `{"file_path": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java"}`
   - `Tool: get_class_context` -> {"context": "package org.apache.druid.indexing.overlord.supervisor;\n\n// Line 33\npublic interface Supervisor {\n    // Line 88: public abstract void checkpoint(int taskGroupId, DataSourceMetadata ch...
   - `Tool: get_class_context` -> {"context": "package org.apache.druid.indexing.overlord.supervisor;\n\n// Line 33\npublic interface Supervisor {\n    // Line 88: public abstract void checkpoint(int taskGroupId, DataSourceMetadata ch...
-  - `Agent calls get_class_context` with `{"file_path": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java", "focus_method": "computeLagStats"}`
-  - `Agent calls get_class_context` with `{"file_path": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java", "focus_method": "getActiveTaskGroupsCount"}`
-  - `Tool: get_class_context` -> {"context": "package org.apache.druid.indexing.overlord.supervisor;\n\n// Line 33\npublic interface Supervisor {\n    // Line 88: public abstract void checkpoint(int taskGroupId, DataSourceMetadata ch...
+  - `Agent calls git_log_follow` with `{"file_path": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java"}`
+  - `Agent calls get_class_context` with `{"file_path": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java"}`
+  - `Tool: git_log_follow` -> b18d836624 [Backport] Check for handoff of upgraded segments (#16162) (#16344)
+M	server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java
+cff5d1e369 Add method Supervisor.com...
   - `Tool: get_class_context` -> {"context": "package org.apache.druid.indexing.overlord.supervisor;\n\n// Line 33\npublic interface Supervisor {\n    // Line 88: public abstract void checkpoint(int taskGroupId, DataSourceMetadata ch...
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
@@ -174,8 +204,8 @@ Raw Response:
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `LagStats` | `LagStats` | 25–29 |
-| 2 | core_fix | `getAggregateForScaling` | `getAggregateForScaling` | 54–58 |
+| 1 | declaration | `LagStats` | `None` | 24–29 |
+| 2 | core_fix | `LagStats` | `None` | 29–53 |
 ## Test File Mappings
 
 

@@ -1,7 +1,7 @@
 {
   "semantic_blueprint": {
     "root_cause_hypothesis": "The method computeLagForAutoScaler was incorrectly returning a lag value based on potentially null LagStats, which could lead to unexpected behavior. | The previous implementation did not handle the case where lag statistics could be null, potentially leading to a NullPointerException. | The class LagBasedAutoScalerConfig did not have a property to hold the lag aggregate function, which is necessary for scaling decisions. | The method computeLagForAutoScaler was returning a lag value based on potentially null LagStats, which could lead to unexpected behavior if computeLagStats() fails or returns null. | The file AggregateFunction.java was missing, which is necessary for defining aggregate functions used in the autoscaler. | Lack of flexibility in specifying the aggregation function for scaling metrics.",
-    "fix_logic": "Removed the computeLagForAutoScaler method entirely, as it was deemed unnecessary. | Replaced the computation of lag with a check for null LagStats, and adjusted the logic to use the aggregate function appropriately. | Added a new field 'lagAggregate' of type AggregateFunction and updated the constructor and getter method to handle this new property. | Removed the computeLagForAutoScaler method entirely, which was handling a null LagStats improperly. | Created a new enum AggregateFunction with values MAX, SUM, and AVERAGE. | Added a new constructor to accept an AggregateFunction parameter and a method to retrieve the specified aggregate function.",
+    "fix_logic": "Removed the computeLagForAutoScaler method entirely to prevent any reliance on potentially null LagStats. | Replaced the computation of lag with a check for null LagStats, and used the appropriate aggregate function to retrieve the lag metric. | Added a new field 'lagAggregate' of type AggregateFunction and updated the constructor and getter method to handle this new property. | Removed the computeLagForAutoScaler method entirely, which was handling null LagStats incorrectly. | Created a new enum class AggregateFunction with constants MAX, SUM, and AVERAGE. | Added a new constructor to accept an AggregateFunction parameter and a method to retrieve the specified aggregate function.",
     "dependent_apis": [
       "computeLagStats",
       "LagStats",
@@ -18,7 +18,7 @@
       {
         "hunk_index": 1,
         "file": "extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java",
-        "summary": "Removed the computeLagForAutoScaler method, which was returning a lag value based on a potentially null LagStats.",
+        "summary": "The computeLagForAutoScaler method is removed to prevent reliance on potentially null LagStats.",
         "role": "cleanup",
         "connects_to_next": "",
         "global_index": 1
@@ -28,13 +28,13 @@
         "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
         "summary": "Added imports for AggregateFunction and LagStats to the class.",
         "role": "declaration",
-        "connects_to_next": "These imports are necessary for the new lag statistics handling introduced in the next hunk.",
+        "connects_to_next": "These imports are necessary for the new lag computation logic that uses LagStats and AggregateFunction.",
         "global_index": 2
       },
       {
         "hunk_index": 2,
         "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java",
-        "summary": "Replaced the lag computation with a new method that checks for null LagStats and uses an aggregate function.",
+        "summary": "Replaced the direct lag computation with a check for LagStats and adjusted the lag metrics calculation accordingly.",
         "role": "core_fix",
         "connects_to_next": "",
         "global_index": 3
@@ -52,7 +52,7 @@
         "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
         "summary": "Declared a new private final field 'lagAggregate' of type AggregateFunction.",
         "role": "declaration",
-        "connects_to_next": "This declaration sets up the field that will be initialized in the constructor in the next hunk.",
+        "connects_to_next": "This declaration sets up the lagAggregate field to be initialized in the constructor in the next hunk.",
         "global_index": 5
       },
       {
@@ -60,7 +60,7 @@
         "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
         "summary": "Updated the constructor to accept a new parameter 'lagAggregate' and initialized the corresponding field.",
         "role": "core_fix",
-        "connects_to_next": "This initialization is crucial for the proper functioning of the lagAggregate property, which will be accessed in the getter method in the next hunk.",
+        "connects_to_next": "This initialization allows the lagAggregate to be set, which is necessary for the getter method in the next hunk.",
         "global_index": 6
       },
       {
@@ -68,7 +68,7 @@
         "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
         "summary": "Assigned the passed 'lagAggregate' parameter to the class field.",
         "role": "core_fix",
-        "connects_to_next": "This assignment ensures that the lagAggregate field is properly set up for retrieval in the next hunk.",
+        "connects_to_next": "This assignment ensures that the lagAggregate field holds the correct value for later retrieval in the next hunk.",
         "global_index": 7
       },
       {
@@ -76,7 +76,7 @@
         "file": "indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java",
         "summary": "Added a getter method for the lagAggregate field to allow external access.",
         "role": "propagation",
-        "connects_to_next": "This getter method enables other classes to retrieve the lagAggregate value, which is essential for scaling logic.",
+        "connects_to_next": "This getter method enables other parts of the code to retrieve the lagAggregate value, which is essential for the overall functionality.",
         "global_index": 8
       },
       {
@@ -98,7 +98,7 @@
       {
         "hunk_index": 1,
         "file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java",
-        "summary": "Introduced a new enum AggregateFunction with constants for MAX, SUM, and AVERAGE.",
+        "summary": "Introduced a new enum AggregateFunction with values MAX, SUM, and AVERAGE.",
         "role": "declaration",
         "connects_to_next": "",
         "global_index": 11
@@ -106,15 +106,15 @@
       {
         "hunk_index": 1,
         "file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
-        "summary": "Introduced a new constructor to LagStats that accepts an AggregateFunction parameter and initializes it.",
+        "summary": "Introduced a new constructor to LagStats that accepts an AggregateFunction parameter.",
         "role": "declaration",
-        "connects_to_next": "This hunk sets up the ability to specify an aggregation function, which is necessary for the next hunk to provide a method to retrieve it.",
+        "connects_to_next": "This new constructor allows the LagStats instance to be initialized with a specific aggregation function, which is necessary for the subsequent method that retrieves this function.",
         "global_index": 12
       },
       {
         "hunk_index": 2,
         "file": "server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java",
-        "summary": "Added methods to get the specified aggregate function and to compute metrics based on the aggregation type.",
+        "summary": "Added methods to retrieve the aggregate function and compute metrics based on the specified aggregation function.",
         "role": "core_fix",
         "connects_to_next": "",
         "global_index": 13

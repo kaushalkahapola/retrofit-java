@@ -8,7 +8,7 @@
 | `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 0 | ❌ | ❌ |
 | `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 1 | ❌ | ❌ |
 | `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 2 | ❌ | ❌ |
-| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 3 | ❌ | ✅ |
+| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 3 | ❌ | ❌ |
 | `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 4 | ❌ | ❌ |
 | `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 5 | ❌ | ❌ |
 | `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java` | 0 | ❌ | ❌ |

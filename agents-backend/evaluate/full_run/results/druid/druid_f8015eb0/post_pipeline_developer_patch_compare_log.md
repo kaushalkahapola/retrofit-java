@@ -8,11 +8,9 @@
 - Compared files: []
 - Mismatched files: []
 - Error: Failed to apply generated patch in temporary index: error: server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java: does not exist in index
-error: server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java: does not exist in index
 
 
 error: server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java: does not exist in index
-error: server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java: does not exist in index
 
 
 ## Hunk-by-Hunk Comparison
@@ -78,7 +76,7 @@ Developer
 
 Generated
 ```diff
-@@ -427,13 +427,6 @@
+@@ -431,13 +431,6 @@
      );
    }
  
@@ -97,7 +95,11 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,4 +1,4 @@-@@ -427,13 +427,6 @@
++@@ -431,13 +431,6 @@
+      );
+    }
+  
 
 ```
 
@@ -169,7 +171,7 @@ Developer
 
 Generated
 ```diff
-@@ -156,8 +156,17 @@
+@@ -154,8 +154,17 @@
        LOCK.lock();
        try {
          if (!spec.isSuspended()) {
@@ -195,7 +197,7 @@ Generated
 Developer -> Generated (Unified Diff)
 ```diff
 --- developer+++ generated@@ -1,4 +1,4 @@-@@ -154,8 +156,17 @@
-+@@ -156,8 +156,17 @@
++@@ -154,8 +154,17 @@
         LOCK.lock();
         try {
           if (!spec.isSuspended()) {
@@ -256,7 +258,7 @@ Developer
 
 Generated
 ```diff
-@@ -45,6 +45,7 @@
+@@ -46,6 +46,7 @@
    private final int scaleOutStep;
    private final boolean enableTaskAutoScaler;
    private final long minTriggerScaleActionFrequencyMillis;
@@ -270,7 +272,7 @@ Generated
 Developer -> Generated (Unified Diff)
 ```diff
 --- developer+++ generated@@ -1,4 +1,4 @@-@@ -45,6 +46,7 @@
-+@@ -45,6 +45,7 @@
++@@ -46,6 +46,7 @@
     private final int scaleOutStep;
     private final boolean enableTaskAutoScaler;
     private final long minTriggerScaleActionFrequencyMillis;
@@ -296,7 +298,7 @@ Developer
 
 Generated
 ```diff
-@@ -61,7 +61,8 @@
+@@ -63,7 +63,8 @@
            @Nullable @JsonProperty("scaleInStep") Integer scaleInStep,
            @Nullable @JsonProperty("scaleOutStep") Integer scaleOutStep,
            @Nullable @JsonProperty("enableTaskAutoScaler") Boolean enableTaskAutoScaler,
@@ -312,7 +314,7 @@ Generated
 Developer -> Generated (Unified Diff)
 ```diff
 --- developer+++ generated@@ -1,4 +1,4 @@-@@ -61,7 +63,8 @@
-+@@ -61,7 +61,8 @@
++@@ -63,7 +63,8 @@
             @Nullable @JsonProperty("scaleInStep") Integer scaleInStep,
             @Nullable @JsonProperty("scaleOutStep") Integer scaleOutStep,
             @Nullable @JsonProperty("enableTaskAutoScaler") Boolean enableTaskAutoScaler,
@@ -336,11 +338,11 @@ Developer
 
 Generated
 ```diff
-@@ -73,6 +73,7 @@
+@@ -76,6 +76,7 @@
      this.scaleInThreshold = scaleInThreshold != null ? scaleInThreshold : 1000000;
      this.triggerScaleOutFractionThreshold = triggerScaleOutFractionThreshold != null ? triggerScaleOutFractionThreshold : 0.3;
      this.triggerScaleInFractionThreshold = triggerScaleInFractionThreshold != null ? triggerScaleInFractionThreshold : 0.9;
-+    this.lagAggregate = lagAggregate != null ? lagAggregate : AggregateFunction.MAX;
++    this.lagAggregate = AggregateFunction.MAX; // Default to MAX for lagAggregate
  
      // Only do taskCountMax and taskCountMin check when autoscaler is enabled. So that users left autoConfig empty{} will not throw any exception and autoscaler is disabled.
      // If autoscaler is disabled, no matter what configs are set, they are not used.
@@ -350,12 +352,12 @@ Generated
 Developer -> Generated (Unified Diff)
 ```diff
 --- developer+++ generated@@ -1,8 +1,8 @@-@@ -73,6 +76,7 @@
-+@@ -73,6 +73,7 @@
++@@ -76,6 +76,7 @@
       this.scaleInThreshold = scaleInThreshold != null ? scaleInThreshold : 1000000;
       this.triggerScaleOutFractionThreshold = triggerScaleOutFractionThreshold != null ? triggerScaleOutFractionThreshold : 0.3;
       this.triggerScaleInFractionThreshold = triggerScaleInFractionThreshold != null ? triggerScaleInFractionThreshold : 0.9;
 -+    this.lagAggregate = lagAggregate;
-++    this.lagAggregate = lagAggregate != null ? lagAggregate : AggregateFunction.MAX;
+++    this.lagAggregate = AggregateFunction.MAX; // Default to MAX for lagAggregate
   
       // Only do taskCountMax and taskCountMin check when autoscaler is enabled. So that users left autoConfig empty{} will not throw any exception and autoscaler is disabled.
       // If autoscaler is disabled, no matter what configs are set, they are not used.
@@ -385,7 +387,7 @@ Developer
 
 Generated
 ```diff
-@@ -186,6 +186,13 @@
+@@ -190,6 +190,13 @@
      return minTriggerScaleActionFrequencyMillis;
    }
  
@@ -405,7 +407,7 @@ Generated
 Developer -> Generated (Unified Diff)
 ```diff
 --- developer+++ generated@@ -1,4 +1,4 @@-@@ -186,6 +190,13 @@
-+@@ -186,6 +186,13 @@
++@@ -190,6 +190,13 @@
       return minTriggerScaleActionFrequencyMillis;
     }
   
@@ -429,7 +431,7 @@ Developer
 
 Generated
 ```diff
-@@ -204,6 +204,7 @@
+@@ -215,6 +215,7 @@
              ", scaleActionPeriodMillis=" + scaleActionPeriodMillis +
              ", scaleInStep=" + scaleInStep +
              ", scaleOutStep=" + scaleOutStep +
@@ -443,7 +445,7 @@ Generated
 Developer -> Generated (Unified Diff)
 ```diff
 --- developer+++ generated@@ -1,4 +1,4 @@-@@ -204,6 +215,7 @@
-+@@ -204,6 +204,7 @@
++@@ -215,6 +215,7 @@
               ", scaleActionPeriodMillis=" + scaleActionPeriodMillis +
               ", scaleInStep=" + scaleInStep +
               ", scaleOutStep=" + scaleOutStep +
@@ -618,7 +620,7 @@ Developer
 
 Generated
 ```diff
-@@ -25,12 +25,19 @@
+@@ -24,12 +24,19 @@
    private final long maxLag;
    private final long totalLag;
    private final long avgLag;
@@ -643,9 +645,7 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,20 +1,20 @@-@@ -24,12 +24,19 @@
-+@@ -25,12 +25,19 @@
-    private final long maxLag;
+--- developer+++ generated@@ -2,19 +2,19 @@    private final long maxLag;
     private final long totalLag;
     private final long avgLag;
 -+  private final AggregateFunction aggregateForScaling;
@@ -706,7 +706,7 @@ Developer
 
 Generated
 ```diff
-@@ -54,4 +54,26 @@
+@@ -29,4 +29,26 @@
    {
      return avgLag;
    }
@@ -739,7 +739,7 @@ Generated
 Developer -> Generated (Unified Diff)
 ```diff
 --- developer+++ generated@@ -1,4 +1,4 @@-@@ -46,4 +53,26 @@
-+@@ -54,4 +54,26 @@
++@@ -29,4 +29,26 @@
     {
       return avgLag;
     }
@@ -833,7 +833,7 @@ Developer -> Generated (Unified Diff)
 diff --git a/extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java b/extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java
 --- a/extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java
 +++ b/extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java
-@@ -427,13 +427,6 @@
+@@ -431,13 +431,6 @@
      );
    }
  
@@ -859,7 +859,7 @@ diff --git a/indexing-service/src/main/java/org/apache/druid/indexing/seekablest
  import org.apache.druid.indexing.overlord.supervisor.autoscaler.SupervisorTaskAutoScaler;
  import org.apache.druid.indexing.seekablestream.supervisor.SeekableStreamSupervisor;
  import org.apache.druid.java.util.common.StringUtils;
-@@ -156,8 +156,17 @@
+@@ -154,8 +154,17 @@
        LOCK.lock();
        try {
          if (!spec.isSuspended()) {
@@ -890,7 +890,7 @@ diff --git a/indexing-service/src/main/java/org/apache/druid/indexing/seekablest
  import org.apache.druid.indexing.overlord.supervisor.autoscaler.SupervisorTaskAutoScaler;
  import org.apache.druid.indexing.seekablestream.supervisor.SeekableStreamSupervisor;
  import org.apache.druid.java.util.emitter.service.ServiceEmitter;
-@@ -45,6 +45,7 @@
+@@ -46,6 +46,7 @@
    private final int scaleOutStep;
    private final boolean enableTaskAutoScaler;
    private final long minTriggerScaleActionFrequencyMillis;
@@ -898,7 +898,7 @@ diff --git a/indexing-service/src/main/java/org/apache/druid/indexing/seekablest
  
    @JsonCreator
    public LagBasedAutoScalerConfig(
-@@ -61,7 +61,8 @@
+@@ -63,7 +63,8 @@
            @Nullable @JsonProperty("scaleInStep") Integer scaleInStep,
            @Nullable @JsonProperty("scaleOutStep") Integer scaleOutStep,
            @Nullable @JsonProperty("enableTaskAutoScaler") Boolean enableTaskAutoScaler,
@@ -908,15 +908,15 @@ diff --git a/indexing-service/src/main/java/org/apache/druid/indexing/seekablest
    )
    {
      this.enableTaskAutoScaler = enableTaskAutoScaler != null ? enableTaskAutoScaler : false;
-@@ -73,6 +73,7 @@
+@@ -76,6 +76,7 @@
      this.scaleInThreshold = scaleInThreshold != null ? scaleInThreshold : 1000000;
      this.triggerScaleOutFractionThreshold = triggerScaleOutFractionThreshold != null ? triggerScaleOutFractionThreshold : 0.3;
      this.triggerScaleInFractionThreshold = triggerScaleInFractionThreshold != null ? triggerScaleInFractionThreshold : 0.9;
-+    this.lagAggregate = lagAggregate != null ? lagAggregate : AggregateFunction.MAX;
++    this.lagAggregate = AggregateFunction.MAX; // Default to MAX for lagAggregate
  
      // Only do taskCountMax and taskCountMin check when autoscaler is enabled. So that users left autoConfig empty{} will not throw any exception and autoscaler is disabled.
      // If autoscaler is disabled, no matter what configs are set, they are not used.
-@@ -186,6 +186,13 @@
+@@ -190,6 +190,13 @@
      return minTriggerScaleActionFrequencyMillis;
    }
  
@@ -930,7 +930,7 @@ diff --git a/indexing-service/src/main/java/org/apache/druid/indexing/seekablest
    @Override
    public String toString()
    {
-@@ -204,6 +204,7 @@
+@@ -215,6 +215,7 @@
              ", scaleActionPeriodMillis=" + scaleActionPeriodMillis +
              ", scaleInStep=" + scaleInStep +
              ", scaleOutStep=" + scaleOutStep +
@@ -990,7 +990,7 @@ diff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/
 diff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java
 --- a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java
 +++ b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java
-@@ -25,12 +25,19 @@
+@@ -24,12 +24,19 @@
    private final long maxLag;
    private final long totalLag;
    private final long avgLag;
@@ -1010,7 +1010,7 @@ diff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/
    }
  
    public long getMaxLag()
-@@ -54,4 +54,26 @@
+@@ -29,4 +29,26 @@
    {
      return avgLag;
    }
@@ -1048,8 +1048,10 @@ diff --git a/docs/ingestion/supervisor.md b/docs/ingestion/supervisor.md
  
  The following example shows a supervisor spec with `lagBased` autoscaler:
  
-diff --git a/server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java b/server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java
---- a/server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java
+diff --git a/server/src/test/java/org/apache/druid/indexing/overlord/supervisor/SupervisorTest.java b/server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java
+rename from server/src/test/java/org/apache/druid/indexing/overlord/supervisor/SupervisorTest.java
+rename to server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java
+--- a/server/src/test/java/org/apache/druid/indexing/overlord/supervisor/SupervisorTest.java
 +++ b/server/src/test/java/org/apache/druid/indexing/overlord/supervisor/LagStatsTest.java
 @@ -19,22 +19,21 @@
  
