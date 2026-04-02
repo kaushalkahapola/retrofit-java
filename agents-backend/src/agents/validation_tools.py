@@ -21,6 +21,7 @@ import glob
 import shutil
 import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
+from utils.file_operations import edit_file, extract_hunk_context_from_diff
 
 # Load environment variables from .env file
 load_dotenv()
@@ -1938,6 +1939,54 @@ class ValidationToolkit:
             else:
                 patch_err = dry_run.stderr or dry_run.stdout or "patch dry-run failed"
                 all_errors.append(f"[gnu-patch-dry-run] {patch_err.strip()}")
+
+            # ------------------------------------------------------------------
+            # Strategy 4: CLAW-style exact string matching (Final Fallback)
+            # ------------------------------------------------------------------
+            # If git and patch both failed, try parsing the hunk into old/new strings
+            # and applying it via exact matching. This handles cases where line
+            # numbers are totally wrong but the code context is unique.
+            try:
+                from utils.file_operations_models import HunkContext
+
+                context: Optional[HunkContext] = extract_hunk_context_from_diff(
+                    patch_content
+                )
+                if context and context.old_string and context.new_string:
+                    # We need the target file path. For multi-file patches this is
+                    # complex, but here we usually have one file in patch_content.
+                    # Try to extract it from the patch header.
+                    target_file_match = re.search(
+                        r"^\+\+\+ b/(.*)", patch_content, re.MULTILINE
+                    )
+                    if target_file_match:
+                        target_file_rel = target_file_match.group(1).strip()
+                        target_file_abs = os.path.join(
+                            self.target_repo_path, target_file_rel
+                        )
+
+                        success, edit_out = edit_file(
+                            path=target_file_abs,
+                            old_string=context.old_string,
+                            new_string=context.new_string,
+                            replace_all=False,
+                        )
+                        if success:
+                            return {
+                                "success": True,
+                                "output": "Applied successfully via CLAW exact-string fallback.",
+                                "applied_files": applied_files,
+                                "apply_strategy": "claw-exact-match",
+                            }
+                        else:
+                            err_msg = (
+                                edit_out.get("error", "Unknown edit error")
+                                if isinstance(edit_out, dict)
+                                else "Edit failed"
+                            )
+                            all_errors.append(f"[claw-exact-match] {err_msg}")
+            except Exception as e:
+                all_errors.append(f"[claw-exact-match-exception] {e}")
 
             return {
                 "success": False,

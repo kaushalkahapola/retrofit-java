@@ -25,11 +25,14 @@ import json
 import os
 from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.prebuilt import create_react_agent
+from langgraph.errors import GraphRecursionError
 from state import AgentState, AdaptedHunk, SemanticBlueprint
 from utils.patch_analyzer import PatchAnalyzer
 from utils.llm_provider import get_llm
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from agents.validation_tools import ValidationToolkit
+from agents.hunk_generator_tools import HunkGeneratorToolkit
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +51,39 @@ Rules (follow ALL of them strictly):
 5. Adjust the @@ line numbers to match the target file's insertion_line and body counts.
 6. Output ONLY the unified diff hunk. Start with @@ and end with the last changed line.
 7. Do NOT include any explanation, markdown fences, or comments outside the hunk."""
+
+_HUNK_REWRITE_SYSTEM_TOOLS = """You are an expert Java patch adapter specializing in backporting security fixes.
+You have access to tools that let you read the real target file before generating a diff hunk.
+
+MANDATORY WORKFLOW — follow these steps IN ORDER for every hunk:
+
+STEP 1 — PLAN (use manage_todo)
+  Add one todo per context-gathering task you need to perform. At minimum add:
+    - "Read file window around insertion_line to verify surrounding context"
+  Also add todos for any specific context lines you are unsure about.
+
+STEP 2 — GATHER CONTEXT (use read_file_window, grep_in_file, get_exact_lines, verify_context_at_line)
+  For EVERY context line (' ' lines) in the hunk, verify it exists at the expected line number
+  in the target file using verify_context_at_line. If it doesn't match, use grep_in_file to
+  find where it actually is, and read_file_window to see the real surrounding lines.
+  Complete each todo as you finish the corresponding tool call.
+
+STEP 3 — GENERATE (emit the final hunk)
+  Only after ALL todos are completed, emit the final adapted unified diff hunk.
+  The context lines you write MUST exactly match the lines you verified in STEP 2.
+  The @@ header line numbers MUST reflect the actual target file lines you found.
+
+Rules (follow ALL of them strictly):
+1. Context lines (' ' lines) MUST match the real target file content exactly (character-for-character).
+2. Keep edits minimal: preserve fix behavior, avoid unrelated changes.
+3. Apply every symbol rename from the ConsistencyMap to '+' lines.
+4. Preserve the fix intent — this fix MUST still work.
+5. Adjust the @@ line numbers to match the VERIFIED insertion line in the target file.
+6. Output ONLY the unified diff hunk at the end. Start with @@ and end with the last changed line.
+7. Do NOT include any explanation, markdown fences, or extra comments outside the hunk.
+8. If you cannot verify context (file unreadable, line not found), emit the best hunk you can
+   and explain the issue in a single comment line BEFORE the @@ block like:
+   # WARNING: Could not verify context at line N — using best-effort"""
 
 
 _HUNK_REWRITE_USER = """\
@@ -988,6 +1024,14 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
         else []
     )
     toolkit = ValidationToolkit(target_repo_path) if target_repo_path else None
+    hg_toolkit = HunkGeneratorToolkit(target_repo_path) if target_repo_path else None
+    hg_react_agent = (
+        create_react_agent(
+            llm, tools=hg_toolkit.get_tools(), prompt=_HUNK_REWRITE_SYSTEM_TOOLS
+        )
+        if hg_toolkit
+        else None
+    )
     retriever = None
     if target_repo_path and mainline_repo_path:
         try:
@@ -1184,17 +1228,25 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
                     continue
             else:
-                # LLM rewrite (up to 2 attempts) for non-import hunks
+                # ReAct tool loop (intelligent hunk generation) or simple LLM rewrite fallback
                 adapted_hunk_text = None
-                for attempt in range(2):
-                    # Use full method body context (no truncation)
-                    # The LLM needs complete context to properly understand method structure,
-                    # boundaries, and surrounding code patterns for accurate hunk adaptation.
-                    # If token budget is a concern, this can be adjusted, but complete context
-                    # produces more accurate hunks.
-                    prompt = _HUNK_REWRITE_USER.format(
+
+                if hg_react_agent:
+                    # ----------------------------------------------------------
+                    # PRIMARY PATH: ReAct agent with file-reading tools.
+                    # The agent will call read_file_window / grep_in_file /
+                    # verify_context_at_line before producing the final hunk,
+                    # ensuring context lines match the actual target file.
+                    # ----------------------------------------------------------
+                    # Reset the toolkit's todo list for this hunk so todos from
+                    # a previous hunk don't carry over.
+                    if hg_toolkit:
+                        hg_toolkit._todos = []
+                        hg_toolkit._todo_counter = 0
+
+                    react_prompt = _HUNK_REWRITE_USER.format(
                         mainline_hunk=pre_rewritten,
-                        target_method_body=target_body,  # Use full body, not truncated
+                        target_method_body=target_body,
                         target_imports_context=_extract_imports_from_body(target_body),
                         consistency_map=cm_formatted,
                         fix_logic=fix_logic,
@@ -1204,78 +1256,180 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         developer_aux_context=aux_context,
                         retry_context=retry_context_str,
                     )
-                    try:
-                        response = await llm.ainvoke(
-                            [
-                                SystemMessage(content=_HUNK_REWRITE_SYSTEM),
-                                HumanMessage(content=prompt),
-                            ]
-                        )
-                        raw_content = (
-                            response.content
-                            if hasattr(response, "content")
-                            else str(response)
-                        )
-                        extracted = _extract_hunk_block(raw_content)
-                        if extracted:
-                            # Candidate A: raw model rewrite as-is.
-                            direct_candidate = (
-                                extracted
-                                if extracted.endswith("\n")
-                                else extracted + "\n"
-                            )
 
-                            # Candidate B: same rewrite but header anchored to mapped insertion line.
-                            adjusted_candidate = _adjust_hunk_header(
-                                direct_candidate, insertion_line
+                    for attempt in range(2):
+                        try:
+                            react_result = await hg_react_agent.ainvoke(
+                                {"messages": [("user", react_prompt)]},
+                                config={"recursion_limit": 30},
                             )
-
-                            # Candidate C: conservative stabilization fallback.
-                            stabilized = _stabilize_hunk_structure(
-                                pre_rewritten, extracted
-                            )
-                            stabilized_candidate = _adjust_hunk_header(
-                                stabilized, insertion_line
-                            )
-
-                            if toolkit:
-                                dr_direct = toolkit.apply_hunk_dry_run(
-                                    target_file, direct_candidate
+                            raw_content = react_result["messages"][-1].content
+                            # Strip leading WARNING comment if present (allowed by system prompt)
+                            raw_content_clean = re.sub(
+                                r"^#\s*WARNING:.*\n",
+                                "",
+                                raw_content,
+                                flags=re.MULTILINE,
+                            ).strip()
+                            extracted = _extract_hunk_block(
+                                raw_content_clean
+                            ) or _extract_hunk_block(raw_content)
+                            if extracted:
+                                direct_candidate = (
+                                    extracted
+                                    if extracted.endswith("\n")
+                                    else extracted + "\n"
                                 )
-                                if dr_direct.get("success"):
+                                adjusted_candidate = _adjust_hunk_header(
+                                    direct_candidate, insertion_line
+                                )
+                                stabilized = _stabilize_hunk_structure(
+                                    pre_rewritten, extracted
+                                )
+                                stabilized_candidate = _adjust_hunk_header(
+                                    stabilized, insertion_line
+                                )
+
+                                if toolkit:
+                                    dr_direct = toolkit.apply_hunk_dry_run(
+                                        target_file, direct_candidate
+                                    )
+                                    if dr_direct.get("success"):
+                                        adapted_hunk_text = direct_candidate
+                                        print(
+                                            f"    Agent 3: ReAct hunk passed dry-run (direct) for {target_file}[{hunk_idx}]"
+                                        )
+                                        break
+
+                                    dr_adjusted = toolkit.apply_hunk_dry_run(
+                                        target_file, adjusted_candidate
+                                    )
+                                    if dr_adjusted.get("success"):
+                                        adapted_hunk_text = adjusted_candidate
+                                        print(
+                                            f"    Agent 3: ReAct hunk passed dry-run (adjusted) for {target_file}[{hunk_idx}]"
+                                        )
+                                        break
+
+                                    dr_stable = toolkit.apply_hunk_dry_run(
+                                        target_file, stabilized_candidate
+                                    )
+                                    if dr_stable.get("success"):
+                                        adapted_hunk_text = stabilized_candidate
+                                        print(
+                                            f"    Agent 3: ReAct hunk passed dry-run (stabilized) for {target_file}[{hunk_idx}]"
+                                        )
+                                        break
+
+                                    print(
+                                        f"    Agent 3: ReAct candidates failed dry-run for {target_file}[{hunk_idx}] "
+                                        f"(attempt {attempt + 1}/2)"
+                                    )
+                                else:
                                     adapted_hunk_text = direct_candidate
                                     break
-
-                                dr_adjusted = toolkit.apply_hunk_dry_run(
-                                    target_file, adjusted_candidate
-                                )
-                                if dr_adjusted.get("success"):
-                                    adapted_hunk_text = adjusted_candidate
-                                    break
-
-                                dr_stable = toolkit.apply_hunk_dry_run(
-                                    target_file, stabilized_candidate
-                                )
-                                if dr_stable.get("success"):
-                                    adapted_hunk_text = stabilized_candidate
-                                    break
-
-                                print(
-                                    f"    Agent 3: Both direct/stabilized candidates failed dry-run on hunk {hunk_idx} (attempt {attempt + 1}/2)"
-                                )
                             else:
-                                adapted_hunk_text = direct_candidate
-                                break
-                        print(
-                            f"    Agent 3: Hunk parse failed (attempt {attempt + 1}/2)"
+                                print(
+                                    f"    Agent 3: ReAct hunk parse failed (attempt {attempt + 1}/2)"
+                                )
+                        except GraphRecursionError as e:
+                            print(
+                                f"    Agent 3: ReAct recursion limit on {target_file}[{hunk_idx}] "
+                                f"(attempt {attempt + 1}/2): {e}"
+                            )
+                        except Exception as e:
+                            print(
+                                f"    Agent 3: ReAct error on {target_file}[{hunk_idx}] "
+                                f"(attempt {attempt + 1}/2): {e}"
+                            )
+
+                else:
+                    # ----------------------------------------------------------
+                    # FALLBACK PATH: simple single LLM call (no tools).
+                    # Used when target_repo_path is unavailable (local dev mode).
+                    # ----------------------------------------------------------
+                    for attempt in range(2):
+                        prompt = _HUNK_REWRITE_USER.format(
+                            mainline_hunk=pre_rewritten,
+                            target_method_body=target_body,
+                            target_imports_context=_extract_imports_from_body(
+                                target_body
+                            ),
+                            consistency_map=cm_formatted,
+                            fix_logic=fix_logic,
+                            dependent_apis=", ".join(dependent_apis),
+                            insertion_line=insertion_line,
+                            target_file=target_file,
+                            developer_aux_context=aux_context,
+                            retry_context=retry_context_str,
                         )
-                    except Exception as e:
-                        print(
-                            f"    Agent 3: LLM error on hunk {hunk_idx} (attempt {attempt + 1}/2): {e}"
-                        )
+                        try:
+                            response = await llm.ainvoke(
+                                [
+                                    SystemMessage(content=_HUNK_REWRITE_SYSTEM),
+                                    HumanMessage(content=prompt),
+                                ]
+                            )
+                            raw_content = (
+                                response.content
+                                if hasattr(response, "content")
+                                else str(response)
+                            )
+                            extracted = _extract_hunk_block(raw_content)
+                            if extracted:
+                                direct_candidate = (
+                                    extracted
+                                    if extracted.endswith("\n")
+                                    else extracted + "\n"
+                                )
+                                adjusted_candidate = _adjust_hunk_header(
+                                    direct_candidate, insertion_line
+                                )
+                                stabilized = _stabilize_hunk_structure(
+                                    pre_rewritten, extracted
+                                )
+                                stabilized_candidate = _adjust_hunk_header(
+                                    stabilized, insertion_line
+                                )
+
+                                if toolkit:
+                                    dr_direct = toolkit.apply_hunk_dry_run(
+                                        target_file, direct_candidate
+                                    )
+                                    if dr_direct.get("success"):
+                                        adapted_hunk_text = direct_candidate
+                                        break
+
+                                    dr_adjusted = toolkit.apply_hunk_dry_run(
+                                        target_file, adjusted_candidate
+                                    )
+                                    if dr_adjusted.get("success"):
+                                        adapted_hunk_text = adjusted_candidate
+                                        break
+
+                                    dr_stable = toolkit.apply_hunk_dry_run(
+                                        target_file, stabilized_candidate
+                                    )
+                                    if dr_stable.get("success"):
+                                        adapted_hunk_text = stabilized_candidate
+                                        break
+
+                                    print(
+                                        f"    Agent 3: Both direct/stabilized candidates failed dry-run on hunk {hunk_idx} (attempt {attempt + 1}/2)"
+                                    )
+                                else:
+                                    adapted_hunk_text = direct_candidate
+                                    break
+                            print(
+                                f"    Agent 3: Hunk parse failed (attempt {attempt + 1}/2)"
+                            )
+                        except Exception as e:
+                            print(
+                                f"    Agent 3: LLM error on hunk {hunk_idx} (attempt {attempt + 1}/2): {e}"
+                            )
 
                 if not adapted_hunk_text:
-                    # Last fallback is deterministic rewrite, but keep fail-closed behavior below.
+                    # Last fallback: deterministic symbol-rewrite header adjustment.
                     adapted_hunk_text = _adjust_hunk_header(
                         pre_rewritten, insertion_line
                     )

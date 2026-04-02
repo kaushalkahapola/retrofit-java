@@ -35,8 +35,10 @@ from utils.patch_analyzer import PatchAnalyzer
 try:
     from langgraph.errors import GraphRecursionError
 except ImportError:  # Compatibility fallback for older langgraph versions
+
     class GraphRecursionError(Exception):
         pass
+
 
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from utils.llm_provider import get_llm
@@ -48,9 +50,7 @@ logger = logging.getLogger(__name__)
 PHASE2_DETERMINISTIC_FIRST = (
     os.getenv("PHASE2_DETERMINISTIC_FIRST", "true").strip().lower() == "true"
 )
-PHASE2_DISABLE_LLM = (
-    os.getenv("PHASE2_DISABLE_LLM", "false").strip().lower() == "true"
-)
+PHASE2_DISABLE_LLM = os.getenv("PHASE2_DISABLE_LLM", "false").strip().lower() == "true"
 PHASE2_MAX_DIFF_CHARS = int(os.getenv("PHASE2_MAX_DIFF_CHARS", "8000"))
 PHASE2_RECURSION_LIMIT = int(os.getenv("PHASE2_RECURSION_LIMIT", "18"))
 
@@ -106,6 +106,7 @@ No markdown. No explanation. Only JSON."""
 # Line-range parser for get_class_context output
 # ---------------------------------------------------------------------------
 
+
 def _extract_line_range(context_output) -> tuple[int | None, int | None, str]:
     """
     Parses the output of get_class_context() (an MCP tool response) to extract
@@ -122,25 +123,25 @@ def _extract_line_range(context_output) -> tuple[int | None, int | None, str]:
         start = context_output.get("start_line")
         end = context_output.get("end_line")
         snippet = context_output.get("context", context_output.get("body", ""))
-        
+
         # Check if we got valid integers
         if start is not None and end is not None:
             try:
                 return int(start), int(end), str(snippet)
             except (ValueError, TypeError):
                 pass
-        
+
         # PRIORITY 2: Try parsing from the context string (embedded comments)
         # Look for patterns like "// [FOCUS] Full Body (Lines 42-88)"
         snippet_str = str(snippet)
-        
+
         # Pattern: "// [FOCUS] Full Body (Lines 42-88)"
         m = re.search(r"// \[FOCUS\] Full Body \(Lines (\d+)-(\d+)\)", snippet_str)
         if m:
             start = int(m.group(1))
             end = int(m.group(2))
             return start, end, snippet_str
-        
+
         # Pattern: "// Line 42" (for individual methods)
         lines_found = re.findall(r"// Line (\d+)", snippet_str)
         if lines_found:
@@ -150,7 +151,7 @@ def _extract_line_range(context_output) -> tuple[int | None, int | None, str]:
                 return start, end, snippet_str
             except (ValueError, IndexError):
                 pass
-        
+
         # PRIORITY 3: Fallback - try old format patterns
         m = re.search(r"/\*\s*L(\d+)", snippet_str)
         if m:
@@ -178,7 +179,9 @@ def _parse_mapping_json(raw_content: str) -> dict | None:
         parsed = json.loads(text)
         return parsed if isinstance(parsed, dict) else None
     except json.JSONDecodeError:
-        text_clean = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", text, flags=re.DOTALL).strip()
+        text_clean = re.sub(
+            r"```(?:json)?\n?(.*?)\n?```", r"\1", text, flags=re.DOTALL
+        ).strip()
         try:
             parsed = json.loads(text_clean)
             return parsed if isinstance(parsed, dict) else None
@@ -253,7 +256,9 @@ def _extract_hunk_anchor_candidates(raw_hunk: str) -> list[str]:
     return removed + context
 
 
-def _build_window_snippet(target_lines: list[str], center_line: int, radius: int = 20) -> str:
+def _build_window_snippet(
+    target_lines: list[str], center_line: int, radius: int = 20
+) -> str:
     """Build a compact surrounding snippet around center_line (1-based)."""
     if not target_lines or center_line is None:
         return ""
@@ -280,6 +285,10 @@ def _realign_mapping_to_target(
             1) Removed lines from raw hunk
             2) Context lines from raw hunk
             3) Existing snippet (first non-empty line)
+            4) Added lines (pure-insertion hunk fallback) — search for the NEIGHBORING line
+               that immediately precedes or follows the insertion block in the target file.
+               For a class-field insertion just inside a class/method opening brace, search
+               for that opening brace and return the line just after it.
     """
     target_lines = _load_target_file_lines(target_repo_path, target_file)
     if not target_lines:
@@ -305,11 +314,44 @@ def _realign_mapping_to_target(
             break
 
     if found_line is None:
-        # Fail closed: do not preserve stale/mainline-derived line numbers.
-        return None, None, snippet
+        # Pure-insertion hunk fallback: no removed/context lines to anchor on.
+        # Strategy: try to locate the *surrounding* lines visible in the raw hunk's
+        # @@ header neighbourhood.  The header tells us the mainline target-side start
+        # line; try to find the line just before that position in the target (it may
+        # still exist unchanged) or the first line of any added block's prefix context
+        # that was encoded as part of the snippet.
+        #
+        # Concretely: iterate the added lines and look for each one in the target.
+        # The first one found means the insertion already landed (skip) or an adjacent
+        # unchanged line can serve as the anchor.
+        added_lines = _extract_added_lines_from_hunk(raw_hunk)
+        # Search for added lines in target only as a last resort anchor:
+        # if the added line already exists in target (e.g. a field that's already there),
+        # use that position.  Otherwise the loop produces nothing and we fall through.
+        for added in added_lines:
+            stripped = added.strip()
+            if stripped:
+                found = _find_line_in_target(target_lines, stripped)
+                if found is not None:
+                    found_line = found
+                    break
+
+        # If still nothing, try using the hunk's mainline +start line directly
+        # (it is the best we have for a brand-new insertion with no existing context).
+        if found_line is None:
+            header_start = _extract_target_start_from_hunk(raw_hunk)
+            if isinstance(header_start, int) and 1 <= header_start <= len(target_lines):
+                found_line = header_start
+            else:
+                # Nothing worked — fail closed.
+                return None, None, snippet
 
     span = 0
-    if isinstance(current_start, int) and isinstance(current_end, int) and current_end >= current_start:
+    if (
+        isinstance(current_start, int)
+        and isinstance(current_end, int)
+        and current_end >= current_start
+    ):
         # Keep previous span when available, but avoid absurd ranges.
         span = min(current_end - current_start, 200)
 
@@ -366,12 +408,22 @@ def _guess_method_from_hunk(raw_hunk: str, hunk_role: str) -> str | None:
 
     # Prefer context/removed lines because added method declarations may not exist yet in target.
     for line in raw_hunk.splitlines()[1:]:
-        if line.startswith(" ") or (line.startswith("-") and not line.startswith("---")):
+        if line.startswith(" ") or (
+            line.startswith("-") and not line.startswith("---")
+        ):
             content = line[1:].strip()
             m = method_decl_pattern.search(content)
             if m:
                 name = m.group(1)
-                if name not in {"if", "for", "while", "switch", "catch", "return", "new"}:
+                if name not in {
+                    "if",
+                    "for",
+                    "while",
+                    "switch",
+                    "catch",
+                    "return",
+                    "new",
+                }:
                     return name
 
     for line in added:
@@ -395,7 +447,11 @@ def _deterministic_map_hunks_for_file(
 
     Returns None when confidence is low (so caller can fall back to LLM mapping).
     """
-    if not file_hunks or not raw_hunks_for_file or len(raw_hunks_for_file) < len(file_hunks):
+    if (
+        not file_hunks
+        or not raw_hunks_for_file
+        or len(raw_hunks_for_file) < len(file_hunks)
+    ):
         return None
 
     deterministic: list[dict] = []
@@ -405,7 +461,9 @@ def _deterministic_map_hunks_for_file(
         hunk_role = hunk_meta.get("role", "")
 
         method_guess = _guess_method_from_hunk(raw_hunk, hunk_role)
-        added_lines = [l.strip() for l in _extract_added_lines_from_hunk(raw_hunk) if l.strip()]
+        added_lines = [
+            l.strip() for l in _extract_added_lines_from_hunk(raw_hunk) if l.strip()
+        ]
         snippet_guess = added_lines[0] if added_lines else ""
         header_start = _extract_target_start_from_hunk(raw_hunk)
 
@@ -423,7 +481,8 @@ def _deterministic_map_hunks_for_file(
 
         deterministic.append(
             {
-                "mainline_method": method_guess or ("<import>" if hunk_role == "declaration" else f"hunk_{hunk_idx}"),
+                "mainline_method": method_guess
+                or ("<import>" if hunk_role == "declaration" else f"hunk_{hunk_idx}"),
                 "target_file": target_file,
                 "target_method": method_guess,
                 "start_line": start_line,
@@ -438,6 +497,7 @@ def _deterministic_map_hunks_for_file(
 # ---------------------------------------------------------------------------
 # Core Agent Node
 # ---------------------------------------------------------------------------
+
 
 async def structural_locator_node(state: AgentState, config) -> dict:
     """
@@ -479,15 +539,37 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     # ------------------------------------------------------------------
     # 1. Hunk Segregation
     # ------------------------------------------------------------------
-    code_changes = [fc for fc in patch_analysis if not (fc.is_test_file if hasattr(fc, 'is_test_file') else fc.get("is_test_file", False))]
-    test_changes = [fc for fc in patch_analysis if (fc.is_test_file if hasattr(fc, 'is_test_file') else fc.get("is_test_file", False))]
-    
+    code_changes = [
+        fc
+        for fc in patch_analysis
+        if not (
+            fc.is_test_file
+            if hasattr(fc, "is_test_file")
+            else fc.get("is_test_file", False)
+        )
+    ]
+    test_changes = [
+        fc
+        for fc in patch_analysis
+        if (
+            fc.is_test_file
+            if hasattr(fc, "is_test_file")
+            else fc.get("is_test_file", False)
+        )
+    ]
+
     # Filter test changes based on with_test_changes flag
     if not with_test_changes:
         test_changes = []
 
-    print(f"  Agent 2: {len(code_changes)} code file(s), {len(test_changes)} test file(s)")
-    logger.info("Hunk segregation complete: code_files=%d test_files=%d", len(code_changes), len(test_changes))
+    print(
+        f"  Agent 2: {len(code_changes)} code file(s), {len(test_changes)} test file(s)"
+    )
+    logger.info(
+        "Hunk segregation complete: code_files=%d test_files=%d",
+        len(code_changes),
+        len(test_changes),
+    )
     trace += f"## Hunk Segregation\n- Code files: {len(code_changes)}\n- Test files: {len(test_changes)}\n\n"
 
     dependent_apis = set(semantic_blueprint.get("dependent_apis", []))
@@ -511,8 +593,10 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         retriever = EnsembleRetriever(mainline_repo_path, target_repo_path)
         # NOTE: Index building is now lazy - it will only be built when Phase 2 ensemble search
         # is actually needed (i.e., when Phase 1 git-based retrieval fails)
-        
-        toolkit = ReasoningToolkit(retriever, target_repo_path, mainline_repo_path, patch_analysis)
+
+        toolkit = ReasoningToolkit(
+            retriever, target_repo_path, mainline_repo_path, patch_analysis
+        )
         logger.debug("Retriever/toolkit initialized successfully")
     except Exception as e:
         print(f"  Agent 2: Warning — could not init retriever: {e}")
@@ -522,13 +606,25 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
     # Setup LLM Agent
     llm = get_llm(temperature=0)
-    tools = [
-        t for t in toolkit.get_tools() if t.name in [
-            "search_candidates", "match_structure", "get_dependency_graph",
-            "read_file", "get_class_context", "git_log_follow", "git_blame_lines"
+    tools = (
+        [
+            t
+            for t in toolkit.get_tools()
+            if t.name
+            in [
+                "search_candidates",
+                "match_structure",
+                "get_dependency_graph",
+                "read_file",
+                "get_class_context",
+                "git_log_follow",
+                "git_blame_lines",
+            ]
         ]
-    ] if toolkit else []
-    
+        if toolkit
+        else []
+    )
+
     agent = create_react_agent(llm, tools=tools, prompt=_AGENT_SYSTEM)
 
     # ------------------------------------------------------------------
@@ -540,7 +636,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     hunk_chain = semantic_blueprint.get("hunk_chain", [])
     print(f"  Agent 2: Found {len(hunk_chain)} hunk(s) in hunk_chain")
     logger.info("Processing hunk_chain: total_hunks=%d", len(hunk_chain))
-    
+
     # Group hunks by file for efficient processing
     hunks_by_file: dict[str, list] = {}
     for hunk in hunk_chain:
@@ -550,36 +646,46 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 hunks_by_file[file] = []
             hunks_by_file[file].append(hunk)
     logger.debug("Grouped hunks into %d file bucket(s)", len(hunks_by_file))
-    
+
     # Process hunks grouped by file
     for mainline_file, file_hunks in hunks_by_file.items():
-        print(f"  Agent 2: Locating target for {mainline_file} ({len(file_hunks)} hunk(s))...")
+        print(
+            f"  Agent 2: Locating target for {mainline_file} ({len(file_hunks)} hunk(s))..."
+        )
         logger.info("Locating target file=%s hunks=%d", mainline_file, len(file_hunks))
         trace += f"### `{mainline_file}`\n\n"
         trace += f"**Hunks in this file**: {len(file_hunks)}\n\n"
         raw_hunks_for_file = raw_hunks_by_file.get(mainline_file, [])
-        
+
         # STEP 1: Try git-based resolution first (no LLM call)
         git_candidates = None
         if toolkit:
             try:
                 git_candidates = toolkit.search_candidates(mainline_file)
-                logger.debug("Git candidate search returned %d candidate(s) for %s", len(git_candidates or []), mainline_file)
+                logger.debug(
+                    "Git candidate search returned %d candidate(s) for %s",
+                    len(git_candidates or []),
+                    mainline_file,
+                )
                 if git_candidates:
                     git_target = git_candidates[0]["file"]
                     print(f"  Agent 2: Git resolution found target: {git_target}")
-                    logger.info("Git resolution selected target=%s for file=%s", git_target, mainline_file)
+                    logger.info(
+                        "Git resolution selected target=%s for file=%s",
+                        git_target,
+                        mainline_file,
+                    )
                     trace += f"**Git Resolution**: Found `{git_target}`\n\n"
             except Exception as e:
                 print(f"  Agent 2: Git resolution failed: {e}")
                 logger.exception("Git resolution failed for file=%s", mainline_file)
                 trace += f"⚠️ Git resolution failed: {e}\n\n"
-        
+
         # STEP 2: Extract target file (prefer git resolution result)
         target_file = mainline_file
         if git_candidates:
             target_file = git_candidates[0]["file"]
-        
+
         mapping_result = None
         used_deterministic = False
         llm_failed = False
@@ -627,7 +733,9 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
             # Simplified blueprint for LLM (avoid redundant info)
             simple_blueprint = {
-                "root_cause_hypothesis": semantic_blueprint.get("root_cause_hypothesis", ""),
+                "root_cause_hypothesis": semantic_blueprint.get(
+                    "root_cause_hypothesis", ""
+                ),
                 "fix_logic": semantic_blueprint.get("fix_logic", ""),
                 "dependent_apis": semantic_blueprint.get("dependent_apis", []),
             }
@@ -648,7 +756,11 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
             for attempt in range(2):
                 try:
-                    logger.debug("Invoking structural locator LLM for file=%s attempt=%d", mainline_file, attempt + 1)
+                    logger.debug(
+                        "Invoking structural locator LLM for file=%s attempt=%d",
+                        mainline_file,
+                        attempt + 1,
+                    )
                     result = await agent.ainvoke(
                         input_data,
                         config={"recursion_limit": PHASE2_RECURSION_LIMIT},
@@ -659,7 +771,11 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                     if not mapping_result:
                         trace += f"⚠️ **LLM Mapping Extraction Failed**\n\nRaw Response:\n```\n{raw_content}\n```\n\n"
                         llm_failed = True
-                        logger.warning("LLM JSON parse failed for file=%s attempt=%d", mainline_file, attempt + 1)
+                        logger.warning(
+                            "LLM JSON parse failed for file=%s attempt=%d",
+                            mainline_file,
+                            attempt + 1,
+                        )
 
                     if mapping_result:
                         trace += f"**Agent Tool Steps:**\n\n"
@@ -672,7 +788,9 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         trace += "\n"
                     break
                 except GraphRecursionError as e:
-                    print(f"  Agent 2: Recursion limit reached in tool loop (attempt {attempt+1}/2): {e}")
+                    print(
+                        f"  Agent 2: Recursion limit reached in tool loop (attempt {attempt + 1}/2): {e}"
+                    )
                     logger.warning(
                         "Recursion limit reached for file=%s attempt=%d; falling back to direct no-tool mapping",
                         mainline_file,
@@ -686,7 +804,9 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                     ]
                     try:
                         fallback_resp = await llm.ainvoke(fallback_messages)
-                        fallback_content = getattr(fallback_resp, "content", str(fallback_resp))
+                        fallback_content = getattr(
+                            fallback_resp, "content", str(fallback_resp)
+                        )
                         mapping_result = _parse_mapping_json(fallback_content)
                         if mapping_result:
                             trace += "**Fallback Mode**: direct no-tool LLM mapping used after recursion limit.\n\n"
@@ -711,8 +831,12 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         print("  Waiting 30 seconds before retry...")
                         time.sleep(30)
                 except Exception as e:
-                    print(f"  Agent 2: LLM call error (attempt {attempt+1}/2): {e}")
-                    logger.exception("LLM call failed for file=%s attempt=%d", mainline_file, attempt + 1)
+                    print(f"  Agent 2: LLM call error (attempt {attempt + 1}/2): {e}")
+                    logger.exception(
+                        "LLM call failed for file=%s attempt=%d",
+                        mainline_file,
+                        attempt + 1,
+                    )
                     llm_failed = True
                     if attempt == 0:
                         print("  Waiting 30 seconds before retry...")
@@ -739,21 +863,21 @@ async def structural_locator_node(state: AgentState, config) -> dict:
             # LLM provided detailed mappings
             for k, v in mapping_result.get("consistency_map_entries", {}).items():
                 consistency_map[k] = v
-                
+
             mappings = mapping_result.get("mappings", [])
             # Initialize list for this file if not present
             if mainline_file not in mapped_target_context:
                 mapped_target_context[mainline_file] = []
-            
+
             # Match each mapping to corresponding hunk by considering order
             # Mappings should be in the same order as file_hunks
             trace += f"| Hunk Idx | Role | Mainline Method | Target Method | Lines |\n"
             trace += f"|---|---|---|---|---|\n"
-            
+
             for hunk_idx_in_hunks, hunk in enumerate(file_hunks):
                 hunk_idx = hunk.get("hunk_index", hunk_idx_in_hunks)
                 hunk_role = hunk.get("role", "")
-                
+
                 # Get the mapping for this hunk (should be at same index)
                 if hunk_idx_in_hunks < len(mappings):
                     m = mappings[hunk_idx_in_hunks]
@@ -767,14 +891,18 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         hunk_idx,
                     )
                     m = {
-                        "mainline_method": "<import>" if hunk_role == "declaration" else f"hunk_{hunk_idx}",
+                        "mainline_method": "<import>"
+                        if hunk_role == "declaration"
+                        else f"hunk_{hunk_idx}",
                         "target_file": target_file,
-                        "target_method": "<import>" if hunk_role == "declaration" else None,
+                        "target_method": "<import>"
+                        if hunk_role == "declaration"
+                        else None,
                         "start_line": None,
                         "end_line": None,
                         "code_snippet": "",
                     }
-                
+
                 # Ensure target_file is set from our git resolution
                 if not m.get("target_file"):
                     m["target_file"] = target_file
@@ -813,7 +941,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 m["end_line"] = new_end
                 if new_snippet:
                     m["code_snippet"] = new_snippet
-                
+
                 # CRITICAL: For import hunks, we need to ensure proper line numbers
                 # Without proper start_line/end_line, hunk_generator will fall back to original mainline line numbers,
                 # which won't match the target file. The sorting in apply_adapted_hunks depends on correct insertion_line values.
@@ -821,23 +949,27 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                     # For imports, try to at least suggest where imports should be
                     # This is a fallback - the LLM mapping should ideally have provided this
                     trace += f"  ⚠️ Import hunk {hunk_idx} has no target start_line. Hunk generator will extract from hunk header.\n"
-                
+
                 trace += (
                     f"| {hunk_idx} | {hunk_role} | `{m.get('mainline_method', '?')}` | "
                     f"`{m.get('target_method', '?')}` | {m.get('start_line', '?')}–{m.get('end_line', '?')} |\n"
                 )
-                
+
                 # Append mapping for this hunk
-                mapped_target_context[mainline_file].append({
-                    "hunk_index": hunk_idx,
-                    "mainline_method": m.get("mainline_method"),
-                    "target_file": m.get("target_file"),
-                    "target_method": m.get("target_method"),
-                    "start_line": m.get("start_line"),
-                    "end_line": m.get("end_line"),
-                    "code_snippet": m.get("code_snippet", ""),
-                })
-                print(f"  Agent 2: Mapped hunk {hunk_idx} ({m.get('mainline_method', '?')}) to {m.get('target_method', '?')} at lines {m.get('start_line', '?')}-{m.get('end_line', '?')}")
+                mapped_target_context[mainline_file].append(
+                    {
+                        "hunk_index": hunk_idx,
+                        "mainline_method": m.get("mainline_method"),
+                        "target_file": m.get("target_file"),
+                        "target_method": m.get("target_method"),
+                        "start_line": m.get("start_line"),
+                        "end_line": m.get("end_line"),
+                        "code_snippet": m.get("code_snippet", ""),
+                    }
+                )
+                print(
+                    f"  Agent 2: Mapped hunk {hunk_idx} ({m.get('mainline_method', '?')}) to {m.get('target_method', '?')} at lines {m.get('start_line', '?')}-{m.get('end_line', '?')}"
+                )
         elif git_candidates:
             # LLM failed, but git resolution succeeded — use it as fallback
             git_target = git_candidates[0]["file"]
@@ -848,15 +980,17 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 llm_failed,
             )
             trace += f"**Fallback**: Using git resolution result (LLM refinement failed).\n\n"
-            
+
             if mainline_file not in mapped_target_context:
                 mapped_target_context[mainline_file] = []
-            
+
             # Create fallback mappings for each hunk
             for idx, hunk in enumerate(file_hunks):
                 hunk_idx = hunk.get("hunk_index", idx)
                 hunk_role = hunk.get("role", "")
-                raw_hunk = raw_hunks_for_file[idx] if idx < len(raw_hunks_for_file) else ""
+                raw_hunk = (
+                    raw_hunks_for_file[idx] if idx < len(raw_hunks_for_file) else ""
+                )
                 start_line, end_line, snippet = _realign_mapping_to_target(
                     target_repo_path=target_repo_path,
                     target_file=git_target,
@@ -865,35 +999,44 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                     current_start=None,
                     current_end=None,
                 )
-                
+
                 if hunk_role == "declaration":
                     # Import statements
-                    mapped_target_context[mainline_file].append({
-                        "hunk_index": hunk_idx,
-                        "mainline_method": "<import>",
-                        "target_file": git_target,
-                        "target_method": "<import>",
-                        "start_line": start_line,
-                        "end_line": end_line,
-                        "code_snippet": snippet,
-                    })
-                    print(f"  Agent 2: Fallback mapped hunk {hunk_idx} (import) to {git_target}")
+                    mapped_target_context[mainline_file].append(
+                        {
+                            "hunk_index": hunk_idx,
+                            "mainline_method": "<import>",
+                            "target_file": git_target,
+                            "target_method": "<import>",
+                            "start_line": start_line,
+                            "end_line": end_line,
+                            "code_snippet": snippet,
+                        }
+                    )
+                    print(
+                        f"  Agent 2: Fallback mapped hunk {hunk_idx} (import) to {git_target}"
+                    )
                 else:
                     # Regular hunks
-                    mapped_target_context[mainline_file].append({
-                        "hunk_index": hunk_idx,
-                        "mainline_method": f"hunk_{hunk_idx}",
-                        "target_file": git_target,
-                        "target_method": None,
-                        "start_line": start_line,
-                        "end_line": end_line,
-                        "code_snippet": snippet,
-                    })
+                    mapped_target_context[mainline_file].append(
+                        {
+                            "hunk_index": hunk_idx,
+                            "mainline_method": f"hunk_{hunk_idx}",
+                            "target_file": git_target,
+                            "target_method": None,
+                            "start_line": start_line,
+                            "end_line": end_line,
+                            "code_snippet": snippet,
+                        }
+                    )
                     print(f"  Agent 2: Fallback mapped hunk {hunk_idx} to {git_target}")
         else:
             trace += f"❌ Failed to locate target — neither LLM nor git resolution provided results.\n\n"
             print(f"  Agent 2: Could not map {mainline_file} — skipping.")
-            logger.error("Failed to map file=%s no LLM mapping and no git candidates", mainline_file)
+            logger.error(
+                "Failed to map file=%s no LLM mapping and no git candidates",
+                mainline_file,
+            )
 
     # ------------------------------------------------------------------
     # 3. Process test files
@@ -901,34 +1044,44 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     trace += "## Test File Mappings\n\n"
 
     for change in test_changes:
-        mainline_test = change.file_path if hasattr(change, "file_path") else change.get("file_path")
+        mainline_test = (
+            change.file_path
+            if hasattr(change, "file_path")
+            else change.get("file_path")
+        )
         target_test = _find_target_test_file(mainline_test, target_repo_path)
 
         if mainline_test not in mapped_target_context:
             mapped_target_context[mainline_test] = []
 
         if target_test:
-            mapped_target_context[mainline_test].append({
-                "hunk_index": 0,
-                "target_file": target_test,
-                "method": None,
-                "start_line": None,
-                "end_line": None,
-                "code_snippet": "",
-            })
+            mapped_target_context[mainline_test].append(
+                {
+                    "hunk_index": 0,
+                    "target_file": target_test,
+                    "method": None,
+                    "start_line": None,
+                    "end_line": None,
+                    "code_snippet": "",
+                }
+            )
             trace += f"- `{mainline_test}` → `{target_test}` ✅\n"
             print(f"  Agent 2: Test file mapped: {mainline_test} → {target_test}")
         else:
-            mapped_target_context[mainline_test].append({
-                "hunk_index": 0,
-                "target_file": None,
-                "method": None,
-                "start_line": None,
-                "end_line": None,
-                "code_snippet": "",
-            })
+            mapped_target_context[mainline_test].append(
+                {
+                    "hunk_index": 0,
+                    "target_file": None,
+                    "method": None,
+                    "start_line": None,
+                    "end_line": None,
+                    "code_snippet": "",
+                }
+            )
             trace += f"- `{mainline_test}` → **null** (test synthesis required by Agent 4) ⚠️\n"
-            print(f"  Agent 2: Test file not found for {mainline_test}. Agent 4 will synthesize.")
+            print(
+                f"  Agent 2: Test file not found for {mainline_test}. Agent 4 will synthesize."
+            )
 
     # ------------------------------------------------------------------
     # 4. Finalize trace & output
@@ -948,9 +1101,11 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     except Exception as e:
         print(f"  Agent 2: Warning — could not write trace: {e}")
 
-    print(f"Agent 2: Complete. Mapped {len(mapped_target_context)} file(s). "
-          f"Total hunk mappings: {sum(len(v) for v in mapped_target_context.values())}. "
-          f"ConsistencyMap has {len(consistency_map)} rename(s).")
+    print(
+        f"Agent 2: Complete. Mapped {len(mapped_target_context)} file(s). "
+        f"Total hunk mappings: {sum(len(v) for v in mapped_target_context.values())}. "
+        f"ConsistencyMap has {len(consistency_map)} rename(s)."
+    )
     logger.info(
         "Agent 2 complete: mapped_files=%d total_hunk_mappings=%d consistency_map_entries=%d",
         len(mapped_target_context),
@@ -975,6 +1130,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
+
 
 def _find_target_file(mainline_file: str, target_repo_path: str, toolkit) -> str | None:
     """
@@ -1004,11 +1160,19 @@ def _find_target_file(mainline_file: str, target_repo_path: str, toolkit) -> str
         try:
             candidates = toolkit.search_candidates(mainline_file)
             if candidates:
-                cand_paths = [c.get("file_path") or c.get("path", "") for c in candidates if isinstance(c, dict)]
+                cand_paths = [
+                    c.get("file_path") or c.get("path", "")
+                    for c in candidates
+                    if isinstance(c, dict)
+                ]
                 cand_paths = [p for p in cand_paths if p]
                 if cand_paths:
                     match_json = toolkit.match_structure(mainline_file, cand_paths)
-                    match_data = json.loads(match_json) if isinstance(match_json, str) else match_json
+                    match_data = (
+                        json.loads(match_json)
+                        if isinstance(match_json, str)
+                        else match_json
+                    )
                     matches = match_data.get("matches", [])
                     if matches:
                         return matches[0].get("file_path")
@@ -1051,7 +1215,18 @@ def _infer_modified_methods(change) -> list[str]:
         r"(?:public|private|protected|static|final|synchronized|\s)+"
         r"[\w<>\[\],\s]+\s+(\w+)\s*\("
     )
-    skip = {"if", "for", "while", "switch", "catch", "new", "return", "else", "do", "try"}
+    skip = {
+        "if",
+        "for",
+        "while",
+        "switch",
+        "catch",
+        "new",
+        "return",
+        "else",
+        "do",
+        "try",
+    }
     found = []
     lines = []
     if hasattr(change, "removed_lines"):
@@ -1072,7 +1247,7 @@ def _infer_modified_methods(change) -> list[str]:
 
     # Fallback/Improvement: If no methods found, try searching in context lines if available
     # However, since FileChange doesn't have context lines, we'll rely on the LLM seeing the full diff.
-    
+
     return found
 
 
@@ -1103,7 +1278,7 @@ def _locate_method_with_reflection(
             "code_snippet": "",
             "divergence": "method_not_identified",
         }
-    
+
     target_method = mainline_method  # assume identity
     start_line = None
     end_line = None
@@ -1113,14 +1288,17 @@ def _locate_method_with_reflection(
     for attempt in range(max_attempts + 1):
         # --- A. Try direct name match ---
         try:
-            ctx = mcp.call_tool("get_class_context", {
-                "target_repo_path": target_repo_path,
-                "file_path": target_file,
-                "focus_method": target_method,
-            })
+            ctx = mcp.call_tool(
+                "get_class_context",
+                {
+                    "target_repo_path": target_repo_path,
+                    "file_path": target_file,
+                    "focus_method": target_method,
+                },
+            )
             start_line, end_line, code_snippet = _extract_line_range(ctx)
         except Exception as e:
-            print(f"    Agent 2: get_class_context error (attempt {attempt+1}): {e}")
+            print(f"    Agent 2: get_class_context error (attempt {attempt + 1}): {e}")
             ctx = None
 
         # --- B. Fallback: fingerprinting if method not found ---
@@ -1133,22 +1311,33 @@ def _locate_method_with_reflection(
                         old_signature="",
                         old_calls=[],
                     )
-                    match_result = json.loads(match_result_str) if isinstance(match_result_str, str) else match_result_str
+                    match_result = (
+                        json.loads(match_result_str)
+                        if isinstance(match_result_str, str)
+                        else match_result_str
+                    )
                     matched = match_result.get("match")
                     if matched:
                         found_name = matched.get("simpleName", mainline_method)
                         if found_name != mainline_method:
                             consistency_map[mainline_method] = found_name
-                            print(f"    Agent 2: Renamed method — {mainline_method} → {found_name}")
+                            print(
+                                f"    Agent 2: Renamed method — {mainline_method} → {found_name}"
+                            )
                         target_method = found_name
                         # Re-fetch with new name
                         try:
-                            ctx2 = mcp.call_tool("get_class_context", {
-                                "target_repo_path": target_repo_path,
-                                "file_path": target_file,
-                                "focus_method": target_method,
-                            })
-                            start_line, end_line, code_snippet = _extract_line_range(ctx2)
+                            ctx2 = mcp.call_tool(
+                                "get_class_context",
+                                {
+                                    "target_repo_path": target_repo_path,
+                                    "file_path": target_file,
+                                    "focus_method": target_method,
+                                },
+                            )
+                            start_line, end_line, code_snippet = _extract_line_range(
+                                ctx2
+                            )
                         except Exception:
                             pass
                 except Exception as e:
@@ -1159,13 +1348,17 @@ def _locate_method_with_reflection(
             missing = [api for api in dependent_apis if api not in code_snippet]
             if missing:
                 divergence = f"missing: {missing}"
-                print(f"    Agent 2: Reflection fail (attempt {attempt+1}) — missing APIs: {missing}")
+                print(
+                    f"    Agent 2: Reflection fail (attempt {attempt + 1}) — missing APIs: {missing}"
+                )
                 if attempt < max_attempts:
                     # Try to broaden search via candidates
                     print(f"    Agent 2: Retrying with broader candidate search...")
                     continue
                 else:
-                    print(f"    Agent 2: Max reflection attempts reached. Using best-effort result.")
+                    print(
+                        f"    Agent 2: Max reflection attempts reached. Using best-effort result."
+                    )
             else:
                 divergence = "ok"
         else:
