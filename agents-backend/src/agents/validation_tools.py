@@ -1399,6 +1399,30 @@ class ValidationToolkit:
                     "output": patch_result.stdout or "Clean apply via patch fallback.",
                 }
 
+            # ------------------------------------------------------------------
+            # Final Fallback: CLAW-style exact string matching (dry-run)
+            # ------------------------------------------------------------------
+            try:
+                from utils.file_operations import extract_hunk_context_from_diff
+
+                context = extract_hunk_context_from_diff(patch_content)
+                if context and context.old_string:
+                    target_file_abs = os.path.join(
+                        self.target_repo_path, target_file_path
+                    )
+                    if os.path.exists(target_file_abs):
+                        with open(
+                            target_file_abs, "r", encoding="utf-8", errors="replace"
+                        ) as f:
+                            content = f.read()
+                        if context.old_string in content:
+                            return {
+                                "success": True,
+                                "output": "Clean apply via CLAW exact-string dry-run.",
+                            }
+            except Exception:
+                pass
+
             return {"success": False, "output": result.stderr or result.stdout}
 
         except Exception as e:

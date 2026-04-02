@@ -274,6 +274,8 @@ def extract_hunk_context_from_diff(hunk_text: str) -> Optional[HunkContext]:
             new_lines_list.append(line[1:])
         elif line.startswith(" "):
             # Context line
+            old_lines_list.append(line[1:])
+            new_lines_list.append(line[1:])
             context_lines.append(line[1:])
         elif line.startswith("\\"):
             # "\ No newline at end of file" marker
