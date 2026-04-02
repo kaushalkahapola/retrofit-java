@@ -1283,8 +1283,9 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         f"    Agent 3: Fallback candidate generated for {target_file}[{hunk_idx}]"
                     )
 
-            # Dry-run validation
+            # Dry-run validation (CLAW-inspired: collect errors, don't drop hunks)
             dry_run_ok = False
+            dry_run_error_info = None
             if toolkit:
                 dr = toolkit.apply_hunk_dry_run(target_file, adapted_hunk_text)
                 dry_run_ok = dr["success"]
@@ -1293,9 +1294,12 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         f"    Agent 3: Dry-run failed for {target_file}[{hunk_idx}]: {dr['output'][:150]}"
                     )
                     trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
-                    # We no longer 'continue' here. We let the failing hunk pass to Phase 4
-                    # so that Phase 4 can try applying the whole patch, fail, and provide
-                    # actual `git apply` feedback for retries.
+                    # Store error info for Phase 4/retry (CLAW pattern: don't drop, enrich)
+                    dry_run_error_info = {
+                        "error_message": dr.get("output", "Unknown dry-run error"),
+                        "tool": "git-apply-check",
+                        "timestamp": str(__import__("datetime").datetime.now()),
+                    }
             else:
                 dry_run_ok = True  # No toolkit → assume ok (local dev mode)
 
@@ -1317,6 +1321,11 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 "file_operation_required": op_plan.get("operation_required", True),
                 "path_resolution_reason": op_plan.get("reason", "unknown"),
             }
+            # Attach error info if dry-run failed (Phase 4 will see this)
+            if dry_run_error_info:
+                hunk["dry_run_error"] = dry_run_error_info
+                hunk["dry_run_error_message"] = dry_run_error_info["error_message"]
+
             adapted_code_hunks.append(hunk)
             trace += (
                 f"| `{target_file}` | {hunk_idx} | "
@@ -1418,10 +1427,18 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             if not adapted_hunk_text:
                 adapted_hunk_text = pre_rewritten
 
+            # Test hunk dry-run validation (CLAW-inspired: collect errors, don't drop)
             dry_run_ok = False
+            dry_run_error_info = None
             if toolkit:
                 dr = toolkit.apply_hunk_dry_run(target_test_file, adapted_hunk_text)
                 dry_run_ok = dr["success"]
+                if not dry_run_ok:
+                    dry_run_error_info = {
+                        "error_message": dr.get("output", "Unknown dry-run error"),
+                        "tool": "git-apply-check",
+                        "timestamp": str(__import__("datetime").datetime.now()),
+                    }
             else:
                 dry_run_ok = True
 
@@ -1436,6 +1453,11 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 "file_operation_required": op_plan.get("operation_required", True),
                 "path_resolution_reason": op_plan.get("reason", "unknown"),
             }
+            # Attach error info if dry-run failed
+            if dry_run_error_info:
+                hunk["dry_run_error"] = dry_run_error_info
+                hunk["dry_run_error_message"] = dry_run_error_info["error_message"]
+
             adapted_test_hunks.append(hunk)
             trace += (
                 f"| `{target_test_file}` (test) | {hunk_idx} | "
@@ -1525,3 +1547,46 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
         "adapted_code_hunks": adapted_code_hunks,
         "adapted_test_hunks": adapted_test_hunks,
     }
+
+
+def extract_hunk_context(hunk_text: str) -> tuple[str, str]:
+    """
+    Extract the old_string and new_string from a unified diff hunk.
+
+    This parses a standard unified diff hunk and reconstructs the exact
+    strings that need to match for the patch to apply. Used for CLAW-style
+    exact string matching approach.
+
+    Args:
+        hunk_text: Unified diff hunk starting with @@
+
+    Returns:
+        Tuple of (old_string, new_string) - exact text to match and replace
+    """
+    lines = hunk_text.strip().split("\n")
+
+    if not lines or not lines[0].startswith("@@"):
+        return "", ""
+
+    old_lines_list = []
+    new_lines_list = []
+
+    for line in lines[1:]:
+        if line.startswith("-") and not line.startswith("---"):
+            # Removed line
+            old_lines_list.append(line[1:])
+        elif line.startswith("+") and not line.startswith("+++"):
+            # Added line
+            new_lines_list.append(line[1:])
+        elif line.startswith(" "):
+            # Context line (appears in both old and new)
+            old_lines_list.append(line[1:])
+            new_lines_list.append(line[1:])
+        elif line.startswith("\\"):
+            # "\ No newline at end of file" marker - skip
+            continue
+
+    old_string = "\n".join(old_lines_list)
+    new_string = "\n".join(new_lines_list)
+
+    return old_string, new_string

@@ -1,5 +1,17 @@
 from typing import List, Dict, Optional, Any
 from utils.mcp_client import get_client
+from utils.validation_models import (
+    HunkValidationResult,
+    HunkValidationError,
+    HunkValidationErrorType,
+    PatchValidationResult,
+    PatchRetryContext,
+)
+from utils.file_operations_models import (
+    StructuredPatchHunk,
+    TextFilePayload,
+    EditFileOutput,
+)
 import tempfile
 import os
 import subprocess
@@ -1394,16 +1406,122 @@ class ValidationToolkit:
             if tmp_path and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def apply_hunk_dry_run_structured(
+        self,
+        hunk_id: str,
+        target_file_path: str,
+        hunk_text: str,
+        context_lines: Optional[List[str]] = None,
+    ) -> HunkValidationResult:
+        """
+        Validates a hunk and returns a structured HunkValidationResult (CLAW-inspired).
+
+        Instead of returning a simple dict with success/failure, this returns a rich
+        HunkValidationResult object with error metadata, context, and suggestions.
+
+        Args:
+            hunk_id: Identifier for this hunk (for tracking)
+            target_file_path: Relative path of the target file
+            hunk_text: The unified diff hunk text
+            context_lines: Optional surrounding code for error context
+
+        Returns:
+            HunkValidationResult with detailed error information if validation fails
+        """
+        result = self.apply_hunk_dry_run(target_file_path, hunk_text)
+
+        if result.get("success"):
+            # Success case
+            return HunkValidationResult(
+                hunk_id=hunk_id,
+                is_error=False,
+                validation_output=result.get("output"),
+                applied_successfully=True,
+                context_lines=context_lines or [],
+            )
+
+        # Failure case: create structured error with categorization and suggestions
+        error_output = result.get("output", "Unknown error")
+        error_type, suggestions = self._categorize_validation_error(
+            error_output, hunk_text
+        )
+
+        error = HunkValidationError(
+            error_type=error_type,
+            message=error_output,
+            context_lines=context_lines or [],
+            suggestions=suggestions,
+            raw_output=error_output,
+        )
+
+        return HunkValidationResult(
+            hunk_id=hunk_id,
+            is_error=True,
+            error=error,
+            validation_output=error_output,
+            applied_successfully=False,
+            context_lines=context_lines or [],
+        )
+
+    def _categorize_validation_error(self, error_output: str, hunk_text: str) -> tuple:
+        """
+        Categorize a validation error and suggest fixes.
+
+        Returns:
+            (HunkValidationErrorType, List[str] of suggestions)
+        """
+        suggestions = []
+
+        # Check for specific error patterns
+        if "malformed patch" in error_output.lower():
+            suggestions.append("Check hunk header format (should start with @@)")
+            suggestions.append("Verify line numbers match target file")
+            return HunkValidationErrorType.MALFORMED_PATCH, suggestions
+
+        if (
+            "context.*does not match" in error_output.lower()
+            or "patch does not apply" in error_output.lower()
+        ):
+            suggestions.append(
+                "Target file may have different code at the hunk location"
+            )
+            suggestions.append("Review line numbers - target code may have changed")
+            suggestions.append("Check if required dependencies or imports are present")
+            return HunkValidationErrorType.CONTEXT_MISMATCH, suggestions
+
+        if "No such file" in error_output or "not found" in error_output.lower():
+            suggestions.append("Target file does not exist - may need CREATE operation")
+            suggestions.append("Check file path mapping from source to target")
+            return HunkValidationErrorType.CONTEXT_MISMATCH, suggestions
+
+        if "Hunk #" in error_output and "FAILED" in error_output:
+            # GNU patch indicates which hunk failed
+            suggestions.append("One or more hunks failed to apply")
+            suggestions.append("Check if file was modified or has different structure")
+            return HunkValidationErrorType.APPLY_FAILED, suggestions
+
+        if "offset" in error_output.lower() or "adjust" in error_output.lower():
+            suggestions.append("Hunk line numbers have shifted due to prior changes")
+            suggestions.append(
+                "Consider reordering hunks or recalculating line numbers"
+            )
+            return HunkValidationErrorType.LINE_OFFSET_ERROR, suggestions
+
+        # Default: unknown error
+        suggestions.append("Review hunk content and target file carefully")
+        suggestions.append("Run git diff to see exact differences in target repo")
+        return HunkValidationErrorType.UNKNOWN, suggestions
+
     def apply_adapted_hunks(self, code_hunks: list, test_hunks: list) -> Dict:
         """
-                Applies the full set of adapted code and test hunks to the target repo
-                using a resilient multi-pass strategy.
+        Applies the full set of adapted code and test hunks to the target repo
+        using a resilient multi-pass strategy.
 
-                Strategy:
-                    1) Build one unified diff section per file with hunks in bottom-to-top order.
-                    2) Try strict git apply with recount.
-                    3) Retry git apply with whitespace-tolerant flags.
-                    4) Fallback to GNU patch dry-run + apply (fuzzy matching/offset support).
+        Strategy:
+            1) Build one unified diff section per file with hunks in bottom-to-top order.
+            2) Try strict git apply with recount.
+            3) Retry git apply with whitespace-tolerant flags.
+            4) Fallback to GNU patch dry-run + apply (fuzzy matching/offset support).
 
         Args:
             code_hunks: List of AdaptedHunk dicts for code changes.
@@ -2097,6 +2215,50 @@ class ValidationToolkit:
                 "failed_tests": [],
             }
 
+    def create_patch_retry_context(
+        self,
+        patch_id: str,
+        failed_hunk_ids: List[str],
+        target_file_path: str,
+        assembly_error_messages: List[str],
+        suggestions: Optional[List[str]] = None,
+    ) -> PatchRetryContext:
+        """
+        Create a PatchRetryContext for when Phase 4 (Validation) encounters failures.
+        This context is passed back to Phase 3 (Hunk Generator) for LLM-driven retry.
+
+        Follows CLAW's pattern of rich error feedback rather than silent failures.
+
+        Args:
+            patch_id: ID of the patch being retried
+            failed_hunk_ids: List of hunk IDs that failed
+            target_file_path: Path to the file being patched
+            assembly_error_messages: Error messages from patch assembly
+            suggestions: Optional list of fix suggestions
+
+        Returns:
+            PatchRetryContext with full context for retry
+        """
+        try:
+            # Read the target file to provide full context to LLM
+            full_path = os.path.join(self.target_repo_path, target_file_path)
+            if os.path.exists(full_path) and os.path.isfile(full_path):
+                with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                    file_content = f.read()
+            else:
+                file_content = f"[File not found at {target_file_path}]"
+        except Exception as e:
+            file_content = f"[Error reading file: {e}]"
+
+        return PatchRetryContext(
+            patch_id=patch_id,
+            failed_hunks=[],  # Would be populated with HunkValidationResult objects by caller
+            target_file_path=target_file_path,
+            target_file_content=file_content,
+            assembly_error_messages=assembly_error_messages,
+            suggestions_from_phase4=suggestions or [],
+        )
+
     def restore_repo_state(self) -> bool:
         """
         Restores the target repository to a clean state, reverting any uncommitted patches.
@@ -2260,3 +2422,227 @@ class ValidationToolkit:
             )
 
         return header + body
+
+    def _extract_hunk_context(self, hunk_text: str) -> tuple[str, str]:
+        """
+        Extract the old_string and new_string from a unified diff hunk.
+
+        This parses a standard unified diff hunk and reconstructs the exact
+        strings that need to match for the patch to apply.
+
+        Args:
+            hunk_text: Unified diff hunk starting with @@
+
+        Returns:
+            Tuple of (old_string, new_string) - exact text to match and replace
+        """
+        lines = hunk_text.strip().split("\n")
+
+        if not lines or not lines[0].startswith("@@"):
+            return "", ""
+
+        old_lines_list = []
+        new_lines_list = []
+
+        for line in lines[1:]:
+            if line.startswith("-") and not line.startswith("---"):
+                # Removed line
+                old_lines_list.append(line[1:])
+            elif line.startswith("+") and not line.startswith("+++"):
+                # Added line
+                new_lines_list.append(line[1:])
+            elif line.startswith(" "):
+                # Context line
+                old_lines_list.append(line[1:])
+                new_lines_list.append(line[1:])
+            elif line.startswith("\\"):
+                # "\ No newline at end of file" marker
+                continue
+
+        old_string = "\n".join(old_lines_list)
+        new_string = "\n".join(new_lines_list)
+
+        return old_string, new_string
+
+    def apply_hunk_with_claw_approach(
+        self,
+        target_file_path: str,
+        hunk_text: str,
+    ) -> Dict:
+        """
+        Apply CLAW's approach to hunk application:
+        1. Pre-validate that old_string exists BEFORE mutation
+        2. Use exact string matching (no fuzzy)
+        3. Return structured patch for verification
+
+        This solves line number offset issues by using exact matching
+        instead of relying on line number calculations.
+
+        Args:
+            target_file_path: Relative path to file (from repo root)
+            hunk_text: Unified diff hunk text
+
+        Returns:
+            Dict with success status and details
+        """
+        # Step 1: Normalize path
+        target_file = (target_file_path or "").strip().replace("\\", "/").lstrip("/")
+        if target_file.startswith("a/") or target_file.startswith("b/"):
+            target_file = target_file[2:]
+
+        full_path = os.path.normpath(os.path.join(self.target_repo_path, target_file))
+
+        # Step 2: Read the file
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                original_content = f.read()
+        except Exception as e:
+            return {
+                "success": False,
+                "file_path": target_file,
+                "error": "file_read_error",
+                "message": f"Could not read file: {str(e)}",
+            }
+
+        # Step 3: Extract old/new strings from hunk
+        old_string, new_string = self._extract_hunk_context(hunk_text)
+
+        if not old_string:
+            return {
+                "success": False,
+                "file_path": target_file,
+                "error": "hunk_parse_error",
+                "message": "Could not parse hunk to extract context",
+            }
+
+        # Step 4: Pre-validate (CLAW approach - BEFORE mutation)
+        if old_string not in original_content:
+            return {
+                "success": False,
+                "file_path": target_file,
+                "error": "context_not_found",
+                "message": f"Could not find exact context in {target_file}",
+                "suggestions": [
+                    "Context lines may have changed",
+                    "Check whitespace and indentation",
+                    "The file may have been modified since the patch was generated",
+                ],
+                "old_string_preview": old_string[:100] + "..."
+                if len(old_string) > 100
+                else old_string,
+            }
+
+        # Step 5: Apply change
+        updated_content = original_content.replace(old_string, new_string, 1)
+
+        # Step 6: Write to disk
+        try:
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(updated_content)
+        except Exception as e:
+            return {
+                "success": False,
+                "file_path": target_file,
+                "error": "file_write_error",
+                "message": f"Could not write file: {str(e)}",
+            }
+
+        return {
+            "success": True,
+            "file_path": target_file,
+            "message": "Hunk applied successfully",
+        }
+
+    def apply_adapted_hunks_claw_style(
+        self, code_hunks: list, test_hunks: list
+    ) -> Dict:
+        """
+        Apply hunks using CLAW's proven approach:
+        - Extract exact strings from hunk context
+        - Pre-validate before mutation
+        - Apply one hunk at a time
+        - Return structured output with detailed results
+
+        This replaces the git apply fallback approach with exact string matching,
+        which is more reliable for generated patches.
+
+        Args:
+            code_hunks: List of AdaptedHunk dicts for code changes
+            test_hunks: List of AdaptedHunk dicts for test changes
+
+        Returns:
+            Dict with success status and results
+        """
+        all_hunks = list(code_hunks) + list(test_hunks)
+        if not all_hunks:
+            return {
+                "success": False,
+                "message": "No hunks to apply",
+                "results": [],
+                "applied_files": [],
+            }
+
+        results = []
+        applied_files = []
+        failed_count = 0
+
+        # Apply each hunk
+        for hunk in all_hunks:
+            target_file = hunk.get("target_file")
+            hunk_text = hunk.get("hunk_text", "")
+            hunk_id = hunk.get("hunk_id", "unknown")
+
+            if not hunk_text or not hunk_text.strip():
+                # Skip empty hunks (structural operations only)
+                results.append(
+                    {
+                        "hunk_id": hunk_id,
+                        "file": target_file,
+                        "status": "skipped",
+                        "reason": "empty_hunk",
+                    }
+                )
+                continue
+
+            # Apply using CLAW approach
+            result = self.apply_hunk_with_claw_approach(target_file, hunk_text)
+
+            if result["success"]:
+                results.append(
+                    {
+                        "hunk_id": hunk_id,
+                        "file": target_file,
+                        "status": "applied",
+                    }
+                )
+                if target_file not in applied_files:
+                    applied_files.append(target_file)
+            else:
+                results.append(
+                    {
+                        "hunk_id": hunk_id,
+                        "file": target_file,
+                        "status": "failed",
+                        "error": result.get("error"),
+                        "message": result.get("message"),
+                        "suggestions": result.get("suggestions", []),
+                    }
+                )
+                failed_count += 1
+
+        # Build summary
+        if failed_count > 0:
+            return {
+                "success": False,
+                "message": f"{failed_count} hunk(s) failed to apply",
+                "results": results,
+                "applied_files": applied_files,
+                "failed_count": failed_count,
+            }
+
+        return {
+            "success": True,
+            "message": "All hunks applied successfully",
+            "results": results,
+            "applied_files": applied_files,
+        }

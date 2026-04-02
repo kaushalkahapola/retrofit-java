@@ -1,4 +1,4 @@
-from typing import TypedDict, Annotated, Optional, NotRequired
+from typing import TypedDict, Annotated, Optional, NotRequired, Dict, Any
 import operator
 from langchain_core.messages import BaseMessage
 
@@ -85,6 +85,12 @@ class AdaptedHunk(TypedDict):
         bool
     ]  # False when operation is already applied/not needed
     path_resolution_reason: NotRequired[str]  # Trace hint for path decision
+    dry_run_error: NotRequired[
+        Optional[Dict[str, Any]]
+    ]  # CLAW-inspired: structured error info from Phase 3 dry-run validation
+    dry_run_error_message: NotRequired[
+        Optional[str]
+    ]  # Human-readable error from Phase 3 validation
 
 
 # ---------------------------------------------------------------------------
