@@ -42,6 +42,10 @@ public class GetClassContextTool {
         }
 
         StringBuilder contextBuilder = new StringBuilder();
+        // Container to track line numbers of focused method
+        Map<String, Object> lineInfo = new HashMap<>();
+        lineInfo.put("start_line", null);
+        lineInfo.put("end_line", null);
 
         // 1. Package & Imports (Approximation: Spoon doesn't easily give raw imports in
         // no-classpath mode,
@@ -61,13 +65,25 @@ public class GetClassContextTool {
             }
 
             // 2. Class Structure
-            printTypeStructure(type, focusMethod, contextBuilder, "");
+            printTypeStructure(type, focusMethod, contextBuilder, "", lineInfo);
         }
 
-        return Map.of("context", contextBuilder.toString());
+        // Build result with line numbers as separate fields
+        Map<String, Object> result = new HashMap<>();
+        result.put("context", contextBuilder.toString());
+        result.put("file_path", filePath);
+        
+        // Include line numbers if they were found
+        if (lineInfo.get("start_line") != null) {
+            result.put("start_line", lineInfo.get("start_line"));
+            result.put("end_line", lineInfo.get("end_line"));
+            result.put("method_name", focusMethod);
+        }
+        
+        return result;
     }
 
-    private void printTypeStructure(CtType<?> type, String focusMethod, StringBuilder sb, String indent) {
+    private void printTypeStructure(CtType<?> type, String focusMethod, StringBuilder sb, String indent, Map<String, Object> lineInfo) {
         // Annotations
         for (spoon.reflect.declaration.CtAnnotation<?> annotation : type.getAnnotations()) {
             sb.append(indent).append(annotation.toString()).append("\n");
@@ -136,6 +152,10 @@ public class GetClassContextTool {
                 int startLine = method.getPosition().isValidPosition() ? method.getPosition().getLine() : -1;
                 int endLine = method.getPosition().isValidPosition() ? method.getPosition().getEndLine() : -1;
 
+                // STORE line info for return to caller
+                lineInfo.put("start_line", startLine);
+                lineInfo.put("end_line", endLine);
+
                 sb.append(childIndent).append("// [FOCUS] Full Body (Lines ").append(startLine).append("-")
                         .append(endLine).append(")\n");
 
@@ -197,7 +217,7 @@ public class GetClassContextTool {
         // Inner Types
         for (CtType<?> innerType : type.getNestedTypes()) {
             sb.append("\n");
-            printTypeStructure(innerType, focusMethod, sb, childIndent);
+            printTypeStructure(innerType, focusMethod, sb, childIndent, lineInfo);
         }
 
         sb.append(indent).append("}\n");

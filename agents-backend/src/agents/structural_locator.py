@@ -101,22 +101,47 @@ def _extract_line_range(context_output) -> tuple[int | None, int | None, str]:
     Parses the output of get_class_context() (an MCP tool response) to extract
     the method start/end line numbers and raw code snippet.
 
-    The MCP tool typically returns a dict like:
-        {"context": "...", "start_line": 42, "end_line": 88}
-    or embeds the line numbers in the context string as comments.
+    The MCP tool now returns a dict like:
+        {"context": "...", "start_line": 42, "end_line": 88, "file_path": "...", "method_name": "..."}
 
     Returns:
         (start_line, end_line, code_snippet)
     """
     if isinstance(context_output, dict):
-        start = context_output.get("start_line") or context_output.get("startLine")
-        end = context_output.get("end_line") or context_output.get("endLine")
+        # PRIORITY 1: Try direct extraction from JSON fields (new format)
+        start = context_output.get("start_line")
+        end = context_output.get("end_line")
         snippet = context_output.get("context", context_output.get("body", ""))
-        if start and end:
-            return int(start), int(end), str(snippet)
-
-        # Try parsing from the context string itself (e.g. "/* L42 */ void foo() {")
+        
+        # Check if we got valid integers
+        if start is not None and end is not None:
+            try:
+                return int(start), int(end), str(snippet)
+            except (ValueError, TypeError):
+                pass
+        
+        # PRIORITY 2: Try parsing from the context string (embedded comments)
+        # Look for patterns like "// [FOCUS] Full Body (Lines 42-88)"
         snippet_str = str(snippet)
+        
+        # Pattern: "// [FOCUS] Full Body (Lines 42-88)"
+        m = re.search(r"// \[FOCUS\] Full Body \(Lines (\d+)-(\d+)\)", snippet_str)
+        if m:
+            start = int(m.group(1))
+            end = int(m.group(2))
+            return start, end, snippet_str
+        
+        # Pattern: "// Line 42" (for individual methods)
+        lines_found = re.findall(r"// Line (\d+)", snippet_str)
+        if lines_found:
+            try:
+                start = int(lines_found[0])
+                end = int(lines_found[-1])
+                return start, end, snippet_str
+            except (ValueError, IndexError):
+                pass
+        
+        # PRIORITY 3: Fallback - try old format patterns
         m = re.search(r"/\*\s*L(\d+)", snippet_str)
         if m:
             start = int(m.group(1))

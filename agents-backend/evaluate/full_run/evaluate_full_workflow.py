@@ -53,7 +53,7 @@ RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 PHASE0_CACHE_DIR = os.path.join(os.path.dirname(__file__), "phase0_cache")
 
 TARGET_PROJECTS = ["elasticsearch"]
-MAX_PATCHES_PER_PROJECT = 3
+MAX_PATCHES_PER_PROJECT = 4
 
 
 def ensure_dirs() -> None:
@@ -912,6 +912,20 @@ async def run_full_pipeline(
         if patch_err:
             results["developer_patch_error"] = patch_err
             return results
+
+        # Save both patches to the results folder
+        project_dir = os.path.join(RESULTS_DIR, project, patch_id)
+        os.makedirs(project_dir, exist_ok=True)
+        
+        mainline_patch_file = os.path.join(project_dir, "mainline.patch")
+        with open(mainline_patch_file, "w", encoding="utf-8") as f:
+            f.write(patch_output)
+        print(f"[{project}/{patch_id}] Saved mainline patch to {mainline_patch_file}")
+        
+        target_patch_file = os.path.join(project_dir, "target.patch")
+        with open(target_patch_file, "w", encoding="utf-8") as f:
+            f.write(developer_patch_diff)
+        print(f"[{project}/{patch_id}] Saved target patch to {target_patch_file}")
 
         analyzer = PatchAnalyzer()
         full_patch_analysis = analyzer.analyze(patch_output, with_test_changes=True)
