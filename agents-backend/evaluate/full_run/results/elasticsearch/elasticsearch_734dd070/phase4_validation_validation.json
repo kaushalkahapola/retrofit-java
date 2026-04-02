@@ -1,0 +1,29 @@
+{
+  "validation_passed": false,
+  "validation_attempts": 3,
+  "validation_error_context": "Hunk application failed: The root cause of the patch failure is likely due to a signature mismatch or changes in the `DataNodeRequestSender.java` file that conflict with the patch being applied. Specifically, the error indicates that the patch cannot be applied at line 59, suggesting that the context around that line has changed. To resolve this, regenerate the hunk by ensuring the target file is in the expected state before applying the patch, or manually adjust the patch to align with the current file structure.",
+  "validation_results": {
+    "hunk_application": {
+      "success": false,
+      "raw": "[git-apply-strict] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:59\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[git-apply-whitespace-tolerant] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:59\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[gnu-patch-dry-run] patch: **** malformed patch at line 84: diff --git a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java",
+      "agent_evaluation": "The root cause of the patch failure is likely due to a signature mismatch or changes in the `DataNodeRequestSender.java` file that conflict with the patch being applied. Specifically, the error indicates that the patch cannot be applied at line 59, suggesting that the context around that line has changed. To resolve this, regenerate the hunk by ensuring the target file is in the expected state before applying the patch, or manually adjust the patch to align with the current file structure.",
+      "error_context": "The root cause of the patch failure is likely due to a signature mismatch or changes in the `DataNodeRequestSender.java` file that conflict with the patch being applied. Specifically, the error indicates that the patch cannot be applied at line 59, suggesting that the context around that line has changed. To resolve this, regenerate the hunk by ensuring the target file is in the expected state before applying the patch, or manually adjust the patch to align with the current file structure.",
+      "diagnostics": {
+        "category": "context_mismatch",
+        "retry_files": [
+          "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java"
+        ],
+        "issues": [
+          {
+            "error_type": "malformed_patch",
+            "suggested_action": "regenerate_hunk"
+          }
+        ]
+      }
+    }
+  },
+  "validation_failure_category": "context_mismatch",
+  "validation_retry_files": [
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java"
+  ]
+}
