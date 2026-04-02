@@ -5,7 +5,7 @@
     "dependent_apis": [
       "DiscoveryNode",
       "TargetShards",
-      "NODE_QUERY_ORDER"
+      "ShardId"
     ],
     "patch_intent_summary": "To ensure that requests to data nodes are sent in an order that respects the roles of the nodes.",
     "hunk_chain": [
@@ -14,7 +14,7 @@
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
         "summary": "Added import for `DiscoveryNodeRole` to access node role constants.",
         "role": "declaration",
-        "connects_to_next": "This import is necessary for defining the order of node roles in the subsequent hunk.",
+        "connects_to_next": "This import is necessary for defining the order of node roles in the next hunk.",
         "global_index": 1
       },
       {
@@ -22,30 +22,30 @@
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
         "summary": "Added imports for `Comparator` and `LinkedHashMap` to facilitate sorting and maintaining order.",
         "role": "declaration",
-        "connects_to_next": "These imports are required for implementing the sorting logic in the new methods introduced in the next hunk.",
+        "connects_to_next": "These imports are required for implementing the sorting logic in the subsequent hunk.",
         "global_index": 2
       },
       {
         "hunk_index": 3,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Defined a static list `NODE_QUERY_ORDER` that specifies the order of node roles for query processing.",
+        "summary": "Defined a static list `NODE_QUERY_ORDER` that specifies the order of node roles for querying.",
         "role": "declaration",
-        "connects_to_next": "This list is used in the new `order` method to determine the order in which nodes should be processed.",
+        "connects_to_next": "This list provides the necessary order for the sorting logic implemented in the next hunk.",
         "global_index": 3
       },
       {
         "hunk_index": 4,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Implemented the `order` method to sort the shards based on the roles of the nodes and their order.",
+        "summary": "Implemented the `order(TargetShards targetShards)` method to sort shards based on node roles.",
         "role": "core_fix",
-        "connects_to_next": "This method provides the core functionality needed to order the shards correctly, which is then utilized in the next hunk.",
+        "connects_to_next": "This method is called in the next hunk to replace the previous logic for adding pending shard IDs.",
         "global_index": 4
       },
       {
         "hunk_index": 5,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Changed the type of `nodeToShardIds` from `HashMap` to `LinkedHashMap` to maintain insertion order.",
-        "role": "cleanup",
+        "summary": "Changed the way pending shard IDs are added by calling the new `order` method.",
+        "role": "propagation",
         "connects_to_next": "",
         "global_index": 5
       }

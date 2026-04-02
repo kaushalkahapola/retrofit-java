@@ -23,7 +23,7 @@
 | 2 | declaration | `<import>` | `<import>` | 39–39 |
 | 3 | declaration | `<class_declaration>` | `<class_declaration>` | 59–59 |
 | 4 | core_fix | `trySendingRequestsForPendingShards` | `trySendingRequestsForPendingShards` | 129–129 |
-| 5 | cleanup | `selectNodeRequests` | `selectNodeRequests` | 341–341 |
+| 5 | propagation | `selectNodeRequests` | `selectNodeRequests` | 341–341 |
 ## Test File Mappings
 
 
