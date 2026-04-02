@@ -1,0 +1,29 @@
+{
+  "validation_passed": false,
+  "validation_attempts": 3,
+  "validation_error_context": "Hunk application failed: The root cause of the hunk application failure is likely a signature mismatch or a conflict in the `DataNodeRequestSender.java` file at line 129, indicating that the patch cannot be applied due to existing changes in that line. To resolve this, review the current implementation at that line, manually apply the necessary changes from the patch, and regenerate the hunk to ensure it aligns with the latest codebase. After making the adjustments, re-run the patch application to confirm successful integration.",
+  "validation_results": {
+    "hunk_application": {
+      "success": false,
+      "raw": "Hunk application failed for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java at line 129:\n[git-apply-strict] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:129\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[git-apply-whitespace-tolerant] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:129\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[gnu-patch-dry-run] The next patch would create the file x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java,\nwhich already exists!  Skipping patch.\n1 out of 1 hunk ignored",
+      "agent_evaluation": "The root cause of the hunk application failure is likely a signature mismatch or a conflict in the `DataNodeRequestSender.java` file at line 129, indicating that the patch cannot be applied due to existing changes in that line. To resolve this, review the current implementation at that line, manually apply the necessary changes from the patch, and regenerate the hunk to ensure it aligns with the latest codebase. After making the adjustments, re-run the patch application to confirm successful integration.",
+      "error_context": "The root cause of the hunk application failure is likely a signature mismatch or a conflict in the `DataNodeRequestSender.java` file at line 129, indicating that the patch cannot be applied due to existing changes in that line. To resolve this, review the current implementation at that line, manually apply the necessary changes from the patch, and regenerate the hunk to ensure it aligns with the latest codebase. After making the adjustments, re-run the patch application to confirm successful integration.",
+      "diagnostics": {
+        "category": "context_mismatch",
+        "retry_files": [
+          "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java"
+        ],
+        "issues": [
+          {
+            "error_type": "context_mismatch",
+            "suggested_action": "regenerate_hunk"
+          }
+        ]
+      }
+    }
+  },
+  "validation_failure_category": "context_mismatch",
+  "validation_retry_files": [
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java"
+  ]
+}

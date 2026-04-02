@@ -1,7 +1,7 @@
 # Structural Locator Trace
 
 ## Blueprint Summary
-- **Root Cause**: The method for ordering nodes for shard requests did not consider the roles of the nodes, potentially leading to inefficient query execution.
+- **Root Cause**: Lack of proper ordering of nodes based on their roles when sending requests to data nodes.
 
 ## Hunk Segregation
 - Code files: 1
