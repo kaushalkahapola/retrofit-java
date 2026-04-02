@@ -1,19 +1,20 @@
 {
   "semantic_blueprint": {
-    "root_cause_hypothesis": "Lack of proper ordering of nodes based on their roles when sending requests.",
-    "fix_logic": "Introduced a new method `order(TargetShards targetShards)` to sort the shards based on the roles of the nodes.",
+    "root_cause_hypothesis": "Lack of proper ordering of nodes based on their roles when sending requests to data nodes.",
+    "fix_logic": "Introduced a new method `order(TargetShards targetShards)` to sort the shards based on the roles of the nodes, utilizing a predefined order of node roles.",
     "dependent_apis": [
       "DiscoveryNode",
-      "TargetShards"
+      "TargetShards",
+      "ShardId"
     ],
-    "patch_intent_summary": "To ensure that requests are sent to nodes in a specific order based on their roles.",
+    "patch_intent_summary": "To ensure that requests to data nodes are sent in an order that respects the roles of the nodes.",
     "hunk_chain": [
       {
         "hunk_index": 1,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Added import for `DiscoveryNodeRole` to access node roles.",
+        "summary": "Added import for `DiscoveryNodeRole` to access node role constants.",
         "role": "declaration",
-        "connects_to_next": "This import is necessary for defining the order of nodes based on their roles in the subsequent hunks.",
+        "connects_to_next": "This import is necessary for defining the order of node roles in the next hunk.",
         "global_index": 1
       },
       {
@@ -21,30 +22,30 @@
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
         "summary": "Added imports for `Comparator` and `LinkedHashMap` to facilitate sorting and maintaining order.",
         "role": "declaration",
-        "connects_to_next": "These imports are essential for implementing the sorting logic in the `order` method that follows.",
+        "connects_to_next": "These imports are required for implementing the sorting logic in the subsequent hunk.",
         "global_index": 2
       },
       {
         "hunk_index": 3,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Defined a static list `NODE_QUERY_ORDER` that specifies the order of node roles.",
+        "summary": "Defined a static list `NODE_QUERY_ORDER` that specifies the order of node roles for query processing.",
         "role": "declaration",
-        "connects_to_next": "This list provides the criteria for sorting nodes in the `order` method, which is implemented in the next hunk.",
+        "connects_to_next": "This list provides the necessary order for the sorting logic implemented in the next hunk.",
         "global_index": 3
       },
       {
         "hunk_index": 4,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Implemented the `order` method to sort shards based on the roles of their corresponding nodes.",
+        "summary": "Implemented the `order(TargetShards targetShards)` method to sort shards based on the roles of their corresponding nodes.",
         "role": "core_fix",
-        "connects_to_next": "This method is called in the next hunk to ensure that the pending shard IDs are processed in the correct order.",
+        "connects_to_next": "This method is called in the next hunk to replace the previous method of adding pending shard IDs.",
         "global_index": 4
       },
       {
         "hunk_index": 5,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Changed the type of `nodeToShardIds` from `HashMap` to `LinkedHashMap` to maintain insertion order.",
-        "role": "cleanup",
+        "summary": "Changed the way pending shard IDs are added by calling the new `order` method instead of directly adding them.",
+        "role": "propagation",
         "connects_to_next": "",
         "global_index": 5
       }

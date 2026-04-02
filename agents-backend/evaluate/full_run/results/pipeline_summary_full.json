@@ -5,7 +5,7 @@
     "mainline_commit": "734dd070e719f0bac49953fbfb983fe8f19bd1de",
     "backport_commit": "c5a3eb86ffd964343865e2f48423f850f8f916ad",
     "run_mode": "full",
-    "timestamp": "2026-04-02T13:19:03.565505",
+    "timestamp": "2026-04-02T15:11:47.440365",
     "phases": {
       "phase1_context_analyzer": {
         "context_analyzer": {
@@ -17,7 +17,7 @@
               "dependent_apis": [
                 "DiscoveryNode",
                 "TargetShards",
-                "NODE_QUERY_ORDER"
+                "ShardId"
               ],
               "patch_intent_summary": "To ensure that requests to data nodes are sent in an order that respects the roles of the nodes.",
               "hunk_chain": [
@@ -42,22 +42,22 @@
                   "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
                   "summary": "Defined a static list `NODE_QUERY_ORDER` that specifies the order of node roles for query processing.",
                   "role": "declaration",
-                  "connects_to_next": "This list provides the necessary role order that will be used in the sorting logic in the next hunk.",
+                  "connects_to_next": "This list provides the necessary order for the sorting logic implemented in the next hunk.",
                   "global_index": 3
                 },
                 {
                   "hunk_index": 4,
                   "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-                  "summary": "Implemented the `order(TargetShards targetShards)` method to sort shards based on node roles.",
+                  "summary": "Implemented the `order(TargetShards targetShards)` method to sort shards based on the roles of their corresponding nodes.",
                   "role": "core_fix",
-                  "connects_to_next": "This method is called in the next hunk to ensure that the shards are processed in the correct order.",
+                  "connects_to_next": "This method is called in the next hunk to replace the previous method of adding pending shard IDs.",
                   "global_index": 4
                 },
                 {
                   "hunk_index": 5,
                   "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-                  "summary": "Changed the type of `nodeToShardIds` from `HashMap` to `LinkedHashMap` to maintain insertion order.",
-                  "role": "cleanup",
+                  "summary": "Changed the way pending shard IDs are added by calling the new `order` method instead of directly adding them.",
+                  "role": "propagation",
                   "connects_to_next": "",
                   "global_index": 5
                 }
@@ -154,19 +154,13 @@
               {
                 "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
                 "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-                "hunk_text": "@@ -59,6 +59,20 @@\n  * and executing these computes on the data nodes.\n  */\n abstract class DataNodeRequestSender {\n+\n+    /**\n+     * Query order according to the\n+     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n+     */\n+    private static final List<String> NODE_QUERY_ORDER = List.of(\n+        DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()\n+    );\n+\n     private final TransportService transportService;\n     private final Executor esqlExecutor;\n     private final CancellableTask rootTask;\n",
+                "hunk_text": "@@ -61,2 +61,16 @@\n abstract class DataNodeRequestSender {\n+\n+    /**\n+     * Query order according to the\n+     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n+     */\n+    private static final List<String> NODE_QUERY_ORDER = List.of(\n+        DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()\n+    );\n+\n \n",
                 "insertion_line": 59,
                 "intent_verified": false,
                 "file_operation": "MODIFIED",
                 "old_target_file": null,
                 "file_operation_required": true,
-                "path_resolution_reason": "modified_target_mapped",
-                "dry_run_error": {
-                  "error_message": "error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:59\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n",
-                  "tool": "git-apply-check",
-                  "timestamp": "2026-04-02 13:20:06.314562"
-                },
-                "dry_run_error_message": "error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:59\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n"
+                "path_resolution_reason": "modified_target_mapped"
               },
               {
                 "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
@@ -181,14 +175,14 @@
                 "dry_run_error": {
                   "error_message": "error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:129\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n",
                   "tool": "git-apply-check",
-                  "timestamp": "2026-04-02 13:20:14.090299"
+                  "timestamp": "2026-04-02 15:25:34.274928"
                 },
                 "dry_run_error_message": "error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:129\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n"
               },
               {
                 "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
                 "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-                "hunk_text": "@@ -335,7 +335,7 @@\n     private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {\n         assert sendingLock.isHeldByCurrentThread();\n-        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new HashMap<>();\n+        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();\n         final Iterator<ShardId> shardsIt = pendingShardIds.iterator();\n \n         while (shardsIt.hasNext()) {\n",
+                "hunk_text": "@@ -341,7 +341,7 @@\n      */\n     private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {\n         assert sendingLock.isHeldByCurrentThread();\n-        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new HashMap<>();\n+        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();\n         final Iterator<ShardId> shardsIt = pendingShardIds.iterator();\n \n         while (shardsIt.hasNext()) {\n",
                 "insertion_line": 341,
                 "intent_verified": false,
                 "file_operation": "MODIFIED",
@@ -207,13 +201,13 @@
           "outputs": {
             "validation_passed": false,
             "validation_attempts": 3,
-            "validation_error_context": "Hunk application failed: The root cause of the hunk application failure is likely a signature mismatch or a conflict in the `DataNodeRequestSender.java` file at line 129, indicating that the patch cannot be applied due to existing changes in that line. To resolve this, review the current implementation at that line, manually apply the necessary changes from the patch, and regenerate the hunk to ensure it aligns with the latest codebase. After making the adjustments, re-run the patch application to confirm successful integration.",
+            "validation_error_context": "Hunk application failed: The root cause of the hunk application failure is a signature mismatch, likely due to changes in the `DataNodeRequestSender.java` file that conflict with the patch being applied. Specifically, the patch is trying to modify line 129, but the expected context has changed, leading to the \"old_string not found\" error. To resolve this, regenerate the hunk by ensuring the patch is based on the latest version of the file, or manually apply the changes to the current file state.",
             "validation_results": {
               "hunk_application": {
                 "success": false,
-                "raw": "Hunk application failed for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java at line 129:\n[git-apply-strict] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:129\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[git-apply-whitespace-tolerant] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:129\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[gnu-patch-dry-run] The next patch would create the file x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java,\nwhich already exists!  Skipping patch.\n1 out of 1 hunk ignored",
-                "agent_evaluation": "The root cause of the hunk application failure is likely a signature mismatch or a conflict in the `DataNodeRequestSender.java` file at line 129, indicating that the patch cannot be applied due to existing changes in that line. To resolve this, review the current implementation at that line, manually apply the necessary changes from the patch, and regenerate the hunk to ensure it aligns with the latest codebase. After making the adjustments, re-run the patch application to confirm successful integration.",
-                "error_context": "The root cause of the hunk application failure is likely a signature mismatch or a conflict in the `DataNodeRequestSender.java` file at line 129, indicating that the patch cannot be applied due to existing changes in that line. To resolve this, review the current implementation at that line, manually apply the necessary changes from the patch, and regenerate the hunk to ensure it aligns with the latest codebase. After making the adjustments, re-run the patch application to confirm successful integration.",
+                "raw": "Hunk application failed for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java at line 129:\n[git-apply-strict] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:129\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[git-apply-whitespace-tolerant] error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:129\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n[gnu-patch-dry-run] The next patch would create the file x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java,\nwhich already exists!  Skipping patch.\n1 out of 1 hunk ignored\n\n[claw-exact-match] old_string not found in file",
+                "agent_evaluation": "The root cause of the hunk application failure is a signature mismatch, likely due to changes in the `DataNodeRequestSender.java` file that conflict with the patch being applied. Specifically, the patch is trying to modify line 129, but the expected context has changed, leading to the \"old_string not found\" error. To resolve this, regenerate the hunk by ensuring the patch is based on the latest version of the file, or manually apply the changes to the current file state.",
+                "error_context": "The root cause of the hunk application failure is a signature mismatch, likely due to changes in the `DataNodeRequestSender.java` file that conflict with the patch being applied. Specifically, the patch is trying to modify line 129, but the expected context has changed, leading to the \"old_string not found\" error. To resolve this, regenerate the hunk by ensuring the patch is based on the latest version of the file, or manually apply the changes to the current file state.",
                 "diagnostics": {
                   "category": "context_mismatch",
                   "retry_files": [
@@ -243,7 +237,7 @@
       "mismatched_files": [],
       "developer_files": [],
       "generated_files": [],
-      "error": "Failed to apply generated patch in temporary index: error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:59\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n\nerror: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:59\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n"
+      "error": "Failed to apply generated patch in temporary index: error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:129\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n\n\nerror: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:129\nerror: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java: patch does not apply\n"
     },
     "status": "completed"
   }
