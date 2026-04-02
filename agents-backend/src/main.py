@@ -145,20 +145,28 @@ async def main():
                     print("----")
                     with open(log_file_path, "a", encoding="utf-8") as log_f:
                         log_f.write("----\n")
-        except Exception as e:
-            print(f"Interrupted: {e}")
+        except (Exception, KeyboardInterrupt) as e:
+            msg = (
+                f"Interrupted: {e}"
+                if not isinstance(e, KeyboardInterrupt)
+                else "Interrupted by user (KeyboardInterrupt)"
+            )
+            print(f"\n{msg}")
             with open(log_file_path, "a", encoding="utf-8") as log_f:
-                log_f.write(f"INTERRUPTED: {e}\n")
+                log_f.write(f"\n{msg}\n")
         finally:
             # Write final token counts
-            with open(tokens_file_path, "w", encoding="utf-8") as token_f:
-                token_f.write(f"Input tokens: {total_tokens['input']}\n")
-                token_f.write(f"Output tokens: {total_tokens['output']}\n")
-                token_f.write(
-                    f"Total tokens: {total_tokens['input'] + total_tokens['output']}\n"
-                )
-            print(f"Logs saved to {log_file_path}")
-            print(f"Token counts saved to {tokens_file_path}")
+            try:
+                with open(tokens_file_path, "w", encoding="utf-8") as token_f:
+                    token_f.write(f"Input tokens: {total_tokens['input']}\n")
+                    token_f.write(f"Output tokens: {total_tokens['output']}\n")
+                    token_f.write(
+                        f"Total tokens: {total_tokens['input'] + total_tokens['output']}\n"
+                    )
+                print(f"Logs saved to {log_file_path}")
+                print(f"Token counts saved to {tokens_file_path}")
+            except Exception as fe:
+                print(f"Error saving tracking files: {fe}")
 
     except Exception as e:
         print(f"Error running Orchestrator: {e}")
