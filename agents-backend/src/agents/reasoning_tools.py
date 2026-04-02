@@ -92,7 +92,7 @@ class ReasoningToolkit:
             "explore_neighbors": explore_neighbors
         })
 
-    def get_class_context(self, file_path: str, focus_method: str = None, use_mainline: bool = False):
+    def get_class_context(self, file_path: str, focus_method: Optional[str] = None, use_mainline: bool = False):
         """
         Reads a Java file and returns a skeleton view with the full body of the focused method.
         Useful for verifying specific methods without reading the entire file.
@@ -101,11 +101,15 @@ class ReasoningToolkit:
         client = get_client()
         
         repo_path = self.mainline_repo_path if use_mainline else self.target_repo_path
+        # Normalize empty/null-ish focus values to None for MCP.
+        focus = focus_method.strip() if isinstance(focus_method, str) else focus_method
+        if focus in {"", "null", "None"}:
+            focus = None
         
         return client.call_tool("get_class_context", {
             "target_repo_path": repo_path,
             "file_path": file_path,
-            "focus_method": focus_method
+            "focus_method": focus
         })
 
     def get_structural_analysis(self, file_path: str, use_mainline: bool = False) -> Dict:

@@ -321,6 +321,20 @@ async def validation_agent(state: AgentState, config) -> dict:
         )
         return {"validation_passed": False}
 
+    if not code_hunks and not test_hunks:
+        msg = (
+            "Validation aborted: Phase 3 produced no adapted code/test hunks. "
+            "Regenerate hunks with target-grounded anchors."
+        )
+        print(f"  Agent 4: {msg}")
+        return {
+            "validation_passed": False,
+            "validation_attempts": attempts + 1,
+            "validation_error_context": msg,
+            "validation_failure_category": "empty_generation",
+            "validation_retry_files": [],
+        }
+
     # Ensure clean repo
     toolkit.restore_repo_state()
 
@@ -400,6 +414,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 f"\n**Final Status: HUNK APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
             )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            toolkit.restore_repo_state()
             return {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
@@ -426,6 +441,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 f"\n**Final Status: BUILD FAILED**\n\n**Agent Analysis:**\n{analysis}"
             )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            toolkit.restore_repo_state()
             return {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
@@ -478,6 +494,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 f"\n**Final Status: TEST EXECUTION FAILED (COMPILE ERROR)**\n\n**Agent Analysis:**\n{analysis}"
             )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            toolkit.restore_repo_state()
             return {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
@@ -499,6 +516,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 f"**Transition Evaluation:**\n{json.dumps(transition_eval, default=str)}"
             )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            toolkit.restore_repo_state()
             return {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
@@ -518,6 +536,7 @@ async def validation_agent(state: AgentState, config) -> dict:
             f"**Transition Summary:**\n{transition_summary}"
         )
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
+        toolkit.restore_repo_state()
         return {
             "validation_passed": True,
             "validation_attempts": attempts + 1,

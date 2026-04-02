@@ -9,6 +9,7 @@ This evaluator differs from evaluate/pipeline/evaluate_full_pipeline.py:
 """
 
 import asyncio
+import argparse
 import csv
 import difflib
 import io
@@ -31,6 +32,8 @@ sys.path.append(
 )
 
 from graph import app
+from agents.context_analyzer import context_analyzer_node
+from agents.structural_locator import structural_locator_node
 from utils.patch_analyzer import PatchAnalyzer
 from dotenv import load_dotenv
 
@@ -55,12 +58,30 @@ PHASE0_CACHE_DIR = os.path.join(os.path.dirname(__file__), "phase0_cache")
 TARGET_PROJECTS = ["elasticsearch"]
 MAX_PATCHES_PER_PROJECT = 4
 
+RUN_MODE_FULL = "full"
+RUN_MODE_PHASE1 = "phase1"
+RUN_MODE_PHASE2 = "phase2"
+
 
 def ensure_dirs() -> None:
     os.makedirs(RESULTS_DIR, exist_ok=True)
     os.makedirs(PHASE0_CACHE_DIR, exist_ok=True)
     for project in TARGET_PROJECTS:
         os.makedirs(os.path.join(RESULTS_DIR, project), exist_ok=True)
+
+
+def _patch_results_dir(project: str, patch_id: str) -> str:
+    return os.path.join(RESULTS_DIR, project, patch_id)
+
+
+def _phase_output_file(
+    project: str, patch_id: str, phase_name: str, agent_name: str
+) -> str:
+    return os.path.join(_patch_results_dir(project, patch_id), f"{phase_name}_{agent_name}.json")
+
+
+def is_phase_processed(project: str, patch_id: str, phase_name: str, agent_name: str) -> bool:
+    return os.path.exists(_phase_output_file(project, patch_id, phase_name, agent_name))
 
 
 def _phase0_cache_file(project: str, backport_commit: str, original_commit: str) -> str:
@@ -190,6 +211,71 @@ def generate_developer_backport_patch(backport_commit, target_repo_path):
             f"Failed to generate developer backport patch for {backport_commit}: {output}",
         )
     return output, None
+
+
+def _prepare_pipeline_inputs(
+    project: str,
+    patch_id: str,
+    mainline_commit: str,
+    backport_commit: str,
+    mainline_repo_path: str,
+    target_repo_path: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """
+    Shared setup for full/phase1/phase2 modes:
+    - repo checkout
+    - mainline patch generation
+    - developer backport patch capture
+    - Java-only patch analysis
+    - auxiliary hunk extraction
+    """
+    success, output = setup_repos(
+        mainline_commit,
+        backport_commit,
+        mainline_repo_path,
+        target_repo_path,
+    )
+    if not success:
+        return None, output
+
+    patch_path, patch_output = generate_mainline_patch(mainline_commit, mainline_repo_path)
+    if not patch_path:
+        return None, patch_output
+
+    developer_patch_diff, patch_err = generate_developer_backport_patch(
+        backport_commit, target_repo_path
+    )
+    if patch_err:
+        return None, patch_err
+
+    project_dir = _patch_results_dir(project, patch_id)
+    os.makedirs(project_dir, exist_ok=True)
+
+    mainline_patch_file = os.path.join(project_dir, "mainline.patch")
+    with open(mainline_patch_file, "w", encoding="utf-8") as f:
+        f.write(patch_output)
+
+    target_patch_file = os.path.join(project_dir, "target.patch")
+    with open(target_patch_file, "w", encoding="utf-8") as f:
+        f.write(developer_patch_diff)
+
+    analyzer = PatchAnalyzer()
+    full_patch_analysis = analyzer.analyze(patch_output, with_test_changes=True)
+    java_only_patch_analysis = [
+        fc for fc in full_patch_analysis if _is_java_code_file(fc.file_path)
+    ]
+    developer_aux_hunks = _build_auxiliary_hunks_from_developer_patch(developer_patch_diff)
+
+    return (
+        {
+            "patch_path": patch_path,
+            "patch_output": patch_output,
+            "developer_patch_diff": developer_patch_diff,
+            "java_only_patch_analysis": java_only_patch_analysis,
+            "developer_aux_hunks": developer_aux_hunks,
+        },
+        None,
+    )
 
 
 def _build_auxiliary_hunks_from_developer_patch(
@@ -699,6 +785,21 @@ def save_agent_state(project, patch_id, phase_name, state_dict, agent_name=None)
     return output_file
 
 
+def load_agent_state(
+    project: str, patch_id: str, phase_name: str, agent_name: str
+) -> dict[str, Any] | None:
+    output_file = _phase_output_file(project, patch_id, phase_name, agent_name)
+    if not os.path.exists(output_file):
+        return None
+
+    try:
+        with open(output_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
 def save_pipeline_log(project, patch_id, phase_name, log_content):
     project_dir = os.path.join(RESULTS_DIR, project, patch_id)
     os.makedirs(project_dir, exist_ok=True)
@@ -876,65 +977,45 @@ async def run_full_pipeline(
     backport_commit,
     mainline_repo_path,
     target_repo_path,
+    run_mode: str = RUN_MODE_FULL,
+    force_phase: bool = False,
 ):
     results = {
         "project": project,
         "patch_id": patch_id,
         "mainline_commit": mainline_commit,
         "backport_commit": backport_commit,
+        "run_mode": run_mode,
         "timestamp": datetime.now().isoformat(),
         "phases": {},
     }
 
     try:
-        print(f"\n[{project}/{patch_id}] Setting up repositories...")
-        success, output = setup_repos(
-            mainline_commit,
-            backport_commit,
-            mainline_repo_path,
-            target_repo_path,
-        )
-        if not success:
-            results["setup_error"] = output
+        if run_mode not in {RUN_MODE_FULL, RUN_MODE_PHASE1, RUN_MODE_PHASE2}:
+            results["status"] = "failed"
+            results["error"] = f"Unsupported run mode: {run_mode}"
             return results
 
-        print(f"[{project}/{patch_id}] Generating mainline patch...")
-        patch_path, patch_output = generate_mainline_patch(
-            mainline_commit, mainline_repo_path
+        print(f"\n[{project}/{patch_id}] Setting up repositories for mode={run_mode}...")
+        prepared_inputs, prepare_err = _prepare_pipeline_inputs(
+            project=project,
+            patch_id=patch_id,
+            mainline_commit=mainline_commit,
+            backport_commit=backport_commit,
+            mainline_repo_path=mainline_repo_path,
+            target_repo_path=target_repo_path,
         )
-        if not patch_path:
-            results["patch_generation_error"] = patch_output
+        if prepare_err:
+            results["setup_error"] = prepare_err
+            results["status"] = "failed"
             return results
 
-        developer_patch_diff, patch_err = generate_developer_backport_patch(
-            backport_commit, target_repo_path
-        )
-        if patch_err:
-            results["developer_patch_error"] = patch_err
-            return results
-
-        # Save both patches to the results folder
-        project_dir = os.path.join(RESULTS_DIR, project, patch_id)
-        os.makedirs(project_dir, exist_ok=True)
-        
-        mainline_patch_file = os.path.join(project_dir, "mainline.patch")
-        with open(mainline_patch_file, "w", encoding="utf-8") as f:
-            f.write(patch_output)
-        print(f"[{project}/{patch_id}] Saved mainline patch to {mainline_patch_file}")
-        
-        target_patch_file = os.path.join(project_dir, "target.patch")
-        with open(target_patch_file, "w", encoding="utf-8") as f:
-            f.write(developer_patch_diff)
-        print(f"[{project}/{patch_id}] Saved target patch to {target_patch_file}")
-
+        patch_path = prepared_inputs["patch_path"]
+        patch_output = prepared_inputs["patch_output"]
+        developer_patch_diff = prepared_inputs["developer_patch_diff"]
+        java_only_patch_analysis = prepared_inputs["java_only_patch_analysis"]
+        developer_aux_hunks = prepared_inputs["developer_aux_hunks"]
         analyzer = PatchAnalyzer()
-        full_patch_analysis = analyzer.analyze(patch_output, with_test_changes=True)
-        java_only_patch_analysis = [
-            fc for fc in full_patch_analysis if _is_java_code_file(fc.file_path)
-        ]
-        developer_aux_hunks = _build_auxiliary_hunks_from_developer_patch(
-            developer_patch_diff
-        )
 
         save_pipeline_log(
             project,
@@ -948,7 +1029,7 @@ async def run_full_pipeline(
             f"## Mainline Patch\n```diff\n{patch_output}\n```\n",
         )
 
-        inputs = {
+        base_inputs = {
             "messages": ["Start"],
             "patch_path": patch_path,
             "patch_diff": patch_output,
@@ -967,6 +1048,108 @@ async def run_full_pipeline(
             "developer_auxiliary_hunks": developer_aux_hunks,
             "use_phase_0_cache": True,
         }
+
+        if run_mode == RUN_MODE_PHASE1:
+            phase_name = "phase1_context_analyzer"
+            agent_name = "context_analyzer"
+            if not force_phase and is_phase_processed(project, patch_id, phase_name, agent_name):
+                print(f"[{project}/{patch_id}] Skipping {run_mode}: phase output already exists")
+                results["status"] = "skipped"
+                results["skip_reason"] = f"{phase_name}_{agent_name} already processed"
+                return results
+
+            print(f"[{project}/{patch_id}] Running {phase_name} only...")
+            phase1_result = await context_analyzer_node(base_inputs, config={})
+            phase1_outputs = {
+                k: v for k, v in phase1_result.items() if k != "messages"
+            }
+            save_agent_state(project, patch_id, phase_name, phase1_outputs, agent_name)
+            results["phases"] = {
+                phase_name: {
+                    agent_name: {
+                        "node": agent_name,
+                        "outputs": phase1_outputs,
+                    }
+                }
+            }
+            results["status"] = "completed"
+            mode_results_file = os.path.join(
+                RESULTS_DIR, project, patch_id, f"{run_mode}_results.json"
+            )
+            with open(mode_results_file, "w", encoding="utf-8") as f:
+                json.dump(results, f, indent=2, default=str)
+            print(f"[{project}/{patch_id}] {run_mode} completed")
+            return results
+
+        if run_mode == RUN_MODE_PHASE2:
+            phase_name = "phase2_structural_locator"
+            agent_name = "structural_locator"
+            if not force_phase and is_phase_processed(project, patch_id, phase_name, agent_name):
+                print(f"[{project}/{patch_id}] Skipping {run_mode}: phase output already exists")
+                results["status"] = "skipped"
+                results["skip_reason"] = f"{phase_name}_{agent_name} already processed"
+                return results
+
+            phase1_state = load_agent_state(
+                project,
+                patch_id,
+                "phase1_context_analyzer",
+                "context_analyzer",
+            )
+            semantic_blueprint = (phase1_state or {}).get("semantic_blueprint")
+
+            if not semantic_blueprint:
+                pipeline_results_path = os.path.join(
+                    _patch_results_dir(project, patch_id), "pipeline_results.json"
+                )
+                if os.path.exists(pipeline_results_path):
+                    try:
+                        with open(pipeline_results_path, "r", encoding="utf-8") as f:
+                            pipeline_results = json.load(f)
+                        semantic_blueprint = (
+                            pipeline_results.get("phases", {})
+                            .get("phase1_context_analyzer", {})
+                            .get("context_analyzer", {})
+                            .get("outputs", {})
+                            .get("semantic_blueprint")
+                        )
+                    except Exception:
+                        semantic_blueprint = None
+
+            if not semantic_blueprint:
+                results["status"] = "failed"
+                results["error"] = (
+                    "Missing semantic_blueprint for phase2-only run. "
+                    "Run phase1 first or provide prior phase1 output."
+                )
+                return results
+
+            phase2_inputs = dict(base_inputs)
+            phase2_inputs["semantic_blueprint"] = semantic_blueprint
+            print(f"[{project}/{patch_id}] Running {phase_name} only...")
+            phase2_result = await structural_locator_node(phase2_inputs, config={})
+            phase2_outputs = {
+                k: v for k, v in phase2_result.items() if k != "messages"
+            }
+            save_agent_state(project, patch_id, phase_name, phase2_outputs, agent_name)
+            results["phases"] = {
+                phase_name: {
+                    agent_name: {
+                        "node": agent_name,
+                        "outputs": phase2_outputs,
+                    }
+                }
+            }
+            results["status"] = "completed"
+            mode_results_file = os.path.join(
+                RESULTS_DIR, project, patch_id, f"{run_mode}_results.json"
+            )
+            with open(mode_results_file, "w", encoding="utf-8") as f:
+                json.dump(results, f, indent=2, default=str)
+            print(f"[{project}/{patch_id}] {run_mode} completed")
+            return results
+
+        inputs = dict(base_inputs)
 
         phase0_cache = _load_phase0_cache(project, backport_commit, mainline_commit)
         phase0_cache_transition = None
@@ -1198,16 +1381,73 @@ async def run_full_pipeline(
         return results
 
 
-def is_patch_processed(project, patch_id):
-    patch_results_dir = os.path.join(RESULTS_DIR, project, patch_id)
+def is_patch_processed(
+    project: str,
+    patch_id: str,
+    phase_name: str | None = None,
+    agent_name: str | None = None,
+) -> bool:
+    if phase_name and agent_name:
+        return is_phase_processed(project, patch_id, phase_name, agent_name)
+
+    patch_results_dir = _patch_results_dir(project, patch_id)
     results_file = os.path.join(patch_results_dir, "pipeline_results.json")
-    return os.path.exists(results_file)
+    if not os.path.exists(results_file):
+        return False
+
+    # Treat legacy summaries with no run_mode as full runs.
+    try:
+        with open(results_file, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        run_mode = str(payload.get("run_mode", RUN_MODE_FULL)).strip().lower()
+        status = str(payload.get("status", "")).strip().lower()
+        return run_mode == RUN_MODE_FULL and status in {"", "completed"}
+    except Exception:
+        return True
 
 
 async def main():
     configure_logging()
+    parser = argparse.ArgumentParser(description="Evaluate full/partial retrofit workflow")
+    parser.add_argument(
+        "--mode",
+        choices=[RUN_MODE_FULL, RUN_MODE_PHASE1, RUN_MODE_PHASE2],
+        default=RUN_MODE_FULL,
+        help="Execution mode: full pipeline, phase1 only, or phase2 only.",
+    )
+    parser.add_argument(
+        "--project",
+        choices=TARGET_PROJECTS,
+        default=None,
+        help="Optional project filter.",
+    )
+    parser.add_argument(
+        "--patch-id",
+        default=None,
+        help="Optional patch id filter (e.g. elasticsearch_734dd070).",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force rerun for the selected mode even if outputs already exist.",
+    )
+    parser.add_argument(
+        "--no-clean",
+        action="store_true",
+        help="Skip git clean/reset before running each patch.",
+    )
+    parser.add_argument(
+        "--phase2-reset",
+        action="store_true",
+        help="When mode=phase2, delete existing phase2 outputs before rerun.",
+    )
+    args = parser.parse_args()
+
     print("=" * 80)
-    print(f"FULL WORKFLOW EVALUATION (Phase 0-4, {', '.join(TARGET_PROJECTS)})")
+    print(
+        f"WORKFLOW EVALUATION MODE={args.mode.upper()} "
+        f"(projects: {', '.join(TARGET_PROJECTS)})"
+    )
     print("=" * 80)
 
     ensure_dirs()
@@ -1216,22 +1456,34 @@ async def main():
         print(f"ERROR: Dataset not found at {DATASET_PATH}")
         return
 
+    selected_projects = [args.project] if args.project else TARGET_PROJECTS
+
     data = []
     with open(DATASET_PATH, mode="r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row["Project"] in TARGET_PROJECTS:
+            if row["Project"] in selected_projects:
                 data.append(row)
 
-    print(f"\nFound {len(data)} total patches for target projects: {TARGET_PROJECTS}")
+    print(f"\nFound {len(data)} total patches for target projects: {selected_projects}")
 
-    if MAX_PATCHES_PER_PROJECT:
+    if args.patch_id:
+        data = [
+            row
+            for row in data
+            if f"{row['Project']}_{row['Original Commit'][:8]}" == args.patch_id
+        ]
+        if not data:
+            print(f"No dataset row matched --patch-id={args.patch_id}")
+            return
+
+    if MAX_PATCHES_PER_PROJECT and not args.patch_id:
         data_limited = defaultdict(list)
         for row in data:
             data_limited[row["Project"]].append(row)
 
         data = []
-        for project in TARGET_PROJECTS:
+        for project in selected_projects:
             data.extend(data_limited[project][:MAX_PATCHES_PER_PROJECT])
 
     print(f"Processing {len(data)} patches")
@@ -1244,8 +1496,27 @@ async def main():
         backport_commit = row["Backport Commit"]
         patch_id = f"{project}_{mainline_commit[:8]}"
 
-        if is_patch_processed(project, patch_id):
-            print(f"\n[{idx}/{len(data)}] SKIPPING (already processed): {patch_id}")
+        if args.mode == RUN_MODE_FULL:
+            already_processed = is_patch_processed(project, patch_id)
+        elif args.mode == RUN_MODE_PHASE1:
+            already_processed = is_patch_processed(
+                project,
+                patch_id,
+                "phase1_context_analyzer",
+                "context_analyzer",
+            )
+        else:
+            already_processed = is_patch_processed(
+                project,
+                patch_id,
+                "phase2_structural_locator",
+                "structural_locator",
+            )
+
+        if already_processed and not args.force:
+            print(
+                f"\n[{idx}/{len(data)}] SKIPPING ({args.mode} already processed): {patch_id}"
+            )
             skipped_patches.append(patch_id)
             continue
 
@@ -1254,17 +1525,29 @@ async def main():
         mainline_repo_path = os.path.join(REPOS_DIR, project)
         target_repo_path = os.path.join(REPOS_DIR, project)
 
-        print(f"[{project}/{patch_id}] Cleaning repositories...")
-        for repo_path in [mainline_repo_path, target_repo_path]:
-            if os.path.exists(repo_path):
-                subprocess.run(
-                    ["git", "reset", "--hard", "HEAD"],
-                    cwd=repo_path,
-                    capture_output=True,
-                )
-                subprocess.run(
-                    ["git", "clean", "-fd"], cwd=repo_path, capture_output=True
-                )
+        if args.phase2_reset and args.mode == RUN_MODE_PHASE2:
+            phase2_file = _phase_output_file(
+                project,
+                patch_id,
+                "phase2_structural_locator",
+                "structural_locator",
+            )
+            if os.path.exists(phase2_file):
+                os.remove(phase2_file)
+                print(f"[{project}/{patch_id}] Removed prior phase2 output: {phase2_file}")
+
+        if not args.no_clean:
+            print(f"[{project}/{patch_id}] Cleaning repositories...")
+            for repo_path in [mainline_repo_path, target_repo_path]:
+                if os.path.exists(repo_path):
+                    subprocess.run(
+                        ["git", "reset", "--hard", "HEAD"],
+                        cwd=repo_path,
+                        capture_output=True,
+                    )
+                    subprocess.run(
+                        ["git", "clean", "-fd"], cwd=repo_path, capture_output=True
+                    )
 
         if not os.path.exists(mainline_repo_path):
             print(f"  ERROR: Repository not found at {mainline_repo_path}")
@@ -1277,6 +1560,8 @@ async def main():
             backport_commit,
             mainline_repo_path,
             target_repo_path,
+            run_mode=args.mode,
+            force_phase=args.force,
         )
         all_results.append(result)
 
@@ -1287,7 +1572,7 @@ async def main():
             except Exception as e:
                 print(f"  Warning: Could not remove temp patch file: {e}")
 
-    summary_file = os.path.join(RESULTS_DIR, "pipeline_summary.json")
+    summary_file = os.path.join(RESULTS_DIR, f"pipeline_summary_{args.mode}.json")
     with open(summary_file, "w", encoding="utf-8") as f:
         json.dump(all_results, f, indent=2, default=str)
 
@@ -1296,11 +1581,14 @@ async def main():
     print("=" * 80)
     completed = sum(1 for r in all_results if r.get("status") == "completed")
     failed = sum(1 for r in all_results if r.get("status") == "failed")
+    mode_skipped = sum(1 for r in all_results if r.get("status") == "skipped")
     print(f"Total Patches in Dataset: {len(data)}")
     print(f"Skipped (already processed): {len(skipped_patches)}")
     print(f"Newly Processed: {len(all_results)}")
     print(f"Completed: {completed}")
     print(f"Failed: {failed}")
+    if mode_skipped:
+        print(f"Mode-skipped during execution: {mode_skipped}")
     if skipped_patches:
         print(f"\nSkipped Patches: {', '.join(skipped_patches)}")
     print(f"Results Directory: {RESULTS_DIR}")

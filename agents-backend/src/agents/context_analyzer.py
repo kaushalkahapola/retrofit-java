@@ -31,6 +31,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+PHASE1_MAX_CODE_BODY_CHARS = int(os.getenv("PHASE1_MAX_CODE_BODY_CHARS", "4000"))
+PHASE1_MAX_HUNK_CHARS = int(os.getenv("PHASE1_MAX_HUNK_CHARS", "1400"))
+PHASE1_ENABLE_REFLECTION = (
+    os.getenv("PHASE1_ENABLE_REFLECTION", "false").strip().lower() == "true"
+)
+
+
 # ---------------------------------------------------------------------------
 # Prompts
 # ---------------------------------------------------------------------------
@@ -285,11 +292,16 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
             code_body = str(pre_ctx)
         except Exception as e:
             code_body = f"(Could not pre-fetch method body: {e})"
+        if len(code_body) > PHASE1_MAX_CODE_BODY_CHARS:
+            code_body = code_body[:PHASE1_MAX_CODE_BODY_CHARS] + "\n...[TRUNCATED]..."
 
         # Number each hunk explicitly so the LLM can reference them by index
         numbered_hunks = []
         for i, h in enumerate(file_hunks, start=1):
-            numbered_hunks.append(f"### Hunk {i}\n```diff\n{h}\n```")
+            hunk_text = h
+            if len(hunk_text) > PHASE1_MAX_HUNK_CHARS:
+                hunk_text = hunk_text[:PHASE1_MAX_HUNK_CHARS] + "\n...[TRUNCATED]..."
+            numbered_hunks.append(f"### Hunk {i}\n```diff\n{hunk_text}\n```")
         hunk_section = "\n\n".join(numbered_hunks) if numbered_hunks else "(no hunks found)"
 
         input_msg = (
@@ -348,7 +360,11 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
             trace += "\n"
 
         # 4. Self-reflection loop
-        if blueprint["root_cause_hypothesis"] and not blueprint["root_cause_hypothesis"].startswith("[Fallback]"):
+        if (
+            PHASE1_ENABLE_REFLECTION
+            and blueprint["root_cause_hypothesis"]
+            and not blueprint["root_cause_hypothesis"].startswith("[Fallback]")
+        ):
             try:
                 pre_ctx = mcp.call_tool("get_class_context", {
                     "target_repo_path": mainline_repo_path,
@@ -363,6 +379,8 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
             trace += f"**Self-Reflection**: {'VERIFIED ✅' if verified else 'FAILED ❌ (used anyway)'}\n\n"
             if not verified:
                 print(f"  Agent 1: Self-reflection rejected blueprint for {file_path}. Using best-effort result.")
+        elif not PHASE1_ENABLE_REFLECTION:
+            trace += "**Self-Reflection**: SKIPPED (PHASE1_ENABLE_REFLECTION=false)\n\n"
 
         # 5. Accumulate
         all_root_causes.append(blueprint["root_cause_hypothesis"])

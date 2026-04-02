@@ -1,7 +1,7 @@
 # Structural Locator Trace
 
 ## Blueprint Summary
-- **Root Cause**: The method for ordering nodes for shard requests did not consider the roles of the nodes, potentially leading to inefficient query execution.
+- **Root Cause**: Lack of proper ordering of nodes based on their roles when sending requests to data nodes.
 
 ## Hunk Segregation
 - Code files: 1
@@ -15,15 +15,15 @@
 
 **Git Resolution**: Found `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java`
 
-**Fallback Mode**: direct no-tool LLM mapping used after recursion limit.
+**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `DataNodeRequestSender` | `<import>` | 17–17 |
-| 2 | declaration | `DataNodeRequestSender` | `<import>` | 36–36 |
-| 3 | declaration | `DataNodeRequestSender` | `<import>` | 54–57 |
-| 4 | core_fix | `DataNodeRequestSender` | `order` | 106–123 |
-| 5 | cleanup | `DataNodeRequestSender` | `nodeToShardIds` | 279–279 |
+| 1 | declaration | `<import>` | `<import>` | 17–17 |
+| 2 | declaration | `<import>` | `<import>` | 39–39 |
+| 3 | declaration | `<class_declaration>` | `<class_declaration>` | 59–59 |
+| 4 | core_fix | `trySendingRequestsForPendingShards` | `trySendingRequestsForPendingShards` | 129–129 |
+| 5 | cleanup | `selectNodeRequests` | `selectNodeRequests` | 341–341 |
 ## Test File Mappings
 
 

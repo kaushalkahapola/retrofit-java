@@ -41,12 +41,13 @@ _HUNK_REWRITE_SYSTEM = """You are an expert Java patch adapter specializing in b
 Your task is to rewrite a single unified diff hunk so it applies cleanly to an older version of a Java file.
 
 Rules (follow ALL of them strictly):
-1. Only modify the `+` lines (additions). Context lines (` ` prefixed) must stay unchanged.
-2. Apply every symbol rename from the ConsistencyMap exactly.
-3. Preserve the fix intent described in the SemanticBlueprint — this fix MUST still work.
-4. Adjust the @@ line numbers to match the target file's insertion_line.
-5. Output ONLY the unified diff hunk. Start with @@ and end with the last changed line.
-6. Do NOT include any explanation, markdown fences, or comments outside the hunk."""
+1. You may adapt context (` ` lines) and removed (`-` lines) so the hunk matches the target file's actual layout.
+2. Keep edits minimal and focused: preserve fix behavior and avoid unrelated modifications.
+3. Apply every symbol rename from the ConsistencyMap exactly.
+4. Preserve the fix intent described in the SemanticBlueprint — this fix MUST still work.
+5. Adjust the @@ line numbers to match the target file's insertion_line and body counts.
+6. Output ONLY the unified diff hunk. Start with @@ and end with the last changed line.
+7. Do NOT include any explanation, markdown fences, or comments outside the hunk."""
 
 
 _HUNK_REWRITE_USER = """\
@@ -368,6 +369,193 @@ def _extract_imports_from_body(target_body: str) -> str:
         return "(No imports found in target context)"
 
     return "Existing imports:\n- " + "\n- ".join(imports)
+
+
+def _read_target_window(
+    target_repo_path: str,
+    target_file: str,
+    insertion_line: int,
+    radius: int = 50,
+) -> str:
+    """Reads a local context window from target file around insertion_line."""
+    if not target_repo_path or not target_file:
+        return ""
+    try:
+        full_path = os.path.normpath(
+            os.path.join(target_repo_path, _normalize_rel_path(target_file))
+        )
+        if not os.path.isfile(full_path):
+            return ""
+        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.read().splitlines()
+        if not lines:
+            return ""
+
+        center = max(1, int(insertion_line or 1))
+        start = max(1, center - radius)
+        end = min(len(lines), center + radius)
+        if start > end:
+            return ""
+        return "\n".join(lines[start - 1 : end])
+    except Exception:
+        return ""
+
+
+def _load_target_file_lines(target_repo_path: str, target_file: str) -> list[str]:
+    if not target_repo_path or not target_file:
+        return []
+    try:
+        full_path = os.path.normpath(
+            os.path.join(target_repo_path, _normalize_rel_path(target_file))
+        )
+        if not os.path.isfile(full_path):
+            return []
+        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read().splitlines()
+    except Exception:
+        return []
+
+
+def _find_line_in_target(target_lines: list[str], needle: str) -> int | None:
+    if not target_lines or not needle:
+        return None
+    stripped = needle.strip()
+    if not stripped:
+        return None
+
+    for idx, line in enumerate(target_lines, start=1):
+        if line == needle:
+            return idx
+    for idx, line in enumerate(target_lines, start=1):
+        if line.strip() == stripped:
+            return idx
+    for idx, line in enumerate(target_lines, start=1):
+        if stripped in line:
+            return idx
+    return None
+
+
+def _extract_anchor_candidates_from_hunk(raw_hunk: str) -> list[str]:
+    if not raw_hunk:
+        return []
+
+    removed: list[str] = []
+    context: list[str] = []
+    for i, line in enumerate(raw_hunk.splitlines()):
+        if i == 0 and line.startswith("@@"):
+            continue
+        if not line:
+            continue
+        if line.startswith("-") and not line.startswith("---"):
+            cand = line[1:].strip()
+            if cand:
+                removed.append(cand)
+        elif line.startswith(" "):
+            cand = line[1:].strip()
+            if cand:
+                context.append(cand)
+
+    return removed + context
+
+
+def _locate_insertion_line_in_target(
+    target_repo_path: str,
+    target_file: str,
+    raw_hunk: str,
+) -> int | None:
+    target_lines = _load_target_file_lines(target_repo_path, target_file)
+    if not target_lines:
+        return None
+
+    for cand in _extract_anchor_candidates_from_hunk(raw_hunk):
+        found = _find_line_in_target(target_lines, cand)
+        if found is not None:
+            return found
+
+    return None
+
+
+def _extract_added_imports(raw_hunk: str) -> list[str]:
+    imports: list[str] = []
+    for i, line in enumerate((raw_hunk or "").splitlines()):
+        if i == 0 and line.startswith("@@"):
+            continue
+        if line.startswith("+") and not line.startswith("+++"):
+            content = line[1:].strip()
+            if content.startswith("import "):
+                imports.append(content)
+    # Preserve order, remove duplicates.
+    return list(dict.fromkeys(imports))
+
+
+def _build_import_hunk_for_target(
+    *,
+    target_repo_path: str,
+    target_file: str,
+    raw_hunk: str,
+    insertion_line: int | None,
+) -> str | None:
+    target_lines = _load_target_file_lines(target_repo_path, target_file)
+    if not target_lines:
+        return None
+
+    imports_to_add = _extract_added_imports(raw_hunk)
+    if not imports_to_add:
+        return None
+
+    existing_imports = {
+        line.strip() for line in target_lines if line.strip().startswith("import ")
+    }
+    imports_to_add = [imp for imp in imports_to_add if imp not in existing_imports]
+    if not imports_to_add:
+        return None
+
+    import_lines = [
+        i + 1 for i, line in enumerate(target_lines) if line.strip().startswith("import ")
+    ]
+    if not import_lines:
+        return None
+
+    preferred_anchor_import = None
+    raw_lines = (raw_hunk or "").splitlines()
+    for i, line in enumerate(raw_lines):
+        if line.startswith("+") and not line.startswith("+++"):
+            content = line[1:].strip()
+            if content.startswith("import "):
+                for j in range(i - 1, -1, -1):
+                    prev = raw_lines[j]
+                    if prev.startswith(" "):
+                        prev_content = prev[1:].strip()
+                        if prev_content.startswith("import "):
+                            preferred_anchor_import = prev_content
+                            break
+                break
+
+    if preferred_anchor_import:
+        anchor_line_no = _find_line_in_target(target_lines, preferred_anchor_import)
+    else:
+        anchor_line_no = None
+
+    if anchor_line_no is None:
+        if insertion_line is None:
+            anchor_line_no = import_lines[-1]
+        else:
+            prior_imports = [ln for ln in import_lines if ln <= insertion_line]
+            anchor_line_no = prior_imports[-1] if prior_imports else import_lines[0]
+
+    # Build with two-sided context for robust git-apply matching.
+    start_line = max(1, anchor_line_no)
+    context_before = target_lines[start_line - 1]
+    has_after = start_line < len(target_lines)
+    context_after = target_lines[start_line] if has_after else ""
+
+    old_count = 2 if has_after else 1
+    new_count = old_count + len(imports_to_add)
+    header = f"@@ -{start_line},{old_count} +{start_line},{new_count} @@"
+    body = [f" {context_before}"] + [f"+{imp}" for imp in imports_to_add]
+    if has_after:
+        body.append(f" {context_after}")
+    return "\n".join([header] + body) + "\n"
 
 
 def _extract_auxiliary_signals(
@@ -943,39 +1131,33 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 target_file = planned_target_file
             insertion_line = mapped_ctx.get("start_line")
             target_body = mapped_ctx.get("code_snippet", "")
-            raw_start_line = _extract_target_start_line(raw_hunk)
-            target_method = (mapped_ctx.get("target_method") or "").strip().lower()
-            mainline_method = (mapped_ctx.get("mainline_method") or "").strip().lower()
-            is_declaration_or_class_hunk = target_method in {
-                "<import>",
-                "<class_declaration>",
-            } or mainline_method.startswith("<")
 
-            # IMPROVEMENT: If insertion_line is None, try to extract from raw hunk header
-            if insertion_line is None:
-                try:
-                    # Parse @@ -X,Y +A,B @@ to get actual line numbers
-                    hunk_header_match = re.search(r"@@ -\d+(?:,\d+)? \+(\d+)", raw_hunk)
-                    if hunk_header_match:
-                        insertion_line = int(hunk_header_match.group(1))
-                        print(
-                            f"  Agent 3: Extracted insertion_line {insertion_line} from hunk {hunk_idx} header"
-                        )
-                except Exception as e:
-                    print(
-                        f"  Agent 3: Could not extract insertion_line from hunk {hunk_idx}: {e}"
-                    )
+            # Never trust mainline hunk headers for target insertion lines.
+            # If Phase 2 did not provide a valid target line, recover using target-file anchors.
+            if not isinstance(insertion_line, int) or insertion_line <= 0:
+                insertion_line = _locate_insertion_line_in_target(
+                    target_repo_path=target_repo_path,
+                    target_file=target_file,
+                    raw_hunk=raw_hunk,
+                )
 
-            # Declaration/class-level mappings often return coarse line anchors (e.g., 1).
-            # Prefer raw hunk header anchor in those cases.
-            if raw_start_line and (
-                is_declaration_or_class_hunk
-                or (isinstance(insertion_line, int) and insertion_line <= 1)
-            ):
-                insertion_line = raw_start_line
+            if not isinstance(insertion_line, int) or insertion_line <= 0:
+                print(
+                    f"    Agent 3: Skipping {target_file}[{hunk_idx}] — unable to locate target insertion line"
+                )
+                trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                continue
 
-            # Default fallback
-            insertion_line = insertion_line or 1
+            # If Agent 2 returned only a short snippet, enrich prompt context from target file.
+            if len(str(target_body or "").splitlines()) < 8:
+                enriched_body = _read_target_window(
+                    target_repo_path=target_repo_path,
+                    target_file=target_file,
+                    insertion_line=insertion_line,
+                    radius=70,
+                )
+                if enriched_body:
+                    target_body = enriched_body
 
             # Deterministic symbol substitution pre-pass
             pre_rewritten = _rewrite_hunk_symbols(raw_hunk, consistency_map)
@@ -983,10 +1165,22 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             # For import-only hunks, skip LLM rewriting to avoid corruption
             # Import statements are fragile and LLM tends to duplicate existing imports
             if _is_import_only_hunk(raw_hunk):
-                adapted_hunk_text = _adjust_hunk_header(pre_rewritten, insertion_line)
-                print(
-                    f"    Agent 3: Skipped LLM rewrite for import-only hunk {hunk_idx}"
+                adapted_hunk_text = _build_import_hunk_for_target(
+                    target_repo_path=target_repo_path,
+                    target_file=target_file,
+                    raw_hunk=raw_hunk,
+                    insertion_line=insertion_line,
                 )
+                if adapted_hunk_text:
+                    print(
+                        f"    Agent 3: Built import-aware hunk for {target_file}[{hunk_idx}]"
+                    )
+                else:
+                    print(
+                        f"    Agent 3: Skipping import-only hunk {target_file}[{hunk_idx}] — no new imports or no import anchor"
+                    )
+                    trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                    continue
             else:
                 # LLM rewrite (up to 2 attempts) for non-import hunks
                 adapted_hunk_text = None
@@ -1022,14 +1216,52 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         )
                         extracted = _extract_hunk_block(raw_content)
                         if extracted:
-                            # Preserve original diff structure and allow model to vary only '+' lines.
+                            # Candidate A: raw model rewrite as-is.
+                            direct_candidate = (
+                                extracted if extracted.endswith("\n") else extracted + "\n"
+                            )
+
+                            # Candidate B: same rewrite but header anchored to mapped insertion line.
+                            adjusted_candidate = _adjust_hunk_header(
+                                direct_candidate, insertion_line
+                            )
+
+                            # Candidate C: conservative stabilization fallback.
                             stabilized = _stabilize_hunk_structure(
                                 pre_rewritten, extracted
                             )
-                            adapted_hunk_text = _adjust_hunk_header(
+                            stabilized_candidate = _adjust_hunk_header(
                                 stabilized, insertion_line
                             )
-                            break
+
+                            if toolkit:
+                                dr_direct = toolkit.apply_hunk_dry_run(
+                                    target_file, direct_candidate
+                                )
+                                if dr_direct.get("success"):
+                                    adapted_hunk_text = direct_candidate
+                                    break
+
+                                dr_adjusted = toolkit.apply_hunk_dry_run(
+                                    target_file, adjusted_candidate
+                                )
+                                if dr_adjusted.get("success"):
+                                    adapted_hunk_text = adjusted_candidate
+                                    break
+
+                                dr_stable = toolkit.apply_hunk_dry_run(
+                                    target_file, stabilized_candidate
+                                )
+                                if dr_stable.get("success"):
+                                    adapted_hunk_text = stabilized_candidate
+                                    break
+
+                                print(
+                                    f"    Agent 3: Both direct/stabilized candidates failed dry-run on hunk {hunk_idx} (attempt {attempt + 1}/2)"
+                                )
+                            else:
+                                adapted_hunk_text = direct_candidate
+                                break
                         print(
                             f"    Agent 3: Hunk parse failed (attempt {attempt + 1}/2)"
                         )
@@ -1039,12 +1271,10 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         )
 
                 if not adapted_hunk_text:
-                    # Fallback: use the deterministic pre-rewrite with adjusted header
-                    adapted_hunk_text = _adjust_hunk_header(
-                        pre_rewritten, insertion_line
-                    )
+                    # Last fallback is deterministic rewrite, but keep fail-closed behavior below.
+                    adapted_hunk_text = _adjust_hunk_header(pre_rewritten, insertion_line)
                     print(
-                        f"    Agent 3: Fallback — using deterministic pre-rewrite for hunk {hunk_idx}"
+                        f"    Agent 3: Fallback candidate generated for {target_file}[{hunk_idx}]"
                     )
 
             # Dry-run validation
@@ -1056,6 +1286,8 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     print(
                         f"    Agent 3: Dry-run failed for {target_file}[{hunk_idx}]: {dr['output'][:150]}"
                     )
+                    trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                    continue
             else:
                 dry_run_ok = True  # No toolkit → assume ok (local dev mode)
 
