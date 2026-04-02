@@ -1403,9 +1403,7 @@ class ValidationToolkit:
             # Final Fallback: CLAW-style exact string matching (dry-run)
             # ------------------------------------------------------------------
             try:
-                from utils.file_operations import extract_hunk_context_from_diff
-
-                context = extract_hunk_context_from_diff(patch_content)
+                context = extract_hunk_context_from_diff(hunk_text)
                 if context and context.old_string:
                     target_file_abs = os.path.join(
                         self.target_repo_path, target_file_path
@@ -1789,11 +1787,18 @@ class ValidationToolkit:
                         if os.path.exists(src):
                             os.remove(src)
                     elif file_operation == "ADDED":
+                        # For ADDED files with hunks, do NOT pre-create the file;
+                        # git/patch add semantics expect the path to be absent.
+                        # Pre-creating here causes "would create file ... already exists".
                         dst = os.path.normpath(
                             os.path.join(self.target_repo_path, target_file)
                         )
                         os.makedirs(os.path.dirname(dst), exist_ok=True)
-                        if not os.path.exists(dst):
+                        has_hunks_for_file = any(
+                            bool((hh.get("hunk_text") or "").strip())
+                            for hh in hunks_by_file.get(target_file, [])
+                        )
+                        if not has_hunks_for_file and not os.path.exists(dst):
                             with open(dst, "w", encoding="utf-8"):
                                 pass
 
@@ -1971,10 +1976,19 @@ class ValidationToolkit:
             # and applying it via exact matching. This handles cases where line
             # numbers are totally wrong but the code context is unique.
             try:
-                from utils.file_operations_models import HunkContext
+                hunk_lines: list[str] = []
+                in_hunk = False
+                for line in str(patch_content or "").splitlines():
+                    if line.startswith("@@"):
+                        in_hunk = True
+                    if in_hunk:
+                        if line.startswith("diff --git") and hunk_lines:
+                            break
+                        hunk_lines.append(line)
 
-                context: Optional[HunkContext] = extract_hunk_context_from_diff(
-                    patch_content
+                hunk_text = "\n".join(hunk_lines).strip()
+                context = (
+                    extract_hunk_context_from_diff(hunk_text) if hunk_text else None
                 )
                 if context and context.old_string and context.new_string:
                     # We need the target file path. For multi-file patches this is

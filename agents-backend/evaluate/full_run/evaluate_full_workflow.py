@@ -77,10 +77,14 @@ def _patch_results_dir(project: str, patch_id: str) -> str:
 def _phase_output_file(
     project: str, patch_id: str, phase_name: str, agent_name: str
 ) -> str:
-    return os.path.join(_patch_results_dir(project, patch_id), f"{phase_name}_{agent_name}.json")
+    return os.path.join(
+        _patch_results_dir(project, patch_id), f"{phase_name}_{agent_name}.json"
+    )
 
 
-def is_phase_processed(project: str, patch_id: str, phase_name: str, agent_name: str) -> bool:
+def is_phase_processed(
+    project: str, patch_id: str, phase_name: str, agent_name: str
+) -> bool:
     return os.path.exists(_phase_output_file(project, patch_id, phase_name, agent_name))
 
 
@@ -238,7 +242,9 @@ def _prepare_pipeline_inputs(
     if not success:
         return None, output
 
-    patch_path, patch_output = generate_mainline_patch(mainline_commit, mainline_repo_path)
+    patch_path, patch_output = generate_mainline_patch(
+        mainline_commit, mainline_repo_path
+    )
     if not patch_path:
         return None, patch_output
 
@@ -264,7 +270,9 @@ def _prepare_pipeline_inputs(
     java_only_patch_analysis = [
         fc for fc in full_patch_analysis if _is_java_code_file(fc.file_path)
     ]
-    developer_aux_hunks = _build_auxiliary_hunks_from_developer_patch(developer_patch_diff)
+    developer_aux_hunks = _build_auxiliary_hunks_from_developer_patch(
+        developer_patch_diff
+    )
 
     return (
         {
@@ -990,13 +998,42 @@ async def run_full_pipeline(
         "phases": {},
     }
 
+    patch_dir = _patch_results_dir(project, patch_id)
+    os.makedirs(patch_dir, exist_ok=True)
+    runtime_log_path = os.path.join(patch_dir, "log.txt")
+    runtime_tokens_path = os.path.join(patch_dir, "tokens.txt")
+    token_totals = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "messages_with_usage": 0,
+    }
+
+    def _append_runtime_log(message: str) -> None:
+        with open(runtime_log_path, "a", encoding="utf-8") as lf:
+            lf.write(message.rstrip("\n") + "\n")
+
+    # Reset per-patch runtime log at start.
+    with open(runtime_log_path, "w", encoding="utf-8") as lf:
+        lf.write(
+            f"patch_id={patch_id}\n"
+            f"project={project}\n"
+            f"mainline_commit={mainline_commit}\n"
+            f"backport_commit={backport_commit}\n"
+            f"mode={run_mode}\n"
+            f"started_at={datetime.now().isoformat()}\n"
+            "----------------------------------------\n"
+        )
+
     try:
         if run_mode not in {RUN_MODE_FULL, RUN_MODE_PHASE1, RUN_MODE_PHASE2}:
             results["status"] = "failed"
             results["error"] = f"Unsupported run mode: {run_mode}"
             return results
 
-        print(f"\n[{project}/{patch_id}] Setting up repositories for mode={run_mode}...")
+        print(
+            f"\n[{project}/{patch_id}] Setting up repositories for mode={run_mode}..."
+        )
         prepared_inputs, prepare_err = _prepare_pipeline_inputs(
             project=project,
             patch_id=patch_id,
@@ -1050,19 +1087,23 @@ async def run_full_pipeline(
         }
 
         if run_mode == RUN_MODE_PHASE1:
+            _append_runtime_log("Running mode=phase1")
             phase_name = "phase1_context_analyzer"
             agent_name = "context_analyzer"
-            if not force_phase and is_phase_processed(project, patch_id, phase_name, agent_name):
-                print(f"[{project}/{patch_id}] Skipping {run_mode}: phase output already exists")
+            if not force_phase and is_phase_processed(
+                project, patch_id, phase_name, agent_name
+            ):
+                print(
+                    f"[{project}/{patch_id}] Skipping {run_mode}: phase output already exists"
+                )
                 results["status"] = "skipped"
                 results["skip_reason"] = f"{phase_name}_{agent_name} already processed"
                 return results
 
             print(f"[{project}/{patch_id}] Running {phase_name} only...")
             phase1_result = await context_analyzer_node(base_inputs, config={})
-            phase1_outputs = {
-                k: v for k, v in phase1_result.items() if k != "messages"
-            }
+            _append_runtime_log("Completed node=context_analyzer")
+            phase1_outputs = {k: v for k, v in phase1_result.items() if k != "messages"}
             save_agent_state(project, patch_id, phase_name, phase1_outputs, agent_name)
             results["phases"] = {
                 phase_name: {
@@ -1079,13 +1120,19 @@ async def run_full_pipeline(
             with open(mode_results_file, "w", encoding="utf-8") as f:
                 json.dump(results, f, indent=2, default=str)
             print(f"[{project}/{patch_id}] {run_mode} completed")
+            _append_runtime_log("Mode phase1 completed")
             return results
 
         if run_mode == RUN_MODE_PHASE2:
+            _append_runtime_log("Running mode=phase2")
             phase_name = "phase2_structural_locator"
             agent_name = "structural_locator"
-            if not force_phase and is_phase_processed(project, patch_id, phase_name, agent_name):
-                print(f"[{project}/{patch_id}] Skipping {run_mode}: phase output already exists")
+            if not force_phase and is_phase_processed(
+                project, patch_id, phase_name, agent_name
+            ):
+                print(
+                    f"[{project}/{patch_id}] Skipping {run_mode}: phase output already exists"
+                )
                 results["status"] = "skipped"
                 results["skip_reason"] = f"{phase_name}_{agent_name} already processed"
                 return results
@@ -1128,9 +1175,8 @@ async def run_full_pipeline(
             phase2_inputs["semantic_blueprint"] = semantic_blueprint
             print(f"[{project}/{patch_id}] Running {phase_name} only...")
             phase2_result = await structural_locator_node(phase2_inputs, config={})
-            phase2_outputs = {
-                k: v for k, v in phase2_result.items() if k != "messages"
-            }
+            _append_runtime_log("Completed node=structural_locator")
+            phase2_outputs = {k: v for k, v in phase2_result.items() if k != "messages"}
             save_agent_state(project, patch_id, phase_name, phase2_outputs, agent_name)
             results["phases"] = {
                 phase_name: {
@@ -1147,6 +1193,7 @@ async def run_full_pipeline(
             with open(mode_results_file, "w", encoding="utf-8") as f:
                 json.dump(results, f, indent=2, default=str)
             print(f"[{project}/{patch_id}] {run_mode} completed")
+            _append_runtime_log("Mode phase2 completed")
             return results
 
         inputs = dict(base_inputs)
@@ -1195,6 +1242,9 @@ async def run_full_pipeline(
             )
 
             if phase0_cached_success:
+                _append_runtime_log(
+                    "Phase0 cache fast-path success; skipping agentic workflow"
+                )
                 print(
                     f"[{project}/{patch_id}] Cached Phase 0 fast-path success. Skipping agentic workflow."
                 )
@@ -1250,9 +1300,11 @@ async def run_full_pipeline(
                 print(
                     f"[{project}/{patch_id}] Completed from cache without agentic workflow."
                 )
+                _append_runtime_log("Completed from cache")
                 return results
 
         print(f"[{project}/{patch_id}] Running full workflow graph...")
+        _append_runtime_log("Running full workflow graph")
         phase_outputs = defaultdict(dict)
         current_phase = None
         latest_adapted_code_hunks = []
@@ -1260,6 +1312,23 @@ async def run_full_pipeline(
         async for output in app.astream(inputs):
             for node_name, node_output in output.items():
                 print(f"  Completed: {node_name}")
+                _append_runtime_log(f"Completed node={node_name}")
+
+                msgs = (
+                    node_output.get("messages", [])
+                    if isinstance(node_output, dict)
+                    else []
+                )
+                for msg in msgs:
+                    md = getattr(msg, "response_metadata", {}) or {}
+                    usage = md.get("token_usage", {}) if isinstance(md, dict) else {}
+                    if isinstance(usage, dict) and usage:
+                        in_tok = int(usage.get("prompt_tokens", 0) or 0)
+                        out_tok = int(usage.get("completion_tokens", 0) or 0)
+                        token_totals["input_tokens"] += in_tok
+                        token_totals["output_tokens"] += out_tok
+                        token_totals["total_tokens"] += in_tok + out_tok
+                        token_totals["messages_with_usage"] += 1
 
                 if (
                     isinstance(node_output, dict)
@@ -1372,13 +1441,19 @@ async def run_full_pipeline(
             json.dump(results, f, indent=2, default=str)
 
         print(f"[{project}/{patch_id}] Full workflow completed!")
+        _append_runtime_log("Workflow completed successfully")
         return results
 
     except Exception as e:
+        _append_runtime_log(f"Workflow failed: {e}")
         results["error"] = str(e)
         results["status"] = "failed"
         print(f"[{project}/{patch_id}] Workflow failed: {e}")
         return results
+    finally:
+        token_totals["finished_at"] = datetime.now().isoformat()
+        with open(runtime_tokens_path, "w", encoding="utf-8") as tf:
+            json.dump(token_totals, tf, indent=2)
 
 
 def is_patch_processed(
@@ -1408,7 +1483,9 @@ def is_patch_processed(
 
 async def main():
     configure_logging()
-    parser = argparse.ArgumentParser(description="Evaluate full/partial retrofit workflow")
+    parser = argparse.ArgumentParser(
+        description="Evaluate full/partial retrofit workflow"
+    )
     parser.add_argument(
         "--mode",
         choices=[RUN_MODE_FULL, RUN_MODE_PHASE1, RUN_MODE_PHASE2],
@@ -1534,7 +1611,9 @@ async def main():
             )
             if os.path.exists(phase2_file):
                 os.remove(phase2_file)
-                print(f"[{project}/{patch_id}] Removed prior phase2 output: {phase2_file}")
+                print(
+                    f"[{project}/{patch_id}] Removed prior phase2 output: {phase2_file}"
+                )
 
         if not args.no_clean:
             print(f"[{project}/{patch_id}] Cleaning repositories...")
