@@ -846,6 +846,39 @@ def _stabilize_hunk_structure(base_hunk: str, candidate_hunk: str) -> str:
     return stabilized
 
 
+def _extract_removed_lines(hunk_text: str) -> list[str]:
+    lines = (hunk_text or "").splitlines()[1:]
+    out = []
+    for line in lines:
+        if line.startswith("-") and not line.startswith("---"):
+            out.append(line[1:])
+    return out
+
+
+def _preserves_required_removals(base_hunk: str, candidate_hunk: str) -> bool:
+    """
+    Guardrail: if source hunk removes lines, candidate must also remove at least
+    one matching line. Prevents semantic regressions where a replacement turns
+    into additive behavior (old line kept + new line added).
+    """
+    base_removed = _extract_removed_lines(base_hunk)
+    if not base_removed:
+        return True
+
+    cand_removed = _extract_removed_lines(candidate_hunk)
+    if not cand_removed:
+        return False
+
+    def norm(s: str) -> str:
+        return re.sub(r"\s+", " ", (s or "").strip())
+
+    base_norm = {norm(x) for x in base_removed if norm(x)}
+    cand_norm = {norm(x) for x in cand_removed if norm(x)}
+    if not base_norm or not cand_norm:
+        return bool(cand_norm)
+    return len(base_norm & cand_norm) > 0
+
+
 def _normalize_rel_path(path: str) -> str:
     p = (path or "").strip().replace("\\", "/").lstrip("/")
     if p.startswith("a/") or p.startswith("b/"):
@@ -1430,6 +1463,24 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     if planned_candidate:
                         adapted_hunk_text = planned_candidate
 
+                # Prefer deterministic rewrite for replacement hunks (contains removals)
+                # to preserve semantic intent and avoid additive regressions.
+                if planned_mode == "rewrite" and adapted_hunk_text is None:
+                    deterministic_candidate = _adjust_hunk_header(
+                        pre_rewritten, insertion_line
+                    )
+                    if toolkit:
+                        dr_det = toolkit.apply_hunk_dry_run(
+                            target_file, deterministic_candidate
+                        )
+                        if dr_det.get("success"):
+                            adapted_hunk_text = deterministic_candidate
+                            print(
+                                f"    Agent 3: Deterministic rewrite passed dry-run for {target_file}[{hunk_idx}]"
+                            )
+                    else:
+                        adapted_hunk_text = deterministic_candidate
+
                 if hg_react_agent and adapted_hunk_text is None:
                     # ----------------------------------------------------------
                     # PRIMARY PATH: ReAct agent with file-reading tools.
@@ -1634,6 +1685,18 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     )
                     print(
                         f"    Agent 3: Fallback candidate generated for {target_file}[{hunk_idx}]"
+                    )
+
+                # Semantic guardrail: if original hunk had removals, candidate must
+                # preserve at least one required '-' removal; otherwise force baseline
+                # deterministic rewrite to avoid additive regressions.
+                if not _preserves_required_removals(pre_rewritten, adapted_hunk_text):
+                    adapted_hunk_text = _adjust_hunk_header(
+                        pre_rewritten, insertion_line
+                    )
+                    print(
+                        f"    Agent 3: Guardrail enforced for {target_file}[{hunk_idx}] "
+                        "(missing required removals)"
                     )
 
             # Dry-run validation (CLAW-inspired: collect errors, don't drop hunks)
