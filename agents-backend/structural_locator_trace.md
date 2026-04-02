@@ -1,7 +1,7 @@
 # Structural Locator Trace
 
 ## Blueprint Summary
-- **Root Cause**: Incorrect condition for checking if pushable sorts are available, which could lead to failing to push down sorts when they are present.
+- **Root Cause**: Incorrect condition for checking if pushable sorts are available, potentially leading to missed optimization opportunities.
 
 ## Hunk Segregation
 - Code files: 1
@@ -24,7 +24,7 @@
   - `Tool: get_class_context` -> {"context": "package org.elasticsearch.xpack.esql.optimizer.rules.physical.local;\n\n// Line 62\npublic class PushTopNToSource extends ParameterizedOptimizerRule {\n    // Line 79: private static fina...
   - `Tool: get_class_context` -> {"context": "package org.elasticsearch.xpack.esql.optimizer.rules.physical.local;\n\n// Line 62\npublic class PushTopNToSource extends ParameterizedOptimizerRule {\n    // Line 79: private static fina...
   - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java", "focus_method": "PushableCompoundExec"}`
-  - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java", "focus_method": "PushableQueryExec"}`
+  - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java", "focus_method": "Pushable"}`
   - `Tool: get_class_context` -> {"context": "package org.elasticsearch.xpack.esql.optimizer.rules.physical.local;\n\n// Line 62\npublic class PushTopNToSource extends ParameterizedOptimizerRule {\n    // Line 79: private static fina...
   - `Tool: get_class_context` -> {"context": "package org.elasticsearch.xpack.esql.optimizer.rules.physical.local;\n\n// Line 62\npublic class PushTopNToSource extends ParameterizedOptimizerRule {\n    // Line 79: private static fina...
   - `Agent calls get_class_context` with `{"file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java", "focus_method": "evaluatePushable"}`
