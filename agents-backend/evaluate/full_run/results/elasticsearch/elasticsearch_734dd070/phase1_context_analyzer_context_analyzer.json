@@ -1,49 +1,49 @@
 {
   "semantic_blueprint": {
-    "root_cause_hypothesis": "The method for ordering nodes for shard requests did not consider the roles of the nodes, potentially leading to inefficient query execution.",
-    "fix_logic": "Introduced a static list of node roles and implemented a new ordering method that sorts nodes based on their roles before processing shard requests.",
+    "root_cause_hypothesis": "Lack of proper ordering of nodes based on their roles when sending requests.",
+    "fix_logic": "Introduced a new method `order(TargetShards targetShards)` to sort the shards based on the roles of the nodes.",
     "dependent_apis": [
       "DiscoveryNode",
       "TargetShards"
     ],
-    "patch_intent_summary": "To ensure that shard requests are sent to nodes in an optimal order based on their roles.",
+    "patch_intent_summary": "To ensure that requests are sent to nodes in a specific order based on their roles.",
     "hunk_chain": [
       {
         "hunk_index": 1,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Added import for DiscoveryNodeRole to access node roles.",
+        "summary": "Added import for `DiscoveryNodeRole` to access node roles.",
         "role": "declaration",
-        "connects_to_next": "This import is necessary for defining the NODE_QUERY_ORDER in the next hunk.",
+        "connects_to_next": "This import is necessary for defining the order of nodes based on their roles in the subsequent hunks.",
         "global_index": 1
       },
       {
         "hunk_index": 2,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Added imports for Comparator and LinkedHashMap to facilitate sorting and maintaining order.",
+        "summary": "Added imports for `Comparator` and `LinkedHashMap` to facilitate sorting and maintaining order.",
         "role": "declaration",
-        "connects_to_next": "These imports are required for the new ordering logic implemented in the following hunks.",
+        "connects_to_next": "These imports are essential for implementing the sorting logic in the `order` method that follows.",
         "global_index": 2
       },
       {
         "hunk_index": 3,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Defined a static list of node roles to establish the order in which nodes should be queried.",
+        "summary": "Defined a static list `NODE_QUERY_ORDER` that specifies the order of node roles.",
         "role": "declaration",
-        "connects_to_next": "This list is utilized in the new ordering methods introduced in the next hunk.",
+        "connects_to_next": "This list provides the criteria for sorting nodes in the `order` method, which is implemented in the next hunk.",
         "global_index": 3
       },
       {
         "hunk_index": 4,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Implemented the order method to sort shard requests based on the roles of the nodes.",
+        "summary": "Implemented the `order` method to sort shards based on the roles of their corresponding nodes.",
         "role": "core_fix",
-        "connects_to_next": "This method provides the core functionality needed to order the nodes correctly, which is then used in the selectNodeRequests method in the next hunk.",
+        "connects_to_next": "This method is called in the next hunk to ensure that the pending shard IDs are processed in the correct order.",
         "global_index": 4
       },
       {
         "hunk_index": 5,
         "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-        "summary": "Changed the map used to store node to shard ID mappings from HashMap to LinkedHashMap to maintain insertion order.",
+        "summary": "Changed the type of `nodeToShardIds` from `HashMap` to `LinkedHashMap` to maintain insertion order.",
         "role": "cleanup",
         "connects_to_next": "",
         "global_index": 5
