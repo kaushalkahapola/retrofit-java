@@ -511,6 +511,116 @@ def _locate_insertion_line_in_target(
     return None
 
 
+def _repair_pure_insertion_hunk_with_target_context(
+    target_repo_path: str,
+    target_file: str,
+    candidate_hunk: str,
+    insertion_line: int,
+) -> str | None:
+    """
+    Rebuild a pure-insertion hunk using exact target-file context lines.
+
+    This is a deterministic fallback for cases where model-generated context lines
+    drift from target reality (common around class-field insertions).
+    """
+    if not candidate_hunk:
+        return None
+
+    lines = candidate_hunk.splitlines()
+    if not lines or not lines[0].startswith("@@"):
+        return None
+
+    removed_lines = [
+        ln for ln in lines[1:] if ln.startswith("-") and not ln.startswith("---")
+    ]
+    added_lines = [
+        ln[1:] for ln in lines[1:] if ln.startswith("+") and not ln.startswith("+++")
+    ]
+    context_lines = [ln[1:] for ln in lines[1:] if ln.startswith(" ")]
+
+    # Only repair pure insertions here.
+    if removed_lines or not added_lines:
+        return None
+
+    target_lines = _load_target_file_lines(target_repo_path, target_file)
+    if not target_lines:
+        return None
+
+    def _is_commentish(line: str) -> bool:
+        s = (line or "").strip()
+        return (not s) or s.startswith("*") or s.startswith("/*") or s.startswith("*/")
+
+    def _is_structural_anchor(line: str) -> bool:
+        s = (line or "").strip()
+        if _is_commentish(s):
+            return False
+        return any(
+            token in s
+            for token in (
+                "class ",
+                "interface ",
+                "enum ",
+                "record ",
+                "private ",
+                "protected ",
+                "public ",
+                "static ",
+                "(",
+            )
+        )
+
+    prioritized_candidates: list[str] = []
+    prioritized_candidates.extend(
+        [c for c in context_lines if _is_structural_anchor(c)]
+    )
+    prioritized_candidates.extend([c for c in context_lines if not _is_commentish(c)])
+    prioritized_candidates.extend(context_lines)
+
+    seen = set()
+    deduped_candidates = []
+    for c in prioritized_candidates:
+        key = c.strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped_candidates.append(c)
+
+    anchor_line = None
+    for cand in deduped_candidates:
+        found = _find_line_in_target(target_lines, cand)
+        if found is not None:
+            anchor_line = found
+            break
+
+    if anchor_line is None:
+        if isinstance(insertion_line, int) and insertion_line > 0:
+            anchor_line = max(1, min(insertion_line, len(target_lines)))
+        else:
+            return None
+
+    before_ctx = target_lines[anchor_line - 1]
+    after_ctx = target_lines[anchor_line] if anchor_line < len(target_lines) else None
+
+    if after_ctx is None:
+        old_count = 1
+        new_count = 1 + len(added_lines)
+        rebuilt = [f"@@ -{anchor_line},{old_count} +{anchor_line},{new_count} @@"]
+        rebuilt.append(f" {before_ctx}")
+        rebuilt.extend(f"+{ln}" for ln in added_lines)
+    else:
+        old_count = 2
+        new_count = 2 + len(added_lines)
+        rebuilt = [f"@@ -{anchor_line},{old_count} +{anchor_line},{new_count} @@"]
+        rebuilt.append(f" {before_ctx}")
+        rebuilt.extend(f"+{ln}" for ln in added_lines)
+        rebuilt.append(f" {after_ctx}")
+
+    out = "\n".join(rebuilt)
+    if not out.endswith("\n"):
+        out += "\n"
+    return out
+
+
 def _extract_added_imports(raw_hunk: str) -> list[str]:
     imports: list[str] = []
     for i, line in enumerate((raw_hunk or "").splitlines()):
@@ -1443,6 +1553,24 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             if toolkit:
                 dr = toolkit.apply_hunk_dry_run(target_file, adapted_hunk_text)
                 dry_run_ok = dr["success"]
+                if not dry_run_ok:
+                    repaired = _repair_pure_insertion_hunk_with_target_context(
+                        target_repo_path=target_repo_path,
+                        target_file=target_file,
+                        candidate_hunk=adapted_hunk_text,
+                        insertion_line=insertion_line,
+                    )
+                    if repaired:
+                        dr_repaired = toolkit.apply_hunk_dry_run(target_file, repaired)
+                        if dr_repaired.get("success"):
+                            adapted_hunk_text = repaired
+                            dry_run_ok = True
+                            print(
+                                f"    Agent 3: Deterministic insertion-hunk repair passed dry-run for {target_file}[{hunk_idx}]"
+                            )
+                        else:
+                            dr = dr_repaired
+
                 if not dry_run_ok:
                     print(
                         f"    Agent 3: Dry-run failed for {target_file}[{hunk_idx}]: {dr['output'][:150]}"
