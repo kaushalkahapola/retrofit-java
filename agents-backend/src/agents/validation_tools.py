@@ -1362,8 +1362,31 @@ class ValidationToolkit:
             )
             if result.returncode == 0:
                 return {"success": True, "output": result.stdout or "Clean apply."}
-            else:
-                return {"success": False, "output": result.stderr or result.stdout}
+
+            # Fallback to patch --dry-run
+            patch_result = subprocess.run(
+                [
+                    "patch",
+                    "-p1",
+                    "--dry-run",
+                    "--batch",
+                    "--forward",
+                    "--reject-file=-",
+                    "--ignore-whitespace",
+                    "-i",
+                    tmp_path,
+                ],
+                capture_output=True,
+                text=True,
+                cwd=self.target_repo_path,
+            )
+            if patch_result.returncode == 0:
+                return {
+                    "success": True,
+                    "output": patch_result.stdout or "Clean apply via patch fallback.",
+                }
+
+            return {"success": False, "output": result.stderr or result.stdout}
 
         except Exception as e:
             return {"success": False, "output": f"Exception during dry-run: {e}"}
@@ -1531,7 +1554,9 @@ class ValidationToolkit:
 
             normalized_hunks.append(h)
 
-        # Group hunks by target file, then sort each file's hunks in ascending line order.
+        # Group hunks by target file, then sort each file's hunks.
+        # We sort them bottom-to-top (reverse=True) and apply them ONE BY ONE.
+        # This prevents earlier hunks from shifting line numbers for later hunks.
         hunks_by_file = {}
         for h in normalized_hunks:
             target_file = _normalize_rel_path(h.get("target_file", "unknown"))
@@ -1539,63 +1564,39 @@ class ValidationToolkit:
                 hunks_by_file[target_file] = []
             hunks_by_file[target_file].append(h)
 
-        # Sort hunks within each file top-to-bottom so git apply and patch can parse them.
-        # Standard unified diff format requires hunks to be in ascending line order.
         for target_file in hunks_by_file:
             hunks_by_file[target_file].sort(
-                key=lambda h: h.get("insertion_line", 0), reverse=False
+                key=lambda h: h.get("insertion_line", 0), reverse=True
             )
             insertion_lines = [
                 h.get("insertion_line") for h in hunks_by_file[target_file]
             ]
             print(
                 f"  Validation: {target_file} - applying {len(hunks_by_file[target_file])} "
-                f"hunk(s) in top-to-bottom order: {insertion_lines}"
+                f"hunk(s) one by one in bottom-to-top order: {insertion_lines}"
             )
 
-        # Build one patch section per file so offsets are resolved cumulatively.
-        patch_parts = []
         applied_files = []
+        all_errors = []
+
         for target_file in hunks_by_file:
-            file_hunks = []
             file_operations = set()
             old_file_path = None
             skip_file = False
 
             for h in hunks_by_file[target_file]:
-                hunk_text = h.get("hunk_text", "")
                 file_op = h.get("file_operation")
-
-                # Skip files marked for skipping (e.g., DELETED when file doesn't exist)
                 if file_op is None:
                     skip_file = True
                     break
-
-                file_op = file_op.upper()
-
-                # Track the old path for renamed files
-                if file_op == "RENAMED":
+                file_operations.add(file_op.upper())
+                if file_op.upper() == "RENAMED" and not old_file_path:
                     old_file_path = h.get("old_target_file") or h.get("mainline_file")
 
-                # Skip hunks with empty text (structural operations handled separately)
-                if not hunk_text or not hunk_text.strip():
-                    # This is a structural operation with no hunks
-                    file_operations.add(file_op)
-                    continue
-
-                file_hunks.append(
-                    hunk_text if hunk_text.endswith("\n") else hunk_text + "\n"
-                )
-                file_operations.add(file_op)
-
-            # Skip this file if it was marked for skipping
             if skip_file:
-                print(
-                    f"  Validation: Skipping {target_file} (file state doesn't match operation)"
-                )
+                print(f"  Validation: Skipping {target_file}")
                 continue
 
-            # If any hunk in this file indicates rename lineage, preserve it for patch header.
             if not old_file_path:
                 for h in hunks_by_file[target_file]:
                     candidate_old = _normalize_rel_path(
@@ -1605,7 +1606,7 @@ class ValidationToolkit:
                         old_file_path = candidate_old
                         break
 
-            # Determine the operation type, preserving structural intent when mixed with content hunks.
+            # Determine the operation type
             if len(file_operations) == 1:
                 file_operation = next(iter(file_operations))
             elif "RENAMED" in file_operations:
@@ -1617,14 +1618,12 @@ class ValidationToolkit:
             else:
                 file_operation = "MODIFIED"
 
-            # Handle structural operations (no hunks)
-            if not file_hunks and file_operation in ["RENAMED", "ADDED", "DELETED"]:
+            # Execute structural operation BEFORE applying hunks
+            if file_operation in ["RENAMED", "ADDED", "DELETED"]:
                 try:
                     if file_operation == "RENAMED":
                         if not old_file_path:
-                            raise ValueError(
-                                "old_file_path is required for RENAMED operation"
-                            )
+                            raise ValueError("old_file_path is required for RENAMED")
                         src = os.path.normpath(
                             os.path.join(
                                 self.target_repo_path,
@@ -1664,46 +1663,54 @@ class ValidationToolkit:
                         "output": f"Invalid {file_operation} operation for {target_file}: {e}",
                         "applied_files": [],
                     }
-                continue
 
-            if not file_hunks:
-                continue
+            # Now apply hunks one by one!
+            for h in hunks_by_file[target_file]:
+                hunk_text = h.get("hunk_text", "")
+                if not hunk_text or not hunk_text.strip():
+                    continue
 
-            if file_operation == "ADDED":
-                dst = os.path.normpath(os.path.join(self.target_repo_path, target_file))
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-            elif file_operation == "RENAMED" and old_file_path:
-                dst = os.path.normpath(os.path.join(self.target_repo_path, target_file))
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                hunk_text = hunk_text if hunk_text.endswith("\n") else hunk_text + "\n"
+                try:
+                    # Treat subsequent hunks on the same file as MODIFIED
+                    # so we don't regenerate "new file" diff headers for the same file.
+                    current_file_op = (
+                        "MODIFIED" if target_file in applied_files else file_operation
+                    )
 
-            combined_hunks = "".join(file_hunks)
-            try:
-                patch_part = self._build_patch_file(
-                    target_file,
-                    combined_hunks,
-                    file_operation=file_operation,
-                    old_file_path=old_file_path,
-                )
-                patch_parts.append(patch_part)
-                if target_file not in applied_files:
-                    applied_files.append(target_file)
-            except ValueError as e:
-                return {
-                    "success": False,
-                    "output": f"Invalid hunk format for {target_file}: {e}",
-                    "applied_files": [],
-                }
+                    patch_part = self._build_patch_file(
+                        target_file,
+                        hunk_text,
+                        file_operation=current_file_op,
+                        old_file_path=old_file_path
+                        if current_file_op == "RENAMED"
+                        else None,
+                    )
 
-        if not patch_parts:
-            return {
-                "success": False,
-                "output": "No valid hunk_text entries found.",
-                "applied_files": [],
-            }
+                    result = self._apply_patch_with_fallbacks(patch_part, [target_file])
+                    if not result.get("success"):
+                        self.restore_repo_state()
+                        return {
+                            "success": False,
+                            "output": f"Hunk application failed for {target_file} at line {h.get('insertion_line')}:\n{result.get('output')}",
+                            "applied_files": [],
+                        }
 
-        combined = "".join(patch_parts)
+                    if target_file not in applied_files:
+                        applied_files.append(target_file)
+                except ValueError as e:
+                    self.restore_repo_state()
+                    return {
+                        "success": False,
+                        "output": f"Invalid hunk format for {target_file}: {e}",
+                        "applied_files": [],
+                    }
 
-        return self._apply_patch_with_fallbacks(combined, applied_files)
+        return {
+            "success": True,
+            "output": "All hunks applied successfully.",
+            "applied_files": applied_files,
+        }
 
     def _apply_patch_with_fallbacks(
         self, patch_content: str, applied_files: list[str]
