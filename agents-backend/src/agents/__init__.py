@@ -1,6 +1,7 @@
 from .phase0_optimistic import phase_0_optimistic
 from .context_analyzer import context_analyzer_node
 from .structural_locator import structural_locator_node
+from .planning_agent import planning_agent_node
 from .hunk_generator import hunk_generator_node
 from .validation_agent import validation_agent
 

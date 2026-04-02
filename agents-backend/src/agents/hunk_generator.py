@@ -621,6 +621,56 @@ def _repair_pure_insertion_hunk_with_target_context(
     return out
 
 
+def _build_pure_insertion_hunk_from_plan(
+    *,
+    target_repo_path: str,
+    target_file: str,
+    anchor_line: int,
+    added_lines: list[str],
+    anchor_before: str = "",
+    anchor_after: str = "",
+) -> str | None:
+    """Build a pure-insertion hunk from planner anchors + real target file lines."""
+    if not added_lines:
+        return None
+    target_lines = _load_target_file_lines(target_repo_path, target_file)
+    if not target_lines:
+        return None
+
+    # Prefer exact/plausible planner-provided before anchor.
+    line_no = None
+    if anchor_before.strip():
+        line_no = _find_line_in_target(target_lines, anchor_before)
+
+    if line_no is None:
+        line_no = max(1, min(int(anchor_line or 1), len(target_lines)))
+
+    before_ctx = target_lines[line_no - 1]
+
+    after_ctx = None
+    if line_no < len(target_lines):
+        after_ctx = target_lines[line_no]
+    if anchor_after.strip():
+        found_after = _find_line_in_target(target_lines, anchor_after)
+        if found_after is not None and found_after >= line_no:
+            after_ctx = target_lines[found_after - 1]
+
+    if after_ctx is None:
+        old_count = 1
+        new_count = 1 + len(added_lines)
+        body = [f" {before_ctx}"] + [f"+{l}" for l in added_lines]
+    else:
+        old_count = 2
+        new_count = 2 + len(added_lines)
+        body = [f" {before_ctx}"] + [f"+{l}" for l in added_lines] + [f" {after_ctx}"]
+
+    header = f"@@ -{line_no},{old_count} +{line_no},{new_count} @@"
+    out = "\n".join([header] + body)
+    if not out.endswith("\n"):
+        out += "\n"
+    return out
+
+
 def _extract_added_imports(raw_hunk: str) -> list[str]:
     imports: list[str] = []
     for i, line in enumerate((raw_hunk or "").splitlines()):
@@ -1065,6 +1115,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
 
     consistency_map: dict = state.get("consistency_map") or {}
     mapped_target_context: dict = state.get("mapped_target_context") or {}
+    hunk_generation_plan: dict = state.get("hunk_generation_plan") or {}
     semantic_blueprint: SemanticBlueprint = state.get("semantic_blueprint")
     patch_analysis: list = state.get("patch_analysis") or []
     patch_diff: str = state.get("patch_diff") or ""
@@ -1207,6 +1258,13 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
 
     adapted_code_hunks: list[AdaptedHunk] = []
     adapted_test_hunks: list[AdaptedHunk] = []
+    token_usage = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "estimated": True,
+        "reason": "usage_metadata_not_available_from_llm_calls",
+    }
     trace = "# Hunk Generator Trace\n\n"
     trace += f"| target_file | hunk_index | dry_run | intent_ok |\n|---|---|---|---|\n"
 
@@ -1287,6 +1345,18 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 target_file = planned_target_file
             insertion_line = mapped_ctx.get("start_line")
             target_body = mapped_ctx.get("code_snippet", "")
+            plan_entries = hunk_generation_plan.get(mainline_file, [])
+            plan_entry = (
+                plan_entries[min(hunk_idx, len(plan_entries) - 1)]
+                if plan_entries
+                else {}
+            )
+            planned_mode = str(plan_entry.get("generation_mode") or "").strip().lower()
+            if (
+                isinstance(plan_entry.get("anchor_line"), int)
+                and plan_entry.get("anchor_line") > 0
+            ):
+                insertion_line = int(plan_entry.get("anchor_line"))
 
             # Never trust mainline hunk headers for target insertion lines.
             # If Phase 2 did not provide a valid target line, recover using target-file anchors.
@@ -1341,7 +1411,26 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 # ReAct tool loop (intelligent hunk generation) or simple LLM rewrite fallback
                 adapted_hunk_text = None
 
-                if hg_react_agent:
+                if planned_mode == "pure_insertion":
+                    added_lines = [
+                        l[1:]
+                        for l in pre_rewritten.splitlines()[1:]
+                        if l.startswith("+") and not l.startswith("+++")
+                    ]
+                    planned_candidate = _build_pure_insertion_hunk_from_plan(
+                        target_repo_path=target_repo_path,
+                        target_file=target_file,
+                        anchor_line=int(
+                            plan_entry.get("anchor_line") or insertion_line
+                        ),
+                        added_lines=added_lines,
+                        anchor_before=str(plan_entry.get("anchor_before") or ""),
+                        anchor_after=str(plan_entry.get("anchor_after") or ""),
+                    )
+                    if planned_candidate:
+                        adapted_hunk_text = planned_candidate
+
+                if hg_react_agent and adapted_hunk_text is None:
                     # ----------------------------------------------------------
                     # PRIMARY PATH: ReAct agent with file-reading tools.
                     # The agent will call read_file_window / grep_in_file /
@@ -1453,7 +1542,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                                 f"(attempt {attempt + 1}/2): {e}"
                             )
 
-                else:
+                elif adapted_hunk_text is None:
                     # ----------------------------------------------------------
                     # FALLBACK PATH: simple single LLM call (no tools).
                     # Used when target_repo_path is unavailable (local dev mode).
@@ -1576,12 +1665,8 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         f"    Agent 3: Dry-run failed for {target_file}[{hunk_idx}]: {dr['output'][:150]}"
                     )
                     trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
-                    # Store error info for Phase 4/retry (CLAW pattern: don't drop, enrich)
-                    dry_run_error_info = {
-                        "error_message": dr.get("output", "Unknown dry-run error"),
-                        "tool": "git-apply-check",
-                        "timestamp": str(__import__("datetime").datetime.now()),
-                    }
+                    # Fail-closed: do not emit unresolved bad hunks to Phase 4.
+                    continue
             else:
                 dry_run_ok = True  # No toolkit → assume ok (local dev mode)
 
@@ -1828,6 +1913,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
         ],
         "adapted_code_hunks": adapted_code_hunks,
         "adapted_test_hunks": adapted_test_hunks,
+        "token_usage": token_usage,
     }
 
 

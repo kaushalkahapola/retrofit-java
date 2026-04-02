@@ -21,6 +21,7 @@ from agents import (
     phase_0_optimistic,
     context_analyzer_node,
     structural_locator_node,
+    planning_agent_node,
     hunk_generator_node,
     validation_agent,
 )
@@ -92,6 +93,15 @@ def route_validation(state: AgentState) -> str:
                 "path/file-operation issue. Routing back to structural_locator for remap."
             )
             return "structural_locator"
+        if latest_hunk_apply_failed and failure_category in {
+            "context_mismatch",
+            "hunk_application_failed",
+        }:
+            print(
+                f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
+                "context mismatch. Routing to planning_agent for anchor replanning."
+            )
+            return "planning_agent"
         print(
             f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}). "
             "Routing back to hunk_generator for retry."
@@ -115,6 +125,7 @@ workflow = StateGraph(AgentState)
 workflow.add_node("phase_0_optimistic", phase_0_optimistic)
 workflow.add_node("context_analyzer", context_analyzer_node)
 workflow.add_node("structural_locator", structural_locator_node)
+workflow.add_node("planning_agent", planning_agent_node)
 workflow.add_node("hunk_generator", hunk_generator_node)
 workflow.add_node("validation", validation_agent)
 
@@ -140,9 +151,10 @@ workflow.add_conditional_edges(
     },
 )
 
-# Linear pipeline: Agent 1 -> Agent 2 -> Agent 3
+# Linear pipeline: Agent 1 -> Agent 2 -> Planner -> Agent 3
 workflow.add_edge("context_analyzer", "structural_locator")
-workflow.add_edge("structural_locator", "hunk_generator")
+workflow.add_edge("structural_locator", "planning_agent")
+workflow.add_edge("planning_agent", "hunk_generator")
 workflow.add_edge("hunk_generator", "validation")
 
 # Validation feedback loop: pass -> END, fail -> retry Agent 3 or give up
@@ -152,6 +164,7 @@ workflow.add_conditional_edges(
     {
         "END": END,
         "structural_locator": "structural_locator",
+        "planning_agent": "planning_agent",
         "hunk_generator": "hunk_generator",
     },
 )

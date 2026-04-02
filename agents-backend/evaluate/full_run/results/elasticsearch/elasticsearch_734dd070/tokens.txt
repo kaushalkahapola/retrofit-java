@@ -1,7 +1,0 @@
-{
-  "input_tokens": 0,
-  "output_tokens": 0,
-  "total_tokens": 0,
-  "messages_with_usage": 0,
-  "finished_at": "2026-04-02T15:26:14.615509"
-}

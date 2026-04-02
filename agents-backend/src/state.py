@@ -65,6 +65,13 @@ e.g., {
 }
 """
 
+HunkGenerationPlan = dict[str, list[dict[str, Any]]]
+"""
+Planning Agent output.
+Per-mainline-file ordered hunk planning entries that include verified anchors,
+line numbers, and generation strategy hints for Agent 3.
+"""
+
 
 class AdaptedHunk(TypedDict):
     """
@@ -153,6 +160,9 @@ class AgentState(TypedDict):
     mapped_target_context: Optional[
         MappedTargetContext
     ]  # Exact target insertion context
+    hunk_generation_plan: Optional[
+        HunkGenerationPlan
+    ]  # Planner output: verified per-hunk anchors/context for generation
 
     # --- Legacy / Agent 2 compatibility ---
     implementation_plan: (
@@ -184,3 +194,6 @@ class AgentState(TypedDict):
     validation_retry_files: NotRequired[
         list[str]
     ]  # Retry scope: files implicated in last validation failure
+    agent_token_usage: NotRequired[
+        dict[str, dict[str, Any]]
+    ]  # Per-node token accounting (exact or estimated)

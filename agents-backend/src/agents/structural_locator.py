@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 PHASE2_DETERMINISTIC_FIRST = (
     os.getenv("PHASE2_DETERMINISTIC_FIRST", "true").strip().lower() == "true"
 )
-PHASE2_DISABLE_LLM = os.getenv("PHASE2_DISABLE_LLM", "false").strip().lower() == "true"
+PHASE2_DISABLE_LLM = os.getenv("PHASE2_DISABLE_LLM", "true").strip().lower() == "true"
 PHASE2_MAX_DIFF_CHARS = int(os.getenv("PHASE2_MAX_DIFF_CHARS", "8000"))
 PHASE2_RECURSION_LIMIT = int(os.getenv("PHASE2_RECURSION_LIMIT", "18"))
 
@@ -604,28 +604,30 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         retriever = None
         toolkit = None
 
-    # Setup LLM Agent
-    llm = get_llm(temperature=0)
-    tools = (
-        [
-            t
-            for t in toolkit.get_tools()
-            if t.name
-            in [
-                "search_candidates",
-                "match_structure",
-                "get_dependency_graph",
-                "read_file",
-                "get_class_context",
-                "git_log_follow",
-                "git_blame_lines",
+    # Setup LLM Agent only when fallback is enabled.
+    llm = None
+    agent = None
+    if not PHASE2_DISABLE_LLM:
+        llm = get_llm(temperature=0)
+        tools = (
+            [
+                t
+                for t in toolkit.get_tools()
+                if t.name
+                in [
+                    "search_candidates",
+                    "match_structure",
+                    "get_dependency_graph",
+                    "read_file",
+                    "get_class_context",
+                    "git_log_follow",
+                    "git_blame_lines",
+                ]
             ]
-        ]
-        if toolkit
-        else []
-    )
-
-    agent = create_react_agent(llm, tools=tools, prompt=_AGENT_SYSTEM)
+            if toolkit
+            else []
+        )
+        agent = create_react_agent(llm, tools=tools, prompt=_AGENT_SYSTEM)
 
     # ------------------------------------------------------------------
     # 2. Process hunks from hunk_chain (from semantic_blueprint)
@@ -1124,6 +1126,15 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         ],
         "consistency_map": consistency_map,
         "mapped_target_context": mapped_target_context,
+        "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": PHASE2_DISABLE_LLM,
+            "reason": "deterministic_no_llm"
+            if PHASE2_DISABLE_LLM
+            else "llm_usage_not_collected_in_this_node",
+        },
     }
 
 

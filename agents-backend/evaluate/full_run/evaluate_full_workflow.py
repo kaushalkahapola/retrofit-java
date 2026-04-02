@@ -1007,7 +1007,145 @@ async def run_full_pipeline(
         "output_tokens": 0,
         "total_tokens": 0,
         "messages_with_usage": 0,
+        "estimated_messages": 0,
+        "by_node": {},
     }
+
+    class _Tee:
+        def __init__(self, *streams):
+            self.streams = streams
+
+        def write(self, data):
+            for s in self.streams:
+                try:
+                    s.write(data)
+                except Exception:
+                    pass
+            return len(data)
+
+        def flush(self):
+            for s in self.streams:
+                try:
+                    s.flush()
+                except Exception:
+                    pass
+
+    def _estimate_tokens_from_text(text: str) -> int:
+        # Coarse fallback: ~4 chars/token for English/code mix.
+        t = str(text or "")
+        if not t:
+            return 0
+        return max(1, len(t) // 4)
+
+    def _add_tokens(
+        node_name: str,
+        input_tokens: int,
+        output_tokens: int,
+        *,
+        estimated: bool,
+        source: str,
+    ) -> None:
+        in_t = int(input_tokens or 0)
+        out_t = int(output_tokens or 0)
+        if in_t == 0 and out_t == 0:
+            return
+
+        token_totals["input_tokens"] += in_t
+        token_totals["output_tokens"] += out_t
+        token_totals["total_tokens"] = (
+            token_totals["input_tokens"] + token_totals["output_tokens"]
+        )
+        if estimated:
+            token_totals["estimated_messages"] += 1
+        else:
+            token_totals["messages_with_usage"] += 1
+
+        node_bucket = token_totals["by_node"].setdefault(
+            node_name,
+            {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "estimated_events": 0,
+                "exact_events": 0,
+                "sources": [],
+            },
+        )
+        node_bucket["input_tokens"] += in_t
+        node_bucket["output_tokens"] += out_t
+        node_bucket["total_tokens"] = (
+            node_bucket["input_tokens"] + node_bucket["output_tokens"]
+        )
+        if estimated:
+            node_bucket["estimated_events"] += 1
+        else:
+            node_bucket["exact_events"] += 1
+        node_bucket["sources"].append(source)
+
+    def _consume_usage(node_name: str, usage: dict | None, source: str) -> bool:
+        if not isinstance(usage, dict) or not usage:
+            return False
+        in_t = usage.get("input_tokens", usage.get("prompt_tokens", 0))
+        out_t = usage.get("output_tokens", usage.get("completion_tokens", 0))
+        total = usage.get("total_tokens")
+        if total and (not in_t and not out_t):
+            # Split unknown direction 50/50 as fallback.
+            in_t = int(total) // 2
+            out_t = int(total) - int(in_t)
+        _add_tokens(
+            node_name, int(in_t or 0), int(out_t or 0), estimated=False, source=source
+        )
+        return bool(in_t or out_t or total)
+
+    def _collect_tokens_from_node_output(
+        node_name: str, node_output: dict[str, Any]
+    ) -> None:
+        exact_hit = False
+
+        if _consume_usage(
+            node_name, node_output.get("token_usage"), "node.token_usage"
+        ):
+            exact_hit = True
+
+        msgs = node_output.get("messages", []) if isinstance(node_output, dict) else []
+        for m in msgs:
+            md = getattr(m, "response_metadata", {}) or {}
+            if isinstance(md, dict):
+                if _consume_usage(
+                    node_name,
+                    md.get("token_usage"),
+                    "msg.response_metadata.token_usage",
+                ):
+                    exact_hit = True
+                if _consume_usage(
+                    node_name,
+                    md.get("usage"),
+                    "msg.response_metadata.usage",
+                ):
+                    exact_hit = True
+
+            um = getattr(m, "usage_metadata", {}) or {}
+            if _consume_usage(node_name, um, "msg.usage_metadata"):
+                exact_hit = True
+
+        if not exact_hit and msgs:
+            in_chars = 0
+            out_chars = 0
+            for m in msgs:
+                txt = getattr(m, "content", "")
+                s = txt if isinstance(txt, str) else str(txt)
+                if getattr(m, "type", "") == "ai":
+                    out_chars += len(s)
+                else:
+                    in_chars += len(s)
+
+            _add_tokens(
+                node_name,
+                _estimate_tokens_from_text("x" * in_chars),
+                _estimate_tokens_from_text("x" * out_chars),
+                estimated=True,
+                source="estimated_from_message_chars",
+            )
 
     def _append_runtime_log(message: str) -> None:
         with open(runtime_log_path, "a", encoding="utf-8") as lf:
@@ -1024,6 +1162,12 @@ async def run_full_pipeline(
             f"started_at={datetime.now().isoformat()}\n"
             "----------------------------------------\n"
         )
+
+    _orig_stdout = sys.stdout
+    _orig_stderr = sys.stderr
+    _log_stream = open(runtime_log_path, "a", encoding="utf-8")
+    sys.stdout = _Tee(_orig_stdout, _log_stream)
+    sys.stderr = _Tee(_orig_stderr, _log_stream)
 
     try:
         if run_mode not in {RUN_MODE_FULL, RUN_MODE_PHASE1, RUN_MODE_PHASE2}:
@@ -1102,6 +1246,7 @@ async def run_full_pipeline(
 
             print(f"[{project}/{patch_id}] Running {phase_name} only...")
             phase1_result = await context_analyzer_node(base_inputs, config={})
+            _collect_tokens_from_node_output("context_analyzer", phase1_result)
             _append_runtime_log("Completed node=context_analyzer")
             phase1_outputs = {k: v for k, v in phase1_result.items() if k != "messages"}
             save_agent_state(project, patch_id, phase_name, phase1_outputs, agent_name)
@@ -1175,6 +1320,7 @@ async def run_full_pipeline(
             phase2_inputs["semantic_blueprint"] = semantic_blueprint
             print(f"[{project}/{patch_id}] Running {phase_name} only...")
             phase2_result = await structural_locator_node(phase2_inputs, config={})
+            _collect_tokens_from_node_output("structural_locator", phase2_result)
             _append_runtime_log("Completed node=structural_locator")
             phase2_outputs = {k: v for k, v in phase2_result.items() if k != "messages"}
             save_agent_state(project, patch_id, phase_name, phase2_outputs, agent_name)
@@ -1313,22 +1459,8 @@ async def run_full_pipeline(
             for node_name, node_output in output.items():
                 print(f"  Completed: {node_name}")
                 _append_runtime_log(f"Completed node={node_name}")
-
-                msgs = (
-                    node_output.get("messages", [])
-                    if isinstance(node_output, dict)
-                    else []
-                )
-                for msg in msgs:
-                    md = getattr(msg, "response_metadata", {}) or {}
-                    usage = md.get("token_usage", {}) if isinstance(md, dict) else {}
-                    if isinstance(usage, dict) and usage:
-                        in_tok = int(usage.get("prompt_tokens", 0) or 0)
-                        out_tok = int(usage.get("completion_tokens", 0) or 0)
-                        token_totals["input_tokens"] += in_tok
-                        token_totals["output_tokens"] += out_tok
-                        token_totals["total_tokens"] += in_tok + out_tok
-                        token_totals["messages_with_usage"] += 1
+                if isinstance(node_output, dict):
+                    _collect_tokens_from_node_output(node_name, node_output)
 
                 if (
                     isinstance(node_output, dict)
@@ -1344,6 +1476,8 @@ async def run_full_pipeline(
                     current_phase = "phase1_context_analyzer"
                 elif node_name in ["structural_locator"]:
                     current_phase = "phase2_structural_locator"
+                elif node_name in ["planning_agent"]:
+                    current_phase = "phase2_5_planning_agent"
                 elif node_name in ["hunk_generator"]:
                     current_phase = "phase3_hunk_generator"
                 elif node_name in ["validation"]:
@@ -1451,6 +1585,12 @@ async def run_full_pipeline(
         print(f"[{project}/{patch_id}] Workflow failed: {e}")
         return results
     finally:
+        try:
+            sys.stdout = _orig_stdout
+            sys.stderr = _orig_stderr
+            _log_stream.close()
+        except Exception:
+            pass
         token_totals["finished_at"] = datetime.now().isoformat()
         with open(runtime_tokens_path, "w", encoding="utf-8") as tf:
             json.dump(token_totals, tf, indent=2)
