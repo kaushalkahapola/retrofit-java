@@ -511,7 +511,9 @@ def _build_import_hunk_for_target(
         return None
 
     import_lines = [
-        i + 1 for i, line in enumerate(target_lines) if line.strip().startswith("import ")
+        i + 1
+        for i, line in enumerate(target_lines)
+        if line.strip().startswith("import ")
     ]
     if not import_lines:
         return None
@@ -1218,7 +1220,9 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         if extracted:
                             # Candidate A: raw model rewrite as-is.
                             direct_candidate = (
-                                extracted if extracted.endswith("\n") else extracted + "\n"
+                                extracted
+                                if extracted.endswith("\n")
+                                else extracted + "\n"
                             )
 
                             # Candidate B: same rewrite but header anchored to mapped insertion line.
@@ -1272,7 +1276,9 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
 
                 if not adapted_hunk_text:
                     # Last fallback is deterministic rewrite, but keep fail-closed behavior below.
-                    adapted_hunk_text = _adjust_hunk_header(pre_rewritten, insertion_line)
+                    adapted_hunk_text = _adjust_hunk_header(
+                        pre_rewritten, insertion_line
+                    )
                     print(
                         f"    Agent 3: Fallback candidate generated for {target_file}[{hunk_idx}]"
                     )
@@ -1287,7 +1293,9 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         f"    Agent 3: Dry-run failed for {target_file}[{hunk_idx}]: {dr['output'][:150]}"
                     )
                     trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
-                    continue
+                    # We no longer 'continue' here. We let the failing hunk pass to Phase 4
+                    # so that Phase 4 can try applying the whole patch, fail, and provide
+                    # actual `git apply` feedback for retries.
             else:
                 dry_run_ok = True  # No toolkit → assume ok (local dev mode)
 
