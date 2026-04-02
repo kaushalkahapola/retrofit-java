@@ -1539,17 +1539,18 @@ class ValidationToolkit:
                 hunks_by_file[target_file] = []
             hunks_by_file[target_file].append(h)
 
-        # Sort hunks within each file bottom-to-top so earlier line numbers remain stable.
+        # Sort hunks within each file top-to-bottom so git apply and patch can parse them.
+        # Standard unified diff format requires hunks to be in ascending line order.
         for target_file in hunks_by_file:
             hunks_by_file[target_file].sort(
-                key=lambda h: h.get("insertion_line", 0), reverse=True
+                key=lambda h: h.get("insertion_line", 0), reverse=False
             )
             insertion_lines = [
                 h.get("insertion_line") for h in hunks_by_file[target_file]
             ]
             print(
                 f"  Validation: {target_file} - applying {len(hunks_by_file[target_file])} "
-                f"hunk(s) in bottom-to-top order: {insertion_lines}"
+                f"hunk(s) in top-to-bottom order: {insertion_lines}"
             )
 
         # Build one patch section per file so offsets are resolved cumulatively.

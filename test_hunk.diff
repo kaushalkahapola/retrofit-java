@@ -1,0 +1,43 @@
+--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java
++++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java
+@@ -129,12 +129,39 @@
+                         nodePermits.putIfAbsent(node, new Semaphore(1));
+                     }
+                 }
+-                pendingShardIds.addAll(targetShards.shards.keySet());
++                pendingShardIds.addAll(order(targetShards));
+                 trySendingRequestsForPendingShards(targetShards, computeListener);
+             }
+         }, listener::onFailure));
+     }
+ 
++    private static List<ShardId> order(TargetShards targetShards) {
++        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();
++        var ordered = new ArrayList<>(targetShards.shards.keySet());
++        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));
++        return ordered;
++    }
++
++    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {
++        if (nodes.isEmpty()) {
++            return Integer.MAX_VALUE;
++        }
++        var order = 0;
++        for (var node : nodes) {
++            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));
++        }
++        return order;
++    }
++
++    private static int nodeOrder(DiscoveryNode node) {
++        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {
++            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {
++                return i;
++            }
++        }
++        return Integer.MAX_VALUE;
++    }
++
+     private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {
+         changed.set(true);
+         final ActionListener<Void> listener = computeListener.acquireAvoid();
