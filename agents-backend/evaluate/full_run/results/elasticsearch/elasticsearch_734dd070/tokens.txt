@@ -1,7 +1,7 @@
 {
-  "input_tokens": 49696,
-  "output_tokens": 2647,
-  "total_tokens": 52343,
+  "input_tokens": 106265,
+  "output_tokens": 2530,
+  "total_tokens": 108795,
   "messages_with_usage": 4,
   "estimated_messages": 2,
   "tokenizer": {
@@ -31,9 +31,9 @@
       ]
     },
     "planning_agent": {
-      "input_tokens": 45776,
-      "output_tokens": 2395,
-      "total_tokens": 48171,
+      "input_tokens": 104541,
+      "output_tokens": 2473,
+      "total_tokens": 107014,
       "estimated_events": 0,
       "exact_events": 1,
       "sources": [
@@ -41,9 +41,9 @@
       ]
     },
     "hunk_generator": {
-      "input_tokens": 3888,
-      "output_tokens": 252,
-      "total_tokens": 4140,
+      "input_tokens": 1692,
+      "output_tokens": 57,
+      "total_tokens": 1749,
       "estimated_events": 0,
       "exact_events": 3,
       "sources": [
@@ -53,5 +53,5 @@
       ]
     }
   },
-  "finished_at": "2026-04-03T04:12:21.865449"
+  "finished_at": "2026-04-03T05:18:03.945203"
 }
