@@ -41,6 +41,9 @@ from utils.token_counter import (
 from agents.hunk_generator_tools import HunkGeneratorToolkit
 
 
+PLANNER_MAX_HUNK_CHARS_REACT = int(os.getenv("PLANNER_MAX_HUNK_CHARS_REACT", "2200"))
+
+
 # ---------------------------------------------------------------------------
 # Planner system prompt
 # ---------------------------------------------------------------------------
@@ -798,6 +801,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             continue
 
         mapped = mapped_target_context.get(mainline_file, [])
+        file_has_mapping = bool(mapped)
         for hidx, raw_hunk in enumerate(raw_hunks):
             if validation_attempts > 0 and retry_hunks and hidx not in retry_hunks:
                 continue
@@ -846,7 +850,23 @@ async def planning_agent_node(state: AgentState, config) -> dict:
 
             planned_entries: list[dict[str, Any]] = []
 
-            if react and toolkit:
+            use_react_for_hunk = bool(
+                react
+                and toolkit
+                and file_has_mapping
+                and len(raw_hunk or "") <= PLANNER_MAX_HUNK_CHARS_REACT
+            )
+            if not use_react_for_hunk and react and toolkit:
+                reason = []
+                if not file_has_mapping:
+                    reason.append("no_mapping")
+                if len(raw_hunk or "") > PLANNER_MAX_HUNK_CHARS_REACT:
+                    reason.append("hunk_too_large")
+                print(
+                    f"    Planning Agent: deterministic-only mode for {target_file}[{hidx}] ({','.join(reason) or 'guarded'})."
+                )
+
+            if use_react_for_hunk:
                 for req in required_entries:
                     edit_type_hint = str(
                         req.get("edit_type") or _classify_edit_type(raw_hunk)

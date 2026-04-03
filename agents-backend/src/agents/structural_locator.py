@@ -54,6 +54,9 @@ PHASE2_DETERMINISTIC_FIRST = (
 PHASE2_DISABLE_LLM = os.getenv("PHASE2_DISABLE_LLM", "false").strip().lower() == "true"
 PHASE2_MAX_DIFF_CHARS = int(os.getenv("PHASE2_MAX_DIFF_CHARS", "8000"))
 PHASE2_RECURSION_LIMIT = int(os.getenv("PHASE2_RECURSION_LIMIT", "18"))
+PHASE2_MAX_HUNK_PROMPT_CHARS = int(os.getenv("PHASE2_MAX_HUNK_PROMPT_CHARS", "1400"))
+PHASE2_MAX_HUNKS_IN_PROMPT = int(os.getenv("PHASE2_MAX_HUNKS_IN_PROMPT", "10"))
+PHASE2_MAX_PROMPT_CHARS = int(os.getenv("PHASE2_MAX_PROMPT_CHARS", "32000"))
 
 
 def _looks_like_test(path: str) -> bool:
@@ -71,6 +74,101 @@ def _normalize_repo_rel_path(path: str) -> str:
     if p.startswith("a/") or p.startswith("b/"):
         p = p[2:]
     return p
+
+
+def _suggest_semantic_neighbor_files(mainline_file: str) -> list[str]:
+    """Suggest likely semantic neighbors when generated parser artifacts diverge."""
+    p = _normalize_repo_rel_path(mainline_file)
+    if not p:
+        return []
+    dirname = os.path.dirname(p)
+    base = os.path.basename(p)
+    out: list[str] = []
+
+    if "BaseLexer" in base:
+        out.append(base.replace("BaseLexer", "Parser"))
+    if "BaseParser" in base:
+        out.append(base.replace("BaseParser", "Parser"))
+    if base.endswith("Lexer.java"):
+        out.append(base.replace("Lexer.java", "Parser.java"))
+    if base.endswith("Parser.java") and "BaseParser" in base:
+        out.append(base.replace("BaseParser", "Parser"))
+
+    # Dedup and re-prefix directory.
+    dedup = []
+    seen = set()
+    for b in out:
+        rel = _normalize_repo_rel_path(os.path.join(dirname, b)) if dirname else b
+        if rel and rel not in seen:
+            seen.add(rel)
+            dedup.append(rel)
+    return dedup
+
+
+def _trim_line_for_prompt(line: str, limit: int = 220) -> str:
+    s = str(line or "")
+    if len(s) <= limit:
+        return s
+    return s[:limit] + " ...[truncated]"
+
+
+def _compact_hunk_for_prompt(raw_hunk: str, max_chars: int) -> str:
+    """
+    Compact a hunk for LLM prompt budgeting.
+    Keep header + a bounded number of removed/context/added lines.
+    """
+    if not raw_hunk:
+        return ""
+
+    lines = raw_hunk.splitlines()
+    header = lines[0] if lines and lines[0].startswith("@@") else "@@"
+    removed: list[str] = []
+    added: list[str] = []
+    context: list[str] = []
+
+    for ln in lines[1:]:
+        if ln.startswith("-") and not ln.startswith("---"):
+            removed.append(_trim_line_for_prompt(ln))
+        elif ln.startswith("+") and not ln.startswith("+++"):
+            added.append(_trim_line_for_prompt(ln))
+        elif ln.startswith(" "):
+            s = ln[1:].strip()
+            if s and len(s) > 3:
+                context.append(_trim_line_for_prompt(ln))
+
+    out: list[str] = [header]
+    out.extend(removed[:6])
+    out.extend(context[:5])
+    out.extend(added[:6])
+
+    compact = "\n".join(out)
+    if len(compact) > max_chars:
+        compact = compact[:max_chars] + "\n...[hunk truncated]..."
+    return compact
+
+
+def _build_hunk_details_for_prompt(
+    file_hunks: list,
+    raw_hunks_for_file: list[str],
+    *,
+    max_hunks: int,
+    per_hunk_chars: int,
+    total_chars: int,
+) -> str:
+    parts: list[str] = []
+    for idx, hunk in enumerate(file_hunks[: max(1, max_hunks)]):
+        raw = raw_hunks_for_file[idx] if idx < len(raw_hunks_for_file) else ""
+        compact = _compact_hunk_for_prompt(raw, per_hunk_chars)
+        parts.append(
+            f"\nHunk {idx + 1} (role: {hunk.get('role')}):\n```diff\n{compact}\n```\n"
+        )
+        if sum(len(p) for p in parts) >= total_chars:
+            parts.append("\n...[additional hunks omitted for prompt budget]...\n")
+            break
+    text = "".join(parts)
+    if len(text) > total_chars:
+        text = text[:total_chars] + "\n...[hunk details truncated]..."
+    return text
 
 
 _AGENT_SYSTEM = """You are an expert software engineer mapping code from a new mainline patch to an older target repository.
@@ -567,15 +665,14 @@ def _deterministic_map_hunks_for_file(
 
     Returns None when confidence is low (so caller can fall back to LLM mapping).
     """
-    if (
-        not file_hunks
-        or not raw_hunks_for_file
-        or len(raw_hunks_for_file) < len(file_hunks)
-    ):
+    if not file_hunks or not raw_hunks_for_file:
         return None
 
     deterministic: list[dict] = []
+    mapped_count = 0
     for idx, hunk_meta in enumerate(file_hunks):
+        if idx >= len(raw_hunks_for_file):
+            continue
         raw_hunk = raw_hunks_for_file[idx]
         hunk_idx = hunk_meta.get("hunk_index", idx)
         hunk_role = hunk_meta.get("role", "")
@@ -597,19 +694,49 @@ def _deterministic_map_hunks_for_file(
         )
 
         if start_line is None:
-            # If any hunk in the file fails to map via anchors,
-            # fail the entire deterministic path so we can fall back
-            # to investigative search.
-            return None
+            # Per-hunk fallback marker; do not fail entire file mapping.
+            deterministic.append(
+                {
+                    "mainline_method": method_guess
+                    or (
+                        "<import>" if hunk_role == "declaration" else f"hunk_{hunk_idx}"
+                    ),
+                    "target_file": target_file,
+                    "target_method": method_guess,
+                    "start_line": None,
+                    "end_line": None,
+                    "code_snippet": "",
+                    "anchor_confidence": "low",
+                    "anchor_reason": "deterministic_anchor_not_found",
+                    "anchor_strategy": "deterministic_partial",
+                }
+            )
+            continue
 
         # Verify anchor confidence before committing to deterministic path
         conf, reason = _infer_anchor_confidence(
             target_repo_path, target_file, start_line, method_guess
         )
         if conf == "low":
-            # If confidence is low (e.g. line out of range or file missing),
-            # trigger investigative search.
-            return None
+            deterministic.append(
+                {
+                    "mainline_method": method_guess
+                    or (
+                        "<import>" if hunk_role == "declaration" else f"hunk_{hunk_idx}"
+                    ),
+                    "target_file": target_file,
+                    "target_method": method_guess,
+                    "start_line": start_line,
+                    "end_line": end_line,
+                    "code_snippet": snippet,
+                    "anchor_confidence": "low",
+                    "anchor_reason": reason,
+                    "anchor_strategy": "deterministic_partial",
+                }
+            )
+            continue
+
+        mapped_count += 1
 
         deterministic.append(
             {
@@ -620,10 +747,13 @@ def _deterministic_map_hunks_for_file(
                 "start_line": start_line,
                 "end_line": end_line,
                 "code_snippet": snippet,
+                "anchor_confidence": conf,
+                "anchor_reason": reason,
+                "anchor_strategy": "deterministic_realign",
             }
         )
 
-    return deterministic
+    return deterministic if mapped_count > 0 else None
 
 
 # ---------------------------------------------------------------------------
@@ -841,6 +971,14 @@ async def structural_locator_node(state: AgentState, config) -> dict:
             filtered_candidates.append(new_cand)
         candidates = filtered_candidates
 
+        # Add semantic neighbor guesses (useful for generated parser artifacts).
+        for neighbor in _suggest_semantic_neighbor_files(mainline_file):
+            if neighbor in failed_locator_paths:
+                continue
+            if any(c.get("file") == neighbor for c in candidates):
+                continue
+            candidates.append({"file": neighbor, "reason": "semantic_neighbor"})
+
         if not candidates:
             fallback_file = _normalize_repo_rel_path(mainline_file)
             candidates = [
@@ -851,6 +989,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
         mapping_result = None
         used_deterministic = False
+        should_run_llm = True
 
         # 1. Deterministic Mapping Loop (Try each candidate)
         if PHASE2_DETERMINISTIC_FIRST:
@@ -869,6 +1008,16 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 # REFINEMENT: Only accept deterministic match if confidence is NOT low.
                 # If anchors only matched weak boilerplate, we MUST use investigative search.
                 if deterministic_mappings:
+                    high_conf_mappings = [
+                        m
+                        for m in deterministic_mappings
+                        if str(m.get("anchor_confidence") or "").lower() != "low"
+                    ]
+                    low_conf_mappings = [
+                        m
+                        for m in deterministic_mappings
+                        if str(m.get("anchor_confidence") or "").lower() == "low"
+                    ]
                     is_low_conf = any(
                         _infer_anchor_confidence(
                             target_repo_path,
@@ -877,7 +1026,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                             m["target_method"],
                         )[0]
                         == "low"
-                        for m in deterministic_mappings
+                        for m in high_conf_mappings
                     )
                     methods_exist = all(
                         _verify_method_exists_in_target(
@@ -886,7 +1035,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                             str(m.get("target_file") or cand_file),
                             str(m.get("target_method") or ""),
                         )
-                        for m in deterministic_mappings
+                        for m in high_conf_mappings
                     )
                     if not methods_exist:
                         failed_locator_paths.add(_normalize_repo_rel_path(cand_file))
@@ -899,16 +1048,23 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                             "(method_absent_in_target).\n\n"
                         )
                         continue
-                    if not is_low_conf:
+                    if not is_low_conf and high_conf_mappings:
                         print(
                             f"  Agent 2: High-confidence deterministic match found in {cand_file}"
                         )
                         mapping_result = {
-                            "mappings": deterministic_mappings,
+                            "mappings": high_conf_mappings,
                             "consistency_map_entries": {},
                         }
                         used_deterministic = True
                         trace += f"**Deterministic Mode**: matched `{cand_file}` with high confidence.\n\n"
+                        if low_conf_mappings:
+                            trace += (
+                                f"**Deterministic Mode**: {len(low_conf_mappings)} hunk(s) remained low confidence; "
+                                "using deterministic partial mapping without LLM escalation.\n\n"
+                            )
+                            mapping_result["mappings"] = deterministic_mappings
+                        should_run_llm = False
                         break
                     else:
                         print(
@@ -916,14 +1072,17 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         )
 
         # 2. Investigative LLM Loop (Fallback)
-        if mapping_result is None and not PHASE2_DISABLE_LLM:
+        if mapping_result is None and not PHASE2_DISABLE_LLM and should_run_llm:
             primary_target = candidates[0]["file"]
             other_targets = [c["file"] for c in candidates[1:5]]
 
-            hunk_details = ""
-            for idx, hunk in enumerate(file_hunks):
-                raw = raw_hunks_for_file[idx] if idx < len(raw_hunks_for_file) else ""
-                hunk_details += f"\nHunk {idx + 1} (role: {hunk.get('role')}):\n```diff\n{raw}\n```\n"
+            hunk_details = _build_hunk_details_for_prompt(
+                file_hunks,
+                raw_hunks_for_file,
+                max_hunks=PHASE2_MAX_HUNKS_IN_PROMPT,
+                per_hunk_chars=PHASE2_MAX_HUNK_PROMPT_CHARS,
+                total_chars=max(2000, PHASE2_MAX_PROMPT_CHARS // 2),
+            )
 
             # Build LLM prompt only when deterministic path did not produce a usable mapping.
             file_diff = ""
@@ -960,6 +1119,26 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 f"3. If overlap is low or zero, assume pair mismatch and aggressively locate semantically equivalent logic; file-level overlap is not required.\n"
                 f"4. REPORT: Return a JSON with 'mappings' array. Each hunk can have a DIFFERENT 'target_file' if the logic was split or relocated."
             )
+            if len(input_msg) > PHASE2_MAX_PROMPT_CHARS:
+                over = len(input_msg) - PHASE2_MAX_PROMPT_CHARS
+                budget_hunks = max(2000, len(hunk_details) - over - 1000)
+                hunk_details = (
+                    hunk_details[:budget_hunks] + "\n...[prompt budget truncation]..."
+                )
+                input_msg = (
+                    f"Mainline File: {mainline_file}\n"
+                    f"Primary Target Hypothesis: {primary_target}\n"
+                    f"Other Potential Targets: {other_targets}\n"
+                    f"Pair mismatch diagnostics: {json.dumps(pair_consistency, indent=2)}\n"
+                    f"Hunk Details: {hunk_details}\n"
+                    f"Semantic Blueprint:\n{json.dumps(simple_blueprint, indent=2)}\n\n"
+                    f"Patch Diff for this file:\n```diff\n{file_diff}\n```\n\n"
+                    f"MISSION: Locate where each hunk applies in the target repository.\n"
+                    f"1. VERIFY if the logic still lives in '{primary_target}' using `get_class_context` or `read_file`.\n"
+                    f"2. IF LOGIC IS MISSING/MOVED: Use `grep_repo` for unique strings, `git_pickaxe` for history, or `get_dependency_graph` to find architectural neighbors (like classes that call or are called by the original class).\n"
+                    f"3. If overlap is low or zero, assume pair mismatch and aggressively locate semantically equivalent logic; file-level overlap is not required.\n"
+                    f"4. REPORT: Return a JSON with 'mappings' array. Each hunk can have a DIFFERENT 'target_file' if the logic was split or relocated."
+                )
             input_data = {"messages": [("user", input_msg)]}
 
             for attempt in range(2):
@@ -1038,6 +1217,11 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         mainline_file,
                         attempt + 1,
                     )
+                    if "context_length_exceeded" in str(e):
+                        print(
+                            "  Agent 2: context_length_exceeded; skipping LLM for this file and relying on deterministic partial mappings."
+                        )
+                        break
                     if attempt == 0:
                         print("  Waiting 30 seconds before retry...")
                         time.sleep(30)
@@ -1263,6 +1447,11 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         f"Total hunk mappings: {sum(len(v) for v in mapped_target_context.values())}. "
         f"ConsistencyMap has {len(consistency_map)} rename(s)."
     )
+    if not mapped_target_context and not PHASE2_DISABLE_LLM:
+        print(
+            "  Agent 2: No mappings produced. Consider setting PHASE2_DISABLE_LLM=true "
+            "to force deterministic mapping on very large generated diffs."
+        )
     logger.info(
         "Agent 2 complete: mapped_files=%d total_hunk_mappings=%d consistency_map_entries=%d",
         len(mapped_target_context),
