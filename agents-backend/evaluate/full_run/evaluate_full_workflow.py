@@ -57,7 +57,7 @@ RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 PHASE0_CACHE_DIR = os.path.join(os.path.dirname(__file__), "phase0_cache")
 
 TARGET_PROJECTS = ["elasticsearch"]
-MAX_PATCHES_PER_PROJECT = 7
+MAX_PATCHES_PER_PROJECT = 6
 
 RUN_MODE_FULL = "full"
 RUN_MODE_PHASE1 = "phase1"

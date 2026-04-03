@@ -1,0 +1,5 @@
+# Phase 0 Cache Reuse
+
+- Cache file: /home/kaushal/retrofit-java/agents-backend/evaluate/full_run/phase0_cache/elasticsearch_56e19e28bd09_21845ad7a188.json
+- Reused targets: {'test_targets': ['x-pack/plugin/esql:org.elasticsearch.xpack.esql.parser.StatementParserTests'], 'source_modules': ['x-pack/plugin/esql'], 'all_modules': ['x-pack/plugin/esql'], 'raw': {'source': 'changed_files', 'changed_files': ['docs/changelog/123085.yaml', 'x-pack/plugin/esql/src/main/antlr/EsqlBaseLexer.g4', 'x-pack/plugin/esql/src/main/antlr/EsqlBaseLexer.tokens', 'x-pack/plugin/esql/src/main/antlr/EsqlBaseParser.tokens', 'x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.interp', 'x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java', 'x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.interp', 'x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java', 'x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/parser/StatementParserTests.java']}}
+- Reused baseline mode: elasticsearch-helper-script

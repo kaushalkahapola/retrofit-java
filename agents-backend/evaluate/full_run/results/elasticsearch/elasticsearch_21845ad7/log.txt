@@ -1,0 +1,28 @@
+patch_id=elasticsearch_21845ad7
+project=elasticsearch
+mainline_commit=21845ad7a18821ccd80927211285308bb3eb8038
+backport_commit=56e19e28bd098337f57e5b49f45ae14137fd3e72
+mode=full
+started_at=2026-04-03T15:26:11.746656
+----------------------------------------
+Running full workflow graph
+Completed node=context_analyzer
+
+[elasticsearch/elasticsearch_21845ad7] Setting up repositories for mode=full...
+[elasticsearch/elasticsearch_21845ad7] Found cached Phase 0 results. Skipping Phase 0 and reusing baseline test state.
+[elasticsearch/elasticsearch_21845ad7] Running full workflow graph...
+Router: Skipping Phase 0 - entering full 4-agent pipeline directly.
+Agent 1 (Context Analyzer): Deterministic blueprint generation...
+Agent 1: Complete. Files=2 hunks=25 (deterministic).
+  Completed: context_analyzer
+Agent 2 (Structural Locator): Starting target location mapping...
+  Agent 2: 2 code file(s), 0 test file(s)
+LLM Provider: azure, Model: apim-4o-mini, Temperature: 0
+  Agent 2: Found 25 hunk(s) in hunk_chain
+  Agent 2: Locating target for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java (9 hunk(s))...
+Blob Hunting: Searching for SHA 53764ba53bc76df6a7f3ee0900b609d06a71b06b (x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java)
+Blob Hunting: Found EXACT match in HEAD at x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java
+Phase 1 (Git) Match Found: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java
+  Agent 2: Git resolution found target: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java
+  Agent 2: LLM call error (attempt 1/2): Error code: 400 - {'error': {'message': "This model's maximum context length is 128000 tokens. However, your messages resulted in 1162174 tokens (1161715 in the messages, 459 in the functions). Please reduce the length of the messages or functions.", 'type': 'invalid_request_error', 'param': 'messages', 'code': 'context_length_exceeded'}}
+  Waiting 30 seconds before retry...
