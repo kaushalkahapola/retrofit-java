@@ -34,7 +34,7 @@ class SemanticBlueprint(TypedDict):
     fix_logic: str  # e.g., "Add if(buffer_size > MAX) return; before memcpy"
     dependent_apis: list  # e.g., ["alloc_buf", "MAX_BUF_SIZE"]
     patch_intent_summary: str  # One-sentence overall goal of the entire patch
-    hunk_chain: list  # Ordered list of HunkRole dicts — causal chain across all hunks
+    hunk_chain: list  # Ordered list of HunkRole dicts - causal chain across all hunks
 
 
 # Type aliases for semantic clarity
@@ -68,15 +68,44 @@ e.g., {
 HunkGenerationPlan = dict[str, list[dict[str, Any]]]
 """
 Planning Agent output.
-Per-mainline-file ordered hunk planning entries that include verified anchors,
-line numbers, and generation strategy hints for Agent 3.
+Per-mainline-file ordered hunk planning entries that include verified str_replace
+edit instructions (old_string -> new_string) for Agent 3 (File Editor).
+Each entry schema:
+  {
+    "hunk_index": int,
+    "target_file": str,
+    "edit_type": "replace" | "insert_before" | "insert_after" | "delete",
+    "old_string": str,      # exact text verified to exist in target file
+    "new_string": str,      # replacement text
+    "verified": bool,       # True if old_string was confirmed in real file
+    "verification_result": str,
+    "notes": str
+  }
 """
+
+
+class FileEdit(TypedDict):
+    """
+    One atomic str_replace edit applied directly to a checked-out target file.
+    Produced by Agent 3 (File Editor) before git diff is run.
+    """
+
+    target_file: str  # repo-relative path edited
+    mainline_file: str  # original mainline file (lineage tracking)
+    old_string: str  # exact text replaced (empty string = pure insertion)
+    new_string: str  # replacement / inserted text
+    edit_type: str  # "replace" | "insert_before" | "insert_after" | "delete"
+    verified: bool  # True if planner confirmed old_string exists in file
+    verification_result: str  # e.g. "EXACT_MATCH at line 59"
+    applied: bool  # True if str_replace succeeded at runtime
+    apply_result: str  # success / error message from the apply step
 
 
 class AdaptedHunk(TypedDict):
     """
-    Agent 3 (Hunk Generator) output per hunk.
-    Represents a single rewritten patch hunk ready for application.
+    Agent 3 (File Editor) output per modified file.
+    hunk_text is now produced by `git diff HEAD -- <file>` after direct file edits,
+    not by an LLM writing unified diff syntax. This guarantees syntactic correctness.
     """
 
     target_file: str  # Relative path in target repo
@@ -136,7 +165,7 @@ class AgentState(TypedDict):
     )
 
     # --- Phase 0: Pre-computed analysis ---
-    patch_analysis: list  # List[FileChange] — from PatchAnalyzer
+    patch_analysis: list  # List[FileChange] - from PatchAnalyzer
 
     # --- Phase 0 fast-path result ---
     fast_path_success: bool  # True if git apply --check & tests passed cleanly
@@ -175,8 +204,13 @@ class AgentState(TypedDict):
         dict  # Map: source_file -> list of candidates (from EnsembleRetriever)
     )
 
-    # --- Agent 3 (Hunk Generator) outputs ---
-    adapted_code_hunks: list[AdaptedHunk]  # Generated/adapted fix patch hunks
+    # --- Agent 3 (File Editor) outputs ---
+    adapted_file_edits: list[
+        FileEdit
+    ]  # Atomic str_replace records applied to target files
+    adapted_code_hunks: list[
+        AdaptedHunk
+    ]  # Generated/adapted fix patch hunks (hunk_text = git diff output)
     adapted_test_hunks: list[AdaptedHunk]  # Generated/adapted test patch hunks
     developer_auxiliary_hunks: list[
         AdaptedHunk

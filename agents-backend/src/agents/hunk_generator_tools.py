@@ -1,5 +1,5 @@
 """
-HunkGeneratorToolkit — Tools for the Intelligent Hunk Generator (Agent 3)
+HunkGeneratorToolkit - Tools for the Intelligent Hunk Generator (Agent 3)
 
 Provides a rich set of tools that allow the hunk generator to:
 1. Read exact file content around an insertion point (read_file_window)
@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from typing import Any, Optional
 
 from langchain_core.tools import StructuredTool
@@ -105,7 +106,7 @@ class HunkGeneratorToolkit:
 
         out_parts: list[str] = [
             f"[read_file_window] {file_path}  (total lines: {total})",
-            f"Showing lines {start_0 + 1}–{end_0}  (center={center_line}):",
+            f"Showing lines {start_0 + 1}-{end_0}  (center={center_line}):",
             "",
         ]
         for i in range(start_0, end_0):
@@ -251,10 +252,10 @@ class HunkGeneratorToolkit:
         This prevents git-apply context-mismatch failures.
 
         Returns one of:
-          - "EXACT_MATCH at line N" — the text matches exactly at that line
-          - "TRIMMED_MATCH at line N" — matches after stripping whitespace
-          - "NEARBY_MATCH at line N (searched ±5)" — found within ±5 lines
-          - "NOT_FOUND (searched ±10 lines around N)" — does not match nearby
+          - "EXACT_MATCH at line N" - the text matches exactly at that line
+          - "TRIMMED_MATCH at line N" - matches after stripping whitespace
+          - "NEARBY_MATCH at line N (searched +/-5)" - found within +/-5 lines
+          - "NOT_FOUND (searched +/-10 lines around N)" - does not match nearby
           - An error message if the file cannot be read.
 
         Args:
@@ -280,37 +281,37 @@ class HunkGeneratorToolkit:
                 f"(actual: '{lines[idx_0]}')"
             )
 
-        # Pass 3: search ±5 lines
+        # Pass 3: search +/-5 lines
         radius = 5
         lo = max(0, idx_0 - radius)
         hi = min(total, idx_0 + radius + 1)
         for i in range(lo, hi):
             if lines[i].strip() == expected_text.strip():
                 return (
-                    f"NEARBY_MATCH at line {i + 1} (searched ±{radius}): "
-                    f"'{expected_text}' — you may need to update your hunk header "
+                    f"NEARBY_MATCH at line {i + 1} (searched +/-{radius}): "
+                    f"'{expected_text}' - you may need to update your hunk header "
                     f"from line {line_number} to line {i + 1}."
                 )
 
-        # Pass 4: wider search ±10
+        # Pass 4: wider search +/-10
         wide = 10
         lo = max(0, idx_0 - wide)
         hi = min(total, idx_0 + wide + 1)
         for i in range(lo, hi):
             if expected_text.strip() in lines[i]:
                 return (
-                    f"SUBSTRING_MATCH at line {i + 1} (searched ±{wide}): "
-                    f"line contains '{expected_text.strip()}' — use exact line content."
+                    f"SUBSTRING_MATCH at line {i + 1} (searched +/-{wide}): "
+                    f"line contains '{expected_text.strip()}' - use exact line content."
                 )
 
         return (
-            f"NOT_FOUND: '{expected_text}' not found within ±{wide} lines of "
+            f"NOT_FOUND: '{expected_text}' not found within +/-{wide} lines of "
             f"line {line_number} in '{file_path}'. "
             "Use grep_in_file to locate the exact line number."
         )
 
     # ------------------------------------------------------------------
-    # Tool 5: todo_list — plan & track context-gathering tasks
+    # Tool 5: todo_list - plan & track context-gathering tasks
     # ------------------------------------------------------------------
 
     def manage_todo(
@@ -328,11 +329,11 @@ class HunkGeneratorToolkit:
         need before writing the final hunk.
 
         Actions:
-          "add"      — Add a new task. Requires *task* text.
+          "add"      - Add a new task. Requires *task* text.
                        Example: manage_todo("add", task="Read file window around line 59 to verify class body context")
-          "complete" — Mark a task done. Requires *todo_id*.
-          "list"     — Show all current tasks with their status.
-          "clear"    — Remove all completed tasks.
+          "complete" - Mark a task done. Requires *todo_id*.
+          "list"     - Show all current tasks with their status.
+          "clear"    - Remove all completed tasks.
 
         Recommended workflow:
           1. Call manage_todo("add", ...) for each context-gathering step you need.
@@ -367,7 +368,7 @@ class HunkGeneratorToolkit:
                 return "Todo list is empty."
             lines = ["[Todo List]", ""]
             for t in self._todos:
-                icon = "✅" if t["status"] == "done" else "⬜"
+                icon = "[done]" if t["status"] == "done" else "[ ]"
                 lines.append(f"  {icon} [{t['id']}] {t['task']}")
             pending = sum(1 for t in self._todos if t["status"] == "pending")
             lines.append(f"\n{pending} pending / {len(self._todos)} total")
@@ -456,6 +457,258 @@ class HunkGeneratorToolkit:
         return out
 
     # ------------------------------------------------------------------
+    # Tool 8: str_replace_in_file  (File Editor core tool)
+    # ------------------------------------------------------------------
+
+    def str_replace_in_file(
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+    ) -> str:
+        """
+        Atomically replace the FIRST occurrence of *old_string* with *new_string*
+        in the checked-out target file.
+
+        This is the primary editing primitive for the File Editor agent.
+        Always verify the old_string exists (via grep_in_file or
+        verify_context_at_line) before calling this tool.
+
+        Args:
+            file_path:   Repo-relative path to the file to edit.
+            old_string:  Exact text to find and replace. Must match verbatim
+                         (including whitespace / indentation).
+            new_string:  Text to substitute in place of old_string.
+
+        Returns:
+            One of:
+              "SUCCESS: replaced at byte offset N (approx line M)"
+              "NOT_FOUND: old_string not present in file"
+              "AMBIGUOUS: N occurrences found - add more surrounding context"
+              "ERROR: <message>"
+        """
+        lines = self._read_lines(file_path)
+        if lines is None:
+            return f"ERROR: Cannot read file '{file_path}' in target repo."
+
+        content = "\n".join(lines)
+        # Preserve trailing newline if original had one.
+        full_path = self._full_path(file_path)
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+        except Exception as exc:
+            return f"ERROR: Cannot read file '{file_path}': {exc}"
+
+        count = content.count(old_string)
+        if count == 0:
+            return f"NOT_FOUND: old_string not present in '{file_path}'."
+        if count > 1:
+            return (
+                f"AMBIGUOUS: {count} occurrences of old_string found in '{file_path}'. "
+                "Extend old_string with more surrounding context lines to make it unique."
+            )
+
+        new_content = content.replace(old_string, new_string, 1)
+        offset = content.index(old_string)
+        approx_line = content[:offset].count("\n") + 1
+
+        try:
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(new_content)
+        except Exception as exc:
+            return f"ERROR: Cannot write file '{file_path}': {exc}"
+
+        return f"SUCCESS: replaced at approx line {approx_line} in '{file_path}'."
+
+    # ------------------------------------------------------------------
+    # Tool 9: insert_after_line  (File Editor pure-insertion helper)
+    # ------------------------------------------------------------------
+
+    def insert_after_line(
+        self,
+        file_path: str,
+        line_number: int,
+        content: str,
+    ) -> str:
+        """
+        Insert *content* after line *line_number* (1-indexed) in the target file.
+
+        Use this for pure insertions when there is no old text to replace -
+        e.g. inserting a new method at the end of a class body.
+
+        If the content to insert is part of a replacement (e.g. you are also
+        changing the anchor line), prefer str_replace_in_file instead.
+
+        Args:
+            file_path:   Repo-relative path to the file.
+            line_number: 1-indexed line after which content is inserted.
+            content:     Text to insert. A trailing newline is added if absent.
+
+        Returns:
+            "SUCCESS: inserted N lines after line M in '<file>'"
+            "ERROR: <message>"
+        """
+        full_path = self._full_path(file_path)
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                original = f.read()
+        except Exception as exc:
+            return f"ERROR: Cannot read file '{file_path}': {exc}"
+
+        lines = original.splitlines(keepends=True)
+        total = len(lines)
+        if line_number < 0 or line_number > total:
+            return (
+                f"ERROR: line_number {line_number} out of range "
+                f"(file has {total} lines)."
+            )
+
+        if not content.endswith("\n"):
+            content += "\n"
+
+        lines.insert(line_number, content)
+        new_content = "".join(lines)
+
+        try:
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(new_content)
+        except Exception as exc:
+            return f"ERROR: Cannot write file '{file_path}': {exc}"
+
+        inserted_lines = content.count("\n")
+        return (
+            f"SUCCESS: inserted {inserted_lines} line(s) after line {line_number} "
+            f"in '{file_path}'."
+        )
+
+    # ------------------------------------------------------------------
+    # Tool 10: read_full_file  (post-edit verification)
+    # ------------------------------------------------------------------
+
+    def read_full_file(
+        self,
+        file_path: str,
+        max_lines: int = 300,
+    ) -> str:
+        """
+        Return the current content of the target file with line numbers.
+
+        Use this AFTER a str_replace_in_file or insert_after_line call to
+        verify the edit was applied correctly before generating the diff.
+
+        Args:
+            file_path:  Repo-relative path to the file.
+            max_lines:  Maximum number of lines to return. Default 300.
+                        If the file is longer, the first max_lines lines are
+                        returned with a truncation notice.
+
+        Returns:
+            Numbered lines, e.g.:
+                1:  package org.elasticsearch.xpack.esql;
+                2:
+                3:  import java.util.List;
+            Or an error message.
+        """
+        lines = self._read_lines(file_path)
+        if lines is None:
+            return f"ERROR: Cannot read file '{file_path}' in target repo."
+
+        total = len(lines)
+        shown = lines[:max_lines]
+        out_parts = [
+            f"[read_full_file] {file_path}  (total lines: {total})",
+            f"Showing lines 1-{min(max_lines, total)}:",
+            "",
+        ]
+        for i, line in enumerate(shown, start=1):
+            out_parts.append(f"{i:5d}: {line}")
+
+        if total > max_lines:
+            out_parts.append(
+                f"\n... (truncated - {total - max_lines} more lines not shown)"
+            )
+
+        return "\n".join(out_parts)
+
+    # ------------------------------------------------------------------
+    # Tool 11: git_diff_file  (mechanically correct diff after edits)
+    # ------------------------------------------------------------------
+
+    def git_diff_file(self, file_path: str) -> str:
+        """
+        Run `git diff HEAD -- <file_path>` and return the unified diff output.
+
+        Call this AFTER all str_replace_in_file / insert_after_line edits for
+        a given file are complete. The diff is produced by git from the real
+        file state, so it is always syntactically correct - no LLM-authored
+        diff format is needed.
+
+        Args:
+            file_path: Repo-relative path to the modified file.
+
+        Returns:
+            The unified diff string (may be empty if no changes detected).
+            On error, returns "ERROR: <message>".
+        """
+        full_path = self._full_path(file_path)
+        if not os.path.isfile(full_path):
+            return f"ERROR: File '{file_path}' not found in target repo."
+
+        try:
+            result = subprocess.run(
+                ["git", "diff", "HEAD", "--", file_path],
+                cwd=self.target_repo_path,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            diff_output = result.stdout
+            if result.returncode != 0 and result.stderr:
+                return f"ERROR: git diff failed: {result.stderr.strip()}"
+            if not diff_output.strip():
+                return (
+                    f"(no changes detected for '{file_path}' - file may be unchanged)"
+                )
+            return diff_output
+        except subprocess.TimeoutExpired:
+            return "ERROR: git diff timed out."
+        except Exception as exc:
+            return f"ERROR: {exc}"
+
+    # ------------------------------------------------------------------
+    # Tool 12: reset_file  (undo all edits for a file)
+    # ------------------------------------------------------------------
+
+    def reset_file(self, file_path: str) -> str:
+        """
+        Reset the target file to its HEAD state, discarding all working-tree
+        edits. Use this if you need to start over for a file after bad edits.
+
+        Args:
+            file_path: Repo-relative path to the file to reset.
+
+        Returns:
+            "SUCCESS: '<file>' reset to HEAD state."
+            "ERROR: <message>"
+        """
+        try:
+            result = subprocess.run(
+                ["git", "checkout", "HEAD", "--", file_path],
+                cwd=self.target_repo_path,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                return f"ERROR: git checkout failed: {result.stderr.strip()}"
+            return f"SUCCESS: '{file_path}' reset to HEAD state."
+        except subprocess.TimeoutExpired:
+            return "ERROR: git checkout timed out."
+        except Exception as exc:
+            return f"ERROR: {exc}"
+
+    # ------------------------------------------------------------------
     # LangChain tool registration
     # ------------------------------------------------------------------
 
@@ -524,6 +777,52 @@ class HunkGeneratorToolkit:
                     "Build a valid unified diff hunk from structured fields. "
                     "Pass removed/added lines WITHOUT diff prefixes; tool adds '-', '+' "
                     "and computes header counts safely to avoid malformed hunks."
+                ),
+            ),
+            # --- File Editor tools (Agent 3 file-edit architecture) ---
+            StructuredTool.from_function(
+                func=self.str_replace_in_file,
+                name="str_replace_in_file",
+                description=(
+                    "Replace the FIRST occurrence of old_string with new_string directly "
+                    "in the target file on disk. Returns SUCCESS, NOT_FOUND, AMBIGUOUS, "
+                    "or ERROR. This is the primary editing primitive - use it instead of "
+                    "generating unified diff hunks. Always verify old_string exists first."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.insert_after_line,
+                name="insert_after_line",
+                description=(
+                    "Insert content after a specific line number (1-indexed) in the target "
+                    "file. Use for pure insertions where there is no text to replace. "
+                    "Prefer str_replace_in_file when the anchor line itself changes."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.read_full_file,
+                name="read_full_file",
+                description=(
+                    "Return the current file content with line numbers (up to max_lines). "
+                    "Use AFTER str_replace_in_file or insert_after_line to verify the "
+                    "edit was applied correctly before generating the diff."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.git_diff_file,
+                name="git_diff_file",
+                description=(
+                    "Run `git diff HEAD -- <file>` and return the unified diff. Call this "
+                    "AFTER all edits for a file are complete to capture the mechanically "
+                    "correct diff. This diff is always syntactically valid."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.reset_file,
+                name="reset_file",
+                description=(
+                    "Reset a target file to its HEAD state, discarding all working-tree "
+                    "edits. Use if edits went wrong and you need to start over for a file."
                 ),
             ),
         ]

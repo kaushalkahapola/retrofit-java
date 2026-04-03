@@ -472,8 +472,15 @@ def _normalize_hunk_header_for_operation(hunk_text: str, file_operation: str) ->
 
 
 def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) -> str:
-    hunks_by_file: dict[str, dict[str, Any]] = {}
-    file_order: list[str] = []
+    """
+    Build a complete unified diff string from adapted_code_hunks.
+
+    Supports two hunk_text formats:
+    1. Full git diff (starts with 'diff --git ...') - produced by the new file_editor
+       architecture. These are passed through directly.
+    2. Bare hunk text (starts with '@@') - produced by the legacy hunk_generator.
+       These are wrapped with diff --git / --- / +++ headers as before.
+    """
 
     def _norm(path: str | None) -> str:
         p = (path or "").strip().replace("\\", "/")
@@ -483,9 +490,37 @@ def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) 
             return ""
         return p
 
+    def _is_full_git_diff(hunk_text: str) -> bool:
+        return bool(hunk_text and hunk_text.lstrip().startswith("diff --git"))
+
+    # Full git-diff payloads (file_editor architecture) are already complete.
+    # Keep them as-is and only wrap legacy bare-@@ hunks.
+    full_diff_parts: list[str] = []
+    full_diff_targets: set[str] = set()
+    legacy_hunks: list[dict[str, Any]] = []
+
     for hunk in adapted_code_hunks or []:
+        hunk_text = hunk.get("hunk_text", "")
+        if _is_full_git_diff(hunk_text):
+            ht = (hunk_text or "").rstrip("\n")
+            if ht:
+                full_diff_parts.append(ht)
+            tf = _norm(hunk.get("target_file"))
+            if tf:
+                full_diff_targets.add(tf)
+        else:
+            legacy_hunks.append(hunk)
+
+    # --- Legacy path: bare @@ hunks (hunk_generator architecture) ---
+    hunks_by_file: dict[str, dict[str, Any]] = {}
+    file_order: list[str] = []
+
+    for hunk in legacy_hunks:
         target_file = _norm(hunk.get("target_file"))
         if not target_file:
+            continue
+        if target_file in full_diff_targets:
+            # File already covered by a complete git diff payload.
             continue
 
         if target_file not in hunks_by_file:
@@ -500,7 +535,6 @@ def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) 
             }
             file_order.append(target_file)
 
-        # Prefer a non-empty old path if later hunks provide one.
         existing_old = hunks_by_file[target_file].get("old_target_file") or ""
         incoming_old = _norm(hunk.get("old_target_file") or hunk.get("mainline_file"))
         if not existing_old and incoming_old:
@@ -532,7 +566,6 @@ def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) 
                 lines.append(f"--- a/{target_file}")
                 lines.append(f"+++ b/{target_file}")
 
-        # If this is effectively an added file represented as MODIFIED, convert header.
         if op == "MODIFIED":
             has_full_create_hunk = any(
                 (h or "").lstrip().startswith("@@ -0,0 +")
@@ -558,9 +591,15 @@ def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) 
             else:
                 lines.append(normalized_hunk.rstrip("\n"))
 
-    if not lines:
+    all_parts = []
+    if full_diff_parts:
+        all_parts.append("\n".join(full_diff_parts).rstrip("\n"))
+    if lines:
+        all_parts.append("\n".join(lines).rstrip("\n"))
+
+    if not all_parts:
         return ""
-    return "\n".join(lines) + "\n"
+    return "\n".join(all_parts) + "\n"
 
 
 def _get_java_code_changed_files(commit, repo_path):

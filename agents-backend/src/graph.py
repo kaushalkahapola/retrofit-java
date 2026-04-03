@@ -8,11 +8,16 @@ H-MABS Orchestrator Graph (Phase 1)
        '-- fast_path_success=False
               -> context_analyzer   (Agent 1: Semantic Blueprint)
               -> structural_locator (Agent 2: Consistency Map + Mapped Context)
-              -> hunk_generator     (Agent 3: Adapted Code/Test Hunks)
+              -> planning_agent     (Phase 2.5: str_replace Edit Plans)
+              -> hunk_generator     (Agent 3: File Editor - direct edits + git diff)
               -> validation         (Agent 4: "Prove Red, Make Green" loop)
                  |-- passed          -> END
                  |-- failed, attempts < MAX_VALIDATION_ATTEMPTS -> hunk_generator (retry)
                  '-- failed, attempts >= MAX_VALIDATION_ATTEMPTS -> END (give up)
+
+Note: The graph node "hunk_generator" is now backed by file_editor_node.
+The node name is kept identical so all routing logic and result-file naming
+(phase3_hunk_generator) remains unchanged.
 """
 
 from langgraph.graph import StateGraph, START, END
@@ -22,7 +27,7 @@ from agents import (
     context_analyzer_node,
     structural_locator_node,
     planning_agent_node,
-    hunk_generator_node,
+    file_editor_node,
     validation_agent,
 )
 
@@ -42,7 +47,7 @@ def route_start(state: AgentState) -> str:
     Otherwise, run phase_0_optimistic.
     """
     if state.get("skip_phase_0", False):
-        print("Router: Skipping Phase 0 — entering full 4-agent pipeline directly.")
+        print("Router: Skipping Phase 0 - entering full 4-agent pipeline directly.")
         return "context_analyzer"
     print("Router: Running Phase 0.")
     return "phase_0_optimistic"
@@ -54,9 +59,9 @@ def route_phase_0(state: AgentState) -> str:
     Otherwise, enter the full 4-agent pipeline via context_analyzer.
     """
     if state.get("fast_path_success", False):
-        print("Router: Phase 0 succeeded — taking fast-path exit.")
+        print("Router: Phase 0 succeeded - taking fast-path exit.")
         return "END"
-    print("Router: Phase 0 failed — entering full 4-agent pipeline.")
+    print("Router: Phase 0 failed - entering full 4-agent pipeline.")
     return "context_analyzer"
 
 
@@ -137,7 +142,7 @@ workflow.add_node("phase_0_optimistic", phase_0_optimistic)
 workflow.add_node("context_analyzer", context_analyzer_node)
 workflow.add_node("structural_locator", structural_locator_node)
 workflow.add_node("planning_agent", planning_agent_node)
-workflow.add_node("hunk_generator", hunk_generator_node)
+workflow.add_node("hunk_generator", file_editor_node)
 workflow.add_node("validation", validation_agent)
 
 # --- Wire edges ---

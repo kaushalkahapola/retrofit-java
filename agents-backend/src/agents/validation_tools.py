@@ -1591,6 +1591,9 @@ class ValidationToolkit:
                     return False
             return saw_added
 
+        def _is_full_git_diff(hunk_text: str) -> bool:
+            return bool((hunk_text or "").lstrip().startswith("diff --git"))
+
         normalized_hunks = []
 
         # Ensure all hunks have insertion_line set; normalize and preflight operations.
@@ -1759,8 +1762,18 @@ class ValidationToolkit:
             else:
                 file_operation = "MODIFIED"
 
-            # Execute structural operation BEFORE applying hunks
-            if file_operation in ["RENAMED", "ADDED", "DELETED"]:
+            file_has_full_git_diff = any(
+                _is_full_git_diff(h.get("hunk_text", ""))
+                for h in hunks_by_file.get(target_file, [])
+            )
+
+            # Execute structural operation BEFORE applying hunks, but only for
+            # legacy bare-@@ hunks. Full git-diff payloads already encode file
+            # operations in their own headers.
+            if (
+                file_operation in ["RENAMED", "ADDED", "DELETED"]
+                and not file_has_full_git_diff
+            ):
                 try:
                     if file_operation == "RENAMED":
                         if not old_file_path:
@@ -1820,6 +1833,23 @@ class ValidationToolkit:
 
                 hunk_text = hunk_text if hunk_text.endswith("\n") else hunk_text + "\n"
                 try:
+                    # New architecture: file_editor emits full git diffs.
+                    # Apply them directly without wrapping.
+                    if _is_full_git_diff(hunk_text):
+                        result = self._apply_patch_with_fallbacks(
+                            hunk_text, [target_file]
+                        )
+                        if not result.get("success"):
+                            self.restore_repo_state()
+                            return {
+                                "success": False,
+                                "output": f"Patch application failed for {target_file} at line {h.get('insertion_line')}:\n{result.get('output')}",
+                                "applied_files": [],
+                            }
+                        if target_file not in applied_files:
+                            applied_files.append(target_file)
+                        continue
+
                     # Treat subsequent hunks on the same file as MODIFIED
                     # so we don't regenerate "new file" diff headers for the same file.
                     current_file_op = (
