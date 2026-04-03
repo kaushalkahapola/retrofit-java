@@ -806,6 +806,175 @@ def _attempt_semantic_adaptation(
 
 
 # ---------------------------------------------------------------------------
+# LLM Fallback for Unverified Hunks (Option 2 Implementation)
+# ---------------------------------------------------------------------------
+
+
+def _build_llm_adaptation_prompt(
+    entry: dict[str, Any],
+    target_file_path: str,
+    target_content: str,
+    mainline_file: str,
+) -> str:
+    """Build a prompt for LLM to adapt an unverified hunk"""
+
+    old_string = entry.get("old_string", "").strip()
+    new_string = entry.get("new_string", "").strip()
+    verification_result = entry.get("verification_result", "")
+    hunk_index = entry.get("hunk_index", 0)
+
+    # Get surrounding context from target file
+    target_lines = target_content.splitlines()
+    insertion_line = min(entry.get("insertion_line", 100), len(target_lines) - 1)
+
+    context_start = max(0, insertion_line - 15)
+    context_end = min(len(target_lines), insertion_line + 15)
+    context_lines = target_lines[context_start:context_end]
+    context = "\n".join(context_lines)
+
+    prompt = f"""You are a Java code expert helping with semantic patch adaptation.
+
+A mainline patch wants to make this change to {mainline_file} (hunk #{hunk_index}):
+
+OLD: {old_string}
+NEW: {new_string}
+
+However, the exact old_string does NOT exist in the target file {target_file_path}.
+This likely means the target uses a different code pattern or API.
+
+Here is the target file code around line {insertion_line} where this change should apply:
+
+```java
+{context}
+```
+
+Your task:
+1. Understand what the mainline patch is trying to achieve semantically
+2. Find the equivalent code pattern in the target file above
+3. Provide the adapted old_string and new_string that would apply the same semantic fix to target's code
+
+Respond ONLY with valid JSON in this exact format, no other text:
+{{
+  "semantic_intent": "description of what the patch is trying to fix",
+  "found_equivalent": true/false,
+  "equivalent_old_string": "exact text from target file that needs to be changed",
+  "equivalent_new_string": "what to change it to, applying the same semantic fix",
+  "confidence": 0.0-1.0,
+  "reasoning": "brief explanation"
+}}
+
+If you cannot find an equivalent pattern, set found_equivalent to false and return empty strings."""
+
+    return prompt
+
+
+async def _adapt_unverified_hunks_with_llm(
+    plan: dict[str, list[dict[str, Any]]],
+    target_repo_path: str,
+    mainline_file: str,
+    token_usage: dict,
+) -> dict[str, list[dict[str, Any]]]:
+    """
+    For any hunk that failed verification, use LLM to find and adapt it to target code.
+    This implements Option 2: LLM-Based Adaptation Fallback.
+    """
+
+    llm = get_llm(temperature=0)
+    adapted_plan = defaultdict(list)
+
+    for file_path, entries in plan.items():
+        adapted_plan[file_path] = []
+        target_content = _read_target_file(target_repo_path, file_path)
+
+        for entry in entries:
+            # Only try to adapt if verification failed
+            if entry.get("verified", False):
+                adapted_plan[file_path].append(entry)
+                continue
+
+            old_string = (entry.get("old_string") or "").strip()
+            if not old_string:
+                # Can't adapt empty old_string
+                adapted_plan[file_path].append(entry)
+                continue
+
+            if not target_content:
+                # Can't adapt without target content
+                adapted_plan[file_path].append(entry)
+                continue
+
+            try:
+                # Build LLM prompt
+                prompt = _build_llm_adaptation_prompt(
+                    entry, file_path, target_content, mainline_file
+                )
+
+                # Call LLM
+                print(
+                    f"    Planning Agent: Using LLM to adapt hunk {entry.get('hunk_index')} in {file_path}"
+                )
+                response = llm.invoke([HumanMessage(content=prompt)])
+                response_text = response.content.strip()
+
+                # Parse JSON response
+                import json
+
+                # Try to find JSON in response (it might have extra text)
+                json_match = response_text
+                if "{" in response_text and "}" in response_text:
+                    json_match = response_text[
+                        response_text.index("{") : response_text.rindex("}") + 1
+                    ]
+
+                adaptation = json.loads(json_match)
+
+                # Check if adaptation was successful
+                if (
+                    adaptation.get("found_equivalent", False)
+                    and adaptation.get("confidence", 0) >= 0.6
+                ):
+                    adapted_old = (
+                        adaptation.get("equivalent_old_string") or ""
+                    ).strip()
+                    adapted_new = (
+                        adaptation.get("equivalent_new_string") or ""
+                    ).strip()
+
+                    if adapted_old and adapted_new:
+                        # Use adapted strings
+                        entry["old_string"] = adapted_old
+                        entry["new_string"] = adapted_new
+                        entry["verified"] = True
+                        entry["verification_result"] = (
+                            f"llm_adapted:{adaptation.get('confidence', 0.0):.2f}"
+                        )
+                        entry["notes"] = (
+                            (entry.get("notes") or "")
+                            + f"|llm_intent:{adaptation.get('semantic_intent', '')}"
+                        ).strip("|")
+
+                        print(
+                            f"    Planning Agent: LLM adapted {file_path}[{entry.get('hunk_index')}] "
+                            f"with confidence {adaptation.get('confidence', 0.0):.2f}"
+                        )
+
+                adapted_plan[file_path].append(entry)
+
+            except json.JSONDecodeError as e:
+                print(
+                    f"    Planning Agent: Could not parse LLM response for {file_path}[{entry.get('hunk_index')}]: {e}"
+                )
+                adapted_plan[file_path].append(entry)
+            except Exception as e:
+                print(
+                    f"    Planning Agent: LLM adaptation failed for {file_path}[{entry.get('hunk_index')}]: {e}"
+                )
+                adapted_plan[file_path].append(entry)
+
+    return dict(adapted_plan)
+
+
+# ---------------------------------------------------------------------------
 # Node
 # ---------------------------------------------------------------------------
 
@@ -1059,6 +1228,16 @@ async def planning_agent_node(state: AgentState, config) -> dict:
 
     total_entries = sum(len(v) for v in plan.values())
     print(f"Planning Agent: Complete. Planned {total_entries} edit(s).")
+
+    # NEW: Try LLM adaptation for any unverified hunks (Option 2)
+    # This is a fallback when Planning Agent couldn't find exact old_string
+    print("Planning Agent: Attempting LLM adaptation for unverified hunks...")
+    plan = await _adapt_unverified_hunks_with_llm(
+        plan=dict(plan),
+        target_repo_path=target_repo_path,
+        mainline_file=list(raw_hunks_by_file.keys())[0] if raw_hunks_by_file else "",
+        token_usage=token_usage,
+    )
 
     # Generate plan signature for retry loop dedup
     import hashlib
