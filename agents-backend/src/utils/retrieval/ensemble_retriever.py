@@ -545,25 +545,21 @@ class EnsembleRetriever:
     def find_candidates(self, file_path: str, original_commit: str) -> List[Dict]:
         """
         Orchestrates the retrieval process using Split Flow (PORTGPT Style).
-        Phase 1: Git Precision (Deterministic) - no index needed
-        Phase 2: Ensemble Search (Probabilistic) - builds index lazily on demand
+        Collects both deterministic git-based candidates and probabilistic
+        semantic candidates.
         """
-        # --- PHASE 1: Deterministic Git Resolution ---
-        git_match = self.resolve_git_path(file_path, original_commit)
-        if git_match:
-            print(f"Phase 1 (Git) Match Found: {git_match[0]['file']}")
-            return git_match
+        # 1. Collect deterministic git candidates (exact path, rename, blob match)
+        pool = self.resolve_git_path(file_path, original_commit) or []
 
-        # --- PHASE 2: Probabilistic Ensemble Fallback ---
-        print(f"Phase 1 failed for {file_path}. Falling back to Ensemble Search...")
-        print(f"Building index for Phase 2 ensemble search...")
-
-        # Note: We skip 'get_git_candidates' inside here because Phase 1 covers it better.
-        # We perform the expensive search now.
+        # 2. Collect probabilistic semantic candidates (symbols, TF-IDF)
+        # We always do this even if a git match was found, to support cases
+        # where logic has moved to a different file.
         sym_cands = self.get_symbol_candidates(file_path, original_commit)
         tfidf_cands = self.get_tfidf_candidates(file_path, original_commit)
 
-        pool = sym_cands + tfidf_cands
+        pool.extend(sym_cands)
+        pool.extend(tfidf_cands)
+
         return self.decide_candidate_list(pool)
 
     def find_symbol_locations(self, symbol_name: str) -> List[str]:

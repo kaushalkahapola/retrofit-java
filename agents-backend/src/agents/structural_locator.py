@@ -255,12 +255,33 @@ def _find_line_in_target(target_lines: list[str], needle: str) -> int | None:
 
 
 def _extract_hunk_anchor_candidates(raw_hunk: str) -> list[str]:
-    """Extract anchor candidates from a raw unified hunk (prefer removed/context lines)."""
+    """
+    Extract anchor candidates from a raw unified hunk (prefer removed/context lines).
+    Skips weak anchors like single braces or empty-ish lines to avoid hallucinations.
+    """
     if not raw_hunk:
         return []
 
     removed: list[str] = []
     context: list[str] = []
+
+    # Heuristic for weak boilerplate that makes for bad anchors.
+    weak_patterns = {
+        "}",
+        "{",
+        "};",
+        "});",
+        "},",
+        "else {",
+        "try {",
+        "finally {",
+        "break;",
+        "continue;",
+        "return;",
+        "return true;",
+        "return false;",
+    }
+
     for i, line in enumerate(raw_hunk.splitlines()):
         if i == 0 and line.startswith("@@"):
             continue
@@ -268,11 +289,11 @@ def _extract_hunk_anchor_candidates(raw_hunk: str) -> list[str]:
             continue
         if line.startswith("-") and not line.startswith("---"):
             cand = line[1:].strip()
-            if cand:
+            if cand and cand not in weak_patterns and len(cand) > 3:
                 removed.append(cand)
         elif line.startswith(" "):
             cand = line[1:].strip()
-            if cand:
+            if cand and cand not in weak_patterns and len(cand) > 5:
                 context.append(cand)
 
     return removed + context
@@ -510,6 +531,18 @@ def _deterministic_map_hunks_for_file(
         )
 
         if start_line is None:
+            # If any hunk in the file fails to map via anchors,
+            # fail the entire deterministic path so we can fall back
+            # to investigative search.
+            return None
+
+        # Verify anchor confidence before committing to deterministic path
+        conf, reason = _infer_anchor_confidence(
+            target_repo_path, target_file, start_line, method_guess
+        )
+        if conf == "low":
+            # If confidence is low (e.g. line out of range or file missing),
+            # trigger investigative search.
             return None
 
         deterministic.append(
@@ -685,11 +718,95 @@ async def structural_locator_node(state: AgentState, config) -> dict:
             hunks_by_file[file].append(hunk)
     logger.debug("Grouped hunks into %d file bucket(s)", len(hunks_by_file))
 
-    # Process hunks grouped by file
     for mainline_file, file_hunks in hunks_by_file.items():
         print(
             f"  Agent 2: Locating target for {mainline_file} ({len(file_hunks)} hunk(s))..."
         )
+        logger.info("Locating target file=%s hunks=%d", mainline_file, len(file_hunks))
+        trace += f"### `{mainline_file}`\n\n"
+        trace += f"**Hunks in this file**: {len(file_hunks)}\n\n"
+        raw_hunks_for_file = raw_hunks_by_file.get(mainline_file, [])
+
+        # RESOLUTION SCOPE:
+        # We start with the primary candidates found by git log / blob hunting.
+        # But for each hunk, we might discover it moved to a DIFFERENT candidate.
+        try:
+            candidates = toolkit.search_candidates(mainline_file)
+        except Exception as e:
+            candidates = [{"file": mainline_file, "reason": "default"}]
+
+        if not candidates:
+            candidates = [{"file": mainline_file, "reason": "default"}]
+
+        print(f"  Agent 2: Identified {len(candidates)} candidate target file(s).")
+
+        mapping_result = None
+        used_deterministic = False
+
+        # 1. Deterministic Mapping Loop (Try each candidate)
+        if PHASE2_DETERMINISTIC_FIRST:
+            for cand in candidates:
+                cand_file = cand["file"]
+                deterministic_mappings = _deterministic_map_hunks_for_file(
+                    file_hunks=file_hunks,
+                    raw_hunks_for_file=raw_hunks_for_file,
+                    target_file=cand_file,
+                    target_repo_path=target_repo_path,
+                    consistency_map=consistency_map,
+                    mcp=mcp,
+                    toolkit=toolkit,
+                )
+
+                # REFINEMENT: Only accept deterministic match if confidence is NOT low.
+                # If anchors only matched weak boilerplate, we MUST use investigative search.
+                if deterministic_mappings:
+                    is_low_conf = any(
+                        _infer_anchor_confidence(
+                            target_repo_path,
+                            cand_file,
+                            m["start_line"],
+                            m["target_method"],
+                        )[0]
+                        == "low"
+                        for m in deterministic_mappings
+                    )
+                    if not is_low_conf:
+                        print(
+                            f"  Agent 2: High-confidence deterministic match found in {cand_file}"
+                        )
+                        mapping_result = {
+                            "mappings": deterministic_mappings,
+                            "consistency_map_entries": {},
+                        }
+                        used_deterministic = True
+                        break
+                    else:
+                        print(
+                            f"  Agent 2: Ignoring low-confidence deterministic match for {cand_file}"
+                        )
+
+        # 2. Investigative LLM Loop (Fallback)
+        if mapping_result is None and not PHASE2_DISABLE_LLM:
+            primary_target = candidates[0]["file"]
+            other_targets = [c["file"] for c in candidates[1:5]]
+
+            hunk_details = ""
+            for idx, hunk in enumerate(file_hunks):
+                raw = raw_hunks_for_file[idx] if idx < len(raw_hunks_for_file) else ""
+                hunk_details += f"\nHunk {idx + 1} (role: {hunk.get('role')}):\n```diff\n{raw}\n```\n"
+
+            input_msg = (
+                f"Mainline File: {mainline_file}\n"
+                f"Primary Target Hypothesis: {primary_target}\n"
+                f"Other Potential Targets: {other_targets}\n"
+                f"Hunk Details: {hunk_details}\n"
+                f"Semantic Blueprint:\n{json.dumps(simple_blueprint, indent=2)}\n\n"
+                f"MISSION: Locate where each hunk applies in the target repository.\n"
+                f"1. VERIFY if the logic still lives in '{primary_target}' using `get_class_context` or `read_file`.\n"
+                f"2. IF LOGIC IS MISSING/MOVED: Use `grep_repo` for unique strings, `git_pickaxe` for history, or `get_dependency_graph` to find architectural neighbors (like classes that call or are called by the original class).\n"
+                f"3. REPORT: Return a JSON with 'mappings' array. Each hunk can have a DIFFERENT 'target_file' if the logic was split or relocated."
+            )
+
         logger.info("Locating target file=%s hunks=%d", mainline_file, len(file_hunks))
         trace += f"### `{mainline_file}`\n\n"
         trace += f"**Hunks in this file**: {len(file_hunks)}\n\n"

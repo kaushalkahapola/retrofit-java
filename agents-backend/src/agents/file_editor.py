@@ -492,10 +492,12 @@ def _retry_with_file_check(
     )
 
 
-def _diff_introduces_call_without_definition(diff_text: str) -> tuple[bool, str]:
+def _diff_introduces_call_without_definition(
+    diff_text: str, target_repo_path: str, rel_path: str
+) -> tuple[bool, str]:
     """
     Detect a common semantic hole: introducing a call to a helper method without
-    adding its declaration in the same patch.
+    adding its declaration in the same patch or having it pre-exist in the file.
 
     Returns (is_invalid, reason).
     """
@@ -511,8 +513,10 @@ def _diff_introduces_call_without_definition(diff_text: str) -> tuple[bool, str]
 
     # Detect added call sites like: pendingShardIds.addAll(order(targetShards));
     called: set[str] = set()
+    # Broadly match identifier followed by (
     for l in added_lines:
         for m in re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", l):
+            # Skip common Java keywords and built-in types
             if m in {
                 "if",
                 "for",
@@ -521,6 +525,8 @@ def _diff_introduces_call_without_definition(diff_text: str) -> tuple[bool, str]
                 "catch",
                 "new",
                 "return",
+                "super",
+                "this",
                 "List",
                 "Map",
                 "Set",
@@ -528,14 +534,18 @@ def _diff_introduces_call_without_definition(diff_text: str) -> tuple[bool, str]
                 "ArrayList",
                 "LinkedHashMap",
                 "Comparator",
+                "Optional",
+                "Collections",
+                "Arrays",
+                "Stream",
             }:
                 continue
             called.add(m)
 
-    # Detect added method declarations.
+    # Detect added method declarations in the patch.
     declared: set[str] = set()
     decl_pat = re.compile(
-        r"\b(?:private|protected|public|static|final|synchronized|native|abstract|strictfp|\s)+\s+"
+        r"\b(?:private|protected|public|static|final|synchronized|native|abstract|strictfp|default|\s)+\s+"
         r"[A-Za-z_][A-Za-z0-9_<>,\[\]\s?]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("
     )
     for l in added_lines:
@@ -543,12 +553,16 @@ def _diff_introduces_call_without_definition(diff_text: str) -> tuple[bool, str]
         if m:
             declared.add(m.group(1))
 
-    # Known failure pattern: call to order(...) requires method declaration added.
-    if "order" in called and "order" not in declared:
-        return (
-            True,
-            "semantic_guard_failed: call to order(...) introduced but no order(...) declaration added in patch",
-        )
+    # Verify each newly introduced call site
+    for call in called:
+        if call in declared:
+            continue
+        # If not declared in patch, must already exist in file
+        if not _file_has_method_declaration(target_repo_path, rel_path, call):
+            return (
+                True,
+                f"semantic_guard_failed: call to '{call}(...)' introduced but no declaration found in patch or target file.",
+            )
 
     return False, ""
 
@@ -1036,13 +1050,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
         # Semantic guard: detect missing helper-method declaration for newly added calls.
         semantic_invalid, semantic_reason = _diff_introduces_call_without_definition(
-            diff_text
+            diff_text, target_repo_path, target_file
         )
-        if semantic_invalid and "order(...)" in semantic_reason:
-            # Avoid false positives when method already exists in target file.
-            if _file_has_method_declaration(target_repo_path, target_file, "order"):
-                semantic_invalid = False
-                semantic_reason = ""
         if semantic_invalid:
             print(f"    Agent 3: {semantic_reason}")
             if toolkit and target_repo_path:
