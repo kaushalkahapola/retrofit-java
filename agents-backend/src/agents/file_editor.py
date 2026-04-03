@@ -216,6 +216,9 @@ def _apply_edit_deterministically(
         return False, f"read_error:{exc}", "", "", "read_failed"
 
     def _resolve_old(content_text: str, candidate: str) -> tuple[str, str]:
+        content_text = (content_text or "").replace("\r\n", "\n").replace("\r", "\n")
+        candidate = (candidate or "").replace("\r\n", "\n").replace("\r", "\n")
+
         if candidate in content_text:
             return candidate, "exact"
 
@@ -362,6 +365,114 @@ def _apply_edit_deterministically(
     if result.startswith("SUCCESS"):
         return True, result, resolved_old, resolved_new, reason
     return False, result, resolved_old, resolved_new, reason
+
+
+def _parse_grep_hits(grep_output: str) -> list[tuple[int, str]]:
+    hits: list[tuple[int, str]] = []
+    for line in (grep_output or "").splitlines():
+        m = re.search(r"Line\s+(\d+):\s?(.*)$", line)
+        if not m:
+            continue
+        try:
+            hits.append((int(m.group(1)), m.group(2)))
+        except ValueError:
+            continue
+    return hits
+
+
+def _parse_numbered_lines_block(block_output: str) -> list[str]:
+    out: list[str] = []
+    for line in (block_output or "").splitlines():
+        m = re.match(r"\s*(\d+):\s?(.*)$", line)
+        if m:
+            out.append(m.group(2))
+    return out
+
+
+def _retry_with_file_check(
+    toolkit: HunkGeneratorToolkit,
+    target_repo_path: str,
+    plan_entry: dict[str, Any],
+    target_file: str,
+) -> tuple[bool, str, str, str, str]:
+    """
+    Retry failed deterministic replacement by probing target file directly via
+    grep/read tools and reconstructing an exact old_string from file content.
+    """
+    old_string = str(plan_entry.get("old_string") or "")
+    if not old_string:
+        return False, "file_check_retry_empty_old", "", "", "file_check_empty_old"
+
+    old_lines = old_string.replace("\r\n", "\n").replace("\r", "\n").splitlines()
+    if not old_lines:
+        return False, "file_check_retry_no_lines", "", "", "file_check_no_lines"
+
+    # Pick the strongest non-empty line as grep anchor.
+    anchor_idx = -1
+    anchor_line = ""
+    best_len = -1
+    for i, line in enumerate(old_lines):
+        s = line.strip()
+        if not s:
+            continue
+        if len(s) > best_len:
+            best_len = len(s)
+            anchor_idx = i
+            anchor_line = s
+
+    if not anchor_line:
+        return False, "file_check_retry_no_anchor", "", "", "file_check_no_anchor"
+
+    grep_out = toolkit.grep_in_file(
+        file_path=target_file,
+        search_text=anchor_line,
+        is_regex=False,
+        max_results=50,
+    )
+    hits = _parse_grep_hits(grep_out)
+    if not hits:
+        return (
+            False,
+            f"file_check_retry_grep_no_hits:{anchor_line}",
+            "",
+            "",
+            "file_check_grep_no_hits",
+        )
+
+    n = len(old_lines)
+    for line_no, _ in hits:
+        start = max(1, line_no - anchor_idx)
+        end = start + n - 1
+        block_out = toolkit.get_exact_lines(target_file, start, end)
+        candidate_lines = _parse_numbered_lines_block(block_out)
+        if len(candidate_lines) != n:
+            continue
+
+        candidate_old = "\n".join(candidate_lines)
+        retry_entry = dict(plan_entry)
+        retry_entry["old_string"] = candidate_old
+        ok, msg, resolved_old, resolved_new, reason = _apply_edit_deterministically(
+            toolkit,
+            target_repo_path,
+            retry_entry,
+            target_file,
+        )
+        if ok:
+            return (
+                True,
+                f"{msg} | retried_with_file_check(start_line={start})",
+                resolved_old,
+                resolved_new,
+                f"file_check_retry_success:{reason}",
+            )
+
+    return (
+        False,
+        "file_check_retry_exhausted",
+        "",
+        "",
+        "file_check_retry_exhausted",
+    )
 
 
 def _diff_introduces_call_without_definition(diff_text: str) -> tuple[bool, str]:
@@ -759,6 +870,31 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         target_file,
                     )
                 )
+
+                if not edit_ok and str(apply_result).startswith(
+                    "old_resolution_failed:not_found"
+                ):
+                    (
+                        retry_ok,
+                        retry_result,
+                        retry_old,
+                        retry_new,
+                        retry_reason,
+                    ) = _retry_with_file_check(
+                        toolkit,
+                        target_repo_path,
+                        plan_entry,
+                        target_file,
+                    )
+                    if retry_ok:
+                        edit_ok = True
+                        apply_result = retry_result
+                        resolved_old = retry_old
+                        resolved_new = retry_new
+                        resolution_reason = retry_reason
+                    else:
+                        apply_result = f"{apply_result} | retry={retry_result}"
+
                 fe: FileEdit = {
                     "target_file": target_file,
                     "mainline_file": mainline_file,
