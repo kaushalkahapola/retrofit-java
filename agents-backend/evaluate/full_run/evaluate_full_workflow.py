@@ -57,7 +57,7 @@ RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 PHASE0_CACHE_DIR = os.path.join(os.path.dirname(__file__), "phase0_cache")
 
 TARGET_PROJECTS = ["elasticsearch"]
-MAX_PATCHES_PER_PROJECT = 6
+MAX_PATCHES_PER_PROJECT = 7
 
 RUN_MODE_FULL = "full"
 RUN_MODE_PHASE1 = "phase1"
@@ -614,7 +614,7 @@ def _build_agent_eligible_patch(
             output_lines.append(f"diff --git a/{source_file} b/{target_file}\n")
 
             # Write file operation markers
-            if patched_file.is_new_file:
+            if patched_file.is_added_file:
                 output_lines.append("new file mode 100644\n")
             if patched_file.is_removed_file:
                 output_lines.append("deleted file mode 100644\n")
@@ -623,7 +623,7 @@ def _build_agent_eligible_patch(
             output_lines.append(f"index 0000000..0000000 100644\n")
 
             # Write --- and +++ lines
-            src = source_file if not patched_file.is_new_file else "/dev/null"
+            src = source_file if not patched_file.is_added_file else "/dev/null"
             tgt = target_file if not patched_file.is_removed_file else "/dev/null"
             output_lines.append(f"--- a/{src}\n")
             output_lines.append(f"+++ b/{tgt}\n")
