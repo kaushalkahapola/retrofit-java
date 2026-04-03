@@ -1,0 +1,51 @@
+{
+  "input_tokens": 72,
+  "output_tokens": 0,
+  "total_tokens": 72,
+  "messages_with_usage": 0,
+  "estimated_messages": 5,
+  "by_node": {
+    "context_analyzer": {
+      "input_tokens": 13,
+      "output_tokens": 0,
+      "total_tokens": 13,
+      "estimated_events": 1,
+      "exact_events": 0,
+      "sources": [
+        "estimated_from_message_chars"
+      ]
+    },
+    "structural_locator": {
+      "input_tokens": 19,
+      "output_tokens": 0,
+      "total_tokens": 19,
+      "estimated_events": 1,
+      "exact_events": 0,
+      "sources": [
+        "estimated_from_message_chars"
+      ]
+    },
+    "planning_agent": {
+      "input_tokens": 10,
+      "output_tokens": 0,
+      "total_tokens": 10,
+      "estimated_events": 1,
+      "exact_events": 0,
+      "sources": [
+        "estimated_from_message_chars"
+      ]
+    },
+    "hunk_generator": {
+      "input_tokens": 30,
+      "output_tokens": 0,
+      "total_tokens": 30,
+      "estimated_events": 2,
+      "exact_events": 0,
+      "sources": [
+        "estimated_from_message_chars",
+        "estimated_from_message_chars"
+      ]
+    }
+  },
+  "finished_at": "2026-04-02T16:59:55.578943"
+}

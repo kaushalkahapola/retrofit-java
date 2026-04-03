@@ -1,0 +1,61 @@
+{
+  "hunk_generation_plan": {
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+        "insertion_line": 17,
+        "generation_mode": "import",
+        "anchor_line": 17,
+        "anchor_before": "import org.elasticsearch.action.search.SearchShardsResponse;",
+        "anchor_after": "import org.elasticsearch.action.support.TransportActions;",
+        "notes": "Exact match found for the anchor line; DiscoveryNodeRole not found in the file.",
+        "raw_added_preview": "import org.elasticsearch.cluster.node.DiscoveryNodeRole;"
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+        "insertion_line": 39,
+        "generation_mode": "import",
+        "anchor_line": 39,
+        "anchor_before": "import java.util.ArrayList;",
+        "anchor_after": "import java.util.Collections;",
+        "notes": "Exact match found for import statements; preparing to insert new imports.",
+        "raw_added_preview": "import java.util.Comparator;\nimport java.util.LinkedHashMap;"
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+        "insertion_line": 59,
+        "generation_mode": "pure_insertion",
+        "anchor_line": 61,
+        "anchor_before": " * and executing these computes on the data nodes.",
+        "anchor_after": "private final ClusterService clusterService;",
+        "notes": "Exact match found for the insertion point with proper context.",
+        "raw_added_preview": "\n    /**\n     * Query order according to the\n     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n     */\n    private static final List<String> NODE_QUERY_ORDER = List.of(\n        DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_CO"
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+        "insertion_line": 129,
+        "generation_mode": "rewrite",
+        "anchor_line": 129,
+        "anchor_before": "            ) {",
+        "anchor_after": "                trySendingRequestsForPendingShards(targetShards, computeListener);",
+        "notes": "Exact match found for the line to be rewritten, with surrounding context verified.",
+        "raw_added_preview": "                pendingShardIds.addAll(order(targetShards));\n    private static List<ShardId> order(TargetShards targetShards) {\n        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();\n        var ordered = new ArrayList<>(targetShards.shards.keySet());\n        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));\n        return ordered;\n    }\n\n    private static int nodesOrder(List<DiscoveryNode> nodes, Map"
+      },
+      {
+        "hunk_index": 4,
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+        "insertion_line": 341,
+        "generation_mode": "rewrite",
+        "anchor_line": 341,
+        "anchor_before": "        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new HashMap<>();",
+        "anchor_after": "        final Iterator<ShardId> shardsIt = pendingShardIds.iterator();",
+        "notes": "Exact line match found for the rewrite operation.",
+        "raw_added_preview": "        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();"
+      }
+    ]
+  }
+}
