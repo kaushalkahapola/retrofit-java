@@ -9,15 +9,6 @@
 
 ## Code File Mappings
 
-### `docs/changelog/118324.yaml`
-
-**Hunks in this file**: 1
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | propagation | `hunk_1` | `None` | 1–1 |
 ### `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java`
 
 **Hunks in this file**: 2

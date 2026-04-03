@@ -1794,7 +1794,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                             )
                             react_result = await hg_react_agent.ainvoke(
                                 {"messages": [("user", react_prompt)]},
-                                config={"recursion_limit": 30},
+                                config={"recursion_limit": 100},
                             )
                             react_messages = react_result.get("messages", [])
                             raw_content = (
