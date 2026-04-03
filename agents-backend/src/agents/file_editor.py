@@ -47,6 +47,7 @@ from utils.token_counter import (
 )
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from agents.hunk_generator_tools import HunkGeneratorToolkit
+from utils.semantic_adaptation_helper import analyze_anchor_failure_quick
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +78,49 @@ Does the diff correctly implement the fix logic? Answer YES or NO.
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+
+def _analyze_anchor_failure_semantic(
+    anchor_text: str,
+    target_file_content: str,
+    target_file_path: str,
+    resolution_reason: str,
+) -> dict[str, Any]:
+    """
+    Perform semantic analysis on an anchor failure.
+    
+    Called when 4-pass deterministic algorithm fails and grep retry fails.
+    Attempts to diagnose why anchor couldn't be found and suggest recovery.
+    
+    Returns:
+        Dict with diagnosis, severity, confidence, recovery strategy, etc.
+    """
+    try:
+        result = analyze_anchor_failure_quick(
+            anchor_text=anchor_text,
+            target_file_content=target_file_content,
+            target_file_path=target_file_path,
+            resolution_reason=resolution_reason,
+        )
+        
+        return {
+            "success": True,
+            "diagnosis": result.diagnosis.value,
+            "severity": result.severity.value,
+            "confidence": result.confidence,
+            "detected_issues": result.detected_issues,
+            "suggested_strategy": result.suggested_retry_strategy,
+            "recovery_actions": result.recovery_actions,
+            "potential_matches": result.potential_matches,
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "diagnosis": "unknown",
+            "confidence": 0.0,
+        }
 
 
 def _normalize_rel_path(path: str) -> str:

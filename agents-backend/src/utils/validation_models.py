@@ -58,6 +58,7 @@ class HunkValidationError:
     suggestions: List[str] = field(default_factory=list)  # How to fix the error
     raw_output: Optional[str] = None  # Full tool output for inspection
     timestamp: datetime = field(default_factory=datetime.now)
+    semantic_analysis: Optional[Dict[str, Any]] = None  # Semantic diagnosis of root cause (e.g., method_renamed, signature_changed)
 
 
 @dataclass
