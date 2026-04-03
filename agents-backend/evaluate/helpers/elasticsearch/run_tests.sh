@@ -13,7 +13,9 @@ echo "--- Container user: ${HOST_UID}:${HOST_GID} ---"
 
 IMAGE_TAG="${IMAGE_TAG:-retrofit-elasticsearch-builder:local}"
 
+MAX_CPU="${MAX_CPU:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 1)}"
 echo "--- Using Docker Image: ${IMAGE_TAG} ---"
+echo "CPU detected: ${MAX_CPU}"
 
 # 1. Determine Gradle test command from TEST_TARGETS.
 #
@@ -82,7 +84,7 @@ ${DOCKER_CMD} run --rm -u root \
     "${IMAGE_TAG}" \
     chown -R "${HOST_UID}:${HOST_GID}" /home/gradle/.gradle
 
-GRADLE_CMD="./gradlew ${GRADLE_ARGS} --project-cache-dir /tmp/gradle-project-cache"
+GRADLE_CMD="./gradlew ${GRADLE_ARGS} --max-workers=${MAX_CPU} --project-cache-dir /tmp/gradle-project-cache"
 echo "--- Executing: ${GRADLE_CMD} ---"
 
 if ${DOCKER_CMD} run --rm \
@@ -96,6 +98,7 @@ if ${DOCKER_CMD} run --rm \
     -w /repo \
     "${IMAGE_TAG}" \
     bash -c "git config --global --add safe.directory /repo || true; \
+    export GRADLE_OPTS=\"\${GRADLE_OPTS:-} -XX:ActiveProcessorCount=${MAX_CPU}\"; \
     mkdir -p /tmp/gradle-project-cache && \
     ${GRADLE_CMD}; \
     GRADLE_EXIT=\$?; \

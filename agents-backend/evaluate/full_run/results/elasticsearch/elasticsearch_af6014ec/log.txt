@@ -1,0 +1,27 @@
+patch_id=elasticsearch_af6014ec
+project=elasticsearch
+mainline_commit=af6014ecb534a38e42b33c0783731ab0c0264e9b
+backport_commit=d2778383792d414973065084d5cbcf4da32a2399
+mode=full
+started_at=2026-04-03T22:22:24.960841
+----------------------------------------
+Running full workflow graph
+Completed node=phase_0_optimistic
+Workflow failed: cannot access local variable 'json' where it is not associated with a value
+
+[elasticsearch/elasticsearch_af6014ec] Setting up repositories for mode=full...
+[elasticsearch/elasticsearch_af6014ec] Running full workflow graph...
+Router: Running Phase 0.
+Phase 0 (Optimistic): Checking direct patch applicability...
+Phase 0: Experiment mode — checking out parent of d2778383792d414973065084d5cbcf4da32a2399...
+Phase 0: Building baseline by applying developer backport test hunks only...
+  Validation: server/src/test/java/org/elasticsearch/ingest/PipelineConfigurationTests.java - applying 2 hunk(s) one by one in bottom-to-top order: [145, 28]
+    Agent 4: Executing elasticsearch helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_tests.sh
+Phase 0: git apply --check SUCCEEDED. Attempting actual patch application and test run.
+    Agent 4: Executing elasticsearch helper build script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_build.sh
+    Agent 4: Executing elasticsearch helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_tests.sh
+Phase 0: Transition summary -> reason=Valid: Observed fail-to-pass and/or newly passing relevant tests with no regressions.; fail->pass(1): ['org.elasticsearch.ingest.PipelineConfigurationTests#testMapKeyOrderingRoundTrip']; newly_passing(0): []; pass->fail(0): []
+Phase 0: Transition-based test validation passed. Fast-path success.
+Router: Phase 0 succeeded - taking fast-path exit.
+  Completed: phase_0_optimistic
+[elasticsearch/elasticsearch_af6014ec] Workflow failed: cannot access local variable 'json' where it is not associated with a value

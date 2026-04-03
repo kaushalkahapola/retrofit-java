@@ -11,6 +11,12 @@ fi
 
 echo "--- Building HBase for commit ${SHORT_SHA} ---"
 
+MAX_CPU="${MAX_CPU:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 1)}"
+MAVEN_THREADS="${MAVEN_THREADS:-${MAX_CPU}}"
+
+echo "CPU detected: ${MAX_CPU}"
+echo "Maven threads: ${MAVEN_THREADS}"
+
 # Initialize build exit code
 BUILD_EXIT_CODE=0
 
@@ -33,7 +39,7 @@ docker volume create maven-cache-hbase 2>/dev/null || true
 echo "--- Running Maven build (compile only, no tests) ---"
 
 # Build without tests, skip documentation and code quality checks
-BUILD_COMMAND="mvn clean install -DskipTests \
+BUILD_COMMAND="mvn clean install -DskipTests -T ${MAVEN_THREADS} \
   -Dmaven.javadoc.skip=true \
   -Dcheckstyle.skip=true \
   -Dfindbugs.skip=true \
@@ -46,7 +52,7 @@ docker run --rm \
     -v "maven-cache-hbase:/root/.m2" \
     -w /repo \
     ${BUILDER_IMAGE_TAG} \
-    bash -c "rm -rf /root/.m2/repository/org/apache/hbase && ${BUILD_COMMAND}" \
+    bash -c "export MAVEN_OPTS=\"\${MAVEN_OPTS:-} -XX:ActiveProcessorCount=${MAX_CPU}\" && rm -rf /root/.m2/repository/org/apache/hbase && ${BUILD_COMMAND}" \
     || BUILD_EXIT_CODE=$?
 
 # Save build status (only if BUILD_STATUS_FILE is set)

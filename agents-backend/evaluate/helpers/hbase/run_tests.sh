@@ -5,6 +5,14 @@ echo "=== Running Tests for ${COMMIT_SHA:0:7} ==="
 echo "Target: ${TEST_TARGETS:-}"
 echo "Modules: ${TEST_MODULES:-}"
 
+MAX_CPU="${MAX_CPU:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 1)}"
+MAVEN_THREADS="${MAVEN_THREADS:-${MAX_CPU}}"
+SUREFIRE_FORKS="${SUREFIRE_FORKS:-${MAX_CPU}}"
+
+echo "CPU detected: ${MAX_CPU}"
+echo "Maven threads: ${MAVEN_THREADS}"
+echo "Surefire forks: ${SUREFIRE_FORKS}"
+
 # 1. Configure Test Command
 if [ "${TEST_TARGETS:-}" == "ALL" ]; then
     echo "--- Running ALL tests (excluding blacklisted modules) ---"
@@ -89,8 +97,9 @@ if docker run --rm \
     "${BUILDER_IMAGE_TAG}" \
     bash -c "set -e; \
              echo 'Maven version:'; mvn --version; \
-             echo 'Running: mvn test ${MAVEN_ARGS}'; \
-             mvn test ${MAVEN_ARGS} \
+             export MAVEN_OPTS=\"\${MAVEN_OPTS:-} -XX:ActiveProcessorCount=${MAX_CPU}\"; \
+             echo 'Running: mvn test -T ${MAVEN_THREADS} -DforkCount=${SUREFIRE_FORKS} ${MAVEN_ARGS}'; \
+             mvn test -T ${MAVEN_THREADS} -DforkCount=${SUREFIRE_FORKS} -DreuseForks=true ${MAVEN_ARGS} \
                   -DfailIfNoTests=false \
                   -Dsurefire.failIfNoSpecifiedTests=false \
                   -Dmaven.javadoc.skip=true \
