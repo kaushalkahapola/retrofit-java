@@ -526,6 +526,50 @@ class ReasoningToolkit:
             return f"Symbol '{symbol_name}' not found in target repository index."
         return f"Symbol '{symbol_name}' declared in:\n  - " + "\n  - ".join(files)
 
+    def find_text_neighbors(
+        self,
+        search_text: str,
+        context_lines: int = 4,
+        max_hits: int = 20,
+    ) -> str:
+        """
+        Repository-wide lexical search with small local context windows.
+        Helps Agent 2 locate semantically-equivalent logic even when file mapping diverges.
+        """
+        txt = str(search_text or "").strip()
+        if not txt:
+            return "ERROR: search_text is required."
+
+        hits = self.retriever.grep_repo(txt, is_regex=False)
+        if not hits:
+            return f"No matches found for '{txt}'."
+
+        ctx_n = max(1, min(int(context_lines or 4), 20))
+        cap = max(1, min(int(max_hits or 20), 100))
+        out: list[str] = [
+            f"Found {min(len(hits), cap)} / {len(hits)} hit(s) for '{txt}':"
+        ]
+
+        for h in hits[:cap]:
+            file_path = h.get("file")
+            line_no = int(h.get("line") or 1)
+            line_txt = (h.get("content") or "").strip()
+            out.append(f"- {file_path}:{line_no}: {line_txt}")
+
+            full_path = os.path.join(self.target_repo_path, file_path)
+            try:
+                with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.read().splitlines()
+                lo = max(1, line_no - ctx_n)
+                hi = min(len(lines), line_no + ctx_n)
+                for ln in range(lo, hi + 1):
+                    marker = ">" if ln == line_no else " "
+                    out.append(f"    {marker}{ln:5d}: {lines[ln - 1]}")
+            except Exception:
+                out.append("    [context unavailable]")
+
+        return "\n".join(out)
+
     def git_pickaxe(self, file_path: str, snippet: str) -> str:
         """
         Uses git log -S (pickaxe) to find commits that introduced or removed
@@ -647,6 +691,11 @@ class ReasoningToolkit:
                 func=self.find_symbol_locations,
                 name="find_symbol_locations",
                 description="Finds all Java files where a specific class or method name is declared using the repository index.",
+            ),
+            StructuredTool.from_function(
+                func=self.find_text_neighbors,
+                name="find_text_neighbors",
+                description="Searches for literal text across Java files and returns local context windows around each hit. Useful for locating moved logic when path mapping is unreliable.",
             ),
             StructuredTool.from_function(
                 func=self.git_pickaxe,

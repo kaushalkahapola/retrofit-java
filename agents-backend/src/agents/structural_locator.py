@@ -651,6 +651,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     semantic_blueprint = state.get("semantic_blueprint")
     patch_analysis = state.get("patch_analysis", [])
     patch_diff = state.get("patch_diff", "")
+    pair_consistency = state.get("pair_consistency") or {}
     target_repo_path = state.get("target_repo_path", "")
     mainline_repo_path = state.get("mainline_repo_path", "")
     with_test_changes = state.get("with_test_changes", False)
@@ -673,6 +674,13 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
     trace = "# Structural Locator Trace\n\n"
     trace += f"## Blueprint Summary\n- **Root Cause**: {semantic_blueprint.get('root_cause_hypothesis', '')}\n\n"
+    if pair_consistency:
+        trace += (
+            "## Pair Consistency\n"
+            f"- Pair mismatch: {pair_consistency.get('pair_mismatch', False)}\n"
+            f"- Overlap ratio (mainline): {pair_consistency.get('overlap_ratio_mainline', 0)}\n"
+            f"- Overlap Java files: {pair_consistency.get('overlap_java_files', [])}\n\n"
+        )
     trace += (
         "## Locator Retry State\n"
         f"- Attempt: {structural_locator_retries + 1}\n"
@@ -769,6 +777,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                     "git_log_follow",
                     "git_blame_lines",
                     "grep_repo",
+                    "find_text_neighbors",
                     "find_symbol_locations",
                     "git_pickaxe",
                 ]
@@ -941,13 +950,15 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 f"Mainline File: {mainline_file}\n"
                 f"Primary Target Hypothesis: {primary_target}\n"
                 f"Other Potential Targets: {other_targets}\n"
+                f"Pair mismatch diagnostics: {json.dumps(pair_consistency, indent=2)}\n"
                 f"Hunk Details: {hunk_details}\n"
                 f"Semantic Blueprint:\n{json.dumps(simple_blueprint, indent=2)}\n\n"
                 f"Patch Diff for this file:\n```diff\n{file_diff}\n```\n\n"
                 f"MISSION: Locate where each hunk applies in the target repository.\n"
                 f"1. VERIFY if the logic still lives in '{primary_target}' using `get_class_context` or `read_file`.\n"
                 f"2. IF LOGIC IS MISSING/MOVED: Use `grep_repo` for unique strings, `git_pickaxe` for history, or `get_dependency_graph` to find architectural neighbors (like classes that call or are called by the original class).\n"
-                f"3. REPORT: Return a JSON with 'mappings' array. Each hunk can have a DIFFERENT 'target_file' if the logic was split or relocated."
+                f"3. If overlap is low or zero, assume pair mismatch and aggressively locate semantically equivalent logic; file-level overlap is not required.\n"
+                f"4. REPORT: Return a JSON with 'mappings' array. Each hunk can have a DIFFERENT 'target_file' if the logic was split or relocated."
             )
             input_data = {"messages": [("user", input_msg)]}
 

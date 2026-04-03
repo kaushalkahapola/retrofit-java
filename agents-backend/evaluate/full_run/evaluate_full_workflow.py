@@ -62,6 +62,9 @@ MAX_PATCHES_PER_PROJECT = 5
 RUN_MODE_FULL = "full"
 RUN_MODE_PHASE1 = "phase1"
 RUN_MODE_PHASE2 = "phase2"
+PAIR_MISMATCH_EARLY_EXIT = (
+    os.getenv("PAIR_MISMATCH_EARLY_EXIT", "false").strip().lower() == "true"
+)
 
 
 def ensure_dirs() -> None:
@@ -1387,12 +1390,17 @@ async def run_full_pipeline(
             "with_test_changes": False,
             "developer_auxiliary_hunks": developer_aux_hunks,
             "use_phase_0_cache": True,
+            "pair_consistency": pair_consistency,
         }
 
         # Pair-mismatch early exit:
         # If mainline Java scope has zero overlap with developer Java scope,
         # agentic adaptation is typically out-of-scope for this commit pair.
-        if run_mode == RUN_MODE_FULL and pair_consistency.get("pair_mismatch", False):
+        if (
+            PAIR_MISMATCH_EARLY_EXIT
+            and run_mode == RUN_MODE_FULL
+            and pair_consistency.get("pair_mismatch", False)
+        ):
             overlap_ratio = float(
                 pair_consistency.get("overlap_ratio_mainline", 1.0) or 0.0
             )
