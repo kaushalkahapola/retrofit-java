@@ -5,7 +5,7 @@
     "mainline_commit": "88cf2487e7deb38686870e40bf08b2b729b7d848",
     "backport_commit": "223d50f0524d3d3e9a19f18a3b146212ff830042",
     "run_mode": "full",
-    "timestamp": "2026-04-03T16:25:27.254710",
+    "timestamp": "2026-04-03T16:47:51.499406",
     "phases": {
       "phase1_context_analyzer": {
         "context_analyzer": {
@@ -98,40 +98,50 @@
                 {
                   "hunk_index": 0,
                   "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+                  "edit_type": "insert_after",
+                  "old_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
+                  "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
+                  "verified": true,
+                  "verification_result": "sanitize_resolved:exact",
+                  "notes": "Inserted CACHE_EVICTIONS_HISTORY import before COMPILATIONS_HISTORY import."
+                },
+                {
+                  "hunk_index": 0,
+                  "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
                   "edit_type": "insert_before",
                   "old_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
                   "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
                   "verified": true,
                   "verification_result": "sanitize_resolved:line_trimmed_unique",
-                  "notes": "Inserted CACHE_EVICTIONS_HISTORY import before COMPILATIONS_HISTORY import."
+                  "notes": "required_op_insert_before|coverage_backfill"
                 },
                 {
                   "hunk_index": 1,
                   "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
                   "edit_type": "replace",
-                  "old_string": "                ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);",
-                  "new_string": "                ob.xContentObject(CACHE_EVICTIONS_HISTORY, compilationsHistory);",
-                  "verified": false,
-                  "verification_result": "sanitize_old_not_found:not_found_single",
-                  "notes": "Replaced COMPILATIONS_HISTORY with CACHE_EVICTIONS_HISTORY in the toXContentChunked method.|sanitize_old_not_found:not_found_single"
+                  "old_string": "TimeSeries.merge(first.compilationsHistory, second.compilationsHistory)",
+                  "new_string": "TimeSeries.merge(first.cacheEvictionsHistory, second.cacheEvictionsHistory)",
+                  "verified": true,
+                  "verification_result": "llm_adapted:0.90",
+                  "notes": "Replaced COMPILATIONS_HISTORY with CACHE_EVICTIONS_HISTORY as per the mainline diff.|sanitize_old_not_found:not_found_single|llm_intent:The patch aims to change the constant used for representing cache evictions history from 'COMPILATIONS_HISTORY' to 'CACHE_EVICTIONS_HISTORY' in the context of a statistics object."
                 },
                 {
                   "hunk_index": 1,
                   "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
                   "edit_type": "replace",
-                  "old_string": "                builder.startObject(COMPILATIONS_HISTORY);",
-                  "new_string": "                builder.startObject(CACHE_EVICTIONS_HISTORY);",
-                  "verified": false,
-                  "verification_result": "sanitize_old_not_found:not_found_single",
-                  "notes": "required_op_replace|coverage_backfill|sanitize_old_not_found:not_found_single"
+                  "old_string": "TimeSeries.merge(first.compilationsHistory, second.compilationsHistory)",
+                  "new_string": "TimeSeries.merge(first.cacheEvictionsHistory, second.cacheEvictionsHistory)",
+                  "verified": true,
+                  "verification_result": "llm_adapted:0.90",
+                  "notes": "required_op_replace|coverage_backfill|sanitize_old_not_found:not_found_single|llm_intent:The patch aims to change the identifier for the history of compilations to the history of cache evictions, reflecting a shift in focus from compilations to cache evictions."
                 }
               ]
             },
-            "last_plan_signature": "a0f4b3f54838b02710390eeb21f087b7d35965232df96973660b233888bdf04e",
+            "last_plan_signature": "566f067a0a2142f2d96d09ed4c8fe7fad32a468d6fb56efefbd57cd7cbc148a6",
             "token_usage": {
-              "input_tokens": 49259,
-              "output_tokens": 821,
-              "total_tokens": 50080,
+              "input_tokens": 48049,
+              "output_tokens": 853,
+              "total_tokens": 48902,
               "estimated": false,
               "sources": [
                 "planner.provider_usage",
@@ -163,6 +173,17 @@
                 "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
                 "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
                 "old_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
+                "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
+                "edit_type": "insert_after",
+                "verified": true,
+                "verification_result": "sanitize_resolved:exact",
+                "applied": true,
+                "apply_result": "SUCCESS: replaced at approx line 28 in 'server/src/main/java/org/elasticsearch/script/ScriptStats.java'."
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+                "old_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
                 "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
                 "edit_type": "insert_before",
                 "verified": true,
@@ -173,24 +194,24 @@
               {
                 "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
                 "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-                "old_string": "                ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);",
-                "new_string": "                ob.xContentObject(CACHE_EVICTIONS_HISTORY, compilationsHistory);",
+                "old_string": "TimeSeries.merge(first.compilationsHistory, second.compilationsHistory)",
+                "new_string": "TimeSeries.merge(first.cacheEvictionsHistory, second.cacheEvictionsHistory)",
                 "edit_type": "replace",
-                "verified": false,
-                "verification_result": "sanitize_old_not_found:not_found_single",
+                "verified": true,
+                "verification_result": "llm_adapted:0.90",
                 "applied": true,
-                "apply_result": "SUCCESS: replaced at approx line 200 in 'server/src/main/java/org/elasticsearch/script/ScriptStats.java'."
+                "apply_result": "SUCCESS: replaced at approx line 91 in 'server/src/main/java/org/elasticsearch/script/ScriptStats.java'."
               },
               {
                 "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
                 "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-                "old_string": "                builder.startObject(COMPILATIONS_HISTORY);",
-                "new_string": "                builder.startObject(CACHE_EVICTIONS_HISTORY);",
+                "old_string": "TimeSeries.merge(first.compilationsHistory, second.compilationsHistory)",
+                "new_string": "TimeSeries.merge(first.cacheEvictionsHistory, second.cacheEvictionsHistory)",
                 "edit_type": "replace",
-                "verified": false,
-                "verification_result": "sanitize_old_not_found:not_found_single",
+                "verified": true,
+                "verification_result": "llm_adapted:0.90",
                 "applied": false,
-                "apply_result": "old_resolution_failed:not_found_single | retry=file_check_retry_grep_no_hits:builder.startObject(COMPILATIONS_HISTORY);"
+                "apply_result": "old_resolution_failed:not_found_single | retry=file_check_retry_grep_no_hits:TimeSeries.merge(first.compilationsHistory, second.compilationsHistory)"
               }
             ],
             "adapted_code_hunks": [],

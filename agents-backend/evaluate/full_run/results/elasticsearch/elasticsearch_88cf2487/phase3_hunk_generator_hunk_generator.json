@@ -1,0 +1,78 @@
+{
+  "adapted_file_edits": [
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "old_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
+      "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
+      "edit_type": "insert_after",
+      "verified": true,
+      "verification_result": "sanitize_resolved:exact",
+      "applied": true,
+      "apply_result": "SUCCESS: replaced at approx line 28 in 'server/src/main/java/org/elasticsearch/script/ScriptStats.java'."
+    },
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "old_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
+      "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
+      "edit_type": "insert_before",
+      "verified": true,
+      "verification_result": "sanitize_resolved:line_trimmed_unique",
+      "applied": true,
+      "apply_result": "SUCCESS: replaced at approx line 28 in 'server/src/main/java/org/elasticsearch/script/ScriptStats.java'."
+    },
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "old_string": "TimeSeries.merge(first.compilationsHistory, second.compilationsHistory)",
+      "new_string": "TimeSeries.merge(first.cacheEvictionsHistory, second.cacheEvictionsHistory)",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "llm_adapted:0.90",
+      "applied": true,
+      "apply_result": "SUCCESS: replaced at approx line 91 in 'server/src/main/java/org/elasticsearch/script/ScriptStats.java'."
+    },
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "old_string": "TimeSeries.merge(first.compilationsHistory, second.compilationsHistory)",
+      "new_string": "TimeSeries.merge(first.cacheEvictionsHistory, second.cacheEvictionsHistory)",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "llm_adapted:0.90",
+      "applied": false,
+      "apply_result": "old_resolution_failed:not_found_single | retry=file_check_retry_grep_no_hits:TimeSeries.merge(first.compilationsHistory, second.compilationsHistory)"
+    }
+  ],
+  "adapted_code_hunks": [],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "hunk_index": 0,
+      "status": "failed",
+      "reason": "generation_contract_failed",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits"
+      ]
+    }
+  ],
+  "generated_patch_hash": "",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}
