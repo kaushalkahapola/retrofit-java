@@ -84,6 +84,15 @@ def route_validation(state: AgentState) -> str:
             (state.get("validation_failure_category") or "").strip().lower()
         )
         failed_stage = (state.get("validation_failed_stage") or "").strip().lower()
+
+        # 1. Identical Patch Guard: force replanning if the patch didn't change
+        # but validation still fails.
+        if failed_stage == "generation_contract_failed":
+            print(
+                f"Router: Generation contract FAILED. Routing to planning_agent for structural fix."
+            )
+            return "planning_agent"
+
         build_diagnostics = (
             (state.get("validation_results") or {}).get("build") or {}
         ).get("diagnostics") or {}

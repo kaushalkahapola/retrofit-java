@@ -240,6 +240,15 @@ class AgentState(TypedDict):
     generated_patch_hash: NotRequired[
         str
     ]  # Last generated code-patch hash (used to avoid identical retry loops)
+    last_plan_signature: NotRequired[
+        str
+    ]  # Hash of last planner output to detect identical planning loops
+    pair_consistency: NotRequired[
+        dict[str, Any]
+    ]  # Mainline/backport commit-pair overlap metrics (diagnostics)
+    failed_locator_paths: NotRequired[
+        list[str]
+    ]  # Repository-relative paths already investigated and ruled out
     token_usage: NotRequired[
         dict[str, Any]
     ]  # Node-local token usage payload (used by evaluator aggregation)

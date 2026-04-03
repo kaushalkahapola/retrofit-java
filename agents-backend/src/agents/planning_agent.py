@@ -632,14 +632,20 @@ def _sanitize_entry_against_target(
 
     if edit_type in {"insert_before", "insert_after"}:
         payload = None
-        if edit_type == "insert_before":
-            idx = new_s.rfind(old_s)
-            if idx >= 0:
-                payload = new_s[:idx]
-        else:
-            idx = new_s.find(old_s)
-            if idx >= 0:
-                payload = new_s[idx + len(old_s) :]
+        # Try matching original old_s first, then resolved_old to extract payload
+        for anchor_candidate in [old_s, resolved_old]:
+            if not anchor_candidate:
+                continue
+            if edit_type == "insert_before":
+                idx = new_s.rfind(anchor_candidate)
+                if idx >= 0:
+                    payload = new_s[:idx]
+                    break
+            else:
+                idx = new_s.find(anchor_candidate)
+                if idx >= 0:
+                    payload = new_s[idx + len(anchor_candidate) :]
+                    break
 
         # Fallback: derive payload by suffix/prefix trimmed-line matching.
         if payload is None:
@@ -932,6 +938,12 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     total_entries = sum(len(v) for v in plan.values())
     print(f"Planning Agent: Complete. Planned {total_entries} edit(s).")
 
+    # Generate plan signature for retry loop dedup
+    import hashlib
+
+    plan_json = json.dumps(dict(plan), sort_keys=True)
+    plan_sig = hashlib.sha256(plan_json.encode("utf-8")).hexdigest()
+
     return {
         "messages": [
             HumanMessage(
@@ -939,5 +951,6 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             )
         ],
         "hunk_generation_plan": dict(plan),
+        "last_plan_signature": plan_sig,
         "token_usage": token_usage,
     }

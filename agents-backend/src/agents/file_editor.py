@@ -222,6 +222,23 @@ def _apply_edit_deterministically(
         if candidate in content_text:
             return candidate, "exact"
 
+        # Pass 1.5: Whitespace-agnostic (trailing and line endings)
+        cand_lines_raw = candidate.splitlines()
+        file_lines_raw = content_text.splitlines()
+        if cand_lines_raw:
+            n = len(cand_lines_raw)
+            for i in range(len(file_lines_raw) - n + 1):
+                match = True
+                for j in range(n):
+                    if file_lines_raw[i + j].rstrip() != cand_lines_raw[j].rstrip():
+                        match = False
+                        break
+                if match:
+                    return (
+                        "\n".join(file_lines_raw[i : i + n]),
+                        "line_trailing_whitespace_agnostic",
+                    )
+
         # Single-line: find unique stripped-line match and adopt exact file line.
         if "\n" not in candidate:
             stripped = candidate.strip()
@@ -577,6 +594,36 @@ def _looks_structurally_truncated(diff_text: str) -> tuple[bool, str]:
             return True, f"syntax_guard_failed: truncated declaration '{s}'"
         if s.endswith("=") and not s.endswith("=="):
             return True, f"syntax_guard_failed: dangling assignment in added line '{s}'"
+    return False, ""
+
+
+def _check_static_field_in_method_body(diff_text: str) -> tuple[bool, str]:
+    """
+    Detect the pattern where a static field is inserted inside a method body.
+    This causes 'illegal start of expression' errors.
+    """
+    lines = (diff_text or "").splitlines()
+    context_before = []
+    for line in lines:
+        if line.startswith("@@"):
+            context_before = []
+            continue
+        if line.startswith(" ") or line.startswith("-"):
+            context_before.append(line[1:])
+        if line.startswith("+") and not line.startswith("+++"):
+            l = line[1:].strip()
+            # If we see a static field declaration
+            if re.match(r"^(private|public|protected)\s+static\s+final\s+", l):
+                # Check brace depth in context
+                combined = "\n".join(context_before[-20:])
+                open_braces = combined.count("{")
+                close_braces = combined.count("}")
+                depth = open_braces - close_braces
+                if depth > 1:  # 0 = outside class, 1 = inside class, >1 = inside method
+                    return (
+                        True,
+                        f"semantic_guard_failed: static field inserted inside method body (brace depth={depth})",
+                    )
     return False, ""
 
 
@@ -969,6 +1016,18 @@ async def file_editor_node(state: AgentState, config) -> dict:
         truncated_invalid, truncated_reason = _looks_structurally_truncated(diff_text)
         if truncated_invalid:
             print(f"    Agent 3: {truncated_reason}")
+            if toolkit and target_repo_path:
+                _git_reset_file(target_repo_path, target_file)
+            task_entry["status"] = "failed"
+            task_entry["reason"] = "generation_contract_failed"
+            continue
+
+        # Semantic guard: detect static fields in method bodies.
+        static_field_invalid, static_field_reason = _check_static_field_in_method_body(
+            diff_text
+        )
+        if static_field_invalid:
+            print(f"    Agent 3: {static_field_reason}")
             if toolkit and target_repo_path:
                 _git_reset_file(target_repo_path, target_file)
             task_entry["status"] = "failed"

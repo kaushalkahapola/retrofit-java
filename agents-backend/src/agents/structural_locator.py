@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 PHASE2_DETERMINISTIC_FIRST = (
     os.getenv("PHASE2_DETERMINISTIC_FIRST", "true").strip().lower() == "true"
 )
-PHASE2_DISABLE_LLM = os.getenv("PHASE2_DISABLE_LLM", "true").strip().lower() == "true"
+PHASE2_DISABLE_LLM = os.getenv("PHASE2_DISABLE_LLM", "false").strip().lower() == "true"
 PHASE2_MAX_DIFF_CHARS = int(os.getenv("PHASE2_MAX_DIFF_CHARS", "8000"))
 PHASE2_RECURSION_LIMIT = int(os.getenv("PHASE2_RECURSION_LIMIT", "18"))
 
@@ -69,16 +69,27 @@ _AGENT_SYSTEM = """You are an expert software engineer mapping code from a new m
 You need to find the exact target file and target method corresponding to a modified mainline file and methods, determining the start and end lines.
 You also need to identify if any methods were renamed.
 
+INVESTIGATION STRATEGY:
+1. Path Match is a HYPOTHESIS: Just because a file exists at the same path doesn't mean the logic is there. Always verify.
+2. Verify Logic: Use `get_class_context` or `read_file` to confirm the mainline code exists in the target file.
+3. If Logic is MISSING: Do NOT anchor to random lines. Use the discovery loop:
+   a. `grep_repo`: Search for exact strings or unique identifiers from the hunk anywhere in the repository.
+   b. `git_pickaxe`: Trace the history of a specific snippet to see where it moved or what it was renamed to.
+   c. `get_dependency_graph`: Find architectural neighbors of the original file. Logic often moves to related classes.
+4. Support Splits: Different hunks from the same mainline file may now live in DIFFERENT target files.
+
 You have tools:
 - `search_candidates(file_path)`: Find a moved/renamed file in the target repo.
 - `match_structure(mainline_file_path, candidate_paths)`: Compare structural similarity.
 - `get_class_context(file_path, method_name)`: Get method boundaries and code in the target repo.
 - `get_dependency_graph(file_paths)`: Find relations.
-- `read_file(file_path)`: Read a file from target repo if you need to manually inspect string matches.
+- `read_file(file_path)`: Read a file from target repo.
+- `grep_repo(search_text, is_regex)`: Search the entire repository for a snippet.
+- `find_symbol_locations(symbol_name)`: Find where a symbol is declared across the project.
+- `git_pickaxe(file_path, snippet)`: Trace the history of a specific code snippet.
 - `git_log_follow(file_path)`: Check git history for renames.
 
-Investigate to find where the mainline changes should be applied in the target repo.
-When you find it, output precisely this JSON:
+When you find the mapping, output precisely this JSON:
 {
     "mappings": [
         {
@@ -92,7 +103,7 @@ When you find it, output precisely this JSON:
     ],
     "consistency_map_entries": {"oldName": "newName"}
 }
-If a method cannot be found, set its target_file and target_method to null.
+If a method cannot be found anywhere, set its target_file and target_method to null.
 Do not include markdown or explanations outside the JSON."""
 
 _DIRECT_MAPPING_SYSTEM = """You are an expert at mapping patch hunks to methods in an older codebase.
@@ -364,15 +375,9 @@ def _realign_mapping_to_target(
                     found_line = found
                     break
 
-        # If still nothing, try using the hunk's mainline +start line directly
-        # (it is the best we have for a brand-new insertion with no existing context).
-        if found_line is None:
-            header_start = _extract_target_start_from_hunk(raw_hunk)
-            if isinstance(header_start, int) and 1 <= header_start <= len(target_lines):
-                found_line = header_start
-            else:
-                # Nothing worked — fail closed.
-                return None, None, snippet
+        # If still nothing, do NOT fallback to header line numbers.
+        # This prevents "mapping hallucinations" where we anchor to unrelated code.
+        return None, None, snippet
 
     span = 0
     if (
@@ -650,6 +655,9 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                     "get_class_context",
                     "git_log_follow",
                     "git_blame_lines",
+                    "grep_repo",
+                    "find_symbol_locations",
+                    "git_pickaxe",
                 ]
             ]
             if toolkit
@@ -772,15 +780,15 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
             input_msg = (
                 f"Mainline File: {mainline_file}\n"
-                f"Target File (from git resolution): {target_file}\n"
+                f"Target File (path-match hypothesis): {target_file}\n"
                 f"{hunk_details}\n"
                 f"Semantic Blueprint:\n{json.dumps(simple_blueprint, indent=2)}\n\n"
                 f"Patch Diff for this file:\n```diff\n{file_diff}\n```\n\n"
-                f"For EACH hunk listed above, identify:\n"
-                f"1. The target method where this hunk applies\n"
-                f"2. The start and end line numbers in the target file\n"
-                f"Return a JSON with 'mappings' array, one entry per hunk, in the SAME ORDER as the Hunk Details above.\n"
-                f"For import hunks, set target_method to '<import>'."
+                f"MISSION: Locate where each of the {len(file_hunks)} hunks above applies in the target repository.\n"
+                f"1. VERIFY if the logic still lives in '{target_file}' using `get_class_context` or `read_file`.\n"
+                f"2. IF LOGIC IS MISSING/MOVED: Use `grep_repo` for unique strings, `git_pickaxe` for history, or `get_dependency_graph` to find architectural neighbors.\n"
+                f"3. REPORT: Return a JSON with 'mappings' array, one entry per hunk in the SAME ORDER as listed above.\n"
+                f"   Each entry can have a different 'target_file' if the logic was split or relocated."
             )
             input_data = {"messages": [("user", input_msg)]}
 

@@ -9,8 +9,15 @@ import subprocess
 from utils.models import ImplementationPlan
 from utils.structural_matcher import find_best_matches
 
+
 class ReasoningToolkit:
-    def __init__(self, retriever: EnsembleRetriever, target_repo_path: str, mainline_repo_path: str, patch_analysis: List[FileChange]):
+    def __init__(
+        self,
+        retriever: EnsembleRetriever,
+        target_repo_path: str,
+        mainline_repo_path: str,
+        patch_analysis: List[FileChange],
+    ):
         self.retriever = retriever
         self.target_repo_path = target_repo_path
         self.mainline_repo_path = mainline_repo_path
@@ -21,7 +28,7 @@ class ReasoningToolkit:
         Searches for potential candidate files in the target repository that correspond to the given source file path.
         Returns a list of candidates with scores and reasoning.
         """
-        return self.retriever.find_candidates(file_path, "HEAD") 
+        return self.retriever.find_candidates(file_path, "HEAD")
 
     def read_file(self, file_path: str) -> str:
         """
@@ -34,19 +41,22 @@ class ReasoningToolkit:
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
-                
+
                 # Strip Comments to avoid Recitation/Copyright filters
                 # Remove block comments
-                content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
+                content = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
                 # Remove line comments
-                content = re.sub(r'//.*', '', content)
-                
+                content = re.sub(r"//.*", "", content)
+
                 lines = content.splitlines()
                 # Remove empty lines created by stripping
                 lines = [line for line in lines if line.strip()]
-                
+
                 if len(lines) > 2000:
-                    return "\n".join(lines[:2000]) + "\n\n... [Truncated: File too large] ..."
+                    return (
+                        "\n".join(lines[:2000])
+                        + "\n\n... [Truncated: File too large] ..."
+                    )
                 return "\n".join(lines)
         except Exception as e:
             return f"Error reading file: {e}"
@@ -59,87 +69,114 @@ class ReasoningToolkit:
         full_path = os.path.join(self.target_repo_path, directory)
         if not os.path.exists(full_path):
             return [f"Error: Directory not found at {directory}"]
-        
+
         try:
             files = []
             for f in os.listdir(full_path):
-                if not f.startswith("."): # Ignore hidden files
+                if not f.startswith("."):  # Ignore hidden files
                     files.append(f)
             return files
         except Exception as e:
             return [f"Error listing files: {e}"]
 
-
-
-    def get_dependency_graph(self, file_paths: List[str], explore_neighbors: bool = False, use_mainline: bool = False) -> Dict:
+    def get_dependency_graph(
+        self,
+        file_paths: List[str],
+        explore_neighbors: bool = False,
+        use_mainline: bool = False,
+    ) -> Dict:
         """
         Analyzes dependencies between a list of Java files.
         Returns a graph where nodes are files and edges are dependencies (imports, inheritance, usage).
-        
+
         Args:
             file_paths: List of relative paths to Java files.
             explore_neighbors: If True, also analyzes all other Java files in the same directory as the input files.
             use_mainline: If True, analyzes the Mainline repository instead of the Target repository.
         """
         from utils.mcp_client import get_client
-        client = get_client()
-        
-        repo_path = self.mainline_repo_path if use_mainline else self.target_repo_path
-        
-        return client.call_tool("get_dependency_graph", {
-            "target_repo_path": repo_path,
-            "file_paths": file_paths,
-            "explore_neighbors": explore_neighbors
-        })
 
-    def get_class_context(self, file_path: str, focus_method: Optional[str] = None, use_mainline: bool = False):
+        client = get_client()
+
+        repo_path = self.mainline_repo_path if use_mainline else self.target_repo_path
+
+        return client.call_tool(
+            "get_dependency_graph",
+            {
+                "target_repo_path": repo_path,
+                "file_paths": file_paths,
+                "explore_neighbors": explore_neighbors,
+            },
+        )
+
+    def get_class_context(
+        self,
+        file_path: str,
+        focus_method: Optional[str] = None,
+        use_mainline: bool = False,
+    ):
         """
         Reads a Java file and returns a skeleton view with the full body of the focused method.
         Useful for verifying specific methods without reading the entire file.
         """
         from utils.mcp_client import get_client
+
         client = get_client()
-        
+
         repo_path = self.mainline_repo_path if use_mainline else self.target_repo_path
         # Normalize empty/null-ish focus values to None for MCP.
         focus = focus_method.strip() if isinstance(focus_method, str) else focus_method
         if focus in {"", "null", "None"}:
             focus = None
-        
-        return client.call_tool("get_class_context", {
-            "target_repo_path": repo_path,
-            "file_path": file_path,
-            "focus_method": focus
-        })
 
-    def get_structural_analysis(self, file_path: str, use_mainline: bool = False) -> Dict:
+        return client.call_tool(
+            "get_class_context",
+            {
+                "target_repo_path": repo_path,
+                "file_path": file_path,
+                "focus_method": focus,
+            },
+        )
+
+    def get_structural_analysis(
+        self, file_path: str, use_mainline: bool = False
+    ) -> Dict:
         """
         Gets rich structural analysis (AST) for a file.
         """
         from utils.mcp_client import get_client
+
         client = get_client()
-        
+
         repo_path = self.mainline_repo_path if use_mainline else self.target_repo_path
-        
+
         # The Java side returns a list of classes, we usually just want the first/main one for matching
-        result = client.call_tool("get_structural_analysis", {
-            "target_repo_path": repo_path,
-            "file_path": file_path
-        })
+        result = client.call_tool(
+            "get_structural_analysis",
+            {"target_repo_path": repo_path, "file_path": file_path},
+        )
         return result
 
-    def match_structure(self, mainline_file_path: str, candidate_file_paths: List[str]) -> str:
+    def match_structure(
+        self, mainline_file_path: str, candidate_file_paths: List[str]
+    ) -> str:
         """
         Determines the best matching target file(s) for a given mainline file using structural analysis.
         Returns a JSON string describing the best match and the reasoning.
         """
         import json
-        
+
         # 1. Analyze Mainline File
-        mainline_analysis = self.get_structural_analysis(mainline_file_path, use_mainline=True)
+        mainline_analysis = self.get_structural_analysis(
+            mainline_file_path, use_mainline=True
+        )
         if "classes" not in mainline_analysis or not mainline_analysis["classes"]:
-            return json.dumps({"error": f"Could not analyze mainline file: {mainline_file_path}"})
-        mainline_node_data = mainline_analysis["classes"][0] # Assume one top level class for now
+            return json.dumps(
+                {"error": f"Could not analyze mainline file: {mainline_file_path}"}
+            )
+        mainline_node_data = mainline_analysis["classes"][
+            0
+        ]  # Assume one top level class for now
 
         # 2. Analyze Candidate Files
         candidates_data = []
@@ -148,81 +185,100 @@ class ReasoningToolkit:
             if "classes" in cand_analysis and cand_analysis["classes"]:
                 # Inject the file path into the data so the matcher knows which file it is
                 data = cand_analysis["classes"][0]
-                data["file_path"] = cand_path 
+                data["file_path"] = cand_path
                 candidates_data.append(data)
-                
+
         if not candidates_data:
-             return json.dumps({"error": "No valid candidates to analyze."})
+            return json.dumps({"error": "No valid candidates to analyze."})
 
         # 3. Run Matcher
         result_dict = find_best_matches(mainline_node_data, candidates_data)
         matches = result_dict["matches"]
         completeness = result_dict["completeness"]
-        
+
         # 4. Format Output
         results = []
         for m in matches:
-            results.append({
-                "file_path": m["data"]["file_path"],
-                "score": round(m["score"], 2),
-                "reasoning": "High structural similarity (Inheritance/Calls/Fields)"
-            })
-            
-        return json.dumps({
-            "matches": results,
-            "verification": {
-                 "completeness_ratio": round(completeness["ratio"], 2),
-                 "missing_features": completeness["missing"],
-                 "status": "COMPLETE" if not completeness["missing"] else "PARTIAL_MATCH"
-            }
-        }, indent=2)
-            
+            results.append(
+                {
+                    "file_path": m["data"]["file_path"],
+                    "score": round(m["score"], 2),
+                    "reasoning": "High structural similarity (Inheritance/Calls/Fields)",
+                }
+            )
 
+        return json.dumps(
+            {
+                "matches": results,
+                "verification": {
+                    "completeness_ratio": round(completeness["ratio"], 2),
+                    "missing_features": completeness["missing"],
+                    "status": "COMPLETE"
+                    if not completeness["missing"]
+                    else "PARTIAL_MATCH",
+                },
+            },
+            indent=2,
+        )
 
-    def find_method_match(self, target_file_path: str, old_method_name: str, old_signature: str, old_calls: List[str]) -> str:
+    def find_method_match(
+        self,
+        target_file_path: str,
+        old_method_name: str,
+        old_signature: str,
+        old_calls: List[str],
+    ) -> str:
         """
         Uses Method Fingerprinting to find a renamed method in a target file.
         Returns a JSON string with the best match.
         """
         from utils.method_fingerprinter import MethodFingerprinter
         from utils.mcp_client import get_client
-        
+
         # 1. Get all methods from the target file using GetDependencyTool
         # We need to analyze just this one file to get its method list
         client = get_client()
-        graph = client.call_tool("get_dependency_graph", {
-            "target_repo_path": self.target_repo_path,
-            "file_paths": [target_file_path],
-            "explore_neighbors": False
-        })
-        
+        graph = client.call_tool(
+            "get_dependency_graph",
+            {
+                "target_repo_path": self.target_repo_path,
+                "file_paths": [target_file_path],
+                "explore_neighbors": False,
+            },
+        )
+
         candidate_methods = []
         for node in graph.get("nodes", []):
-            if node.get("id").endswith(target_file_path.replace("/", ".").replace(".java", "")): # Rough match
-                 candidate_methods = node.get("methods", [])
-                 break
-        
+            if node.get("id").endswith(
+                target_file_path.replace("/", ".").replace(".java", "")
+            ):  # Rough match
+                candidate_methods = node.get("methods", [])
+                break
+
         if not candidate_methods:
-             # Fallback: try to find any node that looks like the file
-             if graph.get("nodes"):
-                 candidate_methods = graph.get("nodes")[0].get("methods", [])
+            # Fallback: try to find any node that looks like the file
+            if graph.get("nodes"):
+                candidate_methods = graph.get("nodes")[0].get("methods", [])
 
         # 2. Tier 1: Git Tracing & Pickaxe
         # We need the Mainline Commit ID to do tracing properly.
         # But `find_method_match` doesn't currently take it.
         # Ideally we'd modify the tool signature. For now, let's use Pickaxe (which works if we search "recently").
-        
+
         from utils.method_discovery import GitMethodTracer, BodySimilarityMatcher
+
         tracer = GitMethodTracer(self.target_repo_path)
-        
+
         # Try finding where the signature moved
         moved_file = tracer.find_moved_method_by_pickaxe(old_method_name, old_signature)
-        if moved_file and moved_file.endswith(target_file_path.split("/")[-1]): # Simple check if it points to our file
-             # It found it in this file! 
-             # Now find which method name it is?
-             # Pickaxe just says "The signature void foo() appeared in this file".
-             # It implies the method name is still 'foo'.
-             pass
+        if moved_file and moved_file.endswith(
+            target_file_path.split("/")[-1]
+        ):  # Simple check if it points to our file
+            # It found it in this file!
+            # Now find which method name it is?
+            # Pickaxe just says "The signature void foo() appeared in this file".
+            # It implies the method name is still 'foo'.
+            pass
 
         # 3. Tier 2: Body Similarity (Content Diff)
         # We need the BODY of the old method.
@@ -232,25 +288,25 @@ class ReasoningToolkit:
         # We need `read_file` or `get_class_context` to get bodies.
         # This is expensive (N reads).
         # Optimization: Only read bodies of Top-3 candidates from Name/Signature match?
-        
+
         body_matcher = BodySimilarityMatcher()
         best_body_score = 0
         best_body_cand = None
-        
+
         # If we have old code, try to match it against candidates
         # For now, we assume candidates don't have bodies unless we fetch them.
         # Let's skip expensive N-fetches for this baseline step unless we are desperate.
-        
+
         # 4. Tier 3: Call Graph (Existing Fingerprinter)
         fingerprinter = MethodFingerprinter()
         result = fingerprinter.find_match(
             old_method_name=old_method_name,
             old_signature=old_signature,
-            old_code="", # Optional for now
+            old_code="",  # Optional for now
             old_calls=old_calls,
-            candidate_methods=candidate_methods
+            candidate_methods=candidate_methods,
         )
-        
+
         return str(result)
 
     # ------------------------------------------------------------------
@@ -276,7 +332,9 @@ class ReasoningToolkit:
         LLM-facing tool wrapper. Runs `git apply --check` with the given patch path.
         Returns a summary string suitable for LLM consumption.
         """
-        result = self._run_git_apply_check(self.retriever.target_repo.working_dir, patch_path)
+        result = self._run_git_apply_check(
+            self.retriever.target_repo.working_dir, patch_path
+        )
         if result["success"]:
             return "Patch applies cleanly. No conflicts detected."
         return f"Patch does NOT apply cleanly:\n{result['output']}"
@@ -287,7 +345,10 @@ class ReasoningToolkit:
         If patch_path is None, looks for the patch file from state (best-effort).
         """
         if not patch_path:
-            return {"success": False, "output": "No patch path provided to git apply check."}
+            return {
+                "success": False,
+                "output": "No patch path provided to git apply check.",
+            }
         try:
             result = subprocess.run(
                 ["git", "apply", "--check", patch_path],
@@ -300,13 +361,18 @@ class ReasoningToolkit:
             else:
                 return {"success": False, "output": result.stderr or result.stdout}
         except Exception as e:
-            return {"success": False, "output": f"Exception during git apply check: {e}"}
+            return {
+                "success": False,
+                "output": f"Exception during git apply check: {e}",
+            }
 
     # ------------------------------------------------------------------
     # Struct / Class Definition Fetcher (Agent 1 support)
     # ------------------------------------------------------------------
 
-    def get_struct_definition(self, struct_name: str, use_mainline: bool = True) -> Dict:
+    def get_struct_definition(
+        self, struct_name: str, use_mainline: bool = True
+    ) -> Dict:
         """
         Retrieves the full definition of a class or struct by name from AST analysis.
         Useful for Agent 1 to pull dependent types referenced in the patch.
@@ -320,37 +386,58 @@ class ReasoningToolkit:
             Returns {'error': ...} if not found.
         """
         from utils.mcp_client import get_client
+
         client = get_client()
         repo_path = self.mainline_repo_path if use_mainline else self.target_repo_path
 
         # Use ripgrep-style search to find the file defining the struct first
         try:
             result = subprocess.run(
-                ["grep", "-r", "--include=*.java", "-l",
-                 f"class {struct_name}|interface {struct_name}", repo_path],
-                capture_output=True, text=True
+                [
+                    "grep",
+                    "-r",
+                    "--include=*.java",
+                    "-l",
+                    f"class {struct_name}|interface {struct_name}",
+                    repo_path,
+                ],
+                capture_output=True,
+                text=True,
             )
             candidates = [f.strip() for f in result.stdout.splitlines() if f.strip()]
         except Exception:
             candidates = []
 
         if not candidates:
-            return {"error": f"No file found defining '{struct_name}' in {'mainline' if use_mainline else 'target'} repo."}
+            return {
+                "error": f"No file found defining '{struct_name}' in {'mainline' if use_mainline else 'target'} repo."
+            }
 
         # Analyze the first match
         rel_path = os.path.relpath(candidates[0], repo_path)
-        analysis = client.call_tool("get_structural_analysis", {
-            "target_repo_path": repo_path,
-            "file_path": rel_path,
-        })
+        analysis = client.call_tool(
+            "get_structural_analysis",
+            {
+                "target_repo_path": repo_path,
+                "file_path": rel_path,
+            },
+        )
         classes = analysis.get("classes", [])
         for cls in classes:
-            if cls.get("simpleName") == struct_name or cls.get("name", "").endswith(struct_name):
+            if cls.get("simpleName") == struct_name or cls.get("name", "").endswith(
+                struct_name
+            ):
                 return cls
         # Return first class if name filter didn't hit
-        return classes[0] if classes else {"error": f"Struct '{struct_name}' not found in {rel_path}."}
+        return (
+            classes[0]
+            if classes
+            else {"error": f"Struct '{struct_name}' not found in {rel_path}."}
+        )
 
-    def get_function_body(self, file_path: str, function_name: str, use_mainline: bool = True) -> str:
+    def get_function_body(
+        self, file_path: str, function_name: str, use_mainline: bool = True
+    ) -> str:
         """
         Retrieves the exact body of a function from a file.
         Useful for Agent 1 to isolate logic.
@@ -358,7 +445,9 @@ class ReasoningToolkit:
         # We reuse get_class_context which already focuses on a specific method.
         # It returns a string representation with the method body fully expanded and other methods stubbed.
         # This is exactly what we need.
-        context = self.get_class_context(file_path, focus_method=function_name, use_mainline=use_mainline)
+        context = self.get_class_context(
+            file_path, focus_method=function_name, use_mainline=use_mainline
+        )
         return str(context)
 
     # ------------------------------------------------------------------
@@ -373,14 +462,27 @@ class ReasoningToolkit:
         repo_path = self.mainline_repo_path if use_mainline else self.target_repo_path
         try:
             result = subprocess.run(
-                ["git", "log", "--follow", "--name-status", "--oneline", "--", file_path],
-                capture_output=True, text=True, cwd=repo_path, check=True
+                [
+                    "git",
+                    "log",
+                    "--follow",
+                    "--name-status",
+                    "--oneline",
+                    "--",
+                    file_path,
+                ],
+                capture_output=True,
+                text=True,
+                cwd=repo_path,
+                check=True,
             )
             return result.stdout or "No history found."
         except subprocess.CalledProcessError as e:
             return f"Error running git log: {e.stderr}"
 
-    def git_blame_lines(self, file_path: str, start_line: int, end_line: int, use_mainline: bool = False) -> str:
+    def git_blame_lines(
+        self, file_path: str, start_line: int, end_line: int, use_mainline: bool = False
+    ) -> str:
         """
         Retrieves git blame for specific lines in a file.
         Useful for Agent 1/2 to understand lineage of the code.
@@ -389,67 +491,123 @@ class ReasoningToolkit:
         try:
             result = subprocess.run(
                 ["git", "blame", "-L", f"{start_line},{end_line}", "--", file_path],
-                capture_output=True, text=True, cwd=repo_path, check=True
+                capture_output=True,
+                text=True,
+                cwd=repo_path,
+                check=True,
             )
             return result.stdout or "No blame found."
         except subprocess.CalledProcessError as e:
             return f"Error running git blame: {e.stderr}"
 
+    def grep_repo(self, search_text: str, is_regex: bool = False) -> str:
+        """
+        Performs a repository-wide search for a code snippet in Java files.
+        Returns a list of matching files and line numbers.
+        """
+        hits = self.retriever.grep_repo(search_text, is_regex)
+        if not hits:
+            return f"No matches found for '{search_text}'."
+
+        lines = [f"Found {len(hits)} match(es):"]
+        for h in hits[:20]:  # Limit to 20 hits for LLM consumption
+            lines.append(f"  {h['file']}:{h['line']} :: {h['content'].strip()}")
+        if len(hits) > 20:
+            lines.append(f"  ... (truncated {len(hits) - 20} more matches)")
+        return "\n".join(lines)
+
+    def find_symbol_locations(self, symbol_name: str) -> str:
+        """
+        Uses the repository index to find all Java files where a specific
+        class or method name is declared.
+        """
+        files = self.retriever.find_symbol_locations(symbol_name)
+        if not files:
+            return f"Symbol '{symbol_name}' not found in target repository index."
+        return f"Symbol '{symbol_name}' declared in:\n  - " + "\n  - ".join(files)
+
+    def git_pickaxe(self, file_path: str, snippet: str) -> str:
+        """
+        Uses git log -S (pickaxe) to find commits that introduced or removed
+        a specific code snippet in a file's history.
+        Helps trace logic migrations and renames.
+        """
+        cmd = [
+            "git",
+            "-C",
+            self.target_repo_path,
+            "log",
+            "-S",
+            snippet,
+            "--oneline",
+            "--name-status",
+            "--",
+            file_path,
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            if result.returncode == 0 and result.stdout:
+                return f"Git Pickaxe results for content '{snippet}' in history of {file_path}:\n{result.stdout}"
+            return f"No git history hits for content '{snippet}' in {file_path}."
+        except Exception as e:
+            return f"Error running git pickaxe: {e}"
 
     def map_hunk_lines(self, mainline_hunk: str, target_method_body: str) -> int:
         """
-        Programmatic helper to find the most likely 1-indexed insertion line 
+        Programmatic helper to find the most likely 1-indexed insertion line
         in target_method_body matching the context lines of mainline_hunk.
         Useful to verify LLM anchoring of diffs.
         """
         lines = target_method_body.splitlines()
         hunk_lines = mainline_hunk.splitlines()
-        
+
         # Extract context lines (lines starting with ' ' in the hunk)
-        context_lines = [h[1:].strip() for h in hunk_lines if h.startswith(" ") and len(h) > 1 and h[1:].strip()]
+        context_lines = [
+            h[1:].strip()
+            for h in hunk_lines
+            if h.startswith(" ") and len(h) > 1 and h[1:].strip()
+        ]
         if not context_lines:
             return 1
-            
+
         for i, t_line in enumerate(lines):
             if context_lines[0] in t_line:
-                return i + 1 # 1-indexed
+                return i + 1  # 1-indexed
         return 1
-
 
     def get_tools(self):
         return [
             StructuredTool.from_function(
                 func=self.search_candidates,
                 name="search_candidates",
-                description="Finds candidate files in the target repo that match a modified file from the patch."
+                description="Finds candidate files in the target repo that match a modified file from the patch.",
             ),
             StructuredTool.from_function(
                 func=self.get_dependency_graph,
                 name="get_dependency_graph",
-                description="Builds a dependency graph (classes + method calls) for a list of files."
+                description="Builds a dependency graph (classes + method calls) for a list of files.",
             ),
             StructuredTool.from_function(
                 func=self.get_class_context,
                 name="get_class_context",
-                description="Reads a Java file intelligently. Returns class structure + full body of ONE focused method."
+                description="Reads a Java file intelligently. Returns class structure + full body of ONE focused method.",
             ),
-             StructuredTool.from_function(
+            StructuredTool.from_function(
                 func=self.find_method_match,
                 name="find_method_match",
                 description="Smartly finds a renamed method in a target file using Name, Signature, or Call Graph.",
-                args_schema=None # Let LangChain infer or define strict schema if needed
+                args_schema=None,  # Let LangChain infer or define strict schema if needed
             ),
             StructuredTool.from_function(
                 func=self.read_file,
                 name="read_file",
-                description="Reads the FULL content of a file from the target repo. Use sparingly."
+                description="Reads the FULL content of a file from the target repo. Use sparingly.",
             ),
             StructuredTool.from_function(
                 func=self.list_files,
                 name="list_files",
-                description="Lists files in a directory of the target repo."
+                description="Lists files in a directory of the target repo.",
             ),
-
             StructuredTool.from_function(
                 func=self.match_structure,
                 name="match_structure",
@@ -479,6 +637,21 @@ class ReasoningToolkit:
                 func=self.git_blame_lines,
                 name="git_blame_lines",
                 description="Retrieves git blame for specific lines in a file.",
+            ),
+            StructuredTool.from_function(
+                func=self.grep_repo,
+                name="grep_repo",
+                description="High-performance literal or regex search across all Java files in the target repository. Returns file:line hits.",
+            ),
+            StructuredTool.from_function(
+                func=self.find_symbol_locations,
+                name="find_symbol_locations",
+                description="Finds all Java files where a specific class or method name is declared using the repository index.",
+            ),
+            StructuredTool.from_function(
+                func=self.git_pickaxe,
+                name="git_pickaxe",
+                description="Traces the history of a specific code snippet using 'git log -S'. Helps find renames and moved logic.",
             ),
             StructuredTool.from_function(
                 func=self.map_hunk_lines,
