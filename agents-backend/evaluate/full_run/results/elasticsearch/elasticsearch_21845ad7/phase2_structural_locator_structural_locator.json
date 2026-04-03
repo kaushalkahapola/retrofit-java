@@ -1,0 +1,23 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {},
+  "failed_locator_paths": [
+    "modules/lang-painless/src/main/java/org/elasticsearch/painless/antlr/PainlessLexer.java",
+    "modules/lang-painless/src/main/java/org/elasticsearch/painless/antlr/SuggestLexer.java",
+    "x-pack/plugin/eql/src/main/java/org/elasticsearch/xpack/eql/parser/EqlBaseLexer.java",
+    "x-pack/plugin/eql/src/main/java/org/elasticsearch/xpack/eql/parser/EqlBaseParser.java",
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java",
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java",
+    "x-pack/plugin/kql/src/main/java/org/elasticsearch/xpack/kql/parser/KqlBaseLexer.java",
+    "x-pack/plugin/kql/src/main/java/org/elasticsearch/xpack/kql/parser/KqlBaseParser.java",
+    "x-pack/plugin/sql/src/main/java/org/elasticsearch/xpack/sql/parser/SqlBaseParser.java"
+  ],
+  "structural_locator_retries": 1,
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
+  }
+}
