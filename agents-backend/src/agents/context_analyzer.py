@@ -75,6 +75,11 @@ def _looks_like_test(path: str) -> bool:
     return "test" in p or p.endswith("test.java")
 
 
+def _is_java_code_file(path: str) -> bool:
+    p = (path or "").lower()
+    return p.endswith(".java") and not _looks_like_test(p)
+
+
 async def context_analyzer_node(state: AgentState, config) -> dict:
     print("Agent 1 (Context Analyzer): Deterministic blueprint generation...")
 
@@ -94,6 +99,8 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
 
     file_hunks: dict[str, list[str]] = defaultdict(list)
     for file_path, hunks in (raw_hunks_by_file or {}).items():
+        if not _is_java_code_file(file_path):
+            continue
         if not with_test_changes and _looks_like_test(file_path):
             continue
         file_hunks[file_path].extend(hunks or [])

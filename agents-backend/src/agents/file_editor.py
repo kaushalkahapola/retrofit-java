@@ -250,6 +250,42 @@ def _apply_edit_deterministically(
                 hits.append("\n".join(file_lines[i : i + n]))
         if len(hits) == 1:
             return hits[0], "multiline_trimmed_unique"
+
+        # Secondary fallback: anchor-line reconstruction for diverged multiline blocks.
+        anchor_idx = -1
+        anchor_line = ""
+        best_len = -1
+        for i, line in enumerate(cand_lines):
+            s = line.strip()
+            if not s:
+                continue
+            if len(s) > best_len:
+                best_len = len(s)
+                anchor_idx = i
+                anchor_line = s
+
+        if anchor_idx >= 0 and anchor_line:
+            anchor_hits = [
+                idx
+                for idx, fl in enumerate(file_lines)
+                if fl.strip() == anchor_line or anchor_line in fl.strip()
+            ]
+            if len(anchor_hits) == 1:
+                hit = anchor_hits[0]
+                start = hit - anchor_idx
+                if start < 0:
+                    start = 0
+                if start + n <= len(file_lines):
+                    window = file_lines[start : start + n]
+                    matched = 0
+                    for j in range(n):
+                        if window[j].strip() == cand_lines[j].strip():
+                            matched += 1
+                    if n > 0 and matched * 2 >= n:
+                        return (
+                            "\n".join(window),
+                            "multiline_anchor_reconstructed",
+                        )
         return "", "not_found_multiline"
 
     resolved_old, reason = _resolve_old(content, old_string)
@@ -260,14 +296,19 @@ def _apply_edit_deterministically(
     if edit_type in {"insert_before", "insert_after"}:
         # Recompose insertion around resolved anchor to avoid whitespace mismatch.
         payload = None
-        if edit_type == "insert_before":
-            idx = new_string.rfind(old_string)
-            if idx >= 0:
-                payload = new_string[:idx]
-        else:
-            idx = new_string.find(old_string)
-            if idx >= 0:
-                payload = new_string[idx + len(old_string) :]
+        for anchor in [old_string, resolved_old]:
+            if not anchor:
+                continue
+            if edit_type == "insert_before":
+                idx = new_string.rfind(anchor)
+                if idx >= 0:
+                    payload = new_string[:idx]
+                    break
+            else:
+                idx = new_string.find(anchor)
+                if idx >= 0:
+                    payload = new_string[idx + len(anchor) :]
+                    break
 
         # Fallback: infer payload using stripped-line suffix/prefix relationship.
         if payload is None:
@@ -421,6 +462,8 @@ def _looks_structurally_truncated(diff_text: str) -> tuple[bool, str]:
                 True,
                 "syntax_guard_failed: truncated declaration 'private static final'",
             )
+        if re.match(r"^(private|public|protected)\s+(static\s+)?(final\s+)?$", s):
+            return True, f"syntax_guard_failed: truncated declaration '{s}'"
         if s.endswith("=") and not s.endswith("=="):
             return True, f"syntax_guard_failed: dangling assignment in added line '{s}'"
     return False, ""
@@ -649,6 +692,27 @@ async def file_editor_node(state: AgentState, config) -> dict:
         plan_entries: list[dict[str, Any]] = hunk_generation_plan.get(mainline_file, [])
         if not plan_entries:
             print(f"  Agent 3: No plan entries for {mainline_file} - skipping.")
+            continue
+
+        if any(
+            "mapping_low_confidence" in str((e or {}).get("notes") or "")
+            for e in plan_entries
+        ):
+            print(
+                f"  Agent 3: Mapping confidence is low for {target_file}; "
+                "requesting structural remap before editing."
+            )
+            generation_checklist.append(
+                {
+                    "mainline_file": mainline_file,
+                    "target_file": target_file,
+                    "hunk_index": 0,
+                    "status": "failed",
+                    "reason": "mapping_required",
+                    "todo_steps": ["remap"],
+                    "completed_steps": [],
+                }
+            )
             continue
 
         print(

@@ -271,6 +271,11 @@ def _prepare_pipeline_inputs(
     java_only_patch_analysis = [
         fc for fc in full_patch_analysis if _is_java_code_file(fc.file_path)
     ]
+    pair_consistency = _compute_pair_consistency(
+        patch_output,
+        developer_patch_diff,
+        analyzer,
+    )
     developer_aux_hunks = _build_auxiliary_hunks_from_developer_patch(
         developer_patch_diff
     )
@@ -281,6 +286,7 @@ def _prepare_pipeline_inputs(
             "patch_output": patch_output,
             "developer_patch_diff": developer_patch_diff,
             "java_only_patch_analysis": java_only_patch_analysis,
+            "pair_consistency": pair_consistency,
             "developer_aux_hunks": developer_aux_hunks,
         },
         None,
@@ -392,6 +398,48 @@ def _extract_hunks_by_file_from_patch(
             if _is_java_code_file(file)
         }
     return hunks_by_file
+
+
+def _collect_java_code_files_from_patch(
+    patch_diff: str,
+    analyzer: PatchAnalyzer,
+) -> set[str]:
+    hunks_by_file = _extract_hunks_by_file_from_patch(
+        patch_diff,
+        analyzer,
+        code_only=True,
+    )
+    return set(hunks_by_file.keys())
+
+
+def _compute_pair_consistency(
+    mainline_patch_diff: str,
+    developer_patch_diff: str,
+    analyzer: PatchAnalyzer,
+) -> dict[str, Any]:
+    mainline_java = sorted(
+        _collect_java_code_files_from_patch(mainline_patch_diff, analyzer)
+    )
+    developer_java = sorted(
+        _collect_java_code_files_from_patch(developer_patch_diff, analyzer)
+    )
+    overlap = sorted(set(mainline_java) & set(developer_java))
+
+    ratio = 1.0
+    if mainline_java:
+        ratio = len(overlap) / len(mainline_java)
+
+    pair_mismatch = bool(mainline_java) and ratio < 0.5
+    reason = "mainline_backport_scope_mismatch" if pair_mismatch else "scope_overlap_ok"
+
+    return {
+        "mainline_java_files": mainline_java,
+        "developer_java_files": developer_java,
+        "overlap_java_files": overlap,
+        "overlap_ratio_mainline": ratio,
+        "pair_mismatch": pair_mismatch,
+        "reason": reason,
+    }
 
 
 def _build_hunk_comparison_markdown(
@@ -727,7 +775,11 @@ def _apply_patch_with_temp_index(repo_path, patch_file_path, env):
 
 
 def compare_generated_with_developer_patch(
-    adapted_code_hunks, developer_patch_diff, backport_commit, target_repo_path
+    adapted_code_hunks,
+    developer_patch_diff,
+    backport_commit,
+    target_repo_path,
+    compare_files_scope: list[str] | None = None,
 ):
     code_only_hunks = [
         h
@@ -754,7 +806,16 @@ def compare_generated_with_developer_patch(
             "generated_patch_diff": generated_patch_diff,
         }
 
-    files_to_compare = sorted(set((developer_files or []) + generated_files))
+    if compare_files_scope:
+        files_to_compare = sorted(
+            {
+                str(p).replace("\\", "/").strip().lstrip("/")
+                for p in compare_files_scope
+                if str(p).strip()
+            }
+        )
+    else:
+        files_to_compare = sorted(set((developer_files or []) + generated_files))
 
     with tempfile.NamedTemporaryFile(
         prefix="git_index_", suffix=".tmp", delete=False
@@ -1285,6 +1346,7 @@ async def run_full_pipeline(
         patch_output = prepared_inputs["patch_output"]
         developer_patch_diff = prepared_inputs["developer_patch_diff"]
         java_only_patch_analysis = prepared_inputs["java_only_patch_analysis"]
+        pair_consistency = prepared_inputs.get("pair_consistency") or {}
         developer_aux_hunks = prepared_inputs["developer_aux_hunks"]
         analyzer = PatchAnalyzer()
 
@@ -1297,6 +1359,13 @@ async def run_full_pipeline(
             f"- Backport commit: {backport_commit}\n"
             f"- Java-only files for agentic phases: {len(java_only_patch_analysis)}\n"
             f"- Developer auxiliary hunks (test + non-Java): {len(developer_aux_hunks)}\n\n"
+            f"## Commit Pair Consistency\n"
+            f"- Pair mismatch: {pair_consistency.get('pair_mismatch', False)}\n"
+            f"- Reason: {pair_consistency.get('reason', 'unknown')}\n"
+            f"- Mainline Java files: {pair_consistency.get('mainline_java_files', [])}\n"
+            f"- Developer Java files: {pair_consistency.get('developer_java_files', [])}\n"
+            f"- Overlap Java files: {pair_consistency.get('overlap_java_files', [])}\n"
+            f"- Overlap ratio (mainline): {pair_consistency.get('overlap_ratio_mainline', 0)}\n\n"
             f"## Mainline Patch\n```diff\n{patch_output}\n```\n",
         )
 
@@ -1605,7 +1674,9 @@ async def run_full_pipeline(
             developer_patch_diff=developer_patch_diff,
             backport_commit=backport_commit,
             target_repo_path=target_repo_path,
+            compare_files_scope=pair_consistency.get("mainline_java_files", []),
         )
+        results["pair_consistency"] = pair_consistency
         results["exact_developer_patch"] = comparison["exact_developer_patch"]
         results["developer_patch_comparison"] = {
             "comparison_method": comparison.get("comparison_method", "file_state"),
@@ -1613,6 +1684,7 @@ async def run_full_pipeline(
             "mismatched_files": comparison.get("mismatched_files", []),
             "developer_files": comparison.get("developer_files", []),
             "generated_files": comparison.get("generated_files", []),
+            "pair_consistency": pair_consistency,
             "error": comparison.get("error"),
         }
 
@@ -1650,6 +1722,14 @@ async def run_full_pipeline(
             "# Post-Pipeline Developer Patch Comparison\n\n"
             f"**Exact Developer Patch (code-only)**: {comparison['exact_developer_patch']}\n\n"
             f"**Comparison Method**: {comparison.get('comparison_method', 'file_state')}\n\n"
+            "## Commit Pair Consistency\n"
+            f"- Pair mismatch: {pair_consistency.get('pair_mismatch', False)}\n"
+            f"- Reason: {pair_consistency.get('reason', 'unknown')}\n"
+            f"- Mainline Java files: {pair_consistency.get('mainline_java_files', [])}\n"
+            f"- Developer Java files: {pair_consistency.get('developer_java_files', [])}\n"
+            f"- Overlap Java files: {pair_consistency.get('overlap_java_files', [])}\n"
+            f"- Overlap ratio (mainline): {pair_consistency.get('overlap_ratio_mainline', 0)}\n"
+            f"- Compare files scope used: {pair_consistency.get('mainline_java_files', [])}\n\n"
             "## File State Comparison\n"
             f"- Compared files: {comparison.get('compared_files', [])}\n"
             f"- Mismatched files: {comparison.get('mismatched_files', [])}\n"

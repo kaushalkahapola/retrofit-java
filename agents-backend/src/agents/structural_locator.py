@@ -54,6 +54,17 @@ PHASE2_DISABLE_LLM = os.getenv("PHASE2_DISABLE_LLM", "true").strip().lower() == 
 PHASE2_MAX_DIFF_CHARS = int(os.getenv("PHASE2_MAX_DIFF_CHARS", "8000"))
 PHASE2_RECURSION_LIMIT = int(os.getenv("PHASE2_RECURSION_LIMIT", "18"))
 
+
+def _looks_like_test(path: str) -> bool:
+    p = (path or "").lower()
+    return "test" in p or p.endswith("test.java")
+
+
+def _is_java_code_file(path: str) -> bool:
+    p = (path or "").lower()
+    return p.endswith(".java") and not _looks_like_test(p)
+
+
 _AGENT_SYSTEM = """You are an expert software engineer mapping code from a new mainline patch to an older target repository.
 You need to find the exact target file and target method corresponding to a modified mainline file and methods, determining the start and end lines.
 You also need to identify if any methods were renamed.
@@ -267,6 +278,23 @@ def _build_window_snippet(
     if start > end:
         return ""
     return "\n".join(target_lines[start - 1 : end])
+
+
+def _infer_anchor_confidence(
+    target_repo_path: str,
+    target_file: str,
+    start_line: int | None,
+    target_method: str | None,
+) -> tuple[str, str]:
+    """Infer mapping confidence for downstream planning/routing."""
+    lines = _load_target_file_lines(target_repo_path, target_file)
+    if not lines:
+        return "low", "target_file_missing_or_unreadable"
+    if not isinstance(start_line, int) or start_line < 1 or start_line > len(lines):
+        return "low", "start_line_out_of_range"
+    if target_method is None:
+        return "medium", "line_resolved_method_unresolved"
+    return "high", "line_and_method_resolved"
 
 
 def _realign_mapping_to_target(
@@ -643,7 +671,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     hunks_by_file: dict[str, list] = {}
     for hunk in hunk_chain:
         file = hunk.get("file", "")
-        if file:
+        if file and _is_java_code_file(file):
             if file not in hunks_by_file:
                 hunks_by_file[file] = []
             hunks_by_file[file].append(hunk)
@@ -958,6 +986,12 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 )
 
                 # Append mapping for this hunk
+                anchor_confidence, anchor_reason = _infer_anchor_confidence(
+                    target_repo_path,
+                    str(m.get("target_file") or target_file),
+                    m.get("start_line"),
+                    m.get("target_method"),
+                )
                 mapped_target_context[mainline_file].append(
                     {
                         "hunk_index": hunk_idx,
@@ -967,6 +1001,11 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         "start_line": m.get("start_line"),
                         "end_line": m.get("end_line"),
                         "code_snippet": m.get("code_snippet", ""),
+                        "anchor_confidence": anchor_confidence,
+                        "anchor_reason": anchor_reason,
+                        "anchor_strategy": "deterministic_realign"
+                        if used_deterministic
+                        else "llm_realign",
                     }
                 )
                 print(
@@ -1004,6 +1043,12 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
                 if hunk_role == "declaration":
                     # Import statements
+                    anchor_confidence, anchor_reason = _infer_anchor_confidence(
+                        target_repo_path,
+                        git_target,
+                        start_line,
+                        "<import>",
+                    )
                     mapped_target_context[mainline_file].append(
                         {
                             "hunk_index": hunk_idx,
@@ -1013,6 +1058,9 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                             "start_line": start_line,
                             "end_line": end_line,
                             "code_snippet": snippet,
+                            "anchor_confidence": anchor_confidence,
+                            "anchor_reason": anchor_reason,
+                            "anchor_strategy": "git_fallback_realign",
                         }
                     )
                     print(
@@ -1020,6 +1068,12 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                     )
                 else:
                     # Regular hunks
+                    anchor_confidence, anchor_reason = _infer_anchor_confidence(
+                        target_repo_path,
+                        git_target,
+                        start_line,
+                        None,
+                    )
                     mapped_target_context[mainline_file].append(
                         {
                             "hunk_index": hunk_idx,
@@ -1029,6 +1083,9 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                             "start_line": start_line,
                             "end_line": end_line,
                             "code_snippet": snippet,
+                            "anchor_confidence": anchor_confidence,
+                            "anchor_reason": anchor_reason,
+                            "anchor_strategy": "git_fallback_realign",
                         }
                     )
                     print(f"  Agent 2: Fallback mapped hunk {hunk_idx} to {git_target}")

@@ -130,6 +130,16 @@ def _is_import_hunk(hunk_text: str) -> bool:
     return True
 
 
+def _looks_like_test(path: str) -> bool:
+    p = (path or "").lower()
+    return "test" in p or p.endswith("test.java")
+
+
+def _is_java_code_file(path: str) -> bool:
+    p = (path or "").lower()
+    return p.endswith(".java") and not _looks_like_test(p)
+
+
 def _is_pure_insertion(hunk_text: str) -> bool:
     lines = (hunk_text or "").splitlines()[1:]
     has_add = any(l.startswith("+") and not l.startswith("+++") for l in lines)
@@ -548,6 +558,42 @@ def _resolve_old_in_content(content: str, old_string: str) -> tuple[str, str]:
             matches.append("\n".join(file_lines[i : i + n]))
     if len(matches) == 1:
         return matches[0], "multiline_trimmed_unique"
+
+    # Secondary fallback: anchor-line reconstruction for diverged multiline blocks.
+    # Find the strongest unique anchor line from candidate, then reconstruct a window.
+    anchor_idx = -1
+    anchor_line = ""
+    best_len = -1
+    for i, line in enumerate(cand):
+        s = line.strip()
+        if not s:
+            continue
+        if len(s) > best_len:
+            best_len = len(s)
+            anchor_idx = i
+            anchor_line = s
+
+    if anchor_idx >= 0 and anchor_line:
+        anchor_hits = [
+            idx
+            for idx, fl in enumerate(file_lines)
+            if fl.strip() == anchor_line or anchor_line in fl.strip()
+        ]
+        if len(anchor_hits) == 1:
+            hit = anchor_hits[0]
+            start = hit - anchor_idx
+            if start < 0:
+                start = 0
+            if start + n <= len(file_lines):
+                window = file_lines[start : start + n]
+                matched = 0
+                for j in range(n):
+                    if window[j].strip() == cand[j].strip():
+                        matched += 1
+                # Require at least 50% line-level match to avoid false anchors.
+                if n > 0 and matched * 2 >= n:
+                    return "\n".join(window), "multiline_anchor_reconstructed"
+
     return "", "not_found_multiline"
 
 
@@ -685,6 +731,8 @@ async def planning_agent_node(state: AgentState, config) -> dict:
 
     for mainline_file, raw_hunks in (raw_hunks_by_file or {}).items():
         normalized_mainline = str(mainline_file).replace("\\", "/").strip().lstrip("/")
+        if not _is_java_code_file(normalized_mainline):
+            continue
         if (
             validation_attempts > 0
             and retry_files
@@ -701,6 +749,23 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             target_file = (ctx.get("target_file") or mainline_file).replace("\\", "/")
             insertion_line = int(ctx.get("start_line") or 1)
             code_snippet = ctx.get("code_snippet") or ""
+            anchor_confidence = str(ctx.get("anchor_confidence") or "").strip().lower()
+            anchor_reason = str(ctx.get("anchor_reason") or "")
+
+            if anchor_confidence == "low":
+                plan[mainline_file].append(
+                    {
+                        "hunk_index": hidx,
+                        "target_file": target_file,
+                        "edit_type": "replace",
+                        "old_string": "",
+                        "new_string": "",
+                        "verified": False,
+                        "verification_result": "mapping_low_confidence",
+                        "notes": f"mapping_low_confidence:{anchor_reason}",
+                    }
+                )
+                continue
 
             required_entries = _decompose_hunk_to_required_entries(
                 hunk_idx=hidx,
