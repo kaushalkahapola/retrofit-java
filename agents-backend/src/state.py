@@ -237,6 +237,9 @@ class AgentState(TypedDict):
     validation_failed_stage: NotRequired[
         str
     ]  # Stage where generation/validation failed (e.g. hunk_sanity_failed)
+    generated_patch_hash: NotRequired[
+        str
+    ]  # Last generated code-patch hash (used to avoid identical retry loops)
     token_usage: NotRequired[
         dict[str, Any]
     ]  # Node-local token usage payload (used by evaluator aggregation)

@@ -84,6 +84,14 @@ def route_validation(state: AgentState) -> str:
             (state.get("validation_failure_category") or "").strip().lower()
         )
         failed_stage = (state.get("validation_failed_stage") or "").strip().lower()
+        build_diagnostics = (
+            (state.get("validation_results") or {}).get("build") or {}
+        ).get("diagnostics") or {}
+        build_issue_types = {
+            str((issue or {}).get("error_type") or "").strip().lower()
+            for issue in (build_diagnostics.get("issues") or [])
+            if isinstance(issue, dict)
+        }
         latest_hunk_apply_failed = bool(
             ((state.get("validation_results") or {}).get("hunk_application") or {}).get(
                 "success"
@@ -116,6 +124,15 @@ def route_validation(state: AgentState) -> str:
             print(
                 f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) due "
                 f"generation stage '{failed_stage}'. Routing to planning_agent."
+            )
+            return "planning_agent"
+        if failure_category == "context_mismatch" and (
+            "api_or_signature_mismatch" in build_issue_types
+            or "java_syntax_or_patch_artifact" in build_issue_types
+        ):
+            print(
+                f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
+                f"build diagnostics {sorted(build_issue_types)}. Routing to planning_agent."
             )
             return "planning_agent"
         print(

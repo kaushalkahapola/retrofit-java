@@ -32,6 +32,7 @@ Key outputs to state:
 import os
 import re
 import subprocess
+import hashlib
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -298,6 +299,87 @@ def _apply_edit_deterministically(
     return False, result, ""
 
 
+def _diff_introduces_call_without_definition(diff_text: str) -> tuple[bool, str]:
+    """
+    Detect a common semantic hole: introducing a call to a helper method without
+    adding its declaration in the same patch.
+
+    Returns (is_invalid, reason).
+    """
+    if not diff_text:
+        return False, ""
+
+    added_lines = []
+    for line in diff_text.splitlines():
+        if line.startswith("+++"):
+            continue
+        if line.startswith("+"):
+            added_lines.append(line[1:])
+
+    # Detect added call sites like: pendingShardIds.addAll(order(targetShards));
+    called: set[str] = set()
+    for l in added_lines:
+        for m in re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", l):
+            if m in {
+                "if",
+                "for",
+                "while",
+                "switch",
+                "catch",
+                "new",
+                "return",
+                "List",
+                "Map",
+                "Set",
+                "HashMap",
+                "ArrayList",
+                "LinkedHashMap",
+                "Comparator",
+            }:
+                continue
+            called.add(m)
+
+    # Detect added method declarations.
+    declared: set[str] = set()
+    decl_pat = re.compile(
+        r"\b(?:private|protected|public|static|final|synchronized|native|abstract|strictfp|\s)+\s+"
+        r"[A-Za-z_][A-Za-z0-9_<>,\[\]\s?]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("
+    )
+    for l in added_lines:
+        m = decl_pat.search(l)
+        if m:
+            declared.add(m.group(1))
+
+    # Known failure pattern: call to order(...) requires method declaration added.
+    if "order" in called and "order" not in declared:
+        return (
+            True,
+            "semantic_guard_failed: call to order(...) introduced but no order(...) declaration added in patch",
+        )
+
+    return False, ""
+
+
+def _file_has_method_declaration(
+    target_repo_path: str, rel_path: str, method_name: str
+) -> bool:
+    """Check whether method_name is declared in the current on-disk file content."""
+    try:
+        full_path = os.path.normpath(os.path.join(target_repo_path, rel_path))
+        if not os.path.isfile(full_path):
+            return False
+        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        pat = re.compile(
+            rf"\b(?:private|protected|public|static|final|synchronized|native|abstract|strictfp|\s)+"
+            rf"\s+[A-Za-z_][A-Za-z0-9_<>,\[\]\s?]*\s+{re.escape(method_name)}\s*\(",
+            flags=re.MULTILINE,
+        )
+        return bool(pat.search(content))
+    except Exception:
+        return False
+
+
 def _resolve_operation_plan(
     *,
     change_type: str,
@@ -426,6 +508,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
     error_context: str = state.get("validation_error_context") or ""
     retry_files_raw = state.get("validation_retry_files") or []
     with_test_changes: bool = state.get("with_test_changes", False)
+    previous_patch_hash = str(state.get("generated_patch_hash") or "")
 
     retry_files = {_normalize_rel_path(p) for p in retry_files_raw if p}
 
@@ -754,6 +837,23 @@ async def file_editor_node(state: AgentState, config) -> dict:
             f"({len(diff_text.splitlines())} lines)"
         )
 
+        # Semantic guard: detect missing helper-method declaration for newly added calls.
+        semantic_invalid, semantic_reason = _diff_introduces_call_without_definition(
+            diff_text
+        )
+        if semantic_invalid and "order(...)" in semantic_reason:
+            # Avoid false positives when method already exists in target file.
+            if _file_has_method_declaration(target_repo_path, target_file, "order"):
+                semantic_invalid = False
+                semantic_reason = ""
+        if semantic_invalid:
+            print(f"    Agent 3: {semantic_reason}")
+            if toolkit and target_repo_path:
+                _git_reset_file(target_repo_path, target_file)
+            task_entry["status"] = "failed"
+            task_entry["reason"] = "generation_contract_failed"
+            continue
+
         # Step D: Extract just the hunk portions from the full git diff output
         # git diff HEAD produces: diff --git a/... b/... \n--- a/... \n+++ b/...\n@@...
         # We extract from the first @@ line onwards for the hunk_text field,
@@ -814,6 +914,51 @@ async def file_editor_node(state: AgentState, config) -> dict:
         f"{len(adapted_file_edits)} edit record(s)."
     )
 
+    # Global retry-loop guard: detect identical code patch across attempts.
+    combined_diff = "\n".join(h.get("hunk_text", "") for h in adapted_code_hunks)
+    current_patch_hash = (
+        hashlib.sha256(combined_diff.encode("utf-8")).hexdigest()
+        if combined_diff.strip()
+        else ""
+    )
+
+    if (
+        validation_attempts > 0
+        and previous_patch_hash
+        and current_patch_hash
+        and previous_patch_hash == current_patch_hash
+    ):
+        print(
+            "  Agent 3: Identical patch hash detected on retry; flagging for replanning."
+        )
+        return {
+            "messages": [
+                HumanMessage(
+                    content=(
+                        "Agent 3 (File Editor): identical generated patch detected on retry; "
+                        "requesting replanning."
+                    )
+                )
+            ],
+            "adapted_file_edits": adapted_file_edits,
+            "adapted_code_hunks": adapted_code_hunks,
+            "adapted_test_hunks": [],
+            "generation_checklist": [
+                {
+                    "mainline_file": "<all>",
+                    "target_file": "<all>",
+                    "hunk_index": 0,
+                    "status": "failed",
+                    "reason": "generation_contract_failed",
+                    "todo_steps": ["replan"],
+                    "completed_steps": [],
+                }
+            ],
+            "validation_failed_stage": "generation_contract_failed",
+            "generated_patch_hash": current_patch_hash,
+            "token_usage": token_usage,
+        }
+
     return {
         "messages": [
             HumanMessage(
@@ -827,5 +972,6 @@ async def file_editor_node(state: AgentState, config) -> dict:
         "adapted_code_hunks": adapted_code_hunks,
         "adapted_test_hunks": [],
         "generation_checklist": generation_checklist,
+        "generated_patch_hash": current_patch_hash,
         "token_usage": token_usage,
     }

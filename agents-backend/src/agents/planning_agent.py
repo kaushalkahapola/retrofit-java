@@ -114,24 +114,6 @@ RULES:
 # ---------------------------------------------------------------------------
 
 
-def _extract_json_obj(text: str) -> dict[str, Any] | None:
-    if not text:
-        return None
-    t = text.strip()
-    if t.startswith("```"):
-        t = "\n".join(
-            line for line in t.splitlines() if not line.strip().startswith("```")
-        ).strip()
-    start = t.find("{")
-    end = t.rfind("}")
-    if start < 0 or end < start:
-        return None
-    try:
-        return json.loads(t[start : end + 1])
-    except Exception:
-        return None
-
-
 def _is_import_hunk(hunk_text: str) -> bool:
     lines = (hunk_text or "").splitlines()[1:]
     for line in lines:
@@ -246,6 +228,277 @@ def _build_default_plan_entry(
     }
 
 
+def _extract_json_payload(text: str) -> Any | None:
+    """Parse JSON object or array from LLM output."""
+    if not text:
+        return None
+    t = text.strip()
+    if t.startswith("```"):
+        t = "\n".join(
+            line for line in t.splitlines() if not line.strip().startswith("```")
+        ).strip()
+
+    # Try object first
+    start_obj = t.find("{")
+    end_obj = t.rfind("}")
+    if start_obj >= 0 and end_obj >= start_obj:
+        try:
+            return json.loads(t[start_obj : end_obj + 1])
+        except Exception:
+            pass
+
+    # Then array
+    start_arr = t.find("[")
+    end_arr = t.rfind("]")
+    if start_arr >= 0 and end_arr >= start_arr:
+        try:
+            return json.loads(t[start_arr : end_arr + 1])
+        except Exception:
+            pass
+    return None
+
+
+def _nearest_non_empty_before(lines: list[str], index: int) -> str:
+    i = index - 1
+    while i >= 0:
+        line = lines[i]
+        if line.strip():
+            return line
+        i -= 1
+    return ""
+
+
+def _nearest_non_empty_after(lines: list[str], index: int) -> str:
+    i = index + 1
+    while i < len(lines):
+        line = lines[i]
+        if line.strip():
+            return line
+        i += 1
+    return ""
+
+
+def _decompose_hunk_to_required_entries(
+    *,
+    hunk_idx: int,
+    raw_hunk: str,
+    target_file: str,
+    consistency_map: dict[str, str],
+) -> list[dict[str, Any]]:
+    """
+    Deterministically decompose a unified hunk into required text-edit operations.
+
+    This prevents a critical failure mode where a mixed hunk (replace + insertion)
+    is collapsed into a single plan entry and the insertion block gets dropped.
+    """
+    body_lines = (raw_hunk or "").splitlines()[1:]
+    entries: list[dict[str, Any]] = []
+
+    i = 0
+    op_index = 0
+    while i < len(body_lines):
+        line = body_lines[i]
+
+        # Collect contiguous deletion block.
+        if line.startswith("-") and not line.startswith("---"):
+            dels: list[str] = []
+            while i < len(body_lines):
+                cur = body_lines[i]
+                if cur.startswith("-") and not cur.startswith("---"):
+                    dels.append(cur[1:])
+                    i += 1
+                    continue
+                break
+
+            # Optional contiguous add block immediately after deletions.
+            adds: list[str] = []
+            while i < len(body_lines):
+                cur = body_lines[i]
+                if cur.startswith("+") and not cur.startswith("+++"):
+                    adds.append(cur[1:])
+                    i += 1
+                    continue
+                break
+
+            if adds:
+                entries.append(
+                    {
+                        "hunk_index": hunk_idx,
+                        "target_file": target_file,
+                        "operation_index": op_index,
+                        "edit_type": "replace",
+                        "old_string": "\n".join(dels),
+                        "new_string": _apply_consistency_map(
+                            "\n".join(adds), consistency_map
+                        ),
+                        "verified": False,
+                        "verification_result": "deterministic_required_replace",
+                        "notes": "required_op_replace",
+                    }
+                )
+            else:
+                entries.append(
+                    {
+                        "hunk_index": hunk_idx,
+                        "target_file": target_file,
+                        "operation_index": op_index,
+                        "edit_type": "delete",
+                        "old_string": "\n".join(dels),
+                        "new_string": "",
+                        "verified": False,
+                        "verification_result": "deterministic_required_delete",
+                        "notes": "required_op_delete",
+                    }
+                )
+            op_index += 1
+            continue
+
+        # Collect contiguous pure insertion block.
+        if line.startswith("+") and not line.startswith("+++"):
+            adds: list[str] = []
+            block_start = i
+            while i < len(body_lines):
+                cur = body_lines[i]
+                if cur.startswith("+") and not cur.startswith("+++"):
+                    adds.append(cur[1:])
+                    i += 1
+                    continue
+                break
+
+            added_text = _apply_consistency_map("\n".join(adds), consistency_map)
+            prev_anchor = _nearest_non_empty_before(body_lines, block_start)
+            next_anchor = _nearest_non_empty_after(body_lines, i - 1)
+
+            # Prefer insert_before(next_anchor) when available; this is more stable
+            # for blocks inserted before an existing method/class member.
+            if next_anchor:
+                entries.append(
+                    {
+                        "hunk_index": hunk_idx,
+                        "target_file": target_file,
+                        "operation_index": op_index,
+                        "edit_type": "insert_before",
+                        "old_string": next_anchor,
+                        "new_string": f"{added_text}\n{next_anchor}",
+                        "verified": False,
+                        "verification_result": "deterministic_required_insert_before",
+                        "notes": "required_op_insert_before",
+                    }
+                )
+            elif prev_anchor:
+                entries.append(
+                    {
+                        "hunk_index": hunk_idx,
+                        "target_file": target_file,
+                        "operation_index": op_index,
+                        "edit_type": "insert_after",
+                        "old_string": prev_anchor,
+                        "new_string": f"{prev_anchor}\n{added_text}",
+                        "verified": False,
+                        "verification_result": "deterministic_required_insert_after",
+                        "notes": "required_op_insert_after",
+                    }
+                )
+            else:
+                # Fallback: no stable anchor found; keep a direct replace-style op.
+                entries.append(
+                    {
+                        "hunk_index": hunk_idx,
+                        "target_file": target_file,
+                        "operation_index": op_index,
+                        "edit_type": "replace",
+                        "old_string": "",
+                        "new_string": added_text,
+                        "verified": False,
+                        "verification_result": "deterministic_required_insert_unanchored",
+                        "notes": "required_op_insert_unanchored",
+                    }
+                )
+            op_index += 1
+            continue
+
+        # Context line; move ahead.
+        i += 1
+
+    if entries:
+        return entries
+
+    # Final fallback for unusual hunks.
+    return [_build_default_plan_entry(hunk_idx, raw_hunk, target_file, consistency_map)]
+
+
+def _entry_operation_marker(entry: dict[str, Any]) -> str:
+    """Extract a semantic marker from a plan entry for coverage matching."""
+    edit_type = str(entry.get("edit_type") or "").strip().lower()
+    old_s = str(entry.get("old_string") or "")
+    new_s = str(entry.get("new_string") or "")
+
+    if edit_type.startswith("insert"):
+        # Marker from inserted part (new without old anchor when possible)
+        if old_s and new_s.startswith(old_s + "\n"):
+            inserted = new_s[len(old_s) + 1 :]
+            for line in inserted.splitlines():
+                if line.strip():
+                    return line.strip()
+        for line in new_s.splitlines():
+            if line.strip() and line.strip() != old_s.strip():
+                return line.strip()
+    else:
+        for line in new_s.splitlines():
+            if line.strip() and line.strip() not in old_s:
+                return line.strip()
+    return ""
+
+
+def _ensure_required_coverage(
+    planned_entries: list[dict[str, Any]],
+    required_entries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Ensure all deterministic required operations are represented in the final plan.
+    Missing required operations are appended as backfill entries.
+    """
+    out = list(planned_entries)
+    for req in required_entries:
+        req_marker = _entry_operation_marker(req)
+        req_type = str(req.get("edit_type") or "").strip().lower()
+        req_old = str(req.get("old_string") or "")
+        req_new = str(req.get("new_string") or "")
+        matched = False
+        for got in out:
+            got_type = str(got.get("edit_type") or "").strip().lower()
+            if got_type != req_type:
+                continue
+            got_old = str(got.get("old_string") or "")
+            got_new = str(got.get("new_string") or "")
+            if req_old and got_old == req_old:
+                if (
+                    req_type.startswith("insert")
+                    and req_marker
+                    and req_marker not in got_new
+                ):
+                    continue
+                matched = True
+                break
+            if req_marker:
+                if req_marker in got_new:
+                    matched = True
+                    break
+            else:
+                if got_old == req_old and got_new == req_new:
+                    matched = True
+                    break
+        if not matched:
+            req_backfill = dict(req)
+            req_backfill["verified"] = False
+            req_backfill["verification_result"] = "coverage_backfill"
+            req_backfill["notes"] = (
+                str(req_backfill.get("notes") or "") + "|coverage_backfill"
+            ).strip("|")
+            out.append(req_backfill)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Node
 # ---------------------------------------------------------------------------
@@ -317,122 +570,153 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             insertion_line = int(ctx.get("start_line") or 1)
             code_snippet = ctx.get("code_snippet") or ""
 
-            edit_type = _classify_edit_type(raw_hunk)
-            removed_text = _extract_removed_text(raw_hunk)
-            added_text = _apply_consistency_map(
-                _extract_added_text(raw_hunk), consistency_map
+            required_entries = _decompose_hunk_to_required_entries(
+                hunk_idx=hidx,
+                raw_hunk=raw_hunk,
+                target_file=target_file,
+                consistency_map=consistency_map,
             )
-            context_lines = _extract_context_lines(raw_hunk)
 
-            # Default entry - will be overwritten by LLM if available
-            entry = _build_default_plan_entry(
-                hidx, raw_hunk, target_file, consistency_map
-            )
+            planned_entries: list[dict[str, Any]] = []
 
             if react and toolkit:
-                # Build a focused prompt for the planner ReAct agent
-                prompt = (
-                    f"Target file: {target_file}\n"
-                    f"Mapped insertion line (approximate): {insertion_line}\n"
-                    f"Edit type hint: {edit_type}\n\n"
-                    f"Mainline hunk to adapt:\n```diff\n{raw_hunk}\n```\n\n"
-                    f"Context snippet from Agent 2 (may be from mainline, verify in target):\n"
-                    f"```java\n{code_snippet[:600]}\n```\n\n"
-                    f"ConsistencyMap (apply these renames to new_string added content):\n"
-                    + (
-                        "\n".join(f"  {k} -> {v}" for k, v in consistency_map.items())
-                        if consistency_map
-                        else "  (none)"
+                for req in required_entries:
+                    edit_type_hint = str(
+                        req.get("edit_type") or _classify_edit_type(raw_hunk)
                     )
-                    + "\n\n"
-                    "Use tools to verify old_string in the real target file, then "
-                    "output the JSON plan."
-                )
+                    prompt = (
+                        f"Target file: {target_file}\n"
+                        f"Mapped insertion line (approximate): {insertion_line}\n"
+                        f"Hunk index: {hidx}\n"
+                        f"Operation index: {req.get('operation_index', 0)}\n"
+                        f"Required edit_type: {edit_type_hint}\n"
+                        f"Required old_string (candidate):\n```text\n{req.get('old_string', '')}\n```\n"
+                        f"Required new_string (candidate):\n```text\n{req.get('new_string', '')}\n```\n\n"
+                        f"Mainline hunk to adapt:\n```diff\n{raw_hunk}\n```\n\n"
+                        f"Context snippet from Agent 2 (may be from mainline, verify in target):\n"
+                        f"```java\n{code_snippet[:600]}\n```\n\n"
+                        f"ConsistencyMap (apply these renames to new_string added content):\n"
+                        + (
+                            "\n".join(
+                                f"  {k} -> {v}" for k, v in consistency_map.items()
+                            )
+                            if consistency_map
+                            else "  (none)"
+                        )
+                        + "\n\n"
+                        "Use tools to verify old_string in the real target file and output ONE JSON object. "
+                        "Do not drop this required operation."
+                    )
 
-                try:
-                    prompt_tokens = count_text_tokens(
-                        _PLANNER_SYSTEM + "\n" + prompt, model_name
-                    )
-                    res = await react.ainvoke(
-                        {"messages": [("user", prompt)]},
-                        config={"recursion_limit": 25},
-                    )
-                    msgs = res.get("messages", [])
+                    entry = dict(req)
+                    try:
+                        prompt_tokens = count_text_tokens(
+                            _PLANNER_SYSTEM + "\n" + prompt, model_name
+                        )
+                        res = await react.ainvoke(
+                            {"messages": [("user", prompt)]},
+                            config={"recursion_limit": 25},
+                        )
+                        msgs = res.get("messages", [])
 
-                    # Collect token usage
-                    exact_any = False
-                    for m in msgs:
-                        if getattr(m, "type", "") != "ai":
-                            continue
-                        usage = extract_usage_from_response(m)
-                        if usage and (usage["input_tokens"] or usage["output_tokens"]):
+                        exact_any = False
+                        for m in msgs:
+                            if getattr(m, "type", "") != "ai":
+                                continue
+                            usage = extract_usage_from_response(m)
+                            if usage and (
+                                usage["input_tokens"] or usage["output_tokens"]
+                            ):
+                                add_usage(
+                                    token_usage,
+                                    usage["input_tokens"],
+                                    usage["output_tokens"],
+                                    "planner.provider_usage",
+                                )
+                                exact_any = True
+
+                        if not exact_any:
+                            final_content = msgs[-1].content if msgs else ""
                             add_usage(
                                 token_usage,
-                                usage["input_tokens"],
-                                usage["output_tokens"],
-                                "planner.provider_usage",
+                                prompt_tokens,
+                                count_text_tokens(str(final_content), model_name),
+                                "planner.tiktoken",
                             )
-                            exact_any = True
+                            token_usage["estimated"] = True
 
-                    if not exact_any:
-                        final_content = msgs[-1].content if msgs else ""
-                        add_usage(
-                            token_usage,
-                            prompt_tokens,
-                            count_text_tokens(str(final_content), model_name),
-                            "planner.tiktoken",
-                        )
-                        token_usage["estimated"] = True
+                        final = msgs[-1].content if msgs else ""
+                        payload = _extract_json_payload(final)
+                        parsed_obj = None
+                        if isinstance(payload, dict):
+                            parsed_obj = payload
+                        elif isinstance(payload, list) and payload:
+                            # If model returns a list unexpectedly, pick first dict.
+                            for x in payload:
+                                if isinstance(x, dict):
+                                    parsed_obj = x
+                                    break
 
-                    final = msgs[-1].content if msgs else ""
-                    parsed = _extract_json_obj(final)
-                    if parsed:
-                        # Merge verified fields from LLM into entry
-                        for k in (
-                            "edit_type",
-                            "old_string",
-                            "new_string",
-                            "verified",
-                            "verification_result",
-                            "notes",
-                        ):
-                            if k in parsed:
-                                entry[k] = parsed[k]
-                        # Always preserve hunk_index and target_file from our side
-                        entry["hunk_index"] = hidx
-                        entry["target_file"] = target_file
-                    else:
+                        if parsed_obj:
+                            for k in (
+                                "edit_type",
+                                "old_string",
+                                "new_string",
+                                "verified",
+                                "verification_result",
+                                "notes",
+                            ):
+                                if k in parsed_obj:
+                                    entry[k] = parsed_obj[k]
+                        else:
+                            entry["notes"] = (
+                                str(entry.get("notes") or "")
+                                + "|planner_parse_fallback"
+                            ).strip("|")
+                            print(
+                                f"    Planning Agent: Could not parse JSON for "
+                                f"{target_file}[{hidx}] op={req.get('operation_index', 0)} - using required fallback."
+                            )
+                    except Exception as e:
+                        entry["notes"] = (
+                            str(entry.get("notes") or "") + f"|planner_tool_error:{e}"
+                        ).strip("|")
                         print(
-                            f"    Planning Agent: Could not parse JSON for "
-                            f"{target_file}[{hidx}] - using deterministic fallback."
+                            f"    Planning Agent: Error on {target_file}[{hidx}] op={req.get('operation_index', 0)}: {e} "
+                            "- using required fallback."
                         )
-                except Exception as e:
-                    entry["notes"] = f"planner_tool_error:{e}"
-                    print(
-                        f"    Planning Agent: Error on {target_file}[{hidx}]: {e} "
-                        "- using deterministic fallback."
-                    )
 
-            # Sanity-clamp types
-            entry["hunk_index"] = hidx
-            entry["target_file"] = target_file
-            entry["edit_type"] = (
-                str(entry.get("edit_type") or edit_type).strip().lower()
+                    planned_entries.append(entry)
+            else:
+                planned_entries = list(required_entries)
+
+            # Hard coverage guarantee: never drop deterministic required operations.
+            planned_entries = _ensure_required_coverage(
+                planned_entries, required_entries
             )
-            if entry["edit_type"] not in {
-                "replace",
-                "insert_after",
-                "insert_before",
-                "delete",
-            }:
-                entry["edit_type"] = edit_type
-            entry["verified"] = bool(entry.get("verified", False))
-            entry.setdefault("old_string", "")
-            entry.setdefault("new_string", "")
-            entry.setdefault("verification_result", "")
-            entry.setdefault("notes", "")
 
-            plan[mainline_file].append(entry)
+            # Sanitize + append all operations for this source hunk.
+            for entry in planned_entries:
+                default_type = _classify_edit_type(raw_hunk)
+                entry["hunk_index"] = hidx
+                entry["target_file"] = target_file
+                entry["edit_type"] = (
+                    str(entry.get("edit_type") or default_type).strip().lower()
+                )
+                if entry["edit_type"] not in {
+                    "replace",
+                    "insert_after",
+                    "insert_before",
+                    "delete",
+                }:
+                    entry["edit_type"] = default_type
+                entry["verified"] = bool(entry.get("verified", False))
+                entry.setdefault("old_string", "")
+                entry.setdefault("new_string", "")
+                entry.setdefault("verification_result", "")
+                entry.setdefault("notes", "")
+                entry.pop("operation_index", None)
+                plan[mainline_file].append(entry)
 
     total_entries = sum(len(v) for v in plan.values())
     print(f"Planning Agent: Complete. Planned {total_entries} edit(s).")
