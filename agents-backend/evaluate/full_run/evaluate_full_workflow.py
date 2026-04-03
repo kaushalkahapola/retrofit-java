@@ -57,7 +57,7 @@ RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 PHASE0_CACHE_DIR = os.path.join(os.path.dirname(__file__), "phase0_cache")
 
 TARGET_PROJECTS = ["elasticsearch"]
-MAX_PATCHES_PER_PROJECT = 7
+MAX_PATCHES_PER_PROJECT = 10
 
 RUN_MODE_FULL = "full"
 RUN_MODE_PHASE1 = "phase1"
@@ -2034,7 +2034,6 @@ async def run_full_pipeline(
                         attempt_tool_calls = trajectory[attempt - 1]
                         if attempt_tool_calls:
                             trace_lines.append("\n### ReAct Agent Actions")
-                            import json
                             for tc in attempt_tool_calls:
                                 trace_lines.append(f"- **{tc.get('target_file')}**: Called `{tc.get('tool')}`")
                                 trace_lines.append("```json\n" + json.dumps(tc.get('args', {}), indent=2) + "\n```")
