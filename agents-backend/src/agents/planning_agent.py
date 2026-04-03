@@ -60,6 +60,13 @@ STEP 1 - CLASSIFY the hunk type:
   - "delete"         : hunk only removes lines
 
 STEP 2 - GATHER the exact target text using tools:
+  Preferred tool order for anchor discovery:
+    1. find_method_definitions (locate method/class declaration lines)
+    2. ripgrep_in_file(pattern, offset, limit) for paginated regex search
+    3. find_symbol_references(symbol, offset, limit) for call-site anchors
+    4. read_file_window / get_exact_lines for exact nearby text
+    5. verify_context_at_line for final confirmation
+
   For REPLACE hunks:
     a. Extract the lines being REMOVED (-) from the mainline diff as the candidate old_string.
     b. Use verify_context_at_line or grep_in_file to check if that exact text exists in

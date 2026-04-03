@@ -709,6 +709,190 @@ class HunkGeneratorToolkit:
             return f"ERROR: {exc}"
 
     # ------------------------------------------------------------------
+    # Tool 13: ripgrep_in_file  (regex search with offset/limit)
+    # ------------------------------------------------------------------
+
+    def ripgrep_in_file(
+        self,
+        file_path: str,
+        pattern: str,
+        offset: int = 0,
+        limit: int = 20,
+        case_sensitive: bool = True,
+    ) -> str:
+        """
+        Regex search in a single file with pagination support.
+
+        This gives planning/file-edit agents a ripgrep-like experience but scoped
+        to one file and with deterministic offset/limit pagination.
+
+        Args:
+            file_path:       Repo-relative path to the file.
+            pattern:         Python regex pattern.
+            offset:          Number of matches to skip from the start.
+            limit:           Maximum number of matches to return.
+            case_sensitive:  Whether regex matching is case sensitive.
+
+        Returns:
+            Formatted matches including line numbers and line content.
+        """
+        lines = self._read_lines(file_path)
+        if lines is None:
+            return f"ERROR: Cannot read file '{file_path}' in target repo."
+
+        try:
+            flags = 0 if case_sensitive else re.IGNORECASE
+            rx = re.compile(pattern, flags)
+        except re.error as exc:
+            return f"ERROR: Invalid regex pattern: {exc}"
+
+        all_hits: list[tuple[int, str]] = []
+        for i, line in enumerate(lines, start=1):
+            if rx.search(line):
+                all_hits.append((i, line))
+
+        total = len(all_hits)
+        if total == 0:
+            return f"No matches for /{pattern}/ in '{file_path}'."
+
+        off = max(0, int(offset or 0))
+        lim = max(1, min(int(limit or 20), 200))
+        page = all_hits[off : off + lim]
+
+        out = [
+            f"[ripgrep_in_file] {file_path}",
+            f"pattern=/{pattern}/ total_matches={total} offset={off} limit={lim}",
+            "",
+        ]
+        for lineno, txt in page:
+            out.append(f"  Line {lineno:5d}: {txt}")
+
+        if off + lim < total:
+            out.append(f"\n... more matches available (next offset={off + lim})")
+
+        return "\n".join(out)
+
+    # ------------------------------------------------------------------
+    # Tool 14: find_method_definitions  (LSP-like symbol index)
+    # ------------------------------------------------------------------
+
+    def find_method_definitions(
+        self,
+        file_path: str,
+        symbol: str = "",
+        offset: int = 0,
+        limit: int = 20,
+    ) -> str:
+        """
+        Find Java method declarations with line numbers (LSP-like helper).
+
+        Args:
+            file_path: Repo-relative file path.
+            symbol:    Optional method name filter (exact match).
+            offset:    Number of matches to skip.
+            limit:     Number of matches to return.
+
+        Returns:
+            Method declaration list with line numbers.
+        """
+        lines = self._read_lines(file_path)
+        if lines is None:
+            return f"ERROR: Cannot read file '{file_path}' in target repo."
+
+        # Java-ish method declaration regex (single-line signature style).
+        pat = re.compile(
+            r"^\s*(?:public|private|protected|static|final|synchronized|native|abstract|strictfp|default|\s)+"
+            r"[A-Za-z_][A-Za-z0-9_<>,\[\]\s?]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*(?:\{|$)"
+        )
+
+        hits: list[tuple[int, str, str]] = []
+        for i, line in enumerate(lines, start=1):
+            m = pat.search(line)
+            if not m:
+                continue
+            name = m.group(1)
+            if symbol and name != symbol:
+                continue
+            hits.append((i, name, line.strip()))
+
+        total = len(hits)
+        if total == 0:
+            if symbol:
+                return f"No method declaration found for symbol '{symbol}' in '{file_path}'."
+            return f"No method declarations found in '{file_path}'."
+
+        off = max(0, int(offset or 0))
+        lim = max(1, min(int(limit or 20), 200))
+        page = hits[off : off + lim]
+
+        out = [
+            f"[find_method_definitions] {file_path}",
+            f"symbol={symbol or '<all>'} total_matches={total} offset={off} limit={lim}",
+            "",
+        ]
+        for lineno, name, sig in page:
+            out.append(f"  Line {lineno:5d}: {name} :: {sig}")
+
+        if off + lim < total:
+            out.append(f"\n... more matches available (next offset={off + lim})")
+
+        return "\n".join(out)
+
+    # ------------------------------------------------------------------
+    # Tool 15: find_symbol_references  (LSP-like references)
+    # ------------------------------------------------------------------
+
+    def find_symbol_references(
+        self,
+        file_path: str,
+        symbol: str,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> str:
+        """
+        Find references of a symbol in a file using word-boundary matching.
+
+        Args:
+            file_path: Repo-relative file path.
+            symbol:    Symbol to search (identifier).
+            offset:    Number of matches to skip.
+            limit:     Number of matches to return.
+        """
+        if not symbol or not symbol.strip():
+            return "ERROR: symbol is required."
+
+        lines = self._read_lines(file_path)
+        if lines is None:
+            return f"ERROR: Cannot read file '{file_path}' in target repo."
+
+        rx = re.compile(rf"\b{re.escape(symbol.strip())}\b")
+        hits: list[tuple[int, str]] = []
+        for i, line in enumerate(lines, start=1):
+            if rx.search(line):
+                hits.append((i, line))
+
+        total = len(hits)
+        if total == 0:
+            return f"No references found for symbol '{symbol}' in '{file_path}'."
+
+        off = max(0, int(offset or 0))
+        lim = max(1, min(int(limit or 20), 200))
+        page = hits[off : off + lim]
+
+        out = [
+            f"[find_symbol_references] {file_path}",
+            f"symbol={symbol} total_matches={total} offset={off} limit={lim}",
+            "",
+        ]
+        for lineno, txt in page:
+            out.append(f"  Line {lineno:5d}: {txt}")
+
+        if off + lim < total:
+            out.append(f"\n... more matches available (next offset={off + lim})")
+
+        return "\n".join(out)
+
+    # ------------------------------------------------------------------
     # LangChain tool registration
     # ------------------------------------------------------------------
 
@@ -777,6 +961,33 @@ class HunkGeneratorToolkit:
                     "Build a valid unified diff hunk from structured fields. "
                     "Pass removed/added lines WITHOUT diff prefixes; tool adds '-', '+' "
                     "and computes header counts safely to avoid malformed hunks."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.ripgrep_in_file,
+                name="ripgrep_in_file",
+                description=(
+                    "Regex search in a single file with offset/limit pagination. "
+                    "Use to scan many candidate anchors deterministically without "
+                    "overflowing context. Supports case-sensitive or insensitive mode."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.find_method_definitions,
+                name="find_method_definitions",
+                description=(
+                    "LSP-like Java method declaration lookup with line numbers. "
+                    "Optionally filter by exact method symbol and paginate via "
+                    "offset/limit. Useful for anchoring edits at method scope."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.find_symbol_references,
+                name="find_symbol_references",
+                description=(
+                    "LSP-like symbol references lookup in one file using "
+                    "identifier-boundary matching with offset/limit pagination. "
+                    "Useful for finding call sites and nearby anchors."
                 ),
             ),
             # --- File Editor tools (Agent 3 file-edit architecture) ---
