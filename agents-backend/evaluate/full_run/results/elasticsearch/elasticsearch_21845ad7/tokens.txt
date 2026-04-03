@@ -1,25 +1,15 @@
 {
-  "input_tokens": 89,
+  "input_tokens": 33,
   "output_tokens": 0,
-  "total_tokens": 89,
+  "total_tokens": 33,
   "messages_with_usage": 0,
-  "estimated_messages": 3,
+  "estimated_messages": 2,
   "tokenizer": {
     "model": "apim-4o-mini",
     "library": "tiktoken",
     "available": true
   },
   "by_node": {
-    "phase_0_optimistic": {
-      "input_tokens": 56,
-      "output_tokens": 0,
-      "total_tokens": 56,
-      "estimated_events": 1,
-      "exact_events": 0,
-      "sources": [
-        "estimated_from_message_chars"
-      ]
-    },
     "context_analyzer": {
       "input_tokens": 14,
       "output_tokens": 0,
@@ -41,5 +31,5 @@
       ]
     }
   },
-  "finished_at": "2026-04-03T13:42:15.371832"
+  "finished_at": "2026-04-03T14:13:15.266291"
 }

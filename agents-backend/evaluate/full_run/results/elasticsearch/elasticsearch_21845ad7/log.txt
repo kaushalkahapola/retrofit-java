@@ -3,27 +3,16 @@ project=elasticsearch
 mainline_commit=21845ad7a18821ccd80927211285308bb3eb8038
 backport_commit=56e19e28bd098337f57e5b49f45ae14137fd3e72
 mode=full
-started_at=2026-04-03T13:25:51.112406
+started_at=2026-04-03T14:03:19.059238
 ----------------------------------------
 Running full workflow graph
-Completed node=phase_0_optimistic
 Completed node=context_analyzer
 Completed node=structural_locator
 
 [elasticsearch/elasticsearch_21845ad7] Setting up repositories for mode=full...
+[elasticsearch/elasticsearch_21845ad7] Found cached Phase 0 results. Skipping Phase 0 and reusing baseline test state.
 [elasticsearch/elasticsearch_21845ad7] Running full workflow graph...
-Router: Running Phase 0.
-Phase 0 (Optimistic): Checking direct patch applicability...
-Phase 0: Experiment mode — checking out parent of 56e19e28bd098337f57e5b49f45ae14137fd3e72...
-Phase 0: Building baseline by applying developer backport test hunks only...
-  Validation: x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/parser/StatementParserTests.java - applying 4 hunk(s) one by one in bottom-to-top order: [3948, 3041, 1084, 793]
-    Agent 4: Executing elasticsearch helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_tests.sh
-Phase 0: git apply --check FAILED. Escalating to full pipeline.
-  Hint: error: patch failed: x-pack/plugin/esql/src/main/antlr/EsqlBaseLexer.g4:223
-error: x-pack/plugin/esql/src/main/antlr/EsqlBaseLexer.g4: patch does not apply
-error: patch failed: x-pack/plugin/esql/src/
-Router: Phase 0 failed - entering full 4-agent pipeline.
-  Completed: phase_0_optimistic
+Router: Skipping Phase 0 - entering full 4-agent pipeline directly.
 Agent 1 (Context Analyzer): Deterministic blueprint generation...
 Agent 1: Complete. Files=2 hunks=25 (deterministic).
   Completed: context_analyzer
@@ -36,37 +25,51 @@ Blob Hunting: Searching for SHA 53764ba53bc76df6a7f3ee0900b609d06a71b06b (x-pack
 Blob Hunting: Found EXACT match in HEAD at x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java
 Loading index from cache: /home/kaushal/.cache/agents-backend/retrieval/index_a1ade5da3a76_HEAD.pkl
 Index loaded from cache.
-  Agent 2: Identified 5 candidate target file(s).
-  Agent 2: LLM call error (attempt 1/2): Error code: 400 - {'error': {'message': "This model's maximum context length is 128000 tokens. However, your messages resulted in 149717 tokens (149192 in the messages, 525 in the functions). Please reduce the length of the messages or functions.", 'type': 'invalid_request_error', 'param': 'messages', 'code': 'context_length_exceeded'}}
-  Waiting 30 seconds before retry...
-  Agent 2: LLM call error (attempt 2/2): Error code: 400 - {'error': {'message': "This model's maximum context length is 128000 tokens. However, your messages resulted in 149717 tokens (149192 in the messages, 525 in the functions). Please reduce the length of the messages or functions.", 'type': 'invalid_request_error', 'param': 'messages', 'code': 'context_length_exceeded'}}
-  Agent 2: Could not map x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java — skipping.
+  Agent 2: Identified 7 candidate target file(s).
+  Agent 2: High-confidence deterministic match found in x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java
+  Agent 2: Mapped hunk 1 (hunk_1) to None at lines None-None
+  Agent 2: Mapped hunk 2 (hunk_2) to None at lines 97-97
+  Agent 2: Mapped hunk 3 (hunk_3) to None at lines 133-133
+  Agent 2: Mapped hunk 4 (hunk_4) to None at lines 142-142
+  Agent 2: Mapped hunk 5 (hunk_5) to None at lines 167-167
+  Agent 2: Mapped hunk 6 (hunk_6) to None at lines 259-259
+  Agent 2: Mapped hunk 7 (NESTED_SORT_sempred) to NESTED_SORT_sempred at lines 264-264
+  Agent 2: Mapped hunk 8 (hunk_8) to None at lines 379-379
+  Agent 2: Mapped hunk 9 (hunk_9) to None at lines 443-443
   Agent 2: Locating target for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java (16 hunk(s))...
-  Agent 2: Identified 4 candidate target file(s).
-  Agent 2: LLM call error (attempt 1/2): Error code: 400 - {'error': {'message': "This model's maximum context length is 128000 tokens. However, your messages resulted in 184067 tokens (183542 in the messages, 525 in the functions). Please reduce the length of the messages or functions.", 'type': 'invalid_request_error', 'param': 'messages', 'code': 'context_length_exceeded'}}
-  Waiting 30 seconds before retry...
-  Agent 2: LLM call error (attempt 2/2): Error code: 400 - {'error': {'message': "This model's maximum context length is 128000 tokens. However, your messages resulted in 282859 tokens (282334 in the messages, 525 in the functions). Please reduce the length of the messages or functions.", 'type': 'invalid_request_error', 'param': 'messages', 'code': 'context_length_exceeded'}}
-  Agent 2: Could not map x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java — skipping.
+  Agent 2: Identified 5 candidate target file(s).
+  Agent 2: High-confidence deterministic match found in x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java
+  Agent 2: Mapped hunk 1 (hunk_1) to None at lines None-None
+  Agent 2: Mapped hunk 2 (hunk_2) to None at lines 109-109
+  Agent 2: Mapped hunk 3 (hunk_3) to None at lines 134-134
+  Agent 2: Mapped hunk 4 (hunk_4) to None at lines 1569-1569
+  Agent 2: Mapped hunk 5 (hunk_5) to None at lines 1876-1876
+  Agent 2: Mapped hunk 6 (hunk_6) to None at lines 1882-1882
+  Agent 2: Mapped hunk 7 (hunk_7) to None at lines 968-968
+  Agent 2: Mapped hunk 8 (hunk_8) to None at lines 6303-6303
+  Agent 2: Mapped hunk 9 (hunk_9) to None at lines None-None
+  Agent 2: Mapped hunk 10 (hunk_10) to None at lines None-None
+  Agent 2: Mapped hunk 11 (hunk_11) to None at lines None-None
+  Agent 2: Mapped hunk 12 (hunk_12) to None at lines None-None
+  Agent 2: Mapped hunk 13 (hunk_13) to None at lines None-None
+  Agent 2: Mapped hunk 14 (hunk_14) to None at lines None-None
+  Agent 2: Mapped hunk 15 (hunk_15) to None at lines None-None
+  Agent 2: Mapped hunk 16 (hunk_16) to None at lines None-None
   Agent 2: Trace written to structural_locator_trace.md
-Agent 2: Complete. Mapped 0 file(s). Total hunk mappings: 0. ConsistencyMap has 0 rename(s).
+Agent 2: Complete. Mapped 2 file(s). Total hunk mappings: 25. ConsistencyMap has 0 rename(s).
   Completed: structural_locator
 Planning Agent: Building per-hunk str_replace edit plans...
 LLM Provider: azure, Model: apim-4o-mini, Temperature: 0
-    Planning Agent: Error on x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[1] op=0: Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT - using required fallback.
-    Planning Agent: Error on x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[2] op=0: Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT - using required fallback.
-    Planning Agent: Error on x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[3] op=0: Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT - using required fallback.
-    Planning Agent: Error on x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[4] op=0: Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT - using required fallback.
-    Planning Agent: Error on x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[6] op=0: Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT - using required fallback.
-    Planning Agent: Error on x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[6] op=1: Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT - using required fallback.
-    Planning Agent: Error on x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[7] op=0: Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT - using required fallback.
-    Planning Agent: Error on x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[8] op=0: Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT - using required fallback.
-    Planning Agent: Error on x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[8] op=1: Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT - using required fallback.
+    Planning Agent: deterministic-only mode for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[0] (hunk_too_large).
+    Planning Agent: deterministic-only mode for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[1] (hunk_too_large).
+    Planning Agent: Could not parse JSON for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[2] op=0 - using required fallback.
+    Planning Agent: Could not parse JSON for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[3] op=0 - using required fallback.
+    Planning Agent: deterministic-only mode for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[4] (hunk_too_large).
+    Planning Agent: Could not parse JSON for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[6] op=0 - using required fallback.
+    Planning Agent: Could not parse JSON for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[6] op=1 - using required fallback.
+    Planning Agent: Could not parse JSON for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[7] op=0 - using required fallback.
+    Planning Agent: deterministic-only mode for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java[8] (hunk_too_large).
+    Planning Agent: deterministic-only mode for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java[0] (hunk_too_large).
+    Planning Agent: Could not parse JSON for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java[1] op=0 - using required fallback.
+    Planning Agent: deterministic-only mode for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java[2] (hunk_too_large).
+    Planning Agent: Could not parse JSON for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java[3] op=0 - using required fallback.
