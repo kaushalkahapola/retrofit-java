@@ -1389,6 +1389,75 @@ async def run_full_pipeline(
             "use_phase_0_cache": True,
         }
 
+        # Pair-mismatch early exit:
+        # If mainline Java scope has zero overlap with developer Java scope,
+        # agentic adaptation is typically out-of-scope for this commit pair.
+        if run_mode == RUN_MODE_FULL and pair_consistency.get("pair_mismatch", False):
+            overlap_ratio = float(
+                pair_consistency.get("overlap_ratio_mainline", 1.0) or 0.0
+            )
+            if overlap_ratio == 0.0:
+                print(
+                    f"[{project}/{patch_id}] Pair mismatch with zero Java overlap; exiting before agentic phases."
+                )
+                save_pipeline_log(
+                    project,
+                    patch_id,
+                    "pair_mismatch_exit",
+                    "# Pair Mismatch Early Exit\n\n"
+                    f"- Reason: {pair_consistency.get('reason', 'unknown')}\n"
+                    f"- Overlap ratio (mainline): {pair_consistency.get('overlap_ratio_mainline', 0)}\n"
+                    f"- Mainline Java files: {pair_consistency.get('mainline_java_files', [])}\n"
+                    f"- Developer Java files: {pair_consistency.get('developer_java_files', [])}\n"
+                    f"- Overlap Java files: {pair_consistency.get('overlap_java_files', [])}\n",
+                )
+
+                final_adapted_code_hunks = list(developer_aux_hunks or [])
+                comparison = compare_generated_with_developer_patch(
+                    adapted_code_hunks=final_adapted_code_hunks,
+                    developer_patch_diff=developer_patch_diff,
+                    backport_commit=backport_commit,
+                    target_repo_path=target_repo_path,
+                    compare_files_scope=pair_consistency.get("mainline_java_files", []),
+                )
+
+                results["phases"] = {
+                    "pair_mismatch_exit": {
+                        "orchestrator": {
+                            "reason": pair_consistency.get(
+                                "reason", "mainline_backport_scope_mismatch"
+                            ),
+                            "overlap_ratio_mainline": overlap_ratio,
+                        }
+                    }
+                }
+                results["pair_consistency"] = pair_consistency
+                results["exact_developer_patch"] = comparison.get(
+                    "exact_developer_patch", True
+                )
+                results["agent_contribution"] = "none_pair_mismatch"
+                results["developer_patch_comparison"] = {
+                    "comparison_method": comparison.get(
+                        "comparison_method", "file_state"
+                    ),
+                    "compared_files": comparison.get("compared_files", []),
+                    "mismatched_files": comparison.get("mismatched_files", []),
+                    "developer_files": comparison.get("developer_files", []),
+                    "generated_files": comparison.get("generated_files", []),
+                    "pair_consistency": pair_consistency,
+                    "error": comparison.get("error"),
+                }
+                results["status"] = "completed"
+
+                results_file = os.path.join(
+                    RESULTS_DIR, project, patch_id, "pipeline_results.json"
+                )
+                with open(results_file, "w", encoding="utf-8") as f:
+                    json.dump(results, f, indent=2, default=str)
+
+                _append_runtime_log("Completed early due to pair_mismatch zero-overlap")
+                return results
+
         if run_mode == RUN_MODE_PHASE1:
             _append_runtime_log("Running mode=phase1")
             phase_name = "phase1_context_analyzer"

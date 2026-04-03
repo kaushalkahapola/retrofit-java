@@ -690,6 +690,50 @@ def _sanitize_entry_against_target(
     return out
 
 
+def _parse_grep_hits(grep_output: str) -> list[tuple[int, str]]:
+    hits: list[tuple[int, str]] = []
+    for line in (grep_output or "").splitlines():
+        m = re.search(r"Line\s+(\d+):\s?(.*)$", line)
+        if not m:
+            continue
+        try:
+            hits.append((int(m.group(1)), m.group(2)))
+        except ValueError:
+            continue
+    return hits
+
+
+def _candidate_probe_terms(raw_hunk: str) -> list[str]:
+    """Build ordered, de-duplicated probe terms for low-confidence anchor recovery."""
+    terms: list[str] = []
+
+    def _add_lines(block: str) -> None:
+        for line in (block or "").splitlines():
+            s = line.strip()
+            if (
+                not s
+                or len(s) < 8
+                or s in {"{", "}", "(", ")", ";"}
+                or s.startswith("//")
+                or s.startswith("*")
+            ):
+                continue
+            terms.append(s)
+
+    _add_lines(_extract_removed_text(raw_hunk))
+    _add_lines("\n".join(_extract_context_lines(raw_hunk)))
+    _add_lines(_extract_added_text(raw_hunk))
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in terms:
+        if t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Node
 # ---------------------------------------------------------------------------
@@ -765,20 +809,23 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             anchor_confidence = str(ctx.get("anchor_confidence") or "").strip().lower()
             anchor_reason = str(ctx.get("anchor_reason") or "")
 
-            if anchor_confidence == "low":
-                plan[mainline_file].append(
-                    {
-                        "hunk_index": hidx,
-                        "target_file": target_file,
-                        "edit_type": "replace",
-                        "old_string": "",
-                        "new_string": "",
-                        "verified": False,
-                        "verification_result": "mapping_low_confidence",
-                        "notes": f"mapping_low_confidence:{anchor_reason}",
-                    }
-                )
-                continue
+            low_confidence_mode = anchor_confidence == "low"
+            low_confidence_reason = f"mapping_low_confidence:{anchor_reason}"
+            if low_confidence_mode and toolkit:
+                # Do not fail-closed on low confidence. Try direct in-file anchor recovery.
+                for probe in _candidate_probe_terms(raw_hunk)[:8]:
+                    grep_out = toolkit.grep_in_file(
+                        target_file,
+                        probe,
+                        is_regex=False,
+                        max_results=5,
+                    )
+                    hits = _parse_grep_hits(grep_out)
+                    if not hits:
+                        continue
+                    insertion_line = hits[0][0]
+                    low_confidence_reason += f"|probe_anchor:{probe}"
+                    break
 
             required_entries = _decompose_hunk_to_required_entries(
                 hunk_idx=hidx,
@@ -786,6 +833,16 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 target_file=target_file,
                 consistency_map=consistency_map,
             )
+
+            if low_confidence_mode:
+                for req in required_entries:
+                    req["notes"] = (
+                        str(req.get("notes") or "") + f"|{low_confidence_reason}"
+                    ).strip("|")
+                    req["verification_result"] = (
+                        str(req.get("verification_result") or "")
+                        + "|mapping_low_confidence_recovery"
+                    ).strip("|")
 
             planned_entries: list[dict[str, Any]] = []
 

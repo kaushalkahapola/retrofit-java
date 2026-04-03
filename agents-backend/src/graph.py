@@ -107,9 +107,20 @@ def route_validation(state: AgentState) -> str:
             )
             is False
         )
+        if failure_category == "mapping_required":
+            locator_retry_count = int(state.get("structural_locator_retries") or 0)
+            if locator_retry_count >= 2:
+                print(
+                    f"Router: mapping_required persists after {locator_retry_count} locator run(s). Exiting."
+                )
+                return "END"
+            print(
+                f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
+                "mapping-required diagnosis. Routing to structural_locator for remap."
+            )
+            return "structural_locator"
         if latest_hunk_apply_failed and failure_category in {
             "path_or_file_operation",
-            "mapping_required",
         }:
             print(
                 f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "

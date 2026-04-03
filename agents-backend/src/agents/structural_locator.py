@@ -66,6 +66,13 @@ def _is_java_code_file(path: str) -> bool:
     return p.endswith(".java") and not _looks_like_test(p)
 
 
+def _normalize_repo_rel_path(path: str) -> str:
+    p = str(path or "").strip().replace("\\", "/").lstrip("/")
+    if p.startswith("a/") or p.startswith("b/"):
+        p = p[2:]
+    return p
+
+
 _AGENT_SYSTEM = """You are an expert software engineer mapping code from a new mainline patch to an older target repository.
 You need to find the exact target file and target method corresponding to a modified mainline file and methods, determining the start and end lines.
 You also need to identify if any methods were renamed.
@@ -330,6 +337,61 @@ def _infer_anchor_confidence(
     return "high", "line_and_method_resolved"
 
 
+def _verify_method_exists_in_target(
+    mcp,
+    target_repo_path: str,
+    target_file: str,
+    method_hint: str | None,
+) -> bool:
+    """
+    Verify that a mapped method hint actually exists in the mapped target file.
+    This prevents accidental similar-name/hallucinated cross-file mappings.
+    """
+    method = str(method_hint or "").strip()
+    if not method or method.startswith("<"):
+        return True
+
+    file_rel = _normalize_repo_rel_path(target_file)
+    if not file_rel:
+        return False
+
+    try:
+        ctx = mcp.call_tool(
+            "get_class_context",
+            {
+                "target_repo_path": target_repo_path,
+                "file_path": file_rel,
+                "focus_method": method,
+            },
+        )
+        start, _, snippet = _extract_line_range(ctx)
+        sn = str(snippet or "")
+        if (
+            isinstance(start, int)
+            and start > 0
+            and sn
+            and "not found" not in sn.lower()
+        ):
+            return True
+        raw = str((ctx or {}).get("context", "") if isinstance(ctx, dict) else ctx)
+        if raw and "not found" not in raw.lower() and method in raw:
+            return True
+    except Exception:
+        pass
+
+    # Text fallback: declaration/usage probe in file content.
+    try:
+        full_path = os.path.join(target_repo_path, file_rel)
+        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        if re.search(rf"\b{re.escape(method)}\s*\(", content):
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
 def _realign_mapping_to_target(
     *,
     target_repo_path: str,
@@ -592,6 +654,12 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     target_repo_path = state.get("target_repo_path", "")
     mainline_repo_path = state.get("mainline_repo_path", "")
     with_test_changes = state.get("with_test_changes", False)
+    structural_locator_retries = int(state.get("structural_locator_retries") or 0)
+    failed_locator_paths = {
+        _normalize_repo_rel_path(p)
+        for p in (state.get("failed_locator_paths") or [])
+        if str(p).strip()
+    }
 
     if not semantic_blueprint:
         msg = "Agent 2 Error: No semantic_blueprint in state. Agent 1 must run first."
@@ -605,6 +673,11 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
     trace = "# Structural Locator Trace\n\n"
     trace += f"## Blueprint Summary\n- **Root Cause**: {semantic_blueprint.get('root_cause_hypothesis', '')}\n\n"
+    trace += (
+        "## Locator Retry State\n"
+        f"- Attempt: {structural_locator_retries + 1}\n"
+        f"- Previously failed paths: {sorted(failed_locator_paths)}\n\n"
+    )
 
     # ------------------------------------------------------------------
     # 1. Hunk Segregation
@@ -745,6 +818,26 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         if not candidates:
             candidates = [{"file": mainline_file, "reason": "default"}]
 
+        filtered_candidates: list[dict] = []
+        for cand in candidates:
+            if not isinstance(cand, dict):
+                continue
+            cand_file = _normalize_repo_rel_path(cand.get("file") or "")
+            if not cand_file:
+                continue
+            if cand_file in failed_locator_paths:
+                continue
+            new_cand = dict(cand)
+            new_cand["file"] = cand_file
+            filtered_candidates.append(new_cand)
+        candidates = filtered_candidates
+
+        if not candidates:
+            fallback_file = _normalize_repo_rel_path(mainline_file)
+            candidates = [
+                {"file": fallback_file, "reason": "fallback_after_failed_paths"}
+            ]
+
         print(f"  Agent 2: Identified {len(candidates)} candidate target file(s).")
 
         mapping_result = None
@@ -777,6 +870,26 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         == "low"
                         for m in deterministic_mappings
                     )
+                    methods_exist = all(
+                        _verify_method_exists_in_target(
+                            mcp,
+                            target_repo_path,
+                            str(m.get("target_file") or cand_file),
+                            str(m.get("target_method") or ""),
+                        )
+                        for m in deterministic_mappings
+                    )
+                    if not methods_exist:
+                        failed_locator_paths.add(_normalize_repo_rel_path(cand_file))
+                        print(
+                            "  Agent 2: Deterministic candidate rejected; method absent in mapped file "
+                            f"{cand_file}"
+                        )
+                        trace += (
+                            f"**Deterministic Mode**: rejected `{cand_file}` "
+                            "(method_absent_in_target).\n\n"
+                        )
+                        continue
                     if not is_low_conf:
                         print(
                             f"  Agent 2: High-confidence deterministic match found in {cand_file}"
@@ -1017,12 +1130,29 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 )
 
                 # Append mapping for this hunk
-                anchor_confidence, anchor_reason = _infer_anchor_confidence(
+                target_file_for_map = str(m.get("target_file"))
+                target_method_for_map = m.get("target_method")
+                if not _verify_method_exists_in_target(
+                    mcp,
                     target_repo_path,
-                    str(m.get("target_file")),
-                    m.get("start_line"),
-                    m.get("target_method"),
-                )
+                    target_file_for_map,
+                    str(target_method_for_map or ""),
+                ):
+                    anchor_confidence = "low"
+                    anchor_reason = "method_absent_in_target"
+                    m["start_line"] = None
+                    m["end_line"] = None
+                    m["code_snippet"] = ""
+                    failed_locator_paths.add(
+                        _normalize_repo_rel_path(target_file_for_map)
+                    )
+                else:
+                    anchor_confidence, anchor_reason = _infer_anchor_confidence(
+                        target_repo_path,
+                        target_file_for_map,
+                        m.get("start_line"),
+                        target_method_for_map,
+                    )
                 mapped_target_context[mainline_file].append(
                     {
                         "hunk_index": hunk_idx,
@@ -1045,6 +1175,10 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         else:
             trace += f"❌ Failed to locate target logic for `{mainline_file}` anywhere in the candidates.\n\n"
             print(f"  Agent 2: Could not map {mainline_file} — skipping.")
+            for cand in candidates:
+                failed_locator_paths.add(
+                    _normalize_repo_rel_path(cand.get("file") or "")
+                )
             logger.error(
                 "Failed to map file=%s no LLM mapping and no deterministic match",
                 mainline_file,
@@ -1136,6 +1270,10 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         ],
         "consistency_map": consistency_map,
         "mapped_target_context": mapped_target_context,
+        "failed_locator_paths": sorted(
+            p for p in failed_locator_paths if str(p or "").strip()
+        ),
+        "structural_locator_retries": structural_locator_retries + 1,
         "token_usage": {
             "input_tokens": 0,
             "output_tokens": 0,

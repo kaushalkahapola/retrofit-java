@@ -249,6 +249,9 @@ class AgentState(TypedDict):
     failed_locator_paths: NotRequired[
         list[str]
     ]  # Repository-relative paths already investigated and ruled out
+    structural_locator_retries: NotRequired[
+        int
+    ]  # Number of structural locator invocations in current run
     token_usage: NotRequired[
         dict[str, Any]
     ]  # Node-local token usage payload (used by evaluator aggregation)
