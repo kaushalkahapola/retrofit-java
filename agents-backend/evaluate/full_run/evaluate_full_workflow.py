@@ -164,6 +164,77 @@ def _is_java_code_file(file_path: str) -> bool:
     return p.endswith(".java") and not _is_test_file(p)
 
 
+def _is_non_java_hunk_in_java_file(file_path: str, hunk_text: str) -> bool:
+    """
+    Detect if a hunk within a Java file contains non-Java code content
+    (SQL, YAML, JSON, XML, config strings, etc.).
+
+    Args:
+        file_path: Path to the file
+        hunk_text: The hunk text (including @@ header lines)
+
+    Returns:
+        True if the file is a .java file AND the hunk contains non-code patterns
+    """
+    # Only apply to Java files (not test files)
+    if not _is_java_code_file(file_path):
+        return False
+
+    # Extract lines from hunk, removing @@ headers and context markers
+    lines = []
+    for line in (hunk_text or "").split("\n"):
+        stripped = line.strip()
+        # Skip hunk headers (@@ ...) and empty lines
+        if stripped.startswith("@@") or not stripped:
+            continue
+        # Remove diff markers (+/-) for content analysis
+        if line and line[0] in ("+", "-"):
+            lines.append(line[1:].strip())
+        else:
+            lines.append(line.strip())
+
+    if not lines:
+        return False
+
+    content = "\n".join(lines)
+
+    # Patterns for non-Java content (regex patterns)
+    patterns = [
+        # SQL patterns (SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER)
+        r"(?i)\b(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)\s+(INTO|FROM|TABLE|DATABASE|VIEW|INDEX)",
+        r"(?i)sql\s*=\s*[\"']",
+        r"(?i)WHERE\s+\w+\s*[=<>]",
+        r"(?i)\bJOIN\b",
+        r"(?i)\bGROUP\s+BY\b",
+        r"(?i)\bORDER\s+BY\b",
+        # YAML patterns (key: value syntax)
+        r"^\s*[a-zA-Z_][a-zA-Z0-9_]*:\s+\S",  # key: value
+        r"^---$|^\.\.\.$",  # YAML document markers
+        r"^!\w+\s",  # YAML tags
+        # JSON patterns
+        r'"\s*:\s*["{\\[\d\-]',  # "key": value pattern
+        r"{\s*\"[^\"]+\"\s*:",
+        # XML patterns
+        r"<\?xml",
+        r"<[a-zA-Z]+\s+[a-zA-Z:_][a-zA-Z0-9:_\-]*\s*=\s*[\"']",
+        # Properties file patterns (key=value)
+        r"^[a-zA-Z_][a-zA-Z0-9._-]*\s*=\s*[^\s]",
+        # Multi-line string/comment markers
+        r'"""\s*$|""".+$',  # Triple quotes
+        r"\/\*\*.*\*\/",  # Large block comments
+    ]
+
+    for pattern in patterns:
+        try:
+            if re.search(pattern, content, re.MULTILINE):
+                return True
+        except Exception:
+            # If regex is invalid, skip it
+            pass
+
+    return False
+
+
 def setup_repos(mainline_commit, backport_commit, mainline_repo_path, target_repo_path):
     success, output = run_cmd(
         ["git", "checkout", mainline_commit],
@@ -300,6 +371,9 @@ def _build_auxiliary_hunks_from_developer_patch(
     Build hunks for developer-owned changes that agentic system should not generate:
     - all test file hunks
     - all non-Java file hunks
+    - non-Java code content hunks within .java files (SQL, YAML, JSON, XML, etc.)
+
+    These hunks are applied directly during validation phase without agent modification.
     """
     if not patch_diff.strip():
         return []
@@ -317,10 +391,10 @@ def _build_auxiliary_hunks_from_developer_patch(
 
     for patched_file in patch_set:
         file_path = _norm_path(patched_file.path)
-        include = _is_test_file(file_path) or (not file_path.lower().endswith(".java"))
-        if not include:
-            continue
+        is_test_file_check = _is_test_file(file_path)
+        is_non_java_file = not file_path.lower().endswith(".java")
 
+        # Process all files; we'll filter hunks per-file
         source_path = _norm_path(getattr(patched_file, "source_file", None))
         target_path = (
             _norm_path(getattr(patched_file, "target_file", None)) or file_path
@@ -337,6 +411,7 @@ def _build_auxiliary_hunks_from_developer_patch(
         else:
             op = "MODIFIED"
 
+        # Process hunks in this file
         for hunk in patched_file:
             lines = [
                 f"@@ -{hunk.source_start},{hunk.source_length} +{hunk.target_start},{hunk.target_length} @@\n"
@@ -353,19 +428,31 @@ def _build_auxiliary_hunks_from_developer_patch(
             if not hunk_text.endswith("\n"):
                 hunk_text += "\n"
 
-            hunks.append(
-                {
-                    "target_file": target_path,
-                    "mainline_file": target_path,
-                    "hunk_text": hunk_text,
-                    "insertion_line": hunk.target_start,
-                    "intent_verified": True,
-                    "file_operation": op,
-                    "old_target_file": source_path or None,
-                }
+            # Determine if this hunk should be auxiliary (skip from agent generation)
+            is_auxiliary = (
+                is_test_file_check  # Test files always auxiliary
+                or is_non_java_file  # Non-Java files always auxiliary
+                or _is_non_java_hunk_in_java_file(
+                    file_path, hunk_text
+                )  # Non-code in .java files
             )
 
+            # Only add to auxiliary hunks if it should be skipped from agents
+            if is_auxiliary:
+                hunks.append(
+                    {
+                        "target_file": target_path,
+                        "mainline_file": target_path,
+                        "hunk_text": hunk_text,
+                        "insertion_line": hunk.target_start,
+                        "intent_verified": True,
+                        "file_operation": op,
+                        "old_target_file": source_path or None,
+                    }
+                )
+
         # Preserve pure structural file-operations with no hunks.
+        # These are ALWAYS auxiliary (they should apply as-is during validation)
         if len(list(patched_file)) == 0:
             hunks.append(
                 {
