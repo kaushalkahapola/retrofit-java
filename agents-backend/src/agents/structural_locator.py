@@ -42,6 +42,7 @@ except ImportError:  # Compatibility fallback for older langgraph versions
 
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from utils.llm_provider import get_llm
+from utils.mcp_client import get_client
 from agents.reasoning_tools import ReasoningToolkit
 
 
@@ -495,6 +496,9 @@ def _deterministic_map_hunks_for_file(
     raw_hunks_for_file: list[str],
     target_file: str,
     target_repo_path: str,
+    consistency_map: dict,
+    mcp,
+    toolkit,
 ) -> list[dict] | None:
     """
     Deterministically map hunks using raw diff anchors and target file contents.
@@ -654,6 +658,9 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     # Changed to support multiple hunks per file: dict[file_path] = list[hunk_mappings]
     mapped_target_context: dict[str, list] = {}
 
+    # Setup MCP client for tool calls
+    mcp = get_client()
+
     # Setup a lightweight retriever (lazy index build — only when Phase 2 git methods fail)
     try:
         retriever = EnsembleRetriever(mainline_repo_path, target_repo_path)
@@ -779,6 +786,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                             "consistency_map_entries": {},
                         }
                         used_deterministic = True
+                        trace += f"**Deterministic Mode**: matched `{cand_file}` with high confidence.\n\n"
                         break
                     else:
                         print(
@@ -795,96 +803,17 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 raw = raw_hunks_for_file[idx] if idx < len(raw_hunks_for_file) else ""
                 hunk_details += f"\nHunk {idx + 1} (role: {hunk.get('role')}):\n```diff\n{raw}\n```\n"
 
-            input_msg = (
-                f"Mainline File: {mainline_file}\n"
-                f"Primary Target Hypothesis: {primary_target}\n"
-                f"Other Potential Targets: {other_targets}\n"
-                f"Hunk Details: {hunk_details}\n"
-                f"Semantic Blueprint:\n{json.dumps(simple_blueprint, indent=2)}\n\n"
-                f"MISSION: Locate where each hunk applies in the target repository.\n"
-                f"1. VERIFY if the logic still lives in '{primary_target}' using `get_class_context` or `read_file`.\n"
-                f"2. IF LOGIC IS MISSING/MOVED: Use `grep_repo` for unique strings, `git_pickaxe` for history, or `get_dependency_graph` to find architectural neighbors (like classes that call or are called by the original class).\n"
-                f"3. REPORT: Return a JSON with 'mappings' array. Each hunk can have a DIFFERENT 'target_file' if the logic was split or relocated."
-            )
-
-        logger.info("Locating target file=%s hunks=%d", mainline_file, len(file_hunks))
-        trace += f"### `{mainline_file}`\n\n"
-        trace += f"**Hunks in this file**: {len(file_hunks)}\n\n"
-        raw_hunks_for_file = raw_hunks_by_file.get(mainline_file, [])
-
-        # STEP 1: Try git-based resolution first (no LLM call)
-        git_candidates = None
-        if toolkit:
-            try:
-                git_candidates = toolkit.search_candidates(mainline_file)
-                logger.debug(
-                    "Git candidate search returned %d candidate(s) for %s",
-                    len(git_candidates or []),
-                    mainline_file,
-                )
-                if git_candidates:
-                    git_target = git_candidates[0]["file"]
-                    print(f"  Agent 2: Git resolution found target: {git_target}")
-                    logger.info(
-                        "Git resolution selected target=%s for file=%s",
-                        git_target,
-                        mainline_file,
-                    )
-                    trace += f"**Git Resolution**: Found `{git_target}`\n\n"
-            except Exception as e:
-                print(f"  Agent 2: Git resolution failed: {e}")
-                logger.exception("Git resolution failed for file=%s", mainline_file)
-                trace += f"⚠️ Git resolution failed: {e}\n\n"
-
-        # STEP 2: Extract target file (prefer git resolution result)
-        target_file = mainline_file
-        if git_candidates:
-            target_file = git_candidates[0]["file"]
-
-        mapping_result = None
-        used_deterministic = False
-        llm_failed = False
-
-        if PHASE2_DETERMINISTIC_FIRST:
-            deterministic_mappings = _deterministic_map_hunks_for_file(
-                file_hunks=file_hunks,
-                raw_hunks_for_file=raw_hunks_for_file,
-                target_file=target_file,
-                target_repo_path=target_repo_path,
-            )
-            if deterministic_mappings:
-                mapping_result = {
-                    "mappings": deterministic_mappings,
-                    "consistency_map_entries": {},
-                }
-                used_deterministic = True
-                trace += "**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).\n\n"
-                logger.info(
-                    "Deterministic mapping used for file=%s hunks=%d",
-                    mainline_file,
-                    len(deterministic_mappings),
-                )
-
-        # Build LLM prompt only when deterministic path did not produce a usable mapping.
-        if mapping_result is None and not PHASE2_DISABLE_LLM:
+            # Build LLM prompt only when deterministic path did not produce a usable mapping.
             file_diff = ""
             try:
                 pa = PatchAnalyzer()
-                raw_hunks = pa.extract_raw_hunks(state.get("patch_diff", ""))
-                file_diff = "\n".join(raw_hunks.get(mainline_file, []))
+                raw_hunks_all = pa.extract_raw_hunks(state.get("patch_diff", ""))
+                file_diff = "\n".join(raw_hunks_all.get(mainline_file, []))
             except Exception:
                 file_diff = "Diff not available."
 
             if len(file_diff) > PHASE2_MAX_DIFF_CHARS:
                 file_diff = file_diff[:PHASE2_MAX_DIFF_CHARS] + "\n...[TRUNCATED]..."
-
-            # Build hunk details for LLM - CRITICAL: include hunk_index for proper ordering
-            hunk_details = "Hunk Details (in order):\n"
-            for idx, hunk in enumerate(file_hunks):
-                hunk_idx = hunk.get("hunk_index", idx)
-                role = hunk.get("role", "?")
-                summary = hunk.get("summary", "")
-                hunk_details += f"  - Hunk {hunk_idx} (role={role}): {summary}\n"
 
             # Simplified blueprint for LLM (avoid redundant info)
             simple_blueprint = {
@@ -897,15 +826,15 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
             input_msg = (
                 f"Mainline File: {mainline_file}\n"
-                f"Target File (path-match hypothesis): {target_file}\n"
-                f"{hunk_details}\n"
+                f"Primary Target Hypothesis: {primary_target}\n"
+                f"Other Potential Targets: {other_targets}\n"
+                f"Hunk Details: {hunk_details}\n"
                 f"Semantic Blueprint:\n{json.dumps(simple_blueprint, indent=2)}\n\n"
                 f"Patch Diff for this file:\n```diff\n{file_diff}\n```\n\n"
-                f"MISSION: Locate where each of the {len(file_hunks)} hunks above applies in the target repository.\n"
-                f"1. VERIFY if the logic still lives in '{target_file}' using `get_class_context` or `read_file`.\n"
-                f"2. IF LOGIC IS MISSING/MOVED: Use `grep_repo` for unique strings, `git_pickaxe` for history, or `get_dependency_graph` to find architectural neighbors.\n"
-                f"3. REPORT: Return a JSON with 'mappings' array, one entry per hunk in the SAME ORDER as listed above.\n"
-                f"   Each entry can have a different 'target_file' if the logic was split or relocated."
+                f"MISSION: Locate where each hunk applies in the target repository.\n"
+                f"1. VERIFY if the logic still lives in '{primary_target}' using `get_class_context` or `read_file`.\n"
+                f"2. IF LOGIC IS MISSING/MOVED: Use `grep_repo` for unique strings, `git_pickaxe` for history, or `get_dependency_graph` to find architectural neighbors (like classes that call or are called by the original class).\n"
+                f"3. REPORT: Return a JSON with 'mappings' array. Each hunk can have a DIFFERENT 'target_file' if the logic was split or relocated."
             )
             input_data = {"messages": [("user", input_msg)]}
 
@@ -925,7 +854,6 @@ async def structural_locator_node(state: AgentState, config) -> dict:
 
                     if not mapping_result:
                         trace += f"⚠️ **LLM Mapping Extraction Failed**\n\nRaw Response:\n```\n{raw_content}\n```\n\n"
-                        llm_failed = True
                         logger.warning(
                             "LLM JSON parse failed for file=%s attempt=%d",
                             mainline_file,
@@ -951,7 +879,6 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         mainline_file,
                         attempt + 1,
                     )
-                    llm_failed = True
 
                     fallback_messages = [
                         ("system", _DIRECT_MAPPING_SYSTEM),
@@ -970,11 +897,6 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                             "⚠️ **Fallback Mapping Extraction Failed**\n\n"
                             f"Raw Response:\n```\n{fallback_content}\n```\n\n"
                         )
-                        logger.warning(
-                            "Fallback direct mapping JSON parse failed for file=%s attempt=%d",
-                            mainline_file,
-                            attempt + 1,
-                        )
                     except Exception as fallback_exc:
                         logger.exception(
                             "Fallback direct mapping invocation failed for file=%s attempt=%d",
@@ -992,15 +914,11 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         mainline_file,
                         attempt + 1,
                     )
-                    llm_failed = True
                     if attempt == 0:
                         print("  Waiting 30 seconds before retry...")
                         time.sleep(30)
-        elif mapping_result is None and PHASE2_DISABLE_LLM:
-            llm_failed = True
-            trace += "**LLM Disabled**: deterministic mapping unavailable; falling back to git-only mapping.\n\n"
 
-        # STEP 3: Use LLM result if successful, otherwise fallback to git resolution
+        # STEP 3: Use mapping result if successful, otherwise log failure
         if mapping_result and isinstance(mapping_result, dict):
             if used_deterministic:
                 logger.info(
@@ -1049,7 +967,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         "mainline_method": "<import>"
                         if hunk_role == "declaration"
                         else f"hunk_{hunk_idx}",
-                        "target_file": target_file,
+                        "target_file": candidates[0]["file"],
                         "target_method": "<import>"
                         if hunk_role == "declaration"
                         else None,
@@ -1058,9 +976,9 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         "code_snippet": "",
                     }
 
-                # Ensure target_file is set from our git resolution
+                # Ensure target_file is set
                 if not m.get("target_file"):
-                    m["target_file"] = target_file
+                    m["target_file"] = candidates[0]["file"]
 
                 # Deterministic post-processing: align guessed lines to real target anchors.
                 raw_hunk = (
@@ -1072,7 +990,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 old_end = m.get("end_line")
                 new_start, new_end, new_snippet = _realign_mapping_to_target(
                     target_repo_path=target_repo_path,
-                    target_file=str(m.get("target_file") or target_file),
+                    target_file=str(m.get("target_file")),
                     snippet=str(m.get("code_snippet", "")),
                     raw_hunk=raw_hunk,
                     current_start=old_start,
@@ -1088,22 +1006,10 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         new_start,
                         new_end,
                     )
-                    trace += (
-                        f"  - Realigned hunk {hunk_idx} lines: "
-                        f"{old_start}-{old_end} -> {new_start}-{new_end}\n"
-                    )
                 m["start_line"] = new_start
                 m["end_line"] = new_end
                 if new_snippet:
                     m["code_snippet"] = new_snippet
-
-                # CRITICAL: For import hunks, we need to ensure proper line numbers
-                # Without proper start_line/end_line, hunk_generator will fall back to original mainline line numbers,
-                # which won't match the target file. The sorting in apply_adapted_hunks depends on correct insertion_line values.
-                if hunk_role == "declaration" and m.get("start_line") is None:
-                    # For imports, try to at least suggest where imports should be
-                    # This is a fallback - the LLM mapping should ideally have provided this
-                    trace += f"  ⚠️ Import hunk {hunk_idx} has no target start_line. Hunk generator will extract from hunk header.\n"
 
                 trace += (
                     f"| {hunk_idx} | {hunk_role} | `{m.get('mainline_method', '?')}` | "
@@ -1113,7 +1019,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 # Append mapping for this hunk
                 anchor_confidence, anchor_reason = _infer_anchor_confidence(
                     target_repo_path,
-                    str(m.get("target_file") or target_file),
+                    str(m.get("target_file")),
                     m.get("start_line"),
                     m.get("target_method"),
                 )
@@ -1136,89 +1042,11 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 print(
                     f"  Agent 2: Mapped hunk {hunk_idx} ({m.get('mainline_method', '?')}) to {m.get('target_method', '?')} at lines {m.get('start_line', '?')}-{m.get('end_line', '?')}"
                 )
-        elif git_candidates:
-            # LLM failed, but git resolution succeeded — use it as fallback
-            git_target = git_candidates[0]["file"]
-            logger.warning(
-                "Using git-only fallback mapping for file=%s target=%s llm_failed=%s",
-                mainline_file,
-                git_target,
-                llm_failed,
-            )
-            trace += f"**Fallback**: Using git resolution result (LLM refinement failed).\n\n"
-
-            if mainline_file not in mapped_target_context:
-                mapped_target_context[mainline_file] = []
-
-            # Create fallback mappings for each hunk
-            for idx, hunk in enumerate(file_hunks):
-                hunk_idx = hunk.get("hunk_index", idx)
-                hunk_role = hunk.get("role", "")
-                raw_hunk = (
-                    raw_hunks_for_file[idx] if idx < len(raw_hunks_for_file) else ""
-                )
-                start_line, end_line, snippet = _realign_mapping_to_target(
-                    target_repo_path=target_repo_path,
-                    target_file=git_target,
-                    snippet="",
-                    raw_hunk=raw_hunk,
-                    current_start=None,
-                    current_end=None,
-                )
-
-                if hunk_role == "declaration":
-                    # Import statements
-                    anchor_confidence, anchor_reason = _infer_anchor_confidence(
-                        target_repo_path,
-                        git_target,
-                        start_line,
-                        "<import>",
-                    )
-                    mapped_target_context[mainline_file].append(
-                        {
-                            "hunk_index": hunk_idx,
-                            "mainline_method": "<import>",
-                            "target_file": git_target,
-                            "target_method": "<import>",
-                            "start_line": start_line,
-                            "end_line": end_line,
-                            "code_snippet": snippet,
-                            "anchor_confidence": anchor_confidence,
-                            "anchor_reason": anchor_reason,
-                            "anchor_strategy": "git_fallback_realign",
-                        }
-                    )
-                    print(
-                        f"  Agent 2: Fallback mapped hunk {hunk_idx} (import) to {git_target}"
-                    )
-                else:
-                    # Regular hunks
-                    anchor_confidence, anchor_reason = _infer_anchor_confidence(
-                        target_repo_path,
-                        git_target,
-                        start_line,
-                        None,
-                    )
-                    mapped_target_context[mainline_file].append(
-                        {
-                            "hunk_index": hunk_idx,
-                            "mainline_method": f"hunk_{hunk_idx}",
-                            "target_file": git_target,
-                            "target_method": None,
-                            "start_line": start_line,
-                            "end_line": end_line,
-                            "code_snippet": snippet,
-                            "anchor_confidence": anchor_confidence,
-                            "anchor_reason": anchor_reason,
-                            "anchor_strategy": "git_fallback_realign",
-                        }
-                    )
-                    print(f"  Agent 2: Fallback mapped hunk {hunk_idx} to {git_target}")
         else:
-            trace += f"❌ Failed to locate target — neither LLM nor git resolution provided results.\n\n"
+            trace += f"❌ Failed to locate target logic for `{mainline_file}` anywhere in the candidates.\n\n"
             print(f"  Agent 2: Could not map {mainline_file} — skipping.")
             logger.error(
-                "Failed to map file=%s no LLM mapping and no git candidates",
+                "Failed to map file=%s no LLM mapping and no deterministic match",
                 mainline_file,
             )
 
