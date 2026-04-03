@@ -1,0 +1,128 @@
+{
+  "adapted_file_edits": [
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "old_string": "import org.elasticsearch.common.breaker.CircuitBreakingException;",
+      "new_string": "import org.elasticsearch.cluster.node.DiscoveryNodeRole;\nimport org.elasticsearch.common.breaker.CircuitBreakingException;",
+      "edit_type": "insert_before",
+      "verified": true,
+      "verification_result": "sanitize_resolved:exact",
+      "applied": true,
+      "apply_result": "SUCCESS: replaced at approx line 22 in 'x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java'."
+    },
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "old_string": "import java.util.HashMap;",
+      "new_string": "import java.util.Comparator;\nimport java.util.HashMap;",
+      "edit_type": "insert_before",
+      "verified": true,
+      "verification_result": "sanitize_resolved:line_trimmed_unique",
+      "applied": true,
+      "apply_result": "SUCCESS: replaced at approx line 42 in 'x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java'."
+    },
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "old_string": "import java.util.List;",
+      "new_string": "import java.util.LinkedHashMap;\nimport java.util.List;",
+      "edit_type": "insert_before",
+      "verified": true,
+      "verification_result": "sanitize_resolved:exact",
+      "applied": true,
+      "apply_result": "SUCCESS: replaced at approx line 47 in 'x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java'."
+    },
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "old_string": "    private final TransportService transportService;",
+      "new_string": "    /**\n     * Query order according to the\n     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n     */\n    private static final List<String> NODE_QUERY_ORDER = List.of(\n        DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()\n    );\n    private final TransportService transportService;",
+      "edit_type": "insert_before",
+      "verified": true,
+      "verification_result": "sanitize_resolved:line_trimmed_unique",
+      "applied": true,
+      "apply_result": "SUCCESS: replaced at approx line 67 in 'x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java'."
+    },
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "old_string": "                pendingShardIds.addAll(targetShards.shards.keySet());",
+      "new_string": "                pendingShardIds.addAll(order(targetShards));",
+      "edit_type": "replace",
+      "verified": false,
+      "verification_result": "sanitize_old_not_found:not_found_single",
+      "applied": true,
+      "apply_result": "SUCCESS: replaced at approx line 144 in 'x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java'."
+    },
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "old_string": "    private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {",
+      "new_string": "    private static List<ShardId> order(TargetShards targetShards) {\n        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();\n        var ordered = new ArrayList<>(targetShards.shards.keySet());\n        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));\n        return ordered;\n    }\n\n    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {\n        if (nodes.isEmpty()) {\n            return Integer.MAX_VALUE;\n        }\n        var order = 0;\n        for (var node : nodes) {\n            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));\n        }\n        return order;\n    }\n\n    private static int nodeOrder(DiscoveryNode node) {\n        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {\n            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {\n                return i;\n            }\n        }\n        return Integer.MAX_VALUE;\n    }\n\n    private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {",
+      "edit_type": "insert_before",
+      "verified": true,
+      "verification_result": "sanitize_resolved:line_trimmed_unique",
+      "applied": true,
+      "apply_result": "SUCCESS: replaced at approx line 150 in 'x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java'."
+    },
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "old_string": "        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new HashMap<>();",
+      "new_string": "        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();",
+      "edit_type": "replace",
+      "verified": false,
+      "verification_result": "sanitize_old_not_found:not_found_single",
+      "applied": true,
+      "apply_result": "SUCCESS: replaced at approx line 383 in 'x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java'."
+    }
+  ],
+  "adapted_code_hunks": [
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_text": "diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java\nindex 3c2855c9534..1e4c9d1fa47 100644\n--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java\n+++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java\n@@ -19,6 +19,7 @@ import org.elasticsearch.action.search.ShardSearchFailure;\n import org.elasticsearch.action.support.TransportActions;\n import org.elasticsearch.cluster.node.DiscoveryNode;\n import org.elasticsearch.cluster.service.ClusterService;\n+import org.elasticsearch.cluster.node.DiscoveryNodeRole;\n import org.elasticsearch.common.breaker.CircuitBreakingException;\n import org.elasticsearch.common.util.Maps;\n import org.elasticsearch.common.util.concurrent.ConcurrentCollections;\n@@ -38,10 +39,12 @@ import org.elasticsearch.xpack.esql.action.EsqlSearchShardsAction;\n \n import java.util.ArrayList;\n import java.util.Collections;\n+import java.util.Comparator;\n import java.util.HashMap;\n import java.util.HashSet;\n import java.util.IdentityHashMap;\n import java.util.Iterator;\n+import java.util.LinkedHashMap;\n import java.util.List;\n import java.util.Map;\n import java.util.Queue;\n@@ -61,6 +64,18 @@ import static org.elasticsearch.core.TimeValue.timeValueNanos;\n abstract class DataNodeRequestSender {\n \n     private final ClusterService clusterService;\n+    /**\n+     * Query order according to the\n+     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n+     */\n+    private static final List<String> NODE_QUERY_ORDER = List.of(\n+        DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()\n+    );\n     private final TransportService transportService;\n     private final Executor esqlExecutor;\n     private final CancellableTask rootTask;\n@@ -126,12 +141,39 @@ abstract class DataNodeRequestSender {\n                     )\n                 )\n             ) {\n-                pendingShardIds.addAll(targetShards.shards.keySet());\n+                pendingShardIds.addAll(order(targetShards));\n                 trySendingRequestsForPendingShards(targetShards, computeListener);\n             }\n         }, listener::onFailure));\n     }\n \n+    private static List<ShardId> order(TargetShards targetShards) {\n+        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();\n+        var ordered = new ArrayList<>(targetShards.shards.keySet());\n+        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));\n+        return ordered;\n+    }\n+\n+    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {\n+        if (nodes.isEmpty()) {\n+            return Integer.MAX_VALUE;\n+        }\n+        var order = 0;\n+        for (var node : nodes) {\n+            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));\n+        }\n+        return order;\n+    }\n+\n+    private static int nodeOrder(DiscoveryNode node) {\n+        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {\n+            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {\n+                return i;\n+            }\n+        }\n+        return Integer.MAX_VALUE;\n+    }\n+\n     private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {\n         changed.set(true);\n         final ActionListener<Void> listener = computeListener.acquireAvoid();\n@@ -338,7 +380,7 @@ abstract class DataNodeRequestSender {\n      */\n     private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {\n         assert sendingLock.isHeldByCurrentThread();\n-        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new HashMap<>();\n+        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();\n         final Iterator<ShardId> shardsIt = pendingShardIds.iterator();\n \n         while (shardsIt.hasNext()) {\n",
+      "insertion_line": 19,
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_index": 0,
+      "status": "success",
+      "reason": "generated_with_intent_warning",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    }
+  ],
+  "generated_patch_hash": "33ad04c6b67ad607877797f4b11a4416810d325fd809efb65dc93f2b244e5050",
+  "token_usage": {
+    "input_tokens": 561,
+    "output_tokens": 19,
+    "total_tokens": 580,
+    "estimated": false,
+    "sources": [
+      "file_editor.intent.provider_usage"
+    ]
+  }
+}
