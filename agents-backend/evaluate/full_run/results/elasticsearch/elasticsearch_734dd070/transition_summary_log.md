@@ -1,10 +1,9 @@
 # Transition Summary
 
-- Source: phase0_cache
-- Valid backport signal: False
-- Reason: Invalid: git apply --check failed. error: patch failed: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:17
-error: x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/Data
-- fail->pass (0): []
+- Source: phase_outputs
+- Valid backport signal: True
+- Reason: Valid: Observed fail-to-pass and/or newly passing relevant tests with no regressions.
+- fail->pass (2): ['org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirst', 'org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirstWhenIlmMovesShard']
 - newly passing (0): []
 - pass->fail (0): []
 
