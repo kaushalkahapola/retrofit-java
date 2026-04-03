@@ -1,0 +1,99 @@
+{
+  "adapted_code_hunks": [
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_text": "@@ -20,2 +20,3 @@\n import org.elasticsearch.cluster.node.DiscoveryNode;\n+import org.elasticsearch.cluster.node.DiscoveryNodeRole;\n import org.elasticsearch.cluster.service.ClusterService;\n",
+      "insertion_line": 17,
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_text": "@@ -40,2 +40,4 @@\n import java.util.Collections;\n+import java.util.Comparator;\n+import java.util.LinkedHashMap;\n import java.util.HashMap;\n",
+      "insertion_line": 39,
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_text": "@@ -61,2 +61,16 @@\n abstract class DataNodeRequestSender {\n+\n+    /**\n+     * Query order according to the\n+     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n+     */\n+    private static final List<String> NODE_QUERY_ORDER = List.of(\n+        DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),\n+        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()\n+    );\n+\n \n",
+      "insertion_line": 59,
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_text": "@@ -341,1 +341,1 @@\n-        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new HashMap<>();\n+        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();\n",
+      "insertion_line": 341,
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_index": 0,
+      "status": "success",
+      "reason": "generated_with_intent_warning"
+    },
+    {
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_index": 1,
+      "status": "success",
+      "reason": "generated_with_intent_warning"
+    },
+    {
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_index": 2,
+      "status": "success",
+      "reason": "generated_with_intent_warning"
+    },
+    {
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_index": 3,
+      "status": "failed",
+      "reason": "hunk_sanity_failed",
+      "error": "line_4_invalid_prefix"
+    },
+    {
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_index": 4,
+      "status": "success",
+      "reason": "generated_with_intent_warning"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 792,
+    "output_tokens": 84,
+    "total_tokens": 876,
+    "estimated": false,
+    "sources": [
+      "hunk_generator.intent.provider_usage",
+      "hunk_generator.intent.provider_usage",
+      "hunk_generator.intent.provider_usage",
+      "hunk_generator.intent.provider_usage"
+    ]
+  }
+}

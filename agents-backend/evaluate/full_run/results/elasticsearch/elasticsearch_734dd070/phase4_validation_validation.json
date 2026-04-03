@@ -1,0 +1,9 @@
+{
+  "validation_passed": false,
+  "validation_attempts": 3,
+  "validation_error_context": "Validation deferred: generator checklist contains unresolved failed hunks. Route back to planning/generation before running build/tests. Failed hunks: [{\"mainline_file\": \"x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java\", \"target_file\": \"x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java\", \"hunk_index\": 3, \"status\": \"failed\", \"reason\": \"hunk_sanity_failed\", \"error\": \"line_4_invalid_prefix\"}]",
+  "validation_failure_category": "context_mismatch",
+  "validation_retry_files": [
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java"
+  ]
+}
