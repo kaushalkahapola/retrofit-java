@@ -2018,6 +2018,47 @@ async def run_full_pipeline(
             transition_eval = phase0_cache_transition
             transition_source = "phase0_cache"
 
+        # Output the full trace of file edits across retries
+        trace_lines = ["# Full Trace of Agentic File Edits"]
+        try:
+            p3 = phase_outputs.get("phase3_hunk_generator", {}).get("hunk_generator", {}).get("outputs", {})
+            history = p3.get("all_adapted_file_edits", [])
+            trajectory = p3.get("agent_trajectory_edits", [])
+            
+            for attempt, edits in enumerate(history, start=1):
+                trace_lines.append(f"\n## Attempt #{attempt}")
+                
+                # Check for agent tool calls in this attempt
+                try:
+                    if len(trajectory) >= attempt:
+                        attempt_tool_calls = trajectory[attempt - 1]
+                        if attempt_tool_calls:
+                            trace_lines.append("\n### ReAct Agent Actions")
+                            import json
+                            for tc in attempt_tool_calls:
+                                trace_lines.append(f"- **{tc.get('target_file')}**: Called `{tc.get('tool')}`")
+                                trace_lines.append("```json\n" + json.dumps(tc.get('args', {}), indent=2) + "\n```")
+                except Exception as eval_e:
+                    pass
+                
+                trace_lines.append("\n### Final Output Diff")
+                for edit in edits:
+                    target = edit.get("target_file", "unknown")
+                    edit_type = edit.get("edit_type", "unknown")
+                    old_str = edit.get("old_string", "")
+                    new_str = edit.get("new_string", "")
+                    trace_lines.append(f"**{target}** [{edit_type}]")
+                    if old_str == "<line-based ReAct agent diff>":
+                        trace_lines.append(f"```diff\n{new_str}\n```")
+                    else:
+                        trace_lines.append(f"```java\n// --- OLD ---\n{old_str}\n// --- NEW ---\n{new_str}\n```")
+            if not history:
+                trace_lines.append("\nNo edit history found in phase 3 outputs.")
+        except Exception as e:
+            trace_lines.append(f"\nError generating trace: {e}")
+        
+        save_pipeline_log(project, patch_id, "full_trace", "\n".join(trace_lines))
+
         save_pipeline_log(
             project,
             patch_id,

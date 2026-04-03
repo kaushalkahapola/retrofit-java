@@ -1,6 +1,6 @@
 # Post-Pipeline Developer Patch Comparison
 
-**Exact Developer Patch (code-only)**: False
+**Exact Developer Patch (code-only)**: True
 
 **Comparison Method**: file_state
 
@@ -15,7 +15,7 @@
 
 ## File State Comparison
 - Compared files: ['server/src/main/java/org/elasticsearch/script/ScriptStats.java']
-- Mismatched files: ['server/src/main/java/org/elasticsearch/script/ScriptStats.java']
+- Mismatched files: []
 - Error: None
 
 ## Comparison Scope
@@ -27,7 +27,7 @@
 ### server/src/main/java/org/elasticsearch/script/ScriptStats.java
 
 - Developer hunks: 2
-- Generated hunks: 0
+- Generated hunks: 2
 
 #### Hunk 1
 
@@ -46,20 +46,21 @@ Developer
 
 Generated
 ```diff
-*No hunk*
+@@ -25,6 +25,7 @@
+ import java.util.Map;
+ import java.util.Objects;
+ 
++import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
+ import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;
+ import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;
+ import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;
+
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,8 +1 @@-@@ -25,6 +25,7 @@
-- import java.util.Map;
-- import java.util.Objects;
-- 
--+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
-- import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;
-- import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;
-- import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;
-+*No hunk*
+(No textual difference)
+
 ```
 
 #### Hunk 2
@@ -80,32 +81,75 @@ Developer
 
 Generated
 ```diff
-*No hunk*
+@@ -199,7 +200,7 @@
+                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
+             }
+             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
+-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);
++                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);
+             }
+             ob.array(CONTEXTS, contextStats.iterator());
+         });
+
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,9 +1 @@-@@ -199,7 +200,7 @@
--                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
--             }
--             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
---                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);
--+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);
--             }
--             ob.array(CONTEXTS, contextStats.iterator());
--         });
-+*No hunk*
+(No textual difference)
+
 ```
 
 
 
 ## Full Generated Patch (Agent-Only, code-only)
 ```diff
+diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
+index f24052ef7e3..e085eb50ffb 100644
+--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java
++++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
+@@ -25,6 +25,7 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Objects;
+ 
++import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
+ import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;
+ import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;
+ import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;
+@@ -199,7 +200,7 @@ public record ScriptStats(
+                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
+             }
+             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
+-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);
++                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);
+             }
+             ob.array(CONTEXTS, contextStats.iterator());
+         });
 
 ```
 
 ## Full Generated Patch (Final Effective, code-only)
 ```diff
+diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
+index f24052ef7e3..e085eb50ffb 100644
+--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java
++++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
+@@ -25,6 +25,7 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Objects;
+ 
++import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
+ import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;
+ import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;
+ import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;
+@@ -199,7 +200,7 @@ public record ScriptStats(
+                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
+             }
+             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
+-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);
++                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);
+             }
+             ob.array(CONTEXTS, contextStats.iterator());
+         });
 
 ```
 ## Full Developer Backport Patch (full commit diff)

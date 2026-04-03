@@ -631,6 +631,113 @@ class HunkGeneratorToolkit:
 
         return "\n".join(out_parts)
 
+    def verify_guidelines(self, diff_text: str) -> str:
+        """
+        Verify the generated git diff adheres to strict Java syntactic and structural guidelines.
+        This runs the exact same checks as the backend engine. Returns "ALL_GOOD" or an error string.
+        Call this tool right before finishing your work to double check your edit.
+        """
+        issues = []
+        
+        # 1. Truncated structs
+        added = [
+            line[1:]
+            for line in (diff_text or "").splitlines()
+            if line.startswith("+") and not line.startswith("+++")
+        ]
+        for line in added:
+            s = line.strip()
+            if s == "private static final":
+                issues.append("syntax_guard_failed: truncated declaration 'private static final'")
+            elif re.match(r"^(private|public|protected)\s+(static\s+)?(final\s+)?$", s):
+                issues.append(f"syntax_guard_failed: truncated declaration '{s}'")
+            elif s.endswith("=") and not s.endswith("=="):
+                issues.append(f"syntax_guard_failed: dangling assignment in added line '{s}'")
+                
+        # 2. Static fields inside method body
+        lines = (diff_text or "").splitlines()
+        context_before = []
+        for line in lines:
+            if line.startswith("@@"):
+                context_before = []
+                continue
+            if line.startswith(" ") or line.startswith("-"):
+                context_before.append(line[1:])
+            if line.startswith("+") and not line.startswith("+++"):
+                l = line[1:].strip()
+                if re.match(r"^(private|public|protected)\s+static\s+final\s+", l):
+                    combined = "\n".join(context_before[-20:])
+                    open_braces = combined.count("{")
+                    close_braces = combined.count("}")
+                    depth = open_braces - close_braces
+                    if depth > 1:
+                        issues.append(f"semantic_guard_failed: static field inserted inside method body (brace depth={depth})")
+                        
+        if issues:
+            return "GUIDELINE_FAILURES:\n- " + "\n- ".join(issues) + "\n\nFix these issues using `replace_lines` again."
+            
+        return "ALL_GOOD"
+
+    # ------------------------------------------------------------------
+    # Tool 10a: replace_lines
+    # ------------------------------------------------------------------
+
+    def replace_lines(
+        self,
+        file_path: str,
+        start_line: int,
+        end_line: int,
+        new_content: str,
+    ) -> str:
+        """
+        Replace lines `start_line` to `end_line` (inclusive, 1-indexed) in the target file
+        with `new_content`.
+        
+        To insert new lines without replacing any existing lines, set `start_line` to N and
+        `end_line` to N-1 (e.g. start_line=27, end_line=26 will insert before line 27).
+
+        Args:
+            file_path: Repo-relative path to the file.
+            start_line: 1-indexed start line to replace (or N for insertion).
+            end_line: 1-indexed end line to replace (or N-1 for insertion).
+            new_content: The new complete code block to insert/replace.
+
+        Returns:
+            SUCCESS message or ERROR message.
+        """
+        full_path = self._full_path(file_path)
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                original = f.read()
+        except Exception as exc:
+            return f"ERROR: Cannot read file '{file_path}': {exc}"
+
+        lines = original.splitlines(keepends=True)
+        total = len(lines)
+        if start_line < 1 or end_line > total or start_line > end_line + 1:
+            return f"ERROR: Invalid range {start_line}-{end_line}. File has {total} lines."
+
+        # Support inserting lines by letting start_line == end_line + 1
+        s_idx = start_line - 1
+        e_idx = end_line # Exclusive
+
+        if new_content and not new_content.endswith("\n") and s_idx < total and lines[s_idx].endswith("\n"):
+            # Ensure proper newline behavior
+            new_content += "\n"
+
+        lines_before = lines[:s_idx]
+        lines_after = lines[e_idx:]
+
+        new_resolved = lines_before + [new_content] + lines_after
+
+        try:
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write("".join(new_resolved))
+            # Also register the generic file edit to the local memory for auditing if desired
+            return f"SUCCESS: lines {start_line} to {end_line} replaced."
+        except Exception as exc:
+            return f"ERROR: Cannot write file '{file_path}': {exc}"
+
     # ------------------------------------------------------------------
     # Tool 11: git_diff_file  (mechanically correct diff after edits)
     # ------------------------------------------------------------------
@@ -1017,6 +1124,23 @@ class HunkGeneratorToolkit:
                     "Return the current file content with line numbers (up to max_lines). "
                     "Use AFTER str_replace_in_file or insert_after_line to verify the "
                     "edit was applied correctly before generating the diff."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.verify_guidelines,
+                name="verify_guidelines",
+                description=(
+                    "Verify the generated git diff adheres to strict Java syntactic guidelines. "
+                    "Call this tool to self-correct. It will return 'ALL_GOOD' or flag compilation issues."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.replace_lines,
+                name="replace_lines",
+                description=(
+                    "Replace a specific block of lines (start_line to end_line, inclusive, 1-indexed) "
+                    "with new_content. This is extremely robust as it does not rely on old_string text matching. "
+                    "To insert new lines without replacing any, use start_line = N, end_line = N-1."
                 ),
             ),
             StructuredTool.from_function(

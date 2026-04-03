@@ -208,6 +208,12 @@ class AgentState(TypedDict):
     adapted_file_edits: list[
         FileEdit
     ]  # Atomic str_replace records applied to target files
+    all_adapted_file_edits: NotRequired[
+        list[list[FileEdit]]
+    ]  # History of file edits across all validation retries
+    agent_trajectory_edits: NotRequired[
+        list[list[dict[str, Any]]]
+    ]  # Raw tool calls (replace_line) made by the ReAct agent across retries
     adapted_code_hunks: list[
         AdaptedHunk
     ]  # Generated/adapted fix patch hunks (hunk_text = git diff output)

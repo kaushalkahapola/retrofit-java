@@ -481,10 +481,16 @@ def _ensure_required_coverage(
     for req in required_entries:
         req_marker = _entry_operation_marker(req)
         req_type = str(req.get("edit_type") or "").strip().lower()
+        req_idx = req.get("operation_index")
         req_old = str(req.get("old_string") or "")
         req_new = str(req.get("new_string") or "")
         matched = False
         for got in out:
+            # First, check if there's a directed match on operation_index
+            if req_idx is not None and got.get("operation_index") == req_idx:
+                matched = True
+                break
+
             got_type = str(got.get("edit_type") or "").strip().lower()
             if got_type != req_type:
                 continue
@@ -815,6 +821,8 @@ def _build_llm_adaptation_prompt(
     target_file_path: str,
     target_content: str,
     mainline_file: str,
+    raw_hunk: str,
+    consistency_map: dict | None = None,
 ) -> str:
     """Build a prompt for LLM to adapt an unverified hunk"""
 
@@ -832,10 +840,19 @@ def _build_llm_adaptation_prompt(
     context_lines = target_lines[context_start:context_end]
     context = "\n".join(context_lines)
 
-    prompt = f"""You are a Java code expert helping with semantic patch adaptation.
+    cm_section = ""
+    if consistency_map:
+        cm_str = "\n".join(f"  {k} -> {v}" for k, v in consistency_map.items())
+        cm_section = f"\nConsistency Map (apply these renames):\n{cm_str}\n"
 
-A mainline patch wants to make this change to {mainline_file} (hunk #{hunk_index}):
+    prompt = f"""Your task is to review a mainline patch hunk, find the equivalent code in the target file, and adapt the specific operation that failed.
 
+Here is the original mainline hunk making changes to {mainline_file} (hunk #{hunk_index}):
+```diff
+{raw_hunk}
+```
+{cm_section}
+The specific operation that failed to apply is extracting this code:
 OLD: {old_string}
 NEW: {new_string}
 
@@ -851,13 +868,16 @@ Here is the target file code around line {insertion_line} where this change shou
 Your task:
 1. Understand what the mainline patch is trying to achieve semantically
 2. Find the equivalent code pattern in the target file above
-3. Provide the adapted old_string and new_string that would apply the same semantic fix to target's code
+3. Apply the symbol renames from the consistency map if applicable
+4. Provide the adapted old_string and new_string that would apply the same semantic fix to target's code
+
+CRITICAL: Do not invent completely new variables or methods. Use the exact variables present in the target code or the consistency map.
 
 Respond ONLY with valid JSON in this exact format, no other text:
 {{
   "semantic_intent": "description of what the patch is trying to fix",
   "found_equivalent": true/false,
-  "equivalent_old_string": "exact text from target file that needs to be changed",
+  "equivalent_old_string": "EXACT on-disk text from the target file that needs to be removed/replaced",
   "equivalent_new_string": "what to change it to, applying the same semantic fix",
   "confidence": 0.0-1.0,
   "reasoning": "brief explanation"
@@ -873,6 +893,8 @@ async def _adapt_unverified_hunks_with_llm(
     target_repo_path: str,
     mainline_file: str,
     token_usage: dict,
+    raw_hunks: list[str] = None,
+    consistency_map: dict | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """
     For any hunk that failed verification, use LLM to find and adapt it to target code.
@@ -886,11 +908,22 @@ async def _adapt_unverified_hunks_with_llm(
         adapted_plan[file_path] = []
         target_content = _read_target_file(target_repo_path, file_path)
 
+        seen_operations = set()
+
         for entry in entries:
             # Only try to adapt if verification failed
             if entry.get("verified", False):
                 adapted_plan[file_path].append(entry)
                 continue
+
+            # Deduplicate by hunk_index and operation_index
+            hidx = entry.get("hunk_index")
+            oidx = entry.get("operation_index")
+            op_key = (hidx, oidx)
+            if op_key in seen_operations and hidx is not None:
+                adapted_plan[file_path].append(entry)
+                continue
+            seen_operations.add(op_key)
 
             old_string = (entry.get("old_string") or "").strip()
             if not old_string:
@@ -904,9 +937,16 @@ async def _adapt_unverified_hunks_with_llm(
                 continue
 
             try:
+                # Identify the raw hunk for this entry
+                raw_hunk = ""
+                if raw_hunks and entry.get("hunk_index") is not None:
+                    hidx = entry.get("hunk_index")
+                    if 0 <= hidx < len(raw_hunks):
+                        raw_hunk = raw_hunks[hidx]
+
                 # Build LLM prompt
                 prompt = _build_llm_adaptation_prompt(
-                    entry, file_path, target_content, mainline_file
+                    entry, file_path, target_content, mainline_file, raw_hunk, consistency_map
                 )
 
                 # Call LLM
@@ -1044,200 +1084,19 @@ async def planning_agent_node(state: AgentState, config) -> dict:
 
             ctx = mapped[min(hidx, len(mapped) - 1)] if mapped else {}
             target_file = (ctx.get("target_file") or mainline_file).replace("\\", "/")
-            insertion_line = int(ctx.get("start_line") or 1)
-            code_snippet = ctx.get("code_snippet") or ""
-            anchor_confidence = str(ctx.get("anchor_confidence") or "").strip().lower()
-            anchor_reason = str(ctx.get("anchor_reason") or "")
-
-            if anchor_confidence == "low":
-                plan[mainline_file].append(
-                    {
-                        "hunk_index": hidx,
-                        "target_file": target_file,
-                        "edit_type": "replace",
-                        "old_string": "",
-                        "new_string": "",
-                        "verified": False,
-                        "verification_result": "mapping_low_confidence",
-                        "notes": f"mapping_low_confidence:{anchor_reason}",
-                    }
-                )
-                continue
-
-            required_entries = _decompose_hunk_to_required_entries(
-                hunk_idx=hidx,
-                raw_hunk=raw_hunk,
-                target_file=target_file,
-                consistency_map=consistency_map,
-            )
-
-            planned_entries: list[dict[str, Any]] = []
-
-            if react and toolkit:
-                for req in required_entries:
-                    edit_type_hint = str(
-                        req.get("edit_type") or _classify_edit_type(raw_hunk)
-                    )
-                    prompt = (
-                        f"Target file: {target_file}\n"
-                        f"Mapped insertion line (approximate): {insertion_line}\n"
-                        f"Hunk index: {hidx}\n"
-                        f"Operation index: {req.get('operation_index', 0)}\n"
-                        f"Required edit_type: {edit_type_hint}\n"
-                        f"Required old_string (candidate):\n```text\n{req.get('old_string', '')}\n```\n"
-                        f"Required new_string (candidate):\n```text\n{req.get('new_string', '')}\n```\n\n"
-                        f"Mainline hunk to adapt:\n```diff\n{raw_hunk}\n```\n\n"
-                        f"Context snippet from Agent 2 (may be from mainline, verify in target):\n"
-                        f"```java\n{code_snippet[:600]}\n```\n\n"
-                        f"ConsistencyMap (apply these renames to new_string added content):\n"
-                        + (
-                            "\n".join(
-                                f"  {k} -> {v}" for k, v in consistency_map.items()
-                            )
-                            if consistency_map
-                            else "  (none)"
-                        )
-                        + "\n\n"
-                        "Use tools to verify old_string in the real target file and output ONE JSON object. "
-                        "Do not drop this required operation."
-                    )
-
-                    entry = dict(req)
-                    try:
-                        prompt_tokens = count_text_tokens(
-                            _PLANNER_SYSTEM + "\n" + prompt, model_name
-                        )
-                        res = await react.ainvoke(
-                            {"messages": [("user", prompt)]},
-                            config={"recursion_limit": 100},
-                        )
-                        msgs = res.get("messages", [])
-
-                        exact_any = False
-                        for m in msgs:
-                            if getattr(m, "type", "") != "ai":
-                                continue
-                            usage = extract_usage_from_response(m)
-                            if usage and (
-                                usage["input_tokens"] or usage["output_tokens"]
-                            ):
-                                add_usage(
-                                    token_usage,
-                                    usage["input_tokens"],
-                                    usage["output_tokens"],
-                                    "planner.provider_usage",
-                                )
-                                exact_any = True
-
-                        if not exact_any:
-                            final_content = msgs[-1].content if msgs else ""
-                            add_usage(
-                                token_usage,
-                                prompt_tokens,
-                                count_text_tokens(str(final_content), model_name),
-                                "planner.tiktoken",
-                            )
-                            token_usage["estimated"] = True
-
-                        final = msgs[-1].content if msgs else ""
-                        payload = _extract_json_payload(final)
-                        parsed_obj = None
-                        if isinstance(payload, dict):
-                            parsed_obj = payload
-                        elif isinstance(payload, list) and payload:
-                            # If model returns a list unexpectedly, pick first dict.
-                            for x in payload:
-                                if isinstance(x, dict):
-                                    parsed_obj = x
-                                    break
-
-                        if parsed_obj:
-                            for k in (
-                                "edit_type",
-                                "old_string",
-                                "new_string",
-                                "verified",
-                                "verification_result",
-                                "notes",
-                            ):
-                                if k in parsed_obj:
-                                    entry[k] = parsed_obj[k]
-                        else:
-                            entry["notes"] = (
-                                str(entry.get("notes") or "")
-                                + "|planner_parse_fallback"
-                            ).strip("|")
-                            print(
-                                f"    Planning Agent: Could not parse JSON for "
-                                f"{target_file}[{hidx}] op={req.get('operation_index', 0)} - using required fallback."
-                            )
-                    except Exception as e:
-                        entry["notes"] = (
-                            str(entry.get("notes") or "") + f"|planner_tool_error:{e}"
-                        ).strip("|")
-                        print(
-                            f"    Planning Agent: Error on {target_file}[{hidx}] op={req.get('operation_index', 0)}: {e} "
-                            "- using required fallback."
-                        )
-
-                    planned_entries.append(entry)
-            else:
-                planned_entries = list(required_entries)
-
-            # Hard coverage guarantee: never drop deterministic required operations.
-            planned_entries = _ensure_required_coverage(
-                planned_entries, required_entries
-            )
-
-            target_content = _read_target_file(target_repo_path, target_file)
-            if target_content:
-                planned_entries = [
-                    _sanitize_entry_against_target(e, target_content)
-                    for e in planned_entries
-                ]
-
-                # Attempt semantic adaptation for entries that failed verification
-                # (This is a retry hook for hunks that failed anchor resolution)
-                planned_entries = [
-                    _attempt_semantic_adapt_entry(e, target_content, target_file)
-                    for e in planned_entries
-                ]
-
-            # Sanitize + append all operations for this source hunk.
-            for entry in planned_entries:
-                default_type = _classify_edit_type(raw_hunk)
-                entry["hunk_index"] = hidx
-                entry["target_file"] = target_file
-                entry["edit_type"] = (
-                    str(entry.get("edit_type") or default_type).strip().lower()
-                )
-                if entry["edit_type"] not in {
-                    "replace",
-                    "insert_after",
-                    "insert_before",
-                    "delete",
-                }:
-                    entry["edit_type"] = default_type
-                entry["verified"] = bool(entry.get("verified", False))
-                entry.setdefault("old_string", "")
-                entry.setdefault("new_string", "")
-                entry.setdefault("verification_result", "")
-                entry.setdefault("notes", "")
-                entry.pop("operation_index", None)
-                plan[mainline_file].append(entry)
+            plan[mainline_file].append({
+                "hunk_index": hidx,
+                "target_file": target_file,
+                "edit_type": "replace",
+                "old_string": "DEPRECATED",
+                "new_string": "DEPRECATED",
+                "verified": False,
+                "verification_result": "Line-Based FileEditor Agent will handle this",
+                "notes": "Passed explicitly"
+            })
 
     total_entries = sum(len(v) for v in plan.values())
     print(f"Planning Agent: Complete. Planned {total_entries} edit(s).")
-
-    # NEW: Try LLM adaptation for any unverified hunks (Option 2)
-    # This is a fallback when Planning Agent couldn't find exact old_string
-    print("Planning Agent: Attempting LLM adaptation for unverified hunks...")
-    plan = await _adapt_unverified_hunks_with_llm(
-        plan=dict(plan),
-        target_repo_path=target_repo_path,
-        mainline_file=list(raw_hunks_by_file.keys())[0] if raw_hunks_by_file else "",
-        token_usage=token_usage,
-    )
 
     # Generate plan signature for retry loop dedup
     import hashlib
