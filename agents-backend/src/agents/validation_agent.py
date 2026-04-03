@@ -120,6 +120,66 @@ def _classify_apply_failure(raw_output: str) -> tuple[str, list[str], list[dict]
     return category, sorted(retry_files), diagnostics
 
 
+def _classify_build_failure(raw_output: str) -> tuple[str, list[str], list[dict], str]:
+    """Deterministic build failure parser for retry routing and concise diagnostics."""
+    text = str(raw_output or "")
+    text_lower = text.lower()
+
+    retry_files: set[str] = set()
+    diagnostics: list[dict] = []
+
+    file_hit_patterns = [
+        r"(/repo/[^:\n]+\.java):\d+:",
+        r"(x-pack/[^:\n]+\.java):\d+:",
+        r"error:\s+patch failed:\s+([^:\n]+):\d+",
+    ]
+    for pat in file_hit_patterns:
+        for m in re.findall(pat, text, flags=re.IGNORECASE):
+            p = (m or "").strip().replace("\\", "/")
+            if p.startswith("/repo/"):
+                p = p[len("/repo/") :]
+            if p:
+                retry_files.add(p)
+
+    if (
+        "not a statement" in text_lower
+        or "class, interface, enum, or record expected" in text_lower
+    ):
+        diagnostics.append(
+            {
+                "error_type": "java_syntax_or_patch_artifact",
+                "suggested_action": "regenerate_hunk_with_structural_guardrails",
+            }
+        )
+        reason = "Java syntax errors detected after patch application (likely malformed hunk output)."
+        return "context_mismatch", sorted(retry_files), diagnostics, reason
+
+    if (
+        "cannot find symbol" in text_lower
+        or "method" in text_lower
+        and "cannot be applied" in text_lower
+    ):
+        diagnostics.append(
+            {
+                "error_type": "api_or_signature_mismatch",
+                "suggested_action": "replan_and_regenerate_with_api_compatibility",
+            }
+        )
+        reason = "API/signature mismatch in generated patch against target branch."
+        return "context_mismatch", sorted(retry_files), diagnostics, reason
+
+    diagnostics.append(
+        {
+            "error_type": "unknown_build_failure",
+            "suggested_action": "inspect_build_log_and_retry",
+        }
+    )
+    reason = (
+        "Build failed; deterministic parser could not identify a narrower category."
+    )
+    return "unknown", sorted(retry_files), diagnostics, reason
+
+
 def _format_transition_summary(transition_eval: dict) -> str:
     if not transition_eval:
         return "No transition evaluation available."
@@ -297,6 +357,7 @@ async def validation_agent(state: AgentState, config) -> dict:
     # 3.0 Setup
     code_hunks = state.get("adapted_code_hunks", [])
     test_hunks = state.get("adapted_test_hunks", [])
+    generation_checklist = state.get("generation_checklist", []) or []
     developer_aux_hunks = state.get("developer_auxiliary_hunks", [])
     attempts = state.get("validation_attempts", 0)
     blueprint = state.get("semantic_blueprint", {})
@@ -320,6 +381,78 @@ async def validation_agent(state: AgentState, config) -> dict:
             f"  Agent 4: Max validation attempts ({MAX_VALIDATION_ATTEMPTS}) reached. Failing."
         )
         return {"validation_passed": False}
+
+    if not code_hunks and not test_hunks:
+        msg = (
+            "Validation aborted: Phase 3 produced no adapted code/test hunks. "
+            "Regenerate hunks with target-grounded anchors."
+        )
+        print(f"  Agent 4: {msg}")
+        return {
+            "validation_passed": False,
+            "validation_attempts": attempts + 1,
+            "validation_error_context": msg,
+            "validation_failure_category": "empty_generation",
+            "validation_retry_files": [],
+        }
+
+    incomplete_generation_items = []
+    for item in generation_checklist:
+        status = str(item.get("status", "")).strip().lower()
+        if status == "failed" or status == "in_progress" or status == "pending":
+            incomplete_generation_items.append(item)
+            continue
+        if status == "success":
+            required_steps = set(item.get("todo_steps") or [])
+            completed_steps = set(item.get("completed_steps") or [])
+            if required_steps and not required_steps.issubset(completed_steps):
+                item = dict(item)
+                item["reason"] = "incomplete_todo_steps"
+                item["missing_steps"] = sorted(required_steps - completed_steps)
+                incomplete_generation_items.append(item)
+
+    if incomplete_generation_items:
+        retry_hunks = sorted(
+            {
+                int(item.get("hunk_index"))
+                for item in incomplete_generation_items
+                if isinstance(item.get("hunk_index"), int)
+            }
+        )
+        failed_stages = [
+            str(item.get("reason") or "").strip()
+            for item in incomplete_generation_items
+            if str(item.get("reason") or "").strip()
+        ]
+        failed_stage = failed_stages[0] if failed_stages else "generation_incomplete"
+
+        retry_files = sorted(
+            {
+                str(item.get("mainline_file") or "").strip()
+                for item in incomplete_generation_items
+                if item.get("mainline_file")
+            }
+            | {
+                str(item.get("target_file") or "").strip()
+                for item in incomplete_generation_items
+                if item.get("target_file")
+            }
+        )
+        msg = (
+            "Validation deferred: generator checklist has incomplete hunk tasks. "
+            "Route back to planning/generation before running build/tests. "
+            f"Incomplete hunks: {json.dumps(incomplete_generation_items, default=str)[:1500]}"
+        )
+        print(f"  Agent 4: {msg}")
+        return {
+            "validation_passed": False,
+            "validation_attempts": attempts + 1,
+            "validation_error_context": msg,
+            "validation_failure_category": "context_mismatch",
+            "validation_retry_files": retry_files,
+            "validation_retry_hunks": retry_hunks,
+            "validation_failed_stage": failed_stage,
+        }
 
     # Ensure clean repo
     toolkit.restore_repo_state()
@@ -400,6 +533,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 f"\n**Final Status: HUNK APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
             )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            toolkit.restore_repo_state()
             return {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
@@ -417,21 +551,29 @@ async def validation_agent(state: AgentState, config) -> dict:
             "raw": build_res.get("output", ""),
         }
         if not build_res.get("success", False):
-            analysis = await _analyze_failure(
-                "Build", build_res.get("output", ""), state
+            failure_category, retry_files, diagnostics, analysis = (
+                _classify_build_failure(build_res.get("output", ""))
             )
             validation_results["build"]["agent_evaluation"] = analysis
             validation_results["build"]["error_context"] = analysis
+            validation_results["build"]["diagnostics"] = {
+                "category": failure_category,
+                "retry_files": retry_files,
+                "issues": diagnostics,
+            }
             trace.append(
                 f"\n**Final Status: BUILD FAILED**\n\n**Agent Analysis:**\n{analysis}"
             )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            toolkit.restore_repo_state()
             return {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
                 "validation_error_context": f"Build failed: {analysis}",
                 "validation_results": validation_results,
                 "regeneration_hint": analysis,
+                "validation_failure_category": failure_category,
+                "validation_retry_files": retry_files,
             }
 
         inferred_project = os.path.basename(target_repo_path).strip().lower()
@@ -465,6 +607,7 @@ async def validation_agent(state: AgentState, config) -> dict:
             "success": test_res.get("success", False),
             "raw": test_res.get("output", ""),
             "mode": test_res.get("mode", "unknown"),
+            "test_state": test_res.get("test_state", {}),
             "state_transition": transition_eval,
         }
 
@@ -478,6 +621,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 f"\n**Final Status: TEST EXECUTION FAILED (COMPILE ERROR)**\n\n**Agent Analysis:**\n{analysis}"
             )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            toolkit.restore_repo_state()
             return {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
@@ -499,6 +643,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 f"**Transition Evaluation:**\n{json.dumps(transition_eval, default=str)}"
             )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
+            toolkit.restore_repo_state()
             return {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
@@ -518,6 +663,7 @@ async def validation_agent(state: AgentState, config) -> dict:
             f"**Transition Summary:**\n{transition_summary}"
         )
         toolkit.write_trace("\n".join(trace), "validation_trace.md")
+        toolkit.restore_repo_state()
         return {
             "validation_passed": True,
             "validation_attempts": attempts + 1,

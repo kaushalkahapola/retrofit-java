@@ -2,16 +2,8 @@
 
 | target_file | hunk_index | dry_run | intent_ok |
 |---|---|---|---|
-| `extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java` | 0 | ❌ | ❌ |
-| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java` | 0 | ❌ | ❌ |
-| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java` | 1 | ❌ | ✅ |
-| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 0 | ❌ | ❌ |
-| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 1 | ❌ | ❌ |
-| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 2 | ❌ | ❌ |
-| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 3 | ❌ | ❌ |
-| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 4 | ❌ | ❌ |
-| `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java` | 5 | ❌ | ❌ |
-| `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java` | 0 | ❌ | ❌ |
-| `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java` | 0 | ❌ | ❌ |
-| `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java` | 0 | ❌ | ❌ |
-| `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java` | 1 | ❌ | ❌ |
+| `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java` | 0 | ✅ | ❌ |
+| `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java` | 1 | ✅ | ❌ |
+| `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java` | 2 | ✅ | ❌ |
+| `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java` | 3 | ✅ | ✅ |
+| `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java` | 4 | ✅ | ❌ |

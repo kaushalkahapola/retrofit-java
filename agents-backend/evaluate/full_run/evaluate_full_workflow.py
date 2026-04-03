@@ -9,6 +9,7 @@ This evaluator differs from evaluate/pipeline/evaluate_full_pipeline.py:
 """
 
 import asyncio
+import argparse
 import csv
 import difflib
 import io
@@ -31,7 +32,10 @@ sys.path.append(
 )
 
 from graph import app
+from agents.context_analyzer import context_analyzer_node
+from agents.structural_locator import structural_locator_node
 from utils.patch_analyzer import PatchAnalyzer
+from utils.token_counter import has_tiktoken, resolve_model_name
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -52,8 +56,12 @@ REPOS_DIR = os.path.join(BASE_DIR, "temp_repo_storage")
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 PHASE0_CACHE_DIR = os.path.join(os.path.dirname(__file__), "phase0_cache")
 
-TARGET_PROJECTS = ["druid"]
-MAX_PATCHES_PER_PROJECT = None
+TARGET_PROJECTS = ["elasticsearch"]
+MAX_PATCHES_PER_PROJECT = 5
+
+RUN_MODE_FULL = "full"
+RUN_MODE_PHASE1 = "phase1"
+RUN_MODE_PHASE2 = "phase2"
 
 
 def ensure_dirs() -> None:
@@ -61,6 +69,24 @@ def ensure_dirs() -> None:
     os.makedirs(PHASE0_CACHE_DIR, exist_ok=True)
     for project in TARGET_PROJECTS:
         os.makedirs(os.path.join(RESULTS_DIR, project), exist_ok=True)
+
+
+def _patch_results_dir(project: str, patch_id: str) -> str:
+    return os.path.join(RESULTS_DIR, project, patch_id)
+
+
+def _phase_output_file(
+    project: str, patch_id: str, phase_name: str, agent_name: str
+) -> str:
+    return os.path.join(
+        _patch_results_dir(project, patch_id), f"{phase_name}_{agent_name}.json"
+    )
+
+
+def is_phase_processed(
+    project: str, patch_id: str, phase_name: str, agent_name: str
+) -> bool:
+    return os.path.exists(_phase_output_file(project, patch_id, phase_name, agent_name))
 
 
 def _phase0_cache_file(project: str, backport_commit: str, original_commit: str) -> str:
@@ -192,6 +218,81 @@ def generate_developer_backport_patch(backport_commit, target_repo_path):
     return output, None
 
 
+def _prepare_pipeline_inputs(
+    project: str,
+    patch_id: str,
+    mainline_commit: str,
+    backport_commit: str,
+    mainline_repo_path: str,
+    target_repo_path: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """
+    Shared setup for full/phase1/phase2 modes:
+    - repo checkout
+    - mainline patch generation
+    - developer backport patch capture
+    - Java-only patch analysis
+    - auxiliary hunk extraction
+    """
+    success, output = setup_repos(
+        mainline_commit,
+        backport_commit,
+        mainline_repo_path,
+        target_repo_path,
+    )
+    if not success:
+        return None, output
+
+    patch_path, patch_output = generate_mainline_patch(
+        mainline_commit, mainline_repo_path
+    )
+    if not patch_path:
+        return None, patch_output
+
+    developer_patch_diff, patch_err = generate_developer_backport_patch(
+        backport_commit, target_repo_path
+    )
+    if patch_err:
+        return None, patch_err
+
+    project_dir = _patch_results_dir(project, patch_id)
+    os.makedirs(project_dir, exist_ok=True)
+
+    mainline_patch_file = os.path.join(project_dir, "mainline.patch")
+    with open(mainline_patch_file, "w", encoding="utf-8") as f:
+        f.write(patch_output)
+
+    target_patch_file = os.path.join(project_dir, "target.patch")
+    with open(target_patch_file, "w", encoding="utf-8") as f:
+        f.write(developer_patch_diff)
+
+    analyzer = PatchAnalyzer()
+    full_patch_analysis = analyzer.analyze(patch_output, with_test_changes=True)
+    java_only_patch_analysis = [
+        fc for fc in full_patch_analysis if _is_java_code_file(fc.file_path)
+    ]
+    pair_consistency = _compute_pair_consistency(
+        patch_output,
+        developer_patch_diff,
+        analyzer,
+    )
+    developer_aux_hunks = _build_auxiliary_hunks_from_developer_patch(
+        developer_patch_diff
+    )
+
+    return (
+        {
+            "patch_path": patch_path,
+            "patch_output": patch_output,
+            "developer_patch_diff": developer_patch_diff,
+            "java_only_patch_analysis": java_only_patch_analysis,
+            "pair_consistency": pair_consistency,
+            "developer_aux_hunks": developer_aux_hunks,
+        },
+        None,
+    )
+
+
 def _build_auxiliary_hunks_from_developer_patch(
     patch_diff: str,
 ) -> list[dict[str, Any]]:
@@ -281,7 +382,72 @@ def _build_auxiliary_hunks_from_developer_patch(
     return hunks
 
 
-def _build_hunk_comparison_markdown(adapted_code_hunks, developer_patch_diff, analyzer):
+def _extract_hunks_by_file_from_patch(
+    patch_diff: str,
+    analyzer: PatchAnalyzer,
+    code_only: bool = True,
+) -> dict[str, list[str]]:
+    if not patch_diff:
+        return {}
+
+    hunks_by_file = analyzer.extract_raw_hunks(patch_diff, with_test_changes=False)
+    if code_only:
+        hunks_by_file = {
+            file: hunks
+            for file, hunks in hunks_by_file.items()
+            if _is_java_code_file(file)
+        }
+    return hunks_by_file
+
+
+def _collect_java_code_files_from_patch(
+    patch_diff: str,
+    analyzer: PatchAnalyzer,
+) -> set[str]:
+    hunks_by_file = _extract_hunks_by_file_from_patch(
+        patch_diff,
+        analyzer,
+        code_only=True,
+    )
+    return set(hunks_by_file.keys())
+
+
+def _compute_pair_consistency(
+    mainline_patch_diff: str,
+    developer_patch_diff: str,
+    analyzer: PatchAnalyzer,
+) -> dict[str, Any]:
+    mainline_java = sorted(
+        _collect_java_code_files_from_patch(mainline_patch_diff, analyzer)
+    )
+    developer_java = sorted(
+        _collect_java_code_files_from_patch(developer_patch_diff, analyzer)
+    )
+    overlap = sorted(set(mainline_java) & set(developer_java))
+
+    ratio = 1.0
+    if mainline_java:
+        ratio = len(overlap) / len(mainline_java)
+
+    pair_mismatch = bool(mainline_java) and ratio < 0.5
+    reason = "mainline_backport_scope_mismatch" if pair_mismatch else "scope_overlap_ok"
+
+    return {
+        "mainline_java_files": mainline_java,
+        "developer_java_files": developer_java,
+        "overlap_java_files": overlap,
+        "overlap_ratio_mainline": ratio,
+        "pair_mismatch": pair_mismatch,
+        "reason": reason,
+    }
+
+
+def _build_hunk_comparison_markdown(
+    developer_patch_diff: str,
+    generated_patch_diff: str,
+    analyzer: PatchAnalyzer,
+    heading: str = "Hunk-by-Hunk Comparison",
+):
     developer_hunks_by_file = analyzer.extract_raw_hunks(
         developer_patch_diff, with_test_changes=False
     )
@@ -291,24 +457,32 @@ def _build_hunk_comparison_markdown(adapted_code_hunks, developer_patch_diff, an
         if _is_java_code_file(file)
     }
 
-    generated_hunks_by_file = {}
-    for hunk in adapted_code_hunks:
-        file = hunk["target_file"]
-        if file not in generated_hunks_by_file:
-            generated_hunks_by_file[file] = []
-        generated_hunks_by_file[file].append(hunk["hunk_text"])
+    generated_hunks_by_file = _extract_hunks_by_file_from_patch(
+        generated_patch_diff,
+        analyzer,
+        code_only=True,
+    )
 
     all_files = set(generated_hunks_by_file.keys()) | set(
         developer_hunks_by_file.keys()
     )
 
-    markdown = ""
+    markdown = f"## {heading}\n\n"
+    if not all_files:
+        return (
+            markdown
+            + "No Java code hunks found in either developer or generated patch.\n\n"
+        )
+
     for file in sorted(all_files):
         gen_hunks = generated_hunks_by_file.get(file, [])
         dev_hunks = developer_hunks_by_file.get(file, [])
         max_hunks = max(len(gen_hunks), len(dev_hunks))
 
         markdown += f"### {file}\n\n"
+        markdown += f"- Developer hunks: {len(dev_hunks)}\n"
+        markdown += f"- Generated hunks: {len(gen_hunks)}\n\n"
+
         for i in range(max_hunks):
             gen = gen_hunks[i] if i < len(gen_hunks) else "*No hunk*"
             dev = dev_hunks[i] if i < len(dev_hunks) else "*No hunk*"
@@ -377,8 +551,15 @@ def _normalize_hunk_header_for_operation(hunk_text: str, file_operation: str) ->
 
 
 def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) -> str:
-    hunks_by_file: dict[str, dict[str, Any]] = {}
-    file_order: list[str] = []
+    """
+    Build a complete unified diff string from adapted_code_hunks.
+
+    Supports two hunk_text formats:
+    1. Full git diff (starts with 'diff --git ...') - produced by the new file_editor
+       architecture. These are passed through directly.
+    2. Bare hunk text (starts with '@@') - produced by the legacy hunk_generator.
+       These are wrapped with diff --git / --- / +++ headers as before.
+    """
 
     def _norm(path: str | None) -> str:
         p = (path or "").strip().replace("\\", "/")
@@ -388,9 +569,37 @@ def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) 
             return ""
         return p
 
+    def _is_full_git_diff(hunk_text: str) -> bool:
+        return bool(hunk_text and hunk_text.lstrip().startswith("diff --git"))
+
+    # Full git-diff payloads (file_editor architecture) are already complete.
+    # Keep them as-is and only wrap legacy bare-@@ hunks.
+    full_diff_parts: list[str] = []
+    full_diff_targets: set[str] = set()
+    legacy_hunks: list[dict[str, Any]] = []
+
     for hunk in adapted_code_hunks or []:
+        hunk_text = hunk.get("hunk_text", "")
+        if _is_full_git_diff(hunk_text):
+            ht = (hunk_text or "").rstrip("\n")
+            if ht:
+                full_diff_parts.append(ht)
+            tf = _norm(hunk.get("target_file"))
+            if tf:
+                full_diff_targets.add(tf)
+        else:
+            legacy_hunks.append(hunk)
+
+    # --- Legacy path: bare @@ hunks (hunk_generator architecture) ---
+    hunks_by_file: dict[str, dict[str, Any]] = {}
+    file_order: list[str] = []
+
+    for hunk in legacy_hunks:
         target_file = _norm(hunk.get("target_file"))
         if not target_file:
+            continue
+        if target_file in full_diff_targets:
+            # File already covered by a complete git diff payload.
             continue
 
         if target_file not in hunks_by_file:
@@ -405,7 +614,6 @@ def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) 
             }
             file_order.append(target_file)
 
-        # Prefer a non-empty old path if later hunks provide one.
         existing_old = hunks_by_file[target_file].get("old_target_file") or ""
         incoming_old = _norm(hunk.get("old_target_file") or hunk.get("mainline_file"))
         if not existing_old and incoming_old:
@@ -437,7 +645,6 @@ def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) 
                 lines.append(f"--- a/{target_file}")
                 lines.append(f"+++ b/{target_file}")
 
-        # If this is effectively an added file represented as MODIFIED, convert header.
         if op == "MODIFIED":
             has_full_create_hunk = any(
                 (h or "").lstrip().startswith("@@ -0,0 +")
@@ -463,9 +670,15 @@ def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) 
             else:
                 lines.append(normalized_hunk.rstrip("\n"))
 
-    if not lines:
+    all_parts = []
+    if full_diff_parts:
+        all_parts.append("\n".join(full_diff_parts).rstrip("\n"))
+    if lines:
+        all_parts.append("\n".join(lines).rstrip("\n"))
+
+    if not all_parts:
         return ""
-    return "\n".join(lines) + "\n"
+    return "\n".join(all_parts) + "\n"
 
 
 def _get_java_code_changed_files(commit, repo_path):
@@ -562,13 +775,22 @@ def _apply_patch_with_temp_index(repo_path, patch_file_path, env):
 
 
 def compare_generated_with_developer_patch(
-    adapted_code_hunks, developer_patch_diff, backport_commit, target_repo_path
+    adapted_code_hunks,
+    developer_patch_diff,
+    backport_commit,
+    target_repo_path,
+    compare_files_scope: list[str] | None = None,
 ):
-    generated_patch_diff = _build_generated_patch_from_hunks(adapted_code_hunks or [])
+    code_only_hunks = [
+        h
+        for h in (adapted_code_hunks or [])
+        if _is_java_code_file((h or {}).get("target_file", ""))
+    ]
+    generated_patch_diff = _build_generated_patch_from_hunks(code_only_hunks)
     generated_files = sorted(
         {
             h.get("target_file")
-            for h in (adapted_code_hunks or [])
+            for h in code_only_hunks
             if h.get("target_file") and _is_java_code_file(h.get("target_file"))
         }
     )
@@ -584,7 +806,16 @@ def compare_generated_with_developer_patch(
             "generated_patch_diff": generated_patch_diff,
         }
 
-    files_to_compare = sorted(set((developer_files or []) + generated_files))
+    if compare_files_scope:
+        files_to_compare = sorted(
+            {
+                str(p).replace("\\", "/").strip().lstrip("/")
+                for p in compare_files_scope
+                if str(p).strip()
+            }
+        )
+    else:
+        files_to_compare = sorted(set((developer_files or []) + generated_files))
 
     with tempfile.NamedTemporaryFile(
         prefix="git_index_", suffix=".tmp", delete=False
@@ -699,6 +930,21 @@ def save_agent_state(project, patch_id, phase_name, state_dict, agent_name=None)
     return output_file
 
 
+def load_agent_state(
+    project: str, patch_id: str, phase_name: str, agent_name: str
+) -> dict[str, Any] | None:
+    output_file = _phase_output_file(project, patch_id, phase_name, agent_name)
+    if not os.path.exists(output_file):
+        return None
+
+    try:
+        with open(output_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
 def save_pipeline_log(project, patch_id, phase_name, log_content):
     project_dir = os.path.join(RESULTS_DIR, project, patch_id)
     os.makedirs(project_dir, exist_ok=True)
@@ -778,18 +1024,22 @@ def _extract_baseline_and_patched_test_results(
         or {}
     )
 
-    patched_result = (
-        phase0_outputs.get("phase_0_post_patch_test_result")
-        or (
-            phase_outputs.get("phase4_validation", {})
-            .get("validation", {})
-            .get("outputs", {})
-            .get("validation_results", {})
-            .get("tests", {})
-        )
-        or (phase0_cache or {}).get("phase_0_post_patch_test_result")
-        or {}
+    phase4_tests = (
+        phase_outputs.get("phase4_validation", {})
+        .get("validation", {})
+        .get("outputs", {})
+        .get("validation_results", {})
+        .get("tests", {})
     )
+
+    if (phase4_tests or {}).get("test_state"):
+        patched_result = {"test_state": (phase4_tests or {}).get("test_state") or {}}
+    else:
+        patched_result = (
+            phase0_outputs.get("phase_0_post_patch_test_result")
+            or (phase0_cache or {}).get("phase_0_post_patch_test_result")
+            or {}
+        )
 
     return baseline_result, patched_result
 
@@ -809,6 +1059,7 @@ def _build_touched_test_state_markdown(
     patched_cases = patched_state.get("test_cases") or {}
     baseline_classes = baseline_state.get("classes") or {}
     patched_classes = patched_state.get("classes") or {}
+    patched_missing = not patched_cases and not patched_classes
 
     lines = [f"- Touched tests (from patch): {touched_classes}"]
     for cls in touched_classes:
@@ -822,11 +1073,15 @@ def _build_touched_test_state_markdown(
         if class_case_keys:
             for key in class_case_keys:
                 old_status = baseline_cases.get(key, "absent")
-                new_status = patched_cases.get(key, "absent")
+                new_status = patched_cases.get(
+                    key, "unknown" if patched_missing else "absent"
+                )
                 lines.append(f"  - {key}: baseline={old_status}, patched={new_status}")
         else:
             old_status = baseline_classes.get(cls, "absent")
-            new_status = patched_classes.get(cls, "absent")
+            new_status = patched_classes.get(
+                cls, "unknown" if patched_missing else "absent"
+            )
             lines.append(f"  - {cls}: baseline={old_status}, patched={new_status}")
 
     return "\n".join(lines) + "\n"
@@ -876,51 +1131,224 @@ async def run_full_pipeline(
     backport_commit,
     mainline_repo_path,
     target_repo_path,
+    run_mode: str = RUN_MODE_FULL,
+    force_phase: bool = False,
 ):
     results = {
         "project": project,
         "patch_id": patch_id,
         "mainline_commit": mainline_commit,
         "backport_commit": backport_commit,
+        "run_mode": run_mode,
         "timestamp": datetime.now().isoformat(),
         "phases": {},
     }
 
+    patch_dir = _patch_results_dir(project, patch_id)
+    os.makedirs(patch_dir, exist_ok=True)
+    runtime_log_path = os.path.join(patch_dir, "log.txt")
+    runtime_tokens_path = os.path.join(patch_dir, "tokens.txt")
+    token_totals = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "messages_with_usage": 0,
+        "estimated_messages": 0,
+        "tokenizer": {
+            "model": resolve_model_name(),
+            "library": "tiktoken",
+            "available": has_tiktoken(),
+        },
+        "by_node": {},
+    }
+
+    class _Tee:
+        def __init__(self, *streams):
+            self.streams = streams
+
+        def write(self, data):
+            for s in self.streams:
+                try:
+                    s.write(data)
+                except Exception:
+                    pass
+            return len(data)
+
+        def flush(self):
+            for s in self.streams:
+                try:
+                    s.flush()
+                except Exception:
+                    pass
+
+    def _estimate_tokens_from_text(text: str) -> int:
+        # Coarse fallback: ~4 chars/token for English/code mix.
+        t = str(text or "")
+        if not t:
+            return 0
+        return max(1, len(t) // 4)
+
+    def _add_tokens(
+        node_name: str,
+        input_tokens: int,
+        output_tokens: int,
+        *,
+        estimated: bool,
+        source: str,
+    ) -> None:
+        in_t = int(input_tokens or 0)
+        out_t = int(output_tokens or 0)
+        if in_t == 0 and out_t == 0:
+            return
+
+        token_totals["input_tokens"] += in_t
+        token_totals["output_tokens"] += out_t
+        token_totals["total_tokens"] = (
+            token_totals["input_tokens"] + token_totals["output_tokens"]
+        )
+        if estimated:
+            token_totals["estimated_messages"] += 1
+        else:
+            token_totals["messages_with_usage"] += 1
+
+        node_bucket = token_totals["by_node"].setdefault(
+            node_name,
+            {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "estimated_events": 0,
+                "exact_events": 0,
+                "sources": [],
+            },
+        )
+        node_bucket["input_tokens"] += in_t
+        node_bucket["output_tokens"] += out_t
+        node_bucket["total_tokens"] = (
+            node_bucket["input_tokens"] + node_bucket["output_tokens"]
+        )
+        if estimated:
+            node_bucket["estimated_events"] += 1
+        else:
+            node_bucket["exact_events"] += 1
+        node_bucket["sources"].append(source)
+
+    def _consume_usage(node_name: str, usage: dict | None, source: str) -> bool:
+        if not isinstance(usage, dict) or not usage:
+            return False
+        in_t = usage.get("input_tokens", usage.get("prompt_tokens", 0))
+        out_t = usage.get("output_tokens", usage.get("completion_tokens", 0))
+        total = usage.get("total_tokens")
+        if total and (not in_t and not out_t):
+            # Split unknown direction 50/50 as fallback.
+            in_t = int(total) // 2
+            out_t = int(total) - int(in_t)
+        _add_tokens(
+            node_name, int(in_t or 0), int(out_t or 0), estimated=False, source=source
+        )
+        return bool(in_t or out_t or total)
+
+    def _collect_tokens_from_node_output(
+        node_name: str, node_output: dict[str, Any]
+    ) -> None:
+        exact_hit = False
+
+        if _consume_usage(
+            node_name, node_output.get("token_usage"), "node.token_usage"
+        ):
+            exact_hit = True
+
+        msgs = node_output.get("messages", []) if isinstance(node_output, dict) else []
+        for m in msgs:
+            md = getattr(m, "response_metadata", {}) or {}
+            if isinstance(md, dict):
+                if _consume_usage(
+                    node_name,
+                    md.get("token_usage"),
+                    "msg.response_metadata.token_usage",
+                ):
+                    exact_hit = True
+                if _consume_usage(
+                    node_name,
+                    md.get("usage"),
+                    "msg.response_metadata.usage",
+                ):
+                    exact_hit = True
+
+            um = getattr(m, "usage_metadata", {}) or {}
+            if _consume_usage(node_name, um, "msg.usage_metadata"):
+                exact_hit = True
+
+        if not exact_hit and msgs:
+            in_chars = 0
+            out_chars = 0
+            for m in msgs:
+                txt = getattr(m, "content", "")
+                s = txt if isinstance(txt, str) else str(txt)
+                if getattr(m, "type", "") == "ai":
+                    out_chars += len(s)
+                else:
+                    in_chars += len(s)
+
+            _add_tokens(
+                node_name,
+                _estimate_tokens_from_text("x" * in_chars),
+                _estimate_tokens_from_text("x" * out_chars),
+                estimated=True,
+                source="estimated_from_message_chars",
+            )
+
+    def _append_runtime_log(message: str) -> None:
+        with open(runtime_log_path, "a", encoding="utf-8") as lf:
+            lf.write(message.rstrip("\n") + "\n")
+
+    # Reset per-patch runtime log at start.
+    with open(runtime_log_path, "w", encoding="utf-8") as lf:
+        lf.write(
+            f"patch_id={patch_id}\n"
+            f"project={project}\n"
+            f"mainline_commit={mainline_commit}\n"
+            f"backport_commit={backport_commit}\n"
+            f"mode={run_mode}\n"
+            f"started_at={datetime.now().isoformat()}\n"
+            "----------------------------------------\n"
+        )
+
+    _orig_stdout = sys.stdout
+    _orig_stderr = sys.stderr
+    _log_stream = open(runtime_log_path, "a", encoding="utf-8")
+    sys.stdout = _Tee(_orig_stdout, _log_stream)
+    sys.stderr = _Tee(_orig_stderr, _log_stream)
+
     try:
-        print(f"\n[{project}/{patch_id}] Setting up repositories...")
-        success, output = setup_repos(
-            mainline_commit,
-            backport_commit,
-            mainline_repo_path,
-            target_repo_path,
-        )
-        if not success:
-            results["setup_error"] = output
+        if run_mode not in {RUN_MODE_FULL, RUN_MODE_PHASE1, RUN_MODE_PHASE2}:
+            results["status"] = "failed"
+            results["error"] = f"Unsupported run mode: {run_mode}"
             return results
 
-        print(f"[{project}/{patch_id}] Generating mainline patch...")
-        patch_path, patch_output = generate_mainline_patch(
-            mainline_commit, mainline_repo_path
+        print(
+            f"\n[{project}/{patch_id}] Setting up repositories for mode={run_mode}..."
         )
-        if not patch_path:
-            results["patch_generation_error"] = patch_output
+        prepared_inputs, prepare_err = _prepare_pipeline_inputs(
+            project=project,
+            patch_id=patch_id,
+            mainline_commit=mainline_commit,
+            backport_commit=backport_commit,
+            mainline_repo_path=mainline_repo_path,
+            target_repo_path=target_repo_path,
+        )
+        if prepare_err:
+            results["setup_error"] = prepare_err
+            results["status"] = "failed"
             return results
 
-        developer_patch_diff, patch_err = generate_developer_backport_patch(
-            backport_commit, target_repo_path
-        )
-        if patch_err:
-            results["developer_patch_error"] = patch_err
-            return results
-
+        patch_path = prepared_inputs["patch_path"]
+        patch_output = prepared_inputs["patch_output"]
+        developer_patch_diff = prepared_inputs["developer_patch_diff"]
+        java_only_patch_analysis = prepared_inputs["java_only_patch_analysis"]
+        pair_consistency = prepared_inputs.get("pair_consistency") or {}
+        developer_aux_hunks = prepared_inputs["developer_aux_hunks"]
         analyzer = PatchAnalyzer()
-        full_patch_analysis = analyzer.analyze(patch_output, with_test_changes=True)
-        java_only_patch_analysis = [
-            fc for fc in full_patch_analysis if _is_java_code_file(fc.file_path)
-        ]
-        developer_aux_hunks = _build_auxiliary_hunks_from_developer_patch(
-            developer_patch_diff
-        )
 
         save_pipeline_log(
             project,
@@ -931,10 +1359,17 @@ async def run_full_pipeline(
             f"- Backport commit: {backport_commit}\n"
             f"- Java-only files for agentic phases: {len(java_only_patch_analysis)}\n"
             f"- Developer auxiliary hunks (test + non-Java): {len(developer_aux_hunks)}\n\n"
+            f"## Commit Pair Consistency\n"
+            f"- Pair mismatch: {pair_consistency.get('pair_mismatch', False)}\n"
+            f"- Reason: {pair_consistency.get('reason', 'unknown')}\n"
+            f"- Mainline Java files: {pair_consistency.get('mainline_java_files', [])}\n"
+            f"- Developer Java files: {pair_consistency.get('developer_java_files', [])}\n"
+            f"- Overlap Java files: {pair_consistency.get('overlap_java_files', [])}\n"
+            f"- Overlap ratio (mainline): {pair_consistency.get('overlap_ratio_mainline', 0)}\n\n"
             f"## Mainline Patch\n```diff\n{patch_output}\n```\n",
         )
 
-        inputs = {
+        base_inputs = {
             "messages": ["Start"],
             "patch_path": patch_path,
             "patch_diff": patch_output,
@@ -953,6 +1388,120 @@ async def run_full_pipeline(
             "developer_auxiliary_hunks": developer_aux_hunks,
             "use_phase_0_cache": True,
         }
+
+        if run_mode == RUN_MODE_PHASE1:
+            _append_runtime_log("Running mode=phase1")
+            phase_name = "phase1_context_analyzer"
+            agent_name = "context_analyzer"
+            if not force_phase and is_phase_processed(
+                project, patch_id, phase_name, agent_name
+            ):
+                print(
+                    f"[{project}/{patch_id}] Skipping {run_mode}: phase output already exists"
+                )
+                results["status"] = "skipped"
+                results["skip_reason"] = f"{phase_name}_{agent_name} already processed"
+                return results
+
+            print(f"[{project}/{patch_id}] Running {phase_name} only...")
+            phase1_result = await context_analyzer_node(base_inputs, config={})
+            _collect_tokens_from_node_output("context_analyzer", phase1_result)
+            _append_runtime_log("Completed node=context_analyzer")
+            phase1_outputs = {k: v for k, v in phase1_result.items() if k != "messages"}
+            save_agent_state(project, patch_id, phase_name, phase1_outputs, agent_name)
+            results["phases"] = {
+                phase_name: {
+                    agent_name: {
+                        "node": agent_name,
+                        "outputs": phase1_outputs,
+                    }
+                }
+            }
+            results["status"] = "completed"
+            mode_results_file = os.path.join(
+                RESULTS_DIR, project, patch_id, f"{run_mode}_results.json"
+            )
+            with open(mode_results_file, "w", encoding="utf-8") as f:
+                json.dump(results, f, indent=2, default=str)
+            print(f"[{project}/{patch_id}] {run_mode} completed")
+            _append_runtime_log("Mode phase1 completed")
+            return results
+
+        if run_mode == RUN_MODE_PHASE2:
+            _append_runtime_log("Running mode=phase2")
+            phase_name = "phase2_structural_locator"
+            agent_name = "structural_locator"
+            if not force_phase and is_phase_processed(
+                project, patch_id, phase_name, agent_name
+            ):
+                print(
+                    f"[{project}/{patch_id}] Skipping {run_mode}: phase output already exists"
+                )
+                results["status"] = "skipped"
+                results["skip_reason"] = f"{phase_name}_{agent_name} already processed"
+                return results
+
+            phase1_state = load_agent_state(
+                project,
+                patch_id,
+                "phase1_context_analyzer",
+                "context_analyzer",
+            )
+            semantic_blueprint = (phase1_state or {}).get("semantic_blueprint")
+
+            if not semantic_blueprint:
+                pipeline_results_path = os.path.join(
+                    _patch_results_dir(project, patch_id), "pipeline_results.json"
+                )
+                if os.path.exists(pipeline_results_path):
+                    try:
+                        with open(pipeline_results_path, "r", encoding="utf-8") as f:
+                            pipeline_results = json.load(f)
+                        semantic_blueprint = (
+                            pipeline_results.get("phases", {})
+                            .get("phase1_context_analyzer", {})
+                            .get("context_analyzer", {})
+                            .get("outputs", {})
+                            .get("semantic_blueprint")
+                        )
+                    except Exception:
+                        semantic_blueprint = None
+
+            if not semantic_blueprint:
+                results["status"] = "failed"
+                results["error"] = (
+                    "Missing semantic_blueprint for phase2-only run. "
+                    "Run phase1 first or provide prior phase1 output."
+                )
+                return results
+
+            phase2_inputs = dict(base_inputs)
+            phase2_inputs["semantic_blueprint"] = semantic_blueprint
+            print(f"[{project}/{patch_id}] Running {phase_name} only...")
+            phase2_result = await structural_locator_node(phase2_inputs, config={})
+            _collect_tokens_from_node_output("structural_locator", phase2_result)
+            _append_runtime_log("Completed node=structural_locator")
+            phase2_outputs = {k: v for k, v in phase2_result.items() if k != "messages"}
+            save_agent_state(project, patch_id, phase_name, phase2_outputs, agent_name)
+            results["phases"] = {
+                phase_name: {
+                    agent_name: {
+                        "node": agent_name,
+                        "outputs": phase2_outputs,
+                    }
+                }
+            }
+            results["status"] = "completed"
+            mode_results_file = os.path.join(
+                RESULTS_DIR, project, patch_id, f"{run_mode}_results.json"
+            )
+            with open(mode_results_file, "w", encoding="utf-8") as f:
+                json.dump(results, f, indent=2, default=str)
+            print(f"[{project}/{patch_id}] {run_mode} completed")
+            _append_runtime_log("Mode phase2 completed")
+            return results
+
+        inputs = dict(base_inputs)
 
         phase0_cache = _load_phase0_cache(project, backport_commit, mainline_commit)
         phase0_cache_transition = None
@@ -998,6 +1547,9 @@ async def run_full_pipeline(
             )
 
             if phase0_cached_success:
+                _append_runtime_log(
+                    "Phase0 cache fast-path success; skipping agentic workflow"
+                )
                 print(
                     f"[{project}/{patch_id}] Cached Phase 0 fast-path success. Skipping agentic workflow."
                 )
@@ -1053,9 +1605,11 @@ async def run_full_pipeline(
                 print(
                     f"[{project}/{patch_id}] Completed from cache without agentic workflow."
                 )
+                _append_runtime_log("Completed from cache")
                 return results
 
         print(f"[{project}/{patch_id}] Running full workflow graph...")
+        _append_runtime_log("Running full workflow graph")
         phase_outputs = defaultdict(dict)
         current_phase = None
         latest_adapted_code_hunks = []
@@ -1063,6 +1617,9 @@ async def run_full_pipeline(
         async for output in app.astream(inputs):
             for node_name, node_output in output.items():
                 print(f"  Completed: {node_name}")
+                _append_runtime_log(f"Completed node={node_name}")
+                if isinstance(node_output, dict):
+                    _collect_tokens_from_node_output(node_name, node_output)
 
                 if (
                     isinstance(node_output, dict)
@@ -1078,6 +1635,8 @@ async def run_full_pipeline(
                     current_phase = "phase1_context_analyzer"
                 elif node_name in ["structural_locator"]:
                     current_phase = "phase2_structural_locator"
+                elif node_name in ["planning_agent"]:
+                    current_phase = "phase2_5_planning_agent"
                 elif node_name in ["hunk_generator"]:
                     current_phase = "phase3_hunk_generator"
                 elif node_name in ["validation"]:
@@ -1115,7 +1674,9 @@ async def run_full_pipeline(
             developer_patch_diff=developer_patch_diff,
             backport_commit=backport_commit,
             target_repo_path=target_repo_path,
+            compare_files_scope=pair_consistency.get("mainline_java_files", []),
         )
+        results["pair_consistency"] = pair_consistency
         results["exact_developer_patch"] = comparison["exact_developer_patch"]
         results["developer_patch_comparison"] = {
             "comparison_method": comparison.get("comparison_method", "file_state"),
@@ -1123,8 +1684,36 @@ async def run_full_pipeline(
             "mismatched_files": comparison.get("mismatched_files", []),
             "developer_files": comparison.get("developer_files", []),
             "generated_files": comparison.get("generated_files", []),
+            "pair_consistency": pair_consistency,
             "error": comparison.get("error"),
         }
+
+        agent_only_generated_patch_diff = _build_generated_patch_from_hunks(
+            [
+                h
+                for h in (latest_adapted_code_hunks or [])
+                if _is_java_code_file((h or {}).get("target_file", ""))
+            ]
+        )
+        final_generated_patch_diff = comparison.get("generated_patch_diff", "")
+
+        agent_hunk_markdown = _build_hunk_comparison_markdown(
+            developer_patch_diff=developer_patch_diff,
+            generated_patch_diff=agent_only_generated_patch_diff,
+            analyzer=analyzer,
+            heading="Agent-Only Hunk Comparison (code files)",
+        )
+
+        final_hunk_markdown = ""
+        if (agent_only_generated_patch_diff or "").strip() != (
+            final_generated_patch_diff or ""
+        ).strip():
+            final_hunk_markdown = _build_hunk_comparison_markdown(
+                developer_patch_diff=developer_patch_diff,
+                generated_patch_diff=final_generated_patch_diff,
+                analyzer=analyzer,
+                heading="Final Effective Hunk Comparison (agent + developer aux, code files)",
+            )
 
         save_pipeline_log(
             project,
@@ -1133,16 +1722,27 @@ async def run_full_pipeline(
             "# Post-Pipeline Developer Patch Comparison\n\n"
             f"**Exact Developer Patch (code-only)**: {comparison['exact_developer_patch']}\n\n"
             f"**Comparison Method**: {comparison.get('comparison_method', 'file_state')}\n\n"
+            "## Commit Pair Consistency\n"
+            f"- Pair mismatch: {pair_consistency.get('pair_mismatch', False)}\n"
+            f"- Reason: {pair_consistency.get('reason', 'unknown')}\n"
+            f"- Mainline Java files: {pair_consistency.get('mainline_java_files', [])}\n"
+            f"- Developer Java files: {pair_consistency.get('developer_java_files', [])}\n"
+            f"- Overlap Java files: {pair_consistency.get('overlap_java_files', [])}\n"
+            f"- Overlap ratio (mainline): {pair_consistency.get('overlap_ratio_mainline', 0)}\n"
+            f"- Compare files scope used: {pair_consistency.get('mainline_java_files', [])}\n\n"
             "## File State Comparison\n"
             f"- Compared files: {comparison.get('compared_files', [])}\n"
             f"- Mismatched files: {comparison.get('mismatched_files', [])}\n"
             f"- Error: {comparison.get('error')}\n\n"
-            "## Hunk-by-Hunk Comparison\n\n"
-            + _build_hunk_comparison_markdown(
-                final_adapted_code_hunks, developer_patch_diff, analyzer
-            )
-            + "\n## Full Generated Patch (code-only)\n"
-            f"```diff\n{comparison['generated_patch_diff']}\n```\n"
+            "## Comparison Scope\n"
+            "- Agent-only patch: code hunks produced by Agent 3\n"
+            "- Final effective patch: agent code hunks + developer auxiliary hunks (still code-only for this report)\n\n"
+            + agent_hunk_markdown
+            + (final_hunk_markdown if final_hunk_markdown else "")
+            + "\n## Full Generated Patch (Agent-Only, code-only)\n"
+            f"```diff\n{agent_only_generated_patch_diff}\n```\n"
+            "\n## Full Generated Patch (Final Effective, code-only)\n"
+            f"```diff\n{final_generated_patch_diff}\n```\n"
             "## Full Developer Backport Patch (full commit diff)\n"
             f"```diff\n{developer_patch_diff}\n```\n",
         )
@@ -1175,25 +1775,96 @@ async def run_full_pipeline(
             json.dump(results, f, indent=2, default=str)
 
         print(f"[{project}/{patch_id}] Full workflow completed!")
+        _append_runtime_log("Workflow completed successfully")
         return results
 
     except Exception as e:
+        _append_runtime_log(f"Workflow failed: {e}")
         results["error"] = str(e)
         results["status"] = "failed"
         print(f"[{project}/{patch_id}] Workflow failed: {e}")
         return results
+    finally:
+        try:
+            sys.stdout = _orig_stdout
+            sys.stderr = _orig_stderr
+            _log_stream.close()
+        except Exception:
+            pass
+        token_totals["finished_at"] = datetime.now().isoformat()
+        with open(runtime_tokens_path, "w", encoding="utf-8") as tf:
+            json.dump(token_totals, tf, indent=2)
 
 
-def is_patch_processed(project, patch_id):
-    patch_results_dir = os.path.join(RESULTS_DIR, project, patch_id)
+def is_patch_processed(
+    project: str,
+    patch_id: str,
+    phase_name: str | None = None,
+    agent_name: str | None = None,
+) -> bool:
+    if phase_name and agent_name:
+        return is_phase_processed(project, patch_id, phase_name, agent_name)
+
+    patch_results_dir = _patch_results_dir(project, patch_id)
     results_file = os.path.join(patch_results_dir, "pipeline_results.json")
-    return os.path.exists(results_file)
+    if not os.path.exists(results_file):
+        return False
+
+    # Treat legacy summaries with no run_mode as full runs.
+    try:
+        with open(results_file, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        run_mode = str(payload.get("run_mode", RUN_MODE_FULL)).strip().lower()
+        status = str(payload.get("status", "")).strip().lower()
+        return run_mode == RUN_MODE_FULL and status in {"", "completed"}
+    except Exception:
+        return True
 
 
 async def main():
     configure_logging()
+    parser = argparse.ArgumentParser(
+        description="Evaluate full/partial retrofit workflow"
+    )
+    parser.add_argument(
+        "--mode",
+        choices=[RUN_MODE_FULL, RUN_MODE_PHASE1, RUN_MODE_PHASE2],
+        default=RUN_MODE_FULL,
+        help="Execution mode: full pipeline, phase1 only, or phase2 only.",
+    )
+    parser.add_argument(
+        "--project",
+        choices=TARGET_PROJECTS,
+        default=None,
+        help="Optional project filter.",
+    )
+    parser.add_argument(
+        "--patch-id",
+        default=None,
+        help="Optional patch id filter (e.g. elasticsearch_734dd070).",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force rerun for the selected mode even if outputs already exist.",
+    )
+    parser.add_argument(
+        "--no-clean",
+        action="store_true",
+        help="Skip git clean/reset before running each patch.",
+    )
+    parser.add_argument(
+        "--phase2-reset",
+        action="store_true",
+        help="When mode=phase2, delete existing phase2 outputs before rerun.",
+    )
+    args = parser.parse_args()
+
     print("=" * 80)
-    print(f"FULL WORKFLOW EVALUATION (Phase 0-4, {', '.join(TARGET_PROJECTS)})")
+    print(
+        f"WORKFLOW EVALUATION MODE={args.mode.upper()} "
+        f"(projects: {', '.join(TARGET_PROJECTS)})"
+    )
     print("=" * 80)
 
     ensure_dirs()
@@ -1202,22 +1873,34 @@ async def main():
         print(f"ERROR: Dataset not found at {DATASET_PATH}")
         return
 
+    selected_projects = [args.project] if args.project else TARGET_PROJECTS
+
     data = []
     with open(DATASET_PATH, mode="r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row["Project"] in TARGET_PROJECTS:
+            if row["Project"] in selected_projects:
                 data.append(row)
 
-    print(f"\nFound {len(data)} total patches for target projects: {TARGET_PROJECTS}")
+    print(f"\nFound {len(data)} total patches for target projects: {selected_projects}")
 
-    if MAX_PATCHES_PER_PROJECT:
+    if args.patch_id:
+        data = [
+            row
+            for row in data
+            if f"{row['Project']}_{row['Original Commit'][:8]}" == args.patch_id
+        ]
+        if not data:
+            print(f"No dataset row matched --patch-id={args.patch_id}")
+            return
+
+    if MAX_PATCHES_PER_PROJECT and not args.patch_id:
         data_limited = defaultdict(list)
         for row in data:
             data_limited[row["Project"]].append(row)
 
         data = []
-        for project in TARGET_PROJECTS:
+        for project in selected_projects:
             data.extend(data_limited[project][:MAX_PATCHES_PER_PROJECT])
 
     print(f"Processing {len(data)} patches")
@@ -1230,8 +1913,27 @@ async def main():
         backport_commit = row["Backport Commit"]
         patch_id = f"{project}_{mainline_commit[:8]}"
 
-        if is_patch_processed(project, patch_id):
-            print(f"\n[{idx}/{len(data)}] SKIPPING (already processed): {patch_id}")
+        if args.mode == RUN_MODE_FULL:
+            already_processed = is_patch_processed(project, patch_id)
+        elif args.mode == RUN_MODE_PHASE1:
+            already_processed = is_patch_processed(
+                project,
+                patch_id,
+                "phase1_context_analyzer",
+                "context_analyzer",
+            )
+        else:
+            already_processed = is_patch_processed(
+                project,
+                patch_id,
+                "phase2_structural_locator",
+                "structural_locator",
+            )
+
+        if already_processed and not args.force:
+            print(
+                f"\n[{idx}/{len(data)}] SKIPPING ({args.mode} already processed): {patch_id}"
+            )
             skipped_patches.append(patch_id)
             continue
 
@@ -1240,17 +1942,31 @@ async def main():
         mainline_repo_path = os.path.join(REPOS_DIR, project)
         target_repo_path = os.path.join(REPOS_DIR, project)
 
-        print(f"[{project}/{patch_id}] Cleaning repositories...")
-        for repo_path in [mainline_repo_path, target_repo_path]:
-            if os.path.exists(repo_path):
-                subprocess.run(
-                    ["git", "reset", "--hard", "HEAD"],
-                    cwd=repo_path,
-                    capture_output=True,
+        if args.phase2_reset and args.mode == RUN_MODE_PHASE2:
+            phase2_file = _phase_output_file(
+                project,
+                patch_id,
+                "phase2_structural_locator",
+                "structural_locator",
+            )
+            if os.path.exists(phase2_file):
+                os.remove(phase2_file)
+                print(
+                    f"[{project}/{patch_id}] Removed prior phase2 output: {phase2_file}"
                 )
-                subprocess.run(
-                    ["git", "clean", "-fd"], cwd=repo_path, capture_output=True
-                )
+
+        if not args.no_clean:
+            print(f"[{project}/{patch_id}] Cleaning repositories...")
+            for repo_path in [mainline_repo_path, target_repo_path]:
+                if os.path.exists(repo_path):
+                    subprocess.run(
+                        ["git", "reset", "--hard", "HEAD"],
+                        cwd=repo_path,
+                        capture_output=True,
+                    )
+                    subprocess.run(
+                        ["git", "clean", "-fd"], cwd=repo_path, capture_output=True
+                    )
 
         if not os.path.exists(mainline_repo_path):
             print(f"  ERROR: Repository not found at {mainline_repo_path}")
@@ -1263,6 +1979,8 @@ async def main():
             backport_commit,
             mainline_repo_path,
             target_repo_path,
+            run_mode=args.mode,
+            force_phase=args.force,
         )
         all_results.append(result)
 
@@ -1273,7 +1991,7 @@ async def main():
             except Exception as e:
                 print(f"  Warning: Could not remove temp patch file: {e}")
 
-    summary_file = os.path.join(RESULTS_DIR, "pipeline_summary.json")
+    summary_file = os.path.join(RESULTS_DIR, f"pipeline_summary_{args.mode}.json")
     with open(summary_file, "w", encoding="utf-8") as f:
         json.dump(all_results, f, indent=2, default=str)
 
@@ -1282,11 +2000,14 @@ async def main():
     print("=" * 80)
     completed = sum(1 for r in all_results if r.get("status") == "completed")
     failed = sum(1 for r in all_results if r.get("status") == "failed")
+    mode_skipped = sum(1 for r in all_results if r.get("status") == "skipped")
     print(f"Total Patches in Dataset: {len(data)}")
     print(f"Skipped (already processed): {len(skipped_patches)}")
     print(f"Newly Processed: {len(all_results)}")
     print(f"Completed: {completed}")
     print(f"Failed: {failed}")
+    if mode_skipped:
+        print(f"Mode-skipped during execution: {mode_skipped}")
     if skipped_patches:
         print(f"\nSkipped Patches: {', '.join(skipped_patches)}")
     print(f"Results Directory: {RESULTS_DIR}")

@@ -25,11 +25,21 @@ import json
 import os
 from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.prebuilt import create_react_agent
+from langgraph.errors import GraphRecursionError
 from state import AgentState, AdaptedHunk, SemanticBlueprint
 from utils.patch_analyzer import PatchAnalyzer
 from utils.llm_provider import get_llm
+from utils.token_counter import (
+    add_usage,
+    count_messages_tokens,
+    count_text_tokens,
+    extract_usage_from_response,
+    resolve_model_name,
+)
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from agents.validation_tools import ValidationToolkit
+from agents.hunk_generator_tools import HunkGeneratorToolkit
 
 
 # ---------------------------------------------------------------------------
@@ -41,12 +51,48 @@ _HUNK_REWRITE_SYSTEM = """You are an expert Java patch adapter specializing in b
 Your task is to rewrite a single unified diff hunk so it applies cleanly to an older version of a Java file.
 
 Rules (follow ALL of them strictly):
-1. Only modify the `+` lines (additions). Context lines (` ` prefixed) must stay unchanged.
-2. Apply every symbol rename from the ConsistencyMap exactly.
-3. Preserve the fix intent described in the SemanticBlueprint — this fix MUST still work.
-4. Adjust the @@ line numbers to match the target file's insertion_line.
-5. Output ONLY the unified diff hunk. Start with @@ and end with the last changed line.
-6. Do NOT include any explanation, markdown fences, or comments outside the hunk."""
+1. You may adapt context (` ` lines) and removed (`-` lines) so the hunk matches the target file's actual layout.
+2. Keep edits minimal and focused: preserve fix behavior and avoid unrelated modifications.
+3. Apply every symbol rename from the ConsistencyMap exactly.
+4. Preserve the fix intent described in the SemanticBlueprint — this fix MUST still work.
+5. Adjust the @@ line numbers to match the target file's insertion_line and body counts.
+6. Output ONLY the unified diff hunk. Start with @@ and end with the last changed line.
+7. Do NOT include any explanation, markdown fences, or comments outside the hunk."""
+
+_HUNK_REWRITE_SYSTEM_TOOLS = """You are an expert Java patch adapter specializing in backporting security fixes.
+You have access to tools that let you read the real target file before generating a diff hunk.
+
+MANDATORY WORKFLOW — follow these steps IN ORDER for every hunk:
+
+STEP 1 — PLAN (use manage_todo)
+  Add one todo per context-gathering task you need to perform. At minimum add:
+    - "Read file window around insertion_line to verify surrounding context"
+  Also add todos for any specific context lines you are unsure about.
+
+STEP 2 — GATHER CONTEXT (use read_file_window, grep_in_file, get_exact_lines, verify_context_at_line)
+  For EVERY context line (' ' lines) in the hunk, verify it exists at the expected line number
+  in the target file using verify_context_at_line. If it doesn't match, use grep_in_file to
+  find where it actually is, and read_file_window to see the real surrounding lines.
+  Complete each todo as you finish the corresponding tool call.
+
+STEP 3 — GENERATE (emit the final hunk)
+  Only after ALL todos are completed, emit the final adapted unified diff hunk.
+  The context lines you write MUST exactly match the lines you verified in STEP 2.
+  The @@ header line numbers MUST reflect the actual target file lines you found.
+  Use build_unified_hunk to construct the final diff body safely (avoid malformed
+  prefixes like '++' or '--' in payload lines).
+
+Rules (follow ALL of them strictly):
+1. Context lines (' ' lines) MUST match the real target file content exactly (character-for-character).
+2. Keep edits minimal: preserve fix behavior, avoid unrelated changes.
+3. Apply every symbol rename from the ConsistencyMap to '+' lines.
+4. Preserve the fix intent — this fix MUST still work.
+5. Adjust the @@ line numbers to match the VERIFIED insertion line in the target file.
+6. Output ONLY the unified diff hunk at the end. Start with @@ and end with the last changed line.
+7. Do NOT include any explanation, markdown fences, or extra comments outside the hunk.
+8. If you cannot verify context (file unreadable, line not found), emit the best hunk you can
+   and explain the issue in a single comment line BEFORE the @@ block like:
+   # WARNING: Could not verify context at line N — using best-effort"""
 
 
 _HUNK_REWRITE_USER = """\
@@ -187,6 +233,8 @@ async def _check_intent(
     llm,
     hunk_text: str,
     blueprint: SemanticBlueprint,
+    token_usage: dict[str, Any] | None = None,
+    model_name: str | None = None,
 ) -> bool:
     """
     Sends a short verification prompt to the LLM asking if the generated hunk
@@ -204,7 +252,28 @@ async def _check_intent(
         ),
     ]
     try:
+        approx_in = count_messages_tokens(messages, model_name)
         response = await llm.ainvoke(messages)
+        usage = extract_usage_from_response(response)
+        if token_usage is not None:
+            if usage and (usage["input_tokens"] or usage["output_tokens"]):
+                add_usage(
+                    token_usage,
+                    usage["input_tokens"],
+                    usage["output_tokens"],
+                    "hunk_generator.intent.provider_usage",
+                )
+            else:
+                out_text = (
+                    response.content if hasattr(response, "content") else str(response)
+                )
+                add_usage(
+                    token_usage,
+                    approx_in,
+                    count_text_tokens(str(out_text), model_name),
+                    "hunk_generator.intent.tiktoken",
+                )
+                token_usage["estimated"] = True
         content = response.content if hasattr(response, "content") else str(response)
         return content.strip().upper().startswith("YES")
     except Exception as e:
@@ -320,6 +389,17 @@ def _extract_added_lines(hunk_text: str) -> list[str]:
     return [line for line in lines[1:] if line.startswith("+")]
 
 
+def _extract_added_payload_lines(hunk_text: str) -> list[str]:
+    """Return '+' line payloads (prefix stripped)."""
+    if not hunk_text:
+        return []
+    out: list[str] = []
+    for line in hunk_text.splitlines()[1:]:
+        if line.startswith("+") and not line.startswith("+++"):
+            out.append(line[1:])
+    return out
+
+
 def _is_import_only_hunk(hunk_text: str) -> bool:
     """
     Detects if a hunk contains ONLY import statements (no other code).
@@ -368,6 +448,460 @@ def _extract_imports_from_body(target_body: str) -> str:
         return "(No imports found in target context)"
 
     return "Existing imports:\n- " + "\n- ".join(imports)
+
+
+def _read_target_window(
+    target_repo_path: str,
+    target_file: str,
+    insertion_line: int,
+    radius: int = 50,
+) -> str:
+    """Reads a local context window from target file around insertion_line."""
+    if not target_repo_path or not target_file:
+        return ""
+    try:
+        full_path = os.path.normpath(
+            os.path.join(target_repo_path, _normalize_rel_path(target_file))
+        )
+        if not os.path.isfile(full_path):
+            return ""
+        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.read().splitlines()
+        if not lines:
+            return ""
+
+        center = max(1, int(insertion_line or 1))
+        start = max(1, center - radius)
+        end = min(len(lines), center + radius)
+        if start > end:
+            return ""
+        return "\n".join(lines[start - 1 : end])
+    except Exception:
+        return ""
+
+
+def _load_target_file_lines(target_repo_path: str, target_file: str) -> list[str]:
+    if not target_repo_path or not target_file:
+        return []
+    try:
+        full_path = os.path.normpath(
+            os.path.join(target_repo_path, _normalize_rel_path(target_file))
+        )
+        if not os.path.isfile(full_path):
+            return []
+        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read().splitlines()
+    except Exception:
+        return []
+
+
+def _find_line_in_target(target_lines: list[str], needle: str) -> int | None:
+    if not target_lines or not needle:
+        return None
+    stripped = needle.strip()
+    if not stripped:
+        return None
+
+    for idx, line in enumerate(target_lines, start=1):
+        if line == needle:
+            return idx
+    for idx, line in enumerate(target_lines, start=1):
+        if line.strip() == stripped:
+            return idx
+    for idx, line in enumerate(target_lines, start=1):
+        if stripped in line:
+            return idx
+    return None
+
+
+def _extract_anchor_candidates_from_hunk(raw_hunk: str) -> list[str]:
+    if not raw_hunk:
+        return []
+
+    removed: list[str] = []
+    context: list[str] = []
+    for i, line in enumerate(raw_hunk.splitlines()):
+        if i == 0 and line.startswith("@@"):
+            continue
+        if not line:
+            continue
+        if line.startswith("-") and not line.startswith("---"):
+            cand = line[1:].strip()
+            if cand:
+                removed.append(cand)
+        elif line.startswith(" "):
+            cand = line[1:].strip()
+            if cand:
+                context.append(cand)
+
+    return removed + context
+
+
+def _locate_insertion_line_in_target(
+    target_repo_path: str,
+    target_file: str,
+    raw_hunk: str,
+) -> int | None:
+    target_lines = _load_target_file_lines(target_repo_path, target_file)
+    if not target_lines:
+        return None
+
+    for cand in _extract_anchor_candidates_from_hunk(raw_hunk):
+        found = _find_line_in_target(target_lines, cand)
+        if found is not None:
+            return found
+
+    return None
+
+
+def _repair_pure_insertion_hunk_with_target_context(
+    target_repo_path: str,
+    target_file: str,
+    candidate_hunk: str,
+    insertion_line: int,
+) -> str | None:
+    """
+    Rebuild a pure-insertion hunk using exact target-file context lines.
+
+    This is a deterministic fallback for cases where model-generated context lines
+    drift from target reality (common around class-field insertions).
+    """
+    if not candidate_hunk:
+        return None
+
+    lines = candidate_hunk.splitlines()
+    if not lines or not lines[0].startswith("@@"):
+        return None
+
+    removed_lines = [
+        ln for ln in lines[1:] if ln.startswith("-") and not ln.startswith("---")
+    ]
+    added_lines = [
+        ln[1:] for ln in lines[1:] if ln.startswith("+") and not ln.startswith("+++")
+    ]
+    context_lines = [ln[1:] for ln in lines[1:] if ln.startswith(" ")]
+
+    # Only repair pure insertions here.
+    if removed_lines or not added_lines:
+        return None
+
+    target_lines = _load_target_file_lines(target_repo_path, target_file)
+    if not target_lines:
+        return None
+
+    def _is_commentish(line: str) -> bool:
+        s = (line or "").strip()
+        return (not s) or s.startswith("*") or s.startswith("/*") or s.startswith("*/")
+
+    def _is_structural_anchor(line: str) -> bool:
+        s = (line or "").strip()
+        if _is_commentish(s):
+            return False
+        return any(
+            token in s
+            for token in (
+                "class ",
+                "interface ",
+                "enum ",
+                "record ",
+                "private ",
+                "protected ",
+                "public ",
+                "static ",
+                "(",
+            )
+        )
+
+    prioritized_candidates: list[str] = []
+    prioritized_candidates.extend(
+        [c for c in context_lines if _is_structural_anchor(c)]
+    )
+    prioritized_candidates.extend([c for c in context_lines if not _is_commentish(c)])
+    prioritized_candidates.extend(context_lines)
+
+    seen = set()
+    deduped_candidates = []
+    for c in prioritized_candidates:
+        key = c.strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped_candidates.append(c)
+
+    anchor_line = None
+    for cand in deduped_candidates:
+        found = _find_line_in_target(target_lines, cand)
+        if found is not None:
+            anchor_line = found
+            break
+
+    if anchor_line is None:
+        if isinstance(insertion_line, int) and insertion_line > 0:
+            anchor_line = max(1, min(insertion_line, len(target_lines)))
+        else:
+            return None
+
+    before_ctx = target_lines[anchor_line - 1]
+    after_ctx = target_lines[anchor_line] if anchor_line < len(target_lines) else None
+
+    if after_ctx is None:
+        old_count = 1
+        new_count = 1 + len(added_lines)
+        rebuilt = [f"@@ -{anchor_line},{old_count} +{anchor_line},{new_count} @@"]
+        rebuilt.append(f" {before_ctx}")
+        rebuilt.extend(f"+{ln}" for ln in added_lines)
+    else:
+        old_count = 2
+        new_count = 2 + len(added_lines)
+        rebuilt = [f"@@ -{anchor_line},{old_count} +{anchor_line},{new_count} @@"]
+        rebuilt.append(f" {before_ctx}")
+        rebuilt.extend(f"+{ln}" for ln in added_lines)
+        rebuilt.append(f" {after_ctx}")
+
+    out = "\n".join(rebuilt)
+    if not out.endswith("\n"):
+        out += "\n"
+    return out
+
+
+def _build_pure_insertion_hunk_from_plan(
+    *,
+    target_repo_path: str,
+    target_file: str,
+    anchor_line: int,
+    added_lines: list[str],
+    anchor_before: str = "",
+    anchor_after: str = "",
+) -> str | None:
+    """Build a pure-insertion hunk from planner anchors + real target file lines."""
+    if not added_lines:
+        return None
+    target_lines = _load_target_file_lines(target_repo_path, target_file)
+    if not target_lines:
+        return None
+
+    # Prefer exact/plausible planner-provided before anchor.
+    line_no = None
+    if anchor_before.strip():
+        line_no = _find_line_in_target(target_lines, anchor_before)
+
+    if line_no is None:
+        line_no = max(1, min(int(anchor_line or 1), len(target_lines)))
+
+    before_ctx = target_lines[line_no - 1]
+
+    after_ctx = None
+    if line_no < len(target_lines):
+        after_ctx = target_lines[line_no]
+    if anchor_after.strip():
+        found_after = _find_line_in_target(target_lines, anchor_after)
+        if found_after is not None and found_after >= line_no:
+            after_ctx = target_lines[found_after - 1]
+
+    if after_ctx is None:
+        old_count = 1
+        new_count = 1 + len(added_lines)
+        body = [f" {before_ctx}"] + [f"+{l}" for l in added_lines]
+    else:
+        old_count = 2
+        new_count = 2 + len(added_lines)
+        body = [f" {before_ctx}"] + [f"+{l}" for l in added_lines] + [f" {after_ctx}"]
+
+    header = f"@@ -{line_no},{old_count} +{line_no},{new_count} @@"
+    out = "\n".join([header] + body)
+    if not out.endswith("\n"):
+        out += "\n"
+    return out
+
+
+def _select_replacement_line(removed_line: str, added_lines: list[str]) -> str | None:
+    if not removed_line or not added_lines:
+        return None
+    removed_norm = removed_line.strip()
+    prefix = (
+        removed_norm.split("(", 1)[0].strip() if "(" in removed_norm else removed_norm
+    )
+    for a in added_lines:
+        a_norm = (a or "").strip()
+        if not a_norm:
+            continue
+        if a_norm == removed_norm:
+            continue
+        if prefix and prefix in a_norm:
+            return a
+    for a in added_lines:
+        a_norm = (a or "").strip()
+        if a_norm and a_norm != removed_norm:
+            return a
+    return None
+
+
+def _build_rewrite_hunk_from_plan(
+    *,
+    target_repo_path: str,
+    target_file: str,
+    pre_rewritten_hunk: str,
+    anchor_before: str,
+    anchor_after: str,
+) -> str | None:
+    """
+    Deterministically build a rewrite hunk (or two hunks) using planner anchors.
+    Useful when model output fails dry-run on large mixed replace+insert hunks.
+    """
+    target_lines = _load_target_file_lines(target_repo_path, target_file)
+    if not target_lines:
+        return None
+
+    removed_lines = _extract_removed_lines(pre_rewritten_hunk)
+    added_lines = _extract_added_payload_lines(pre_rewritten_hunk)
+    if not removed_lines or not added_lines:
+        return None
+
+    remove_exact = None
+    remove_line_no = None
+    if anchor_before.strip():
+        remove_line_no = _find_line_in_target(target_lines, anchor_before)
+    if remove_line_no is None:
+        for r in removed_lines:
+            found = _find_line_in_target(target_lines, r)
+            if found is not None:
+                remove_line_no = found
+                break
+    if remove_line_no is not None and 1 <= remove_line_no <= len(target_lines):
+        remove_exact = target_lines[remove_line_no - 1]
+
+    if not remove_exact or remove_line_no is None:
+        return None
+
+    replacement = _select_replacement_line(remove_exact, added_lines)
+    if not replacement:
+        return None
+
+    remaining_added = list(added_lines)
+    try:
+        remaining_added.remove(replacement)
+    except ValueError:
+        pass
+
+    hunk_parts: list[str] = []
+
+    # Sub-hunk A: line replacement
+    hunk_parts.extend(
+        [
+            f"@@ -{remove_line_no},1 +{remove_line_no},1 @@",
+            f"-{remove_exact}",
+            f"+{replacement}",
+        ]
+    )
+
+    # Sub-hunk B: insert additional helper block before anchor_after (if available)
+    if remaining_added:
+        anchor_after_no = None
+        if anchor_after.strip():
+            anchor_after_no = _find_line_in_target(target_lines, anchor_after)
+        if anchor_after_no is None:
+            # Fallback: insert after replacement line.
+            anchor_after_no = min(remove_line_no + 1, len(target_lines))
+
+        if 1 <= anchor_after_no <= len(target_lines):
+            anchor_after_exact = target_lines[anchor_after_no - 1]
+            hunk_parts.extend(
+                [
+                    f"@@ -{anchor_after_no},1 +{anchor_after_no},{1 + len(remaining_added)} @@",
+                    *[f"+{l}" for l in remaining_added],
+                    f" {anchor_after_exact}",
+                ]
+            )
+
+    out = "\n".join(hunk_parts)
+    if not out.endswith("\n"):
+        out += "\n"
+    return out
+
+
+def _extract_added_imports(raw_hunk: str) -> list[str]:
+    imports: list[str] = []
+    for i, line in enumerate((raw_hunk or "").splitlines()):
+        if i == 0 and line.startswith("@@"):
+            continue
+        if line.startswith("+") and not line.startswith("+++"):
+            content = line[1:].strip()
+            if content.startswith("import "):
+                imports.append(content)
+    # Preserve order, remove duplicates.
+    return list(dict.fromkeys(imports))
+
+
+def _build_import_hunk_for_target(
+    *,
+    target_repo_path: str,
+    target_file: str,
+    raw_hunk: str,
+    insertion_line: int | None,
+) -> str | None:
+    target_lines = _load_target_file_lines(target_repo_path, target_file)
+    if not target_lines:
+        return None
+
+    imports_to_add = _extract_added_imports(raw_hunk)
+    if not imports_to_add:
+        return None
+
+    existing_imports = {
+        line.strip() for line in target_lines if line.strip().startswith("import ")
+    }
+    imports_to_add = [imp for imp in imports_to_add if imp not in existing_imports]
+    if not imports_to_add:
+        return None
+
+    import_lines = [
+        i + 1
+        for i, line in enumerate(target_lines)
+        if line.strip().startswith("import ")
+    ]
+    if not import_lines:
+        return None
+
+    preferred_anchor_import = None
+    raw_lines = (raw_hunk or "").splitlines()
+    for i, line in enumerate(raw_lines):
+        if line.startswith("+") and not line.startswith("+++"):
+            content = line[1:].strip()
+            if content.startswith("import "):
+                for j in range(i - 1, -1, -1):
+                    prev = raw_lines[j]
+                    if prev.startswith(" "):
+                        prev_content = prev[1:].strip()
+                        if prev_content.startswith("import "):
+                            preferred_anchor_import = prev_content
+                            break
+                break
+
+    if preferred_anchor_import:
+        anchor_line_no = _find_line_in_target(target_lines, preferred_anchor_import)
+    else:
+        anchor_line_no = None
+
+    if anchor_line_no is None:
+        if insertion_line is None:
+            anchor_line_no = import_lines[-1]
+        else:
+            prior_imports = [ln for ln in import_lines if ln <= insertion_line]
+            anchor_line_no = prior_imports[-1] if prior_imports else import_lines[0]
+
+    # Build with two-sided context for robust git-apply matching.
+    start_line = max(1, anchor_line_no)
+    context_before = target_lines[start_line - 1]
+    has_after = start_line < len(target_lines)
+    context_after = target_lines[start_line] if has_after else ""
+
+    old_count = 2 if has_after else 1
+    new_count = old_count + len(imports_to_add)
+    header = f"@@ -{start_line},{old_count} +{start_line},{new_count} @@"
+    body = [f" {context_before}"] + [f"+{imp}" for imp in imports_to_add]
+    if has_after:
+        body.append(f" {context_after}")
+    return "\n".join([header] + body) + "\n"
 
 
 def _extract_auxiliary_signals(
@@ -458,6 +992,110 @@ def _stabilize_hunk_structure(base_hunk: str, candidate_hunk: str) -> str:
     if not stabilized.endswith("\n"):
         stabilized += "\n"
     return stabilized
+
+
+def _extract_removed_lines(hunk_text: str) -> list[str]:
+    lines = (hunk_text or "").splitlines()[1:]
+    out = []
+    for line in lines:
+        if line.startswith("-") and not line.startswith("---"):
+            out.append(line[1:])
+    return out
+
+
+def _preserves_required_removals(base_hunk: str, candidate_hunk: str) -> bool:
+    """
+    Guardrail: if source hunk removes lines, candidate must also remove at least
+    one matching line. Prevents semantic regressions where a replacement turns
+    into additive behavior (old line kept + new line added).
+    """
+    base_removed = _extract_removed_lines(base_hunk)
+    if not base_removed:
+        return True
+
+    cand_removed = _extract_removed_lines(candidate_hunk)
+    if not cand_removed:
+        return False
+
+    def norm(s: str) -> str:
+        return re.sub(r"\s+", " ", (s or "").strip())
+
+    base_norm = {norm(x) for x in base_removed if norm(x)}
+    cand_norm = {norm(x) for x in cand_removed if norm(x)}
+    if not base_norm or not cand_norm:
+        return bool(cand_norm)
+    return len(base_norm & cand_norm) > 0
+
+
+def _normalize_accidental_double_prefixes(hunk_text: str) -> str:
+    """Best-effort repair for accidental '++'/'--' payload prefix artifacts."""
+    if not hunk_text:
+        return hunk_text
+    out: list[str] = []
+    for i, line in enumerate(hunk_text.splitlines()):
+        if i == 0 or line.startswith("@@"):
+            out.append(line)
+            continue
+        if re.match(r"^\+\+[ \t].*", line):
+            out.append(line[1:])
+            continue
+        if re.match(r"^--[ \t].*", line):
+            out.append(line[1:])
+            continue
+        out.append(line)
+    repaired = "\n".join(out)
+    if hunk_text.endswith("\n") and not repaired.endswith("\n"):
+        repaired += "\n"
+    return repaired
+
+
+def _hunk_sanity_check(hunk_text: str) -> tuple[bool, str]:
+    """Deterministic structural validation before dry-run/apply."""
+    if not hunk_text:
+        return False, "empty_hunk"
+    lines = hunk_text.splitlines()
+    if not lines or not lines[0].startswith("@@"):
+        return False, "missing_or_invalid_header"
+
+    for idx, line in enumerate(lines[1:], start=2):
+        if line.startswith("@@"):
+            # Multi-hunk payload: allow additional hunk headers.
+            continue
+        if not line:
+            return False, f"line_{idx}_missing_diff_prefix"
+        if line[0] not in {" ", "+", "-", "\\"}:
+            return False, f"line_{idx}_invalid_prefix"
+        if re.match(r"^\+\+[ \t].*", line):
+            return False, f"line_{idx}_accidental_double_plus"
+        if re.match(r"^--[ \t].*", line):
+            return False, f"line_{idx}_accidental_double_minus"
+
+    return True, "ok"
+
+
+def _line_present_with_prefix(hunk_text: str, prefix: str, payload: str) -> bool:
+    needle = f"{prefix}{payload}"
+    return needle in (hunk_text or "").splitlines()
+
+
+def _check_generation_contract(
+    hunk_text: str,
+    must_add_lines: list[str] | None,
+    must_remove_lines: list[str] | None,
+) -> tuple[bool, str]:
+    must_add = [x for x in (must_add_lines or []) if str(x).strip()]
+    must_remove = [x for x in (must_remove_lines or []) if str(x).strip()]
+
+    for line in must_add:
+        if not _line_present_with_prefix(hunk_text, "+", line):
+            return False, "missing_must_add_line"
+    if must_remove:
+        has_any_remove = any(
+            _line_present_with_prefix(hunk_text, "-", line) for line in must_remove
+        )
+        if not has_any_remove:
+            return False, "missing_required_remove_line"
+    return True, "ok"
 
 
 def _normalize_rel_path(path: str) -> str:
@@ -729,6 +1367,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
 
     consistency_map: dict = state.get("consistency_map") or {}
     mapped_target_context: dict = state.get("mapped_target_context") or {}
+    hunk_generation_plan: dict = state.get("hunk_generation_plan") or {}
     semantic_blueprint: SemanticBlueprint = state.get("semantic_blueprint")
     patch_analysis: list = state.get("patch_analysis") or []
     patch_diff: str = state.get("patch_diff") or ""
@@ -738,11 +1377,14 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     validation_attempts: int = state.get("validation_attempts") or 0
     error_context: str = state.get("validation_error_context") or ""
     retry_files_raw = state.get("validation_retry_files") or []
+    retry_hunks_raw = state.get("validation_retry_hunks") or []
+    failed_stage: str = str(state.get("validation_failed_stage") or "").strip()
     with_test_changes: bool = state.get("with_test_changes", False)
     developer_aux_hunks: list[dict[str, Any]] = (
         state.get("developer_auxiliary_hunks") or []
     )
     retry_files = {_normalize_rel_path(p) for p in retry_files_raw if p}
+    retry_hunks = {int(h) for h in retry_hunks_raw if isinstance(h, int)}
     aux_consistency_map, aux_context = _extract_auxiliary_signals(developer_aux_hunks)
     if aux_consistency_map:
         merged_cm = dict(consistency_map)
@@ -798,6 +1440,14 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
         else []
     )
     toolkit = ValidationToolkit(target_repo_path) if target_repo_path else None
+    hg_toolkit = HunkGeneratorToolkit(target_repo_path) if target_repo_path else None
+    hg_react_agent = (
+        create_react_agent(
+            llm, tools=hg_toolkit.get_tools(), prompt=_HUNK_REWRITE_SYSTEM_TOOLS
+        )
+        if hg_toolkit
+        else None
+    )
     retriever = None
     if target_repo_path and mainline_repo_path:
         try:
@@ -863,6 +1513,15 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
 
     adapted_code_hunks: list[AdaptedHunk] = []
     adapted_test_hunks: list[AdaptedHunk] = []
+    generation_checklist: list[dict[str, Any]] = []
+    token_usage = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "estimated": False,
+        "sources": [],
+    }
+    model_name = resolve_model_name()
     trace = "# Hunk Generator Trace\n\n"
     trace += f"| target_file | hunk_index | dry_run | intent_ok |\n|---|---|---|---|\n"
 
@@ -943,39 +1602,75 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 target_file = planned_target_file
             insertion_line = mapped_ctx.get("start_line")
             target_body = mapped_ctx.get("code_snippet", "")
-            raw_start_line = _extract_target_start_line(raw_hunk)
-            target_method = (mapped_ctx.get("target_method") or "").strip().lower()
-            mainline_method = (mapped_ctx.get("mainline_method") or "").strip().lower()
-            is_declaration_or_class_hunk = target_method in {
-                "<import>",
-                "<class_declaration>",
-            } or mainline_method.startswith("<")
-
-            # IMPROVEMENT: If insertion_line is None, try to extract from raw hunk header
-            if insertion_line is None:
+            plan_entries = hunk_generation_plan.get(mainline_file, [])
+            plan_by_index: dict[int, dict[str, Any]] = {}
+            for pe in plan_entries or []:
                 try:
-                    # Parse @@ -X,Y +A,B @@ to get actual line numbers
-                    hunk_header_match = re.search(r"@@ -\d+(?:,\d+)? \+(\d+)", raw_hunk)
-                    if hunk_header_match:
-                        insertion_line = int(hunk_header_match.group(1))
-                        print(
-                            f"  Agent 3: Extracted insertion_line {insertion_line} from hunk {hunk_idx} header"
-                        )
-                except Exception as e:
-                    print(
-                        f"  Agent 3: Could not extract insertion_line from hunk {hunk_idx}: {e}"
-                    )
-
-            # Declaration/class-level mappings often return coarse line anchors (e.g., 1).
-            # Prefer raw hunk header anchor in those cases.
-            if raw_start_line and (
-                is_declaration_or_class_hunk
-                or (isinstance(insertion_line, int) and insertion_line <= 1)
+                    pi = int(pe.get("hunk_index"))
+                    plan_by_index[pi] = pe
+                except Exception:
+                    continue
+            plan_entry = plan_by_index.get(hunk_idx)
+            if plan_entry is None:
+                plan_entry = {}
+            task_entry = {
+                "mainline_file": mainline_file,
+                "target_file": target_file,
+                "hunk_index": hunk_idx,
+                "status": "in_progress",
+                "reason": "started",
+                "todo_steps": [
+                    "resolve_insertion_line",
+                    "construct_hunk",
+                    "sanity_check",
+                    "contract_check",
+                    "dry_run",
+                    "intent_check",
+                ],
+                "completed_steps": [],
+            }
+            generation_checklist.append(task_entry)
+            planned_mode = str(plan_entry.get("generation_mode") or "").strip().lower()
+            force_deterministic_for_hunk = (
+                validation_attempts > 0
+                and failed_stage in {"hunk_sanity_failed", "generation_contract_failed"}
+                and (not retry_hunks or hunk_idx in retry_hunks)
+            )
+            if (
+                isinstance(plan_entry.get("anchor_line"), int)
+                and plan_entry.get("anchor_line") > 0
             ):
-                insertion_line = raw_start_line
+                insertion_line = int(plan_entry.get("anchor_line"))
 
-            # Default fallback
-            insertion_line = insertion_line or 1
+            # Never trust mainline hunk headers for target insertion lines.
+            # If Phase 2 did not provide a valid target line, recover using target-file anchors.
+            if not isinstance(insertion_line, int) or insertion_line <= 0:
+                insertion_line = _locate_insertion_line_in_target(
+                    target_repo_path=target_repo_path,
+                    target_file=target_file,
+                    raw_hunk=raw_hunk,
+                )
+
+            if not isinstance(insertion_line, int) or insertion_line <= 0:
+                print(
+                    f"    Agent 3: Skipping {target_file}[{hunk_idx}] — unable to locate target insertion line"
+                )
+                trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "missing_insertion_line"
+                continue
+            task_entry["completed_steps"].append("resolve_insertion_line")
+
+            # If Agent 2 returned only a short snippet, enrich prompt context from target file.
+            if len(str(target_body or "").splitlines()) < 8:
+                enriched_body = _read_target_window(
+                    target_repo_path=target_repo_path,
+                    target_file=target_file,
+                    insertion_line=insertion_line,
+                    radius=70,
+                )
+                if enriched_body:
+                    target_body = enriched_body
 
             # Deterministic symbol substitution pre-pass
             pre_rewritten = _rewrite_hunk_symbols(raw_hunk, consistency_map)
@@ -983,22 +1678,104 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             # For import-only hunks, skip LLM rewriting to avoid corruption
             # Import statements are fragile and LLM tends to duplicate existing imports
             if _is_import_only_hunk(raw_hunk):
-                adapted_hunk_text = _adjust_hunk_header(pre_rewritten, insertion_line)
-                print(
-                    f"    Agent 3: Skipped LLM rewrite for import-only hunk {hunk_idx}"
+                adapted_hunk_text = _build_import_hunk_for_target(
+                    target_repo_path=target_repo_path,
+                    target_file=target_file,
+                    raw_hunk=raw_hunk,
+                    insertion_line=insertion_line,
                 )
+                if adapted_hunk_text:
+                    print(
+                        f"    Agent 3: Built import-aware hunk for {target_file}[{hunk_idx}]"
+                    )
+                    task_entry["completed_steps"].append("construct_hunk")
+                else:
+                    print(
+                        f"    Agent 3: Skipping import-only hunk {target_file}[{hunk_idx}] — no new imports or no import anchor"
+                    )
+                    trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                    task_entry["status"] = "noop"
+                    task_entry["reason"] = "import_hunk_no_new_lines_or_anchor"
+                    continue
             else:
-                # LLM rewrite (up to 2 attempts) for non-import hunks
+                # ReAct tool loop (intelligent hunk generation) or simple LLM rewrite fallback
                 adapted_hunk_text = None
-                for attempt in range(2):
-                    # Use full method body context (no truncation)
-                    # The LLM needs complete context to properly understand method structure,
-                    # boundaries, and surrounding code patterns for accurate hunk adaptation.
-                    # If token budget is a concern, this can be adjusted, but complete context
-                    # produces more accurate hunks.
-                    prompt = _HUNK_REWRITE_USER.format(
+
+                if planned_mode == "pure_insertion":
+                    added_lines = [
+                        l[1:]
+                        for l in pre_rewritten.splitlines()[1:]
+                        if l.startswith("+") and not l.startswith("+++")
+                    ]
+                    planned_candidate = _build_pure_insertion_hunk_from_plan(
+                        target_repo_path=target_repo_path,
+                        target_file=target_file,
+                        anchor_line=int(
+                            plan_entry.get("anchor_line") or insertion_line
+                        ),
+                        added_lines=added_lines,
+                        anchor_before=str(plan_entry.get("anchor_before") or ""),
+                        anchor_after=str(plan_entry.get("anchor_after") or ""),
+                    )
+                    if planned_candidate:
+                        adapted_hunk_text = planned_candidate
+
+                # Prefer deterministic rewrite for replacement hunks (contains removals)
+                # to preserve semantic intent and avoid additive regressions.
+                if planned_mode == "rewrite" and adapted_hunk_text is None:
+                    planned_rewrite_candidate = _build_rewrite_hunk_from_plan(
+                        target_repo_path=target_repo_path,
+                        target_file=target_file,
+                        pre_rewritten_hunk=pre_rewritten,
+                        anchor_before=str(plan_entry.get("anchor_before") or ""),
+                        anchor_after=str(plan_entry.get("anchor_after") or ""),
+                    )
+                    if planned_rewrite_candidate and toolkit:
+                        dr_plan = toolkit.apply_hunk_dry_run(
+                            target_file, planned_rewrite_candidate
+                        )
+                        if dr_plan.get("success"):
+                            adapted_hunk_text = planned_rewrite_candidate
+                            print(
+                                f"    Agent 3: Planned rewrite passed dry-run for {target_file}[{hunk_idx}]"
+                            )
+
+                if planned_mode == "rewrite" and adapted_hunk_text is None:
+                    deterministic_candidate = _adjust_hunk_header(
+                        pre_rewritten, insertion_line
+                    )
+                    if toolkit:
+                        dr_det = toolkit.apply_hunk_dry_run(
+                            target_file, deterministic_candidate
+                        )
+                        if dr_det.get("success"):
+                            adapted_hunk_text = deterministic_candidate
+                            print(
+                                f"    Agent 3: Deterministic rewrite passed dry-run for {target_file}[{hunk_idx}]"
+                            )
+                    else:
+                        adapted_hunk_text = deterministic_candidate
+
+                if (
+                    hg_react_agent
+                    and adapted_hunk_text is None
+                    and not force_deterministic_for_hunk
+                ):
+                    # ----------------------------------------------------------
+                    # PRIMARY PATH: ReAct agent with file-reading tools.
+                    # The agent will call read_file_window / grep_in_file /
+                    # verify_context_at_line before producing the final hunk,
+                    # ensuring context lines match the actual target file.
+                    # ----------------------------------------------------------
+                    # Reset the toolkit's todo list for this hunk so todos from
+                    # a previous hunk don't carry over.
+                    if hg_toolkit:
+                        hg_toolkit._todos = []
+                        hg_toolkit._todo_counter = 0
+
+                    react_prompt = _HUNK_REWRITE_USER.format(
                         mainline_hunk=pre_rewritten,
-                        target_method_body=target_body,  # Use full body, not truncated
+                        target_method_body=target_body,
                         target_imports_context=_extract_imports_from_body(target_body),
                         consistency_map=cm_formatted,
                         fix_logic=fix_logic,
@@ -1008,63 +1785,367 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         developer_aux_context=aux_context,
                         retry_context=retry_context_str,
                     )
-                    try:
-                        response = await llm.ainvoke(
-                            [
+
+                    for attempt in range(2):
+                        try:
+                            react_in_tokens = count_text_tokens(
+                                _HUNK_REWRITE_SYSTEM_TOOLS + "\n" + react_prompt,
+                                model_name,
+                            )
+                            react_result = await hg_react_agent.ainvoke(
+                                {"messages": [("user", react_prompt)]},
+                                config={"recursion_limit": 25},
+                            )
+                            react_messages = react_result.get("messages", [])
+                            raw_content = (
+                                react_messages[-1].content if react_messages else ""
+                            )
+
+                            exact_any = False
+                            for rm in react_messages:
+                                if getattr(rm, "type", "") != "ai":
+                                    continue
+                                usage = extract_usage_from_response(rm)
+                                if usage and (
+                                    usage["input_tokens"] or usage["output_tokens"]
+                                ):
+                                    add_usage(
+                                        token_usage,
+                                        usage["input_tokens"],
+                                        usage["output_tokens"],
+                                        "hunk_generator.react.provider_usage",
+                                    )
+                                    exact_any = True
+                            if not exact_any:
+                                add_usage(
+                                    token_usage,
+                                    react_in_tokens,
+                                    count_text_tokens(str(raw_content), model_name),
+                                    "hunk_generator.react.tiktoken",
+                                )
+                                token_usage["estimated"] = True
+
+                            # Strip leading WARNING comment if present (allowed by system prompt)
+                            raw_content_clean = re.sub(
+                                r"^#\s*WARNING:.*\n",
+                                "",
+                                raw_content,
+                                flags=re.MULTILINE,
+                            ).strip()
+                            extracted = _extract_hunk_block(
+                                raw_content_clean
+                            ) or _extract_hunk_block(raw_content)
+                            if extracted:
+                                direct_candidate = (
+                                    extracted
+                                    if extracted.endswith("\n")
+                                    else extracted + "\n"
+                                )
+                                adjusted_candidate = _adjust_hunk_header(
+                                    direct_candidate, insertion_line
+                                )
+                                stabilized = _stabilize_hunk_structure(
+                                    pre_rewritten, extracted
+                                )
+                                stabilized_candidate = _adjust_hunk_header(
+                                    stabilized, insertion_line
+                                )
+
+                                if toolkit:
+                                    dr_direct = toolkit.apply_hunk_dry_run(
+                                        target_file, direct_candidate
+                                    )
+                                    if dr_direct.get("success"):
+                                        adapted_hunk_text = direct_candidate
+                                        print(
+                                            f"    Agent 3: ReAct hunk passed dry-run (direct) for {target_file}[{hunk_idx}]"
+                                        )
+                                        break
+
+                                    dr_adjusted = toolkit.apply_hunk_dry_run(
+                                        target_file, adjusted_candidate
+                                    )
+                                    if dr_adjusted.get("success"):
+                                        adapted_hunk_text = adjusted_candidate
+                                        print(
+                                            f"    Agent 3: ReAct hunk passed dry-run (adjusted) for {target_file}[{hunk_idx}]"
+                                        )
+                                        break
+
+                                    dr_stable = toolkit.apply_hunk_dry_run(
+                                        target_file, stabilized_candidate
+                                    )
+                                    if dr_stable.get("success"):
+                                        adapted_hunk_text = stabilized_candidate
+                                        print(
+                                            f"    Agent 3: ReAct hunk passed dry-run (stabilized) for {target_file}[{hunk_idx}]"
+                                        )
+                                        break
+
+                                    print(
+                                        f"    Agent 3: ReAct candidates failed dry-run for {target_file}[{hunk_idx}] "
+                                        f"(attempt {attempt + 1}/2)"
+                                    )
+                                else:
+                                    adapted_hunk_text = direct_candidate
+                                    break
+                            else:
+                                print(
+                                    f"    Agent 3: ReAct hunk parse failed (attempt {attempt + 1}/2)"
+                                )
+                        except GraphRecursionError as e:
+                            print(
+                                f"    Agent 3: ReAct recursion limit on {target_file}[{hunk_idx}] "
+                                f"(attempt {attempt + 1}/2): {e}"
+                            )
+                        except Exception as e:
+                            print(
+                                f"    Agent 3: ReAct error on {target_file}[{hunk_idx}] "
+                                f"(attempt {attempt + 1}/2): {e}"
+                            )
+
+                elif adapted_hunk_text is None and not force_deterministic_for_hunk:
+                    # ----------------------------------------------------------
+                    # FALLBACK PATH: simple single LLM call (no tools).
+                    # Used when target_repo_path is unavailable (local dev mode).
+                    # ----------------------------------------------------------
+                    for attempt in range(2):
+                        prompt = _HUNK_REWRITE_USER.format(
+                            mainline_hunk=pre_rewritten,
+                            target_method_body=target_body,
+                            target_imports_context=_extract_imports_from_body(
+                                target_body
+                            ),
+                            consistency_map=cm_formatted,
+                            fix_logic=fix_logic,
+                            dependent_apis=", ".join(dependent_apis),
+                            insertion_line=insertion_line,
+                            target_file=target_file,
+                            developer_aux_context=aux_context,
+                            retry_context=retry_context_str,
+                        )
+                        try:
+                            llm_msgs = [
                                 SystemMessage(content=_HUNK_REWRITE_SYSTEM),
                                 HumanMessage(content=prompt),
                             ]
-                        )
-                        raw_content = (
-                            response.content
-                            if hasattr(response, "content")
-                            else str(response)
-                        )
-                        extracted = _extract_hunk_block(raw_content)
-                        if extracted:
-                            # Preserve original diff structure and allow model to vary only '+' lines.
-                            stabilized = _stabilize_hunk_structure(
-                                pre_rewritten, extracted
+                            llm_in_tokens = count_messages_tokens(llm_msgs, model_name)
+                            response = await llm.ainvoke(llm_msgs)
+                            usage = extract_usage_from_response(response)
+                            if usage and (
+                                usage["input_tokens"] or usage["output_tokens"]
+                            ):
+                                add_usage(
+                                    token_usage,
+                                    usage["input_tokens"],
+                                    usage["output_tokens"],
+                                    "hunk_generator.rewrite.provider_usage",
+                                )
+                            else:
+                                fallback_content = (
+                                    response.content
+                                    if hasattr(response, "content")
+                                    else str(response)
+                                )
+                                add_usage(
+                                    token_usage,
+                                    llm_in_tokens,
+                                    count_text_tokens(
+                                        str(fallback_content), model_name
+                                    ),
+                                    "hunk_generator.rewrite.tiktoken",
+                                )
+                                token_usage["estimated"] = True
+
+                            raw_content = (
+                                response.content
+                                if hasattr(response, "content")
+                                else str(response)
                             )
-                            adapted_hunk_text = _adjust_hunk_header(
-                                stabilized, insertion_line
+                            extracted = _extract_hunk_block(raw_content)
+                            if extracted:
+                                direct_candidate = (
+                                    extracted
+                                    if extracted.endswith("\n")
+                                    else extracted + "\n"
+                                )
+                                adjusted_candidate = _adjust_hunk_header(
+                                    direct_candidate, insertion_line
+                                )
+                                stabilized = _stabilize_hunk_structure(
+                                    pre_rewritten, extracted
+                                )
+                                stabilized_candidate = _adjust_hunk_header(
+                                    stabilized, insertion_line
+                                )
+
+                                if toolkit:
+                                    dr_direct = toolkit.apply_hunk_dry_run(
+                                        target_file, direct_candidate
+                                    )
+                                    if dr_direct.get("success"):
+                                        adapted_hunk_text = direct_candidate
+                                        break
+
+                                    dr_adjusted = toolkit.apply_hunk_dry_run(
+                                        target_file, adjusted_candidate
+                                    )
+                                    if dr_adjusted.get("success"):
+                                        adapted_hunk_text = adjusted_candidate
+                                        break
+
+                                    dr_stable = toolkit.apply_hunk_dry_run(
+                                        target_file, stabilized_candidate
+                                    )
+                                    if dr_stable.get("success"):
+                                        adapted_hunk_text = stabilized_candidate
+                                        break
+
+                                    print(
+                                        f"    Agent 3: Both direct/stabilized candidates failed dry-run on hunk {hunk_idx} (attempt {attempt + 1}/2)"
+                                    )
+                                else:
+                                    adapted_hunk_text = direct_candidate
+                                    break
+                            print(
+                                f"    Agent 3: Hunk parse failed (attempt {attempt + 1}/2)"
                             )
-                            break
-                        print(
-                            f"    Agent 3: Hunk parse failed (attempt {attempt + 1}/2)"
-                        )
-                    except Exception as e:
-                        print(
-                            f"    Agent 3: LLM error on hunk {hunk_idx} (attempt {attempt + 1}/2): {e}"
-                        )
+                        except Exception as e:
+                            print(
+                                f"    Agent 3: LLM error on hunk {hunk_idx} (attempt {attempt + 1}/2): {e}"
+                            )
 
                 if not adapted_hunk_text:
-                    # Fallback: use the deterministic pre-rewrite with adjusted header
+                    # Last fallback: deterministic symbol-rewrite header adjustment.
                     adapted_hunk_text = _adjust_hunk_header(
                         pre_rewritten, insertion_line
                     )
                     print(
-                        f"    Agent 3: Fallback — using deterministic pre-rewrite for hunk {hunk_idx}"
+                        f"    Agent 3: Fallback candidate generated for {target_file}[{hunk_idx}]"
                     )
+
+                if adapted_hunk_text:
+                    task_entry["completed_steps"].append("construct_hunk")
+
+                # Semantic guardrail: if original hunk had removals, candidate must
+                # preserve at least one required '-' removal; otherwise force baseline
+                # deterministic rewrite to avoid additive regressions.
+                if not _preserves_required_removals(pre_rewritten, adapted_hunk_text):
+                    adapted_hunk_text = _adjust_hunk_header(
+                        pre_rewritten, insertion_line
+                    )
+                    print(
+                        f"    Agent 3: Guardrail enforced for {target_file}[{hunk_idx}] "
+                        "(missing required removals)"
+                    )
+
+            if not adapted_hunk_text:
+                task_entry["status"] = "failed"
+                task_entry["reason"] = (
+                    "forced_deterministic_no_candidate"
+                    if force_deterministic_for_hunk
+                    else "no_candidate_generated"
+                )
+                trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                continue
+
+            # Deterministic structural guardrails before dry-run.
+            sane, sanity_msg = _hunk_sanity_check(adapted_hunk_text)
+            if not sane:
+                repaired_text = _normalize_accidental_double_prefixes(adapted_hunk_text)
+                if repaired_text != adapted_hunk_text:
+                    adapted_hunk_text = repaired_text
+                    sane, sanity_msg = _hunk_sanity_check(adapted_hunk_text)
+            if not sane:
+                print(
+                    f"    Agent 3: Structural hunk sanity failed for {target_file}[{hunk_idx}] ({sanity_msg})"
+                )
+                trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "hunk_sanity_failed"
+                task_entry["error"] = sanity_msg
+                continue
+            task_entry["completed_steps"].append("sanity_check")
+
+            contract_ok, contract_msg = _check_generation_contract(
+                adapted_hunk_text,
+                plan_entry.get("must_add_lines")
+                if isinstance(plan_entry, dict)
+                else [],
+                plan_entry.get("must_remove_lines")
+                if isinstance(plan_entry, dict)
+                else [],
+            )
+            if not contract_ok:
+                print(
+                    f"    Agent 3: Generation contract failed for {target_file}[{hunk_idx}] ({contract_msg})"
+                )
+                trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "generation_contract_failed"
+                task_entry["error"] = contract_msg
+                continue
+            task_entry["completed_steps"].append("contract_check")
 
             # Dry-run validation
             dry_run_ok = False
+            dry_run_error_info = None
             if toolkit:
                 dr = toolkit.apply_hunk_dry_run(target_file, adapted_hunk_text)
                 dry_run_ok = dr["success"]
                 if not dry_run_ok:
+                    repaired = _repair_pure_insertion_hunk_with_target_context(
+                        target_repo_path=target_repo_path,
+                        target_file=target_file,
+                        candidate_hunk=adapted_hunk_text,
+                        insertion_line=insertion_line,
+                    )
+                    if repaired:
+                        dr_repaired = toolkit.apply_hunk_dry_run(target_file, repaired)
+                        if dr_repaired.get("success"):
+                            adapted_hunk_text = repaired
+                            dry_run_ok = True
+                            print(
+                                f"    Agent 3: Deterministic insertion-hunk repair passed dry-run for {target_file}[{hunk_idx}]"
+                            )
+                        else:
+                            dr = dr_repaired
+
+                if not dry_run_ok:
                     print(
                         f"    Agent 3: Dry-run failed for {target_file}[{hunk_idx}]: {dr['output'][:150]}"
                     )
+                    trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                    # Fail-closed: do not emit unresolved bad hunks to Phase 4.
+                    task_entry["status"] = "failed"
+                    task_entry["reason"] = "dry_run_failed"
+                    task_entry["error"] = dr.get("output", "")
+                    continue
+                task_entry["completed_steps"].append("dry_run")
             else:
                 dry_run_ok = True  # No toolkit → assume ok (local dev mode)
+                task_entry["completed_steps"].append("dry_run")
 
             # Blueprint intent check
-            intent_ok = await _check_intent(llm, adapted_hunk_text, semantic_blueprint)
+            intent_ok = await _check_intent(
+                llm,
+                adapted_hunk_text,
+                semantic_blueprint,
+                token_usage=token_usage,
+                model_name=model_name,
+            )
             if not intent_ok:
                 print(
                     f"    Agent 3: Blueprint check failed for {target_file}[{hunk_idx}] — flagging."
                 )
+            task_entry["completed_steps"].append("intent_check")
+
+            task_entry["status"] = "success"
+            task_entry["reason"] = (
+                "generated_with_intent_warning"
+                if not intent_ok
+                else "generated_and_validated"
+            )
 
             hunk: AdaptedHunk = {
                 "target_file": target_file,
@@ -1077,6 +2158,11 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 "file_operation_required": op_plan.get("operation_required", True),
                 "path_resolution_reason": op_plan.get("reason", "unknown"),
             }
+            # Attach error info if dry-run failed (Phase 4 will see this)
+            if dry_run_error_info:
+                hunk["dry_run_error"] = dry_run_error_info
+                hunk["dry_run_error_message"] = dry_run_error_info["error_message"]
+
             adapted_code_hunks.append(hunk)
             trace += (
                 f"| `{target_file}` | {hunk_idx} | "
@@ -1152,12 +2238,34 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     retry_context=retry_context_str,
                 )
                 try:
-                    response = await llm.ainvoke(
-                        [
-                            SystemMessage(content=_HUNK_REWRITE_SYSTEM),
-                            HumanMessage(content=prompt),
-                        ]
-                    )
+                    test_llm_msgs = [
+                        SystemMessage(content=_HUNK_REWRITE_SYSTEM),
+                        HumanMessage(content=prompt),
+                    ]
+                    test_in_tokens = count_messages_tokens(test_llm_msgs, model_name)
+                    response = await llm.ainvoke(test_llm_msgs)
+                    usage = extract_usage_from_response(response)
+                    if usage and (usage["input_tokens"] or usage["output_tokens"]):
+                        add_usage(
+                            token_usage,
+                            usage["input_tokens"],
+                            usage["output_tokens"],
+                            "hunk_generator.test_rewrite.provider_usage",
+                        )
+                    else:
+                        fallback_content = (
+                            response.content
+                            if hasattr(response, "content")
+                            else str(response)
+                        )
+                        add_usage(
+                            token_usage,
+                            test_in_tokens,
+                            count_text_tokens(str(fallback_content), model_name),
+                            "hunk_generator.test_rewrite.tiktoken",
+                        )
+                        token_usage["estimated"] = True
+
                     raw_content = (
                         response.content
                         if hasattr(response, "content")
@@ -1178,10 +2286,18 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             if not adapted_hunk_text:
                 adapted_hunk_text = pre_rewritten
 
+            # Test hunk dry-run validation (CLAW-inspired: collect errors, don't drop)
             dry_run_ok = False
+            dry_run_error_info = None
             if toolkit:
                 dr = toolkit.apply_hunk_dry_run(target_test_file, adapted_hunk_text)
                 dry_run_ok = dr["success"]
+                if not dry_run_ok:
+                    dry_run_error_info = {
+                        "error_message": dr.get("output", "Unknown dry-run error"),
+                        "tool": "git-apply-check",
+                        "timestamp": str(__import__("datetime").datetime.now()),
+                    }
             else:
                 dry_run_ok = True
 
@@ -1196,6 +2312,11 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 "file_operation_required": op_plan.get("operation_required", True),
                 "path_resolution_reason": op_plan.get("reason", "unknown"),
             }
+            # Attach error info if dry-run failed
+            if dry_run_error_info:
+                hunk["dry_run_error"] = dry_run_error_info
+                hunk["dry_run_error_message"] = dry_run_error_info["error_message"]
+
             adapted_test_hunks.append(hunk)
             trace += (
                 f"| `{target_test_file}` (test) | {hunk_idx} | "
@@ -1284,4 +2405,49 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
         ],
         "adapted_code_hunks": adapted_code_hunks,
         "adapted_test_hunks": adapted_test_hunks,
+        "generation_checklist": generation_checklist,
+        "token_usage": token_usage,
     }
+
+
+def extract_hunk_context(hunk_text: str) -> tuple[str, str]:
+    """
+    Extract the old_string and new_string from a unified diff hunk.
+
+    This parses a standard unified diff hunk and reconstructs the exact
+    strings that need to match for the patch to apply. Used for CLAW-style
+    exact string matching approach.
+
+    Args:
+        hunk_text: Unified diff hunk starting with @@
+
+    Returns:
+        Tuple of (old_string, new_string) - exact text to match and replace
+    """
+    lines = hunk_text.strip().split("\n")
+
+    if not lines or not lines[0].startswith("@@"):
+        return "", ""
+
+    old_lines_list = []
+    new_lines_list = []
+
+    for line in lines[1:]:
+        if line.startswith("-") and not line.startswith("---"):
+            # Removed line
+            old_lines_list.append(line[1:])
+        elif line.startswith("+") and not line.startswith("+++"):
+            # Added line
+            new_lines_list.append(line[1:])
+        elif line.startswith(" "):
+            # Context line (appears in both old and new)
+            old_lines_list.append(line[1:])
+            new_lines_list.append(line[1:])
+        elif line.startswith("\\"):
+            # "\ No newline at end of file" marker - skip
+            continue
+
+    old_string = "\n".join(old_lines_list)
+    new_string = "\n".join(new_lines_list)
+
+    return old_string, new_string

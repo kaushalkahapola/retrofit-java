@@ -1,202 +1,57 @@
 # Context Analyzer Trace
 
-## File: `extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java`
+## File: `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java`
 
-**Method focused**: `computeLagForAutoScaler`
-**Hunk count**: 1
-
-**Agent Tool Steps:**
-
-**Patch Intent**: The patch aims to remove the computeLagForAutoScaler method to prevent potential null reference issues.
-
-**Root Cause**: The method computeLagForAutoScaler was incorrectly returning a lag value based on potentially null LagStats, which could lead to misleading metrics.
-
-**Fix Logic**: Removed the computeLagForAutoScaler method entirely, eliminating the risk of returning a null-dependent value.
-
-**Dependent APIs**: computeLagStats, LagStats
-
-**Hunk Chain**:
-
-  - H1 [cleanup]: The hunk removes the computeLagForAutoScaler method, which was returning a lag value based on a potentially null LagStats object.
-
-**Self-Reflection**: VERIFIED ✅
-
-## File: `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java`
-
-**Method focused**: `Unknown`
-**Hunk count**: 2
+**Method focused**: `order`
+**Hunk count**: 5
 
 **Agent Tool Steps:**
 
-  - `Tool: get_class_context` -> {'context': 'package org.apache.druid.indexing.seekablestream.supervisor.autoscaler;\n\n// Line 40\n...
-  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
-  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
-  - `Tool: read_file` -> /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agre...
-**Patch Intent**: Ensure that lag metrics are collected safely by handling potential null values in lag statistics.
+**Patch Intent**: To ensure that requests to data nodes are sent in an order that respects the roles of the nodes.
 
-**Root Cause**: The previous implementation did not handle the case where lag statistics could be null, potentially leading to a NullPointerException when accessing lag metrics.
+**Root Cause**: Lack of proper ordering of nodes based on their roles when sending requests to data nodes.
 
-**Fix Logic**: Replaced the computation of lag with a check for null LagStats, and added logic to handle the case where lagStats is null by offering 0L to lagMetricsQueue.
+**Fix Logic**: Introduced a new method `order(TargetShards targetShards)` to sort the shards based on the roles of the nodes, utilizing a predefined order of node roles.
 
-**Dependent APIs**: supervisor, lagMetricsQueue, lagBasedAutoScalerConfig, LagStats, AggregateFunction
+**Dependent APIs**: DiscoveryNode, TargetShards, ShardId
 
 **Hunk Chain**:
 
-  - H1 [declaration]: Added imports for AggregateFunction and LagStats to the class.
-    → *These imports are necessary for the new lag statistics handling introduced in the next hunk.*
-  - H2 [core_fix]: Replaced the lag computation with a new method that checks for null LagStats and uses it to determine the lag value.
+  - H1 [declaration]: Added import for `DiscoveryNodeRole` to access node role constants.
+    → *This import is necessary for defining the order of node roles in the next hunk.*
+  - H2 [declaration]: Added imports for `Comparator` and `LinkedHashMap` to facilitate sorting and maintaining order.
+    → *These imports are required for implementing the sorting logic in the subsequent hunk.*
+  - H3 [declaration]: Defined a static list `NODE_QUERY_ORDER` that specifies the order of node roles for query processing.
+    → *This list provides the necessary order for the sorting logic implemented in the next hunk.*
+  - H4 [core_fix]: Implemented the `order(TargetShards targetShards)` method to sort shards based on the roles of their corresponding nodes.
+    → *This method is called in the next hunk to replace the previous method of adding pending shard IDs.*
+  - H5 [propagation]: Changed the way pending shard IDs are added by calling the new `order` method instead of directly adding them.
 
-**Self-Reflection**: VERIFIED ✅
-
-## File: `indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java`
-
-**Method focused**: `getLagAggregate`
-**Hunk count**: 6
-
-**Agent Tool Steps:**
-
-**Patch Intent**: To introduce a lag aggregate function property in LagBasedAutoScalerConfig for improved scaling decisions.
-
-**Root Cause**: The class LagBasedAutoScalerConfig did not have a property to hold the lag aggregate function, which is necessary for scaling decisions.
-
-**Fix Logic**: Added a new field 'lagAggregate' of type AggregateFunction and updated the constructor and getter method to handle this new property.
-
-**Dependent APIs**: lagAggregate, AggregateFunction
-
-**Hunk Chain**:
-
-  - H1 [declaration]: Imported the AggregateFunction class to be used in the configuration.
-    → *This import is necessary to declare the lagAggregate field in the next hunk.*
-  - H2 [declaration]: Declared a new private final field 'lagAggregate' of type AggregateFunction.
-    → *This declaration sets up the lagAggregate field to be initialized in the constructor in the next hunk.*
-  - H3 [core_fix]: Updated the constructor to accept a new parameter 'lagAggregate' and initialized the corresponding field.
-    → *This initialization allows the lagAggregate to be set, which is necessary for the getter method in the next hunk.*
-  - H4 [core_fix]: Assigned the passed 'lagAggregate' parameter to the class field.
-    → *This assignment ensures that the lagAggregate field holds the correct value for retrieval in the next hunk.*
-  - H5 [propagation]: Added a getter method for the lagAggregate field to allow external access.
-    → *This getter method enables other parts of the code to retrieve the lagAggregate value, which is essential for its usage.*
-  - H6 [cleanup]: Updated the toString method to include the lagAggregate field in the string representation of the object.
-
-**Self-Reflection**: FAILED ❌ (used anyway)
-
-## File: `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java`
-
-**Method focused**: `computeLagForAutoScaler`
-**Hunk count**: 1
-
-**Agent Tool Steps:**
-
-  - `Tool: get_class_context` -> {'context': 'package org.apache.druid.indexing.overlord.supervisor;\n\n// Line 33\npublic interface ...
-  - `Tool: get_struct_definition` -> Tool unavailable. Try using get_class_context or read_file if you know the file path....
-  - `Tool: read_file` -> /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agre...
-**Patch Intent**: To eliminate the risk of returning a lag value based on a null LagStats object.
-
-**Root Cause**: The method computeLagForAutoScaler was returning a lag value based on potentially null LagStats, which could lead to unexpected behavior if computeLagStats() fails or returns null.
-
-**Fix Logic**: Removed the computeLagForAutoScaler method entirely, which was handling a null LagStats incorrectly.
-
-**Dependent APIs**: computeLagStats, LagStats
-
-**Hunk Chain**:
-
-  - H1 [cleanup]: Removed the computeLagForAutoScaler method and its implementation.
-
-**Self-Reflection**: FAILED ❌ (used anyway)
-
-## File: `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java`
-
-**Method focused**: `Foundation`
-**Hunk count**: 1
-
-**Agent Tool Steps:**
-
-  - `Tool: read_file` -> Error reading file server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/Agg...
-  - `Tool: get_class_context` -> {'error': 'File not found: server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autosc...
-**Patch Intent**: To define a set of aggregate functions for use in the autoscaler.
-
-**Root Cause**: The file AggregateFunction.java was missing, which could lead to undefined behavior when trying to use aggregate functions in the autoscaler.
-
-**Fix Logic**: Created a new enum AggregateFunction with values MAX, SUM, and AVERAGE.
-
-**Dependent APIs**: AggregateFunction
-
-**Hunk Chain**:
-
-  - H1 [declaration]: Introduced a new enum AggregateFunction with constants for MAX, SUM, and AVERAGE.
-
-**Self-Reflection**: FAILED ❌ (used anyway)
-
-## File: `server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java`
-
-**Method focused**: `getAggregateForScaling`
-**Hunk count**: 2
-
-**Agent Tool Steps:**
-
-  - `Tool: get_class_context` -> {'context': 'package org.apache.druid.indexing.overlord.supervisor.autoscaler;\n\n// Line 22\npublic...
-  - `Tool: get_class_context` -> {'context': 'package org.apache.druid.indexing.overlord.supervisor.autoscaler;\n\n// Line 22\npublic...
-**Patch Intent**: Enhance the LagStats class to allow specification of the aggregation function used for scaling metrics.
-
-**Root Cause**: Lack of flexibility in specifying the aggregation function for scaling metrics.
-
-**Fix Logic**: Added a new constructor to accept an AggregateFunction parameter and a method to retrieve the specified aggregate function.
-
-**Dependent APIs**: AggregateFunction, getAggregateForScaling, getMetric
-
-**Hunk Chain**:
-
-  - H1 [declaration]: Introduced a new constructor to LagStats that accepts an AggregateFunction parameter and initializes it.
-    → *This hunk sets up the ability to specify an aggregation function, which is necessary for the next hunk to provide a method to retrieve it.*
-  - H2 [core_fix]: Added methods to get the specified aggregate function and to compute metrics based on the aggregation type.
-
-**Self-Reflection**: FAILED ❌ (used anyway)
+**Self-Reflection**: SKIPPED (PHASE1_ENABLE_REFLECTION=false)
 
 
 ## Consolidated Blueprint
 
-**Patch Intent**: To introduce a lag aggregate function property in LagBasedAutoScalerConfig for improved scaling decisions.
+**Patch Intent**: To ensure that requests to data nodes are sent in an order that respects the roles of the nodes.
 
-- **Root Cause**: The method computeLagForAutoScaler was incorrectly returning a lag value based on potentially null LagStats, which could lead to misleading metrics. | The previous implementation did not handle the case where lag statistics could be null, potentially leading to a NullPointerException when accessing lag metrics. | The class LagBasedAutoScalerConfig did not have a property to hold the lag aggregate function, which is necessary for scaling decisions. | The method computeLagForAutoScaler was returning a lag value based on potentially null LagStats, which could lead to unexpected behavior if computeLagStats() fails or returns null. | The file AggregateFunction.java was missing, which could lead to undefined behavior when trying to use aggregate functions in the autoscaler. | Lack of flexibility in specifying the aggregation function for scaling metrics.
-- **Fix Logic**: Removed the computeLagForAutoScaler method entirely, eliminating the risk of returning a null-dependent value. | Replaced the computation of lag with a check for null LagStats, and added logic to handle the case where lagStats is null by offering 0L to lagMetricsQueue. | Added a new field 'lagAggregate' of type AggregateFunction and updated the constructor and getter method to handle this new property. | Removed the computeLagForAutoScaler method entirely, which was handling a null LagStats incorrectly. | Created a new enum AggregateFunction with values MAX, SUM, and AVERAGE. | Added a new constructor to accept an AggregateFunction parameter and a method to retrieve the specified aggregate function.
-- **Dependent APIs**: ['computeLagStats', 'LagStats', 'supervisor', 'lagMetricsQueue', 'lagBasedAutoScalerConfig', 'AggregateFunction', 'lagAggregate', 'getAggregateForScaling', 'getMetric']
+- **Root Cause**: Lack of proper ordering of nodes based on their roles when sending requests to data nodes.
+- **Fix Logic**: Introduced a new method `order(TargetShards targetShards)` to sort the shards based on the roles of the nodes, utilizing a predefined order of node roles.
+- **Dependent APIs**: ['DiscoveryNode', 'TargetShards', 'ShardId']
 
 ### Full Hunk Chain (Cross-File)
 
-**[G1] extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java — H1** `[cleanup]`
-  The hunk removes the computeLagForAutoScaler method, which was returning a lag value based on a potentially null LagStats object.
-**[G2] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java — H1** `[declaration]`
-  Added imports for AggregateFunction and LagStats to the class.
-  → These imports are necessary for the new lag statistics handling introduced in the next hunk.
-**[G3] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java — H2** `[core_fix]`
-  Replaced the lag computation with a new method that checks for null LagStats and uses it to determine the lag value.
-**[G4] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java — H1** `[declaration]`
-  Imported the AggregateFunction class to be used in the configuration.
-  → This import is necessary to declare the lagAggregate field in the next hunk.
-**[G5] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java — H2** `[declaration]`
-  Declared a new private final field 'lagAggregate' of type AggregateFunction.
-  → This declaration sets up the lagAggregate field to be initialized in the constructor in the next hunk.
-**[G6] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java — H3** `[core_fix]`
-  Updated the constructor to accept a new parameter 'lagAggregate' and initialized the corresponding field.
-  → This initialization allows the lagAggregate to be set, which is necessary for the getter method in the next hunk.
-**[G7] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java — H4** `[core_fix]`
-  Assigned the passed 'lagAggregate' parameter to the class field.
-  → This assignment ensures that the lagAggregate field holds the correct value for retrieval in the next hunk.
-**[G8] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java — H5** `[propagation]`
-  Added a getter method for the lagAggregate field to allow external access.
-  → This getter method enables other parts of the code to retrieve the lagAggregate value, which is essential for its usage.
-**[G9] indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java — H6** `[cleanup]`
-  Updated the toString method to include the lagAggregate field in the string representation of the object.
-**[G10] server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java — H1** `[cleanup]`
-  Removed the computeLagForAutoScaler method and its implementation.
-**[G11] server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java — H1** `[declaration]`
-  Introduced a new enum AggregateFunction with constants for MAX, SUM, and AVERAGE.
-**[G12] server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java — H1** `[declaration]`
-  Introduced a new constructor to LagStats that accepts an AggregateFunction parameter and initializes it.
-  → This hunk sets up the ability to specify an aggregation function, which is necessary for the next hunk to provide a method to retrieve it.
-**[G13] server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java — H2** `[core_fix]`
-  Added methods to get the specified aggregate function and to compute metrics based on the aggregation type.
+**[G1] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H1** `[declaration]`
+  Added import for `DiscoveryNodeRole` to access node role constants.
+  → This import is necessary for defining the order of node roles in the next hunk.
+**[G2] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H2** `[declaration]`
+  Added imports for `Comparator` and `LinkedHashMap` to facilitate sorting and maintaining order.
+  → These imports are required for implementing the sorting logic in the subsequent hunk.
+**[G3] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H3** `[declaration]`
+  Defined a static list `NODE_QUERY_ORDER` that specifies the order of node roles for query processing.
+  → This list provides the necessary order for the sorting logic implemented in the next hunk.
+**[G4] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H4** `[core_fix]`
+  Implemented the `order(TargetShards targetShards)` method to sort shards based on the roles of their corresponding nodes.
+  → This method is called in the next hunk to replace the previous method of adding pending shard IDs.
+**[G5] x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java — H5** `[propagation]`
+  Changed the way pending shard IDs are added by calling the new `order` method instead of directly adding them.
 

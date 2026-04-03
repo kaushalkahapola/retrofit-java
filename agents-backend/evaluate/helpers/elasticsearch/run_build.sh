@@ -5,6 +5,10 @@ set -e
 
 echo "--- Building Elasticsearch for ${COMMIT_SHA:0:7} ---"
 
+HOST_UID="${HOST_UID:-$(id -u)}"
+HOST_GID="${HOST_GID:-$(id -g)}"
+echo "--- Container user: ${HOST_UID}:${HOST_GID} ---"
+
 # BUILD_DIR must be outside PROJECT_DIR to prevent recursive Docker build contexts.
 BUILD_DIR="${BUILD_DIR:-/tmp/es-build-${COMMIT_SHA:0:7}}"
 mkdir -p "${BUILD_DIR}"
@@ -45,18 +49,20 @@ ${DOCKER_CMD} run --rm -u root \
     -v "gradle-cache-es:/home/gradle/.gradle/caches" \
     -v "gradle-wrapper-es:/home/gradle/.gradle/wrapper" \
     "${IMAGE_TAG}" \
-    chown -R 1000:1000 /home/gradle/.gradle
+    chown -R "${HOST_UID}:${HOST_GID}" /home/gradle/.gradle
 
 echo "--- Compiling with Gradle (assemble + testClasses, skip tests) ---"
 if ${DOCKER_CMD} run --rm \
     --dns=8.8.8.8 \
-    -u 1000:1000 \
+    -e HOME=/tmp \
+    -e XDG_CONFIG_HOME=/tmp \
+    -u "${HOST_UID}:${HOST_GID}" \
     -v "gradle-cache-es:/home/gradle/.gradle/caches" \
     -v "gradle-wrapper-es:/home/gradle/.gradle/wrapper" \
     -v "${PROJECT_DIR}:/repo" \
     -w /repo \
     "${IMAGE_TAG}" \
-    bash -c "git config --global --add safe.directory /repo && \
+    bash -c "git config --global --add safe.directory /repo || true; \
     ./gradlew classes testClasses \
         -x :benchmarks:classes \
         -x :benchmarks:testClasses \

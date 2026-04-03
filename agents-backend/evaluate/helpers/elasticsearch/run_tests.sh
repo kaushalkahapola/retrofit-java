@@ -7,6 +7,10 @@ set -e
 echo "=== Running Elasticsearch Tests for ${COMMIT_SHA:0:7} ==="
 echo "Target: ${TEST_TARGETS}"
 
+HOST_UID="${HOST_UID:-$(id -u)}"
+HOST_GID="${HOST_GID:-$(id -g)}"
+echo "--- Container user: ${HOST_UID}:${HOST_GID} ---"
+
 IMAGE_TAG="${IMAGE_TAG:-retrofit-elasticsearch-builder:local}"
 
 echo "--- Using Docker Image: ${IMAGE_TAG} ---"
@@ -71,18 +75,28 @@ fi
 ${DOCKER_CMD} volume create gradle-cache-es 2>/dev/null || true
 ${DOCKER_CMD} volume create gradle-wrapper-es 2>/dev/null || true
 
-GRADLE_CMD="./gradlew ${GRADLE_ARGS}"
+echo "--- Setting cache permissions ---"
+${DOCKER_CMD} run --rm -u root \
+    -v "gradle-cache-es:/home/gradle/.gradle/caches" \
+    -v "gradle-wrapper-es:/home/gradle/.gradle/wrapper" \
+    "${IMAGE_TAG}" \
+    chown -R "${HOST_UID}:${HOST_GID}" /home/gradle/.gradle
+
+GRADLE_CMD="./gradlew ${GRADLE_ARGS} --project-cache-dir /tmp/gradle-project-cache"
 echo "--- Executing: ${GRADLE_CMD} ---"
 
 if ${DOCKER_CMD} run --rm \
     --dns=8.8.8.8 \
-    -u 1000:1000 \
+    -e HOME=/tmp \
+    -e XDG_CONFIG_HOME=/tmp \
+    -u "${HOST_UID}:${HOST_GID}" \
     -v "gradle-cache-es:/home/gradle/.gradle/caches" \
     -v "gradle-wrapper-es:/home/gradle/.gradle/wrapper" \
     -v "${PROJECT_DIR}:/repo" \
     -w /repo \
     "${IMAGE_TAG}" \
-    bash -c "git config --global --add safe.directory /repo && \
+    bash -c "git config --global --add safe.directory /repo || true; \
+    mkdir -p /tmp/gradle-project-cache && \
     ${GRADLE_CMD}; \
     GRADLE_EXIT=\$?; \
     echo '--- Test results are available in build/test-results/ ---'; \

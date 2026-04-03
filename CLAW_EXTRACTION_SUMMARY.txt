@@ -1,0 +1,335 @@
+================================================================================
+CLAW CODE EXTRACTION - COMPLETE SUMMARY
+================================================================================
+
+PROJECT: Retrofit Java Agents
+PURPOSE: Extract CLAW's file operation implementation patterns for adaptation
+STATUS: COMPLETE
+
+================================================================================
+DELIVERABLES
+================================================================================
+
+1. CLAW_IMPLEMENTATION_PATTERNS.md (724 lines)
+   - Complete analysis of CLAW source code
+   - 13 major sections covering all aspects
+   - Includes exact code locations and line references
+   - Documents what CLAW does and does NOT do
+   - Full system prompt structure and content
+
+2. CLAW_QUICK_REFERENCE.md
+   - One-page quick reference guide
+   - Critical design decisions explained
+   - Code snippets for common patterns
+   - Testing patterns from CLAW
+   - Absolute path handling strategies
+
+3. CLAW_READY_TO_USE_CODE.md
+   - 20 ready-to-use code snippets
+   - Exact implementations from CLAW
+   - Direct copy-paste ready
+   - All data structures defined
+   - All functions fully implemented
+   - Tool specifications in JSON format
+   - System prompt functions
+
+================================================================================
+KEY FINDINGS
+================================================================================
+
+LINE NUMBER HANDLING:
+  - Internal: 0-indexed (for slicing)
+  - Output: 1-indexed (for human display)
+  - Always convert with `index + 1` when returning to user
+  - Use saturating arithmetic: `saturating_add()`, `saturating_sub()`
+
+FILE EDITING STRATEGY:
+  - EXACT string matching ONLY (no fuzzy matching)
+  - Use `replace()` for replace-all
+  - Use `replacen(..., 1)` for first occurrence only
+  - Validate BEFORE mutating the file
+  - Return comprehensive output for verification
+
+PATCH GENERATION:
+  - Single hunk for entire file (not multi-hunk)
+  - oldStart and newStart always = 1
+  - Lines prefixed with "-" (removed) or "+" (added)
+  - For visualization only, not for application
+
+ERROR HANDLING:
+  - Errors are converted to messages (not exceptions)
+  - Pre-condition validation (inputs)
+  - Existence checks (file/string found)
+  - Safe arithmetic (no panic on boundaries)
+
+OUTPUT COMPREHENSIVENESS:
+  - Always return original file content
+  - Include structured patch for visualization
+  - Echo parameters back (old_string, new_string, etc.)
+  - Include metadata (file paths, line counts)
+  - Include provenance flags (user_modified)
+
+================================================================================
+DATA STRUCTURES (READY TO USE)
+================================================================================
+
+✓ StructuredPatchHunk
+  - Fields: old_start, old_lines, new_start, new_lines, lines
+  - JSON serialization: camelCase
+  - All line numbers are 1-indexed
+
+✓ TextFilePayload
+  - Fields: file_path, content, num_lines, start_line, total_lines
+  - start_line is always 1-indexed for display
+  - Separates chunk size from total file size
+
+✓ EditFileOutput
+  - Complete output for edit operations
+  - Contains: file_path, old_string, new_string, original_file
+  - Includes: structured_patch, user_modified, replace_all
+
+✓ ReadFileOutput / WriteFileOutput
+  - Wrapper structures with "type" field
+  - TextFilePayload for read output
+  - Include git_diff field (for future use)
+
+================================================================================
+FUNCTIONS (READY TO USE)
+================================================================================
+
+✓ edit_file(path, old_string, new_string, replace_all)
+  - Exact implementation from CLAW
+  - Complete error handling
+  - Returns comprehensive output
+  - Ready for direct adaptation
+
+✓ read_file(path, offset, limit)
+  - 0-indexed internally, 1-indexed output
+  - Boundary safe slicing
+  - Returns metadata about file
+
+✓ write_file(path, content)
+  - Creates parent directories automatically
+  - Distinguishes "create" vs "update"
+  - Returns original file content
+
+✓ make_patch(original, updated)
+  - Exact CLAW implementation
+  - Creates single hunk
+  - Formats lines with +/- prefix
+
+✓ normalize_path() / normalize_path_allow_missing()
+  - Two variants for different use cases
+  - Always canonicalizes paths
+  - Handles symlinks and relative paths
+
+================================================================================
+TOOL SPECIFICATIONS (READY TO USE)
+================================================================================
+
+All JSON schemas extracted:
+  - edit_file: path, old_string, new_string, replace_all
+  - read_file: path, offset (optional), limit (optional)
+  - write_file: path, content
+  - Permission modes: read-only, workspace-write, full-access
+
+================================================================================
+SYSTEM PROMPTS (EXTRACTED)
+================================================================================
+
+Static sections:
+  1. Introduction
+  2. System rules
+  3. Doing tasks (6 guidelines)
+  4. Executing actions with care
+
+Key guidance extracted:
+  - "Read relevant code before changing it"
+  - "Keep changes tightly scoped"
+  - "Do not add speculative abstractions"
+  - "Do not create files unless required"
+  - "If an approach fails, diagnose before switching tactics"
+  - "Report outcomes faithfully"
+
+Dynamic sections:
+  - Environment context (cwd, date, platform)
+  - Project context (git status, instruction files)
+  - Runtime configuration
+  - Additional instructions
+
+================================================================================
+IMPLEMENTATION PATTERNS
+================================================================================
+
+1. Validation Before Mutation
+   - Check inputs first
+   - Then write to disk
+   - Return original state for audit
+
+2. Dual Indexing
+   - Internal: 0-indexed arrays
+   - Output: 1-indexed for human display
+   - Consistent conversion pattern
+
+3. Exact String Matching
+   - No context matching
+   - No fuzzy matching
+   - Deterministic and auditable
+
+4. Comprehensive Output
+   - Include verification data
+   - Echo parameters back
+   - Provide metadata
+
+5. Boundary Safe Arithmetic
+   - Always use saturating operations
+   - Check bounds before slicing
+   - Use min() for limits
+
+6. Error Message Conversion
+   - Convert Err to message string
+   - Include is_error flag
+   - Report to user as message
+
+================================================================================
+WHAT CLAW INTENTIONALLY DOES NOT IMPLEMENT
+================================================================================
+
+✗ Fuzzy/context matching for edits
+  Reason: Deterministic and auditable only
+
+✗ Patch application (only generation)
+  Reason: Simple visualization-only approach
+
+✗ File locking or transactions
+  Reason: Direct writes for simplicity
+
+✗ Rollback mechanism
+  Reason: Changes are immediate
+
+✗ Merge conflict resolution
+  Reason: Simple string replacement only
+
+✗ Automatic retry on failure
+  Reason: Errors are reported to user
+
+✗ Line-based patching
+  Reason: Full file replacement approach
+
+These are intentional design choices, not oversights.
+
+================================================================================
+SOURCE LOCATIONS (VERIFIED)
+================================================================================
+
+CLAW Repository: /media/kaushal/FDrive/retrofit-java/references/claw-code-main/
+
+Key files analyzed:
+  ✓ rust/crates/runtime/src/file_ops.rs (550 lines)
+  ✓ rust/crates/runtime/src/prompt.rs (795 lines)
+  ✓ rust/crates/tools/src/lib.rs (1583+ lines)
+  ✓ rust/crates/runtime/src/conversation.rs (801 lines)
+  ✓ rust/crates/runtime/src/bash.rs (283 lines)
+
+All code verified and traced to exact line numbers.
+
+================================================================================
+RECOMMENDED IMPLEMENTATION ORDER
+================================================================================
+
+1. Data structures (easy, foundational)
+   - StructuredPatchHunk
+   - TextFilePayload
+   - EditFileOutput, ReadFileOutput, WriteFileOutput
+
+2. Path handling functions (essential)
+   - normalize_path()
+   - normalize_path_allow_missing()
+
+3. Core file operations (core functionality)
+   - read_file()
+   - write_file()
+   - edit_file()
+
+4. Patch generation (visualization)
+   - make_patch()
+
+5. Tool specifications (interface definition)
+   - JSON schemas for tools
+   - Permission modes
+
+6. System prompts (guidance)
+   - Static sections
+   - Dynamic sections
+
+7. Integration (verification)
+   - Test cases
+   - Error handling
+   - Edge cases
+
+================================================================================
+TESTING RECOMMENDATIONS
+================================================================================
+
+From CLAW test suite:
+  ✓ Test offset/limit combinations
+  ✓ Test replace_all flag behavior
+  ✓ Test file creation vs update
+  ✓ Test error conditions
+  ✓ Test boundary conditions (empty files, large files)
+  ✓ Test path normalization
+  ✓ Test line number conversions
+
+All test patterns extracted and documented.
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Copy data structures from CLAW_READY_TO_USE_CODE.md
+2. Copy functions from same file (20 snippets provided)
+3. Implement file operation tools using these patterns
+4. Integrate with your system prompt system
+5. Test against the test cases provided
+6. Verify line number handling (most common error point)
+7. Validate all boundary conditions
+
+================================================================================
+CRITICAL REMINDERS
+================================================================================
+
+1. LINE NUMBERS
+   Always remember: internal = 0-indexed, output = 1-indexed
+
+2. VALIDATION
+   Always validate BEFORE mutating files
+
+3. SAFETY
+   Always use saturating arithmetic (no panics)
+
+4. COMPREHENSIVENESS
+   Always return original file content and metadata
+
+5. SIMPLICITY
+   CLAW uses simple exact matching, not fuzzy matching
+
+6. DETERMINISM
+   Every operation should be auditable and repeatable
+
+================================================================================
+DOCUMENTATION CREATED
+================================================================================
+
+✓ CLAW_IMPLEMENTATION_PATTERNS.md (724 lines)
+✓ CLAW_QUICK_REFERENCE.md
+✓ CLAW_READY_TO_USE_CODE.md
+✓ CLAW_EXTRACTION_SUMMARY.txt (this file)
+
+All files saved to:
+/media/kaushal/FDrive/retrofit-java/
+
+Ready for use in your implementation.
+
+================================================================================
+END OF SUMMARY
+================================================================================
