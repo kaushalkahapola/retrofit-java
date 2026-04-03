@@ -36,11 +36,8 @@ import hashlib
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langgraph.prebuilt import create_react_agent
-from langgraph.errors import GraphRecursionError
 
 from state import AgentState, AdaptedHunk, FileEdit, SemanticBlueprint
-from utils.patch_analyzer import PatchAnalyzer
 from utils.llm_provider import get_llm
 from utils.token_counter import (
     add_usage,
@@ -55,67 +52,6 @@ from agents.hunk_generator_tools import HunkGeneratorToolkit
 # ---------------------------------------------------------------------------
 # System prompts
 # ---------------------------------------------------------------------------
-
-_FILE_EDITOR_SYSTEM = """\
-You are an expert Java backport engineer.
-
-Your task: apply a precise code change to an older version of a Java file using
-direct file-editing tools. You do NOT generate unified diff syntax.
-
-MANDATORY WORKFLOW for each edit:
-
-STEP 1 - VERIFY the plan's old_string:
-  Call verify_context_at_line or grep_in_file to confirm old_string exists in
-  the target file. If NOT_FOUND, use grep_in_file and read_file_window to find
-  the actual text and adjust old_string accordingly.
-
-STEP 2 - APPLY the edit:
-  Call str_replace_in_file(file_path, old_string, new_string).
-  - If SUCCESS: proceed.
-  - If AMBIGUOUS: extend old_string with more surrounding context lines.
-  - If NOT_FOUND: use grep_in_file to find the actual text, then retry.
-
-STEP 3 - VERIFY the result:
-  After str_replace_in_file succeeds, call read_file_window around the edited
-  area to confirm the change looks correct.
-
-STEP 4 - CAPTURE the diff:
-  After ALL edits for the file are complete, call git_diff_file(file_path).
-  This produces the mechanically correct unified diff.
-
-RULES:
-- NEVER generate unified diff text yourself - always use str_replace_in_file.
-- old_string must match the real file content character-for-character.
-- For multi-line old_string, include enough context to make it unique in the file.
-- Apply all symbol renames from the ConsistencyMap to new_string added content.
-- Preserve the fix intent from the SemanticBlueprint.
-- If an edit fails repeatedly, call reset_file and try a different approach.
-"""
-
-_FILE_EDITOR_USER = """\
-## Target File
-`{target_file}`
-
-## Edit Plan (from Planning Agent)
-{edit_plan}
-
-## ConsistencyMap (apply to new_string added content only)
-{consistency_map}
-
-## Fix Intent (SemanticBlueprint)
-- Fix Logic: {fix_logic}
-- Dependent APIs: {dependent_apis}
-
-## File Context (from Agent 2 - may be from mainline, verify in target)
-```java
-{target_context}
-```
-
-{retry_context}
-
-Apply all edits to `{target_file}`, then call git_diff_file to capture the result.
-Report: SUCCESS or FAILURE with reason.
-"""
 
 _INTENT_CHECK_SYSTEM = """\
 You are a code reviewer verifying that a git diff preserves a specific fix intent.
@@ -148,30 +84,6 @@ def _normalize_rel_path(path: str) -> str:
     if p.startswith("a/") or p.startswith("b/"):
         p = p[2:]
     return p
-
-
-def _format_consistency_map(cm: dict) -> str:
-    if not cm:
-        return "(none - no renames detected)"
-    return "\n".join(f"  {old} -> {new}" for old, new in cm.items())
-
-
-def _format_edit_plan(plan_entries: list[dict[str, Any]]) -> str:
-    if not plan_entries:
-        return "(no plan entries)"
-    lines = []
-    for i, e in enumerate(plan_entries, start=1):
-        lines.append(f"Edit {i} (hunk_index={e.get('hunk_index')}):")
-        lines.append(f"  edit_type:  {e.get('edit_type')}")
-        lines.append(f"  verified:   {e.get('verified')}")
-        lines.append(
-            f"  old_string (first 200 chars): {str(e.get('old_string', ''))[:200]!r}"
-        )
-        lines.append(
-            f"  new_string (first 200 chars): {str(e.get('new_string', ''))[:200]!r}"
-        )
-        lines.append(f"  notes:      {e.get('notes', '')}")
-    return "\n".join(lines)
 
 
 def _git_diff_file(target_repo_path: str, rel_path: str) -> str:
@@ -279,24 +191,136 @@ def _exists_file(repo_path: str, rel_path: str) -> bool:
 
 def _apply_edit_deterministically(
     toolkit: HunkGeneratorToolkit,
+    target_repo_path: str,
     plan_entry: dict[str, Any],
     target_file: str,
-) -> tuple[bool, str, str]:
+) -> tuple[bool, str, str, str, str]:
     """
-    Try to apply a single plan edit without the LLM.
-    Returns (success, apply_result_message, diff_after).
+    Apply a single plan operation deterministically with anchor resolution.
+
+    Returns:
+      (success, apply_result_message, resolved_old, resolved_new, resolution_reason)
     """
     edit_type = str(plan_entry.get("edit_type") or "replace").lower()
     old_string = str(plan_entry.get("old_string") or "")
     new_string = str(plan_entry.get("new_string") or "")
 
     if not old_string:
-        return False, "empty_old_string", ""
+        return False, "empty_old_string", "", "", "empty_old"
 
-    result = toolkit.str_replace_in_file(target_file, old_string, new_string)
+    full_path = os.path.normpath(os.path.join(target_repo_path, target_file))
+    try:
+        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except Exception as exc:
+        return False, f"read_error:{exc}", "", "", "read_failed"
+
+    def _resolve_old(content_text: str, candidate: str) -> tuple[str, str]:
+        if candidate in content_text:
+            return candidate, "exact"
+
+        # Single-line: find unique stripped-line match and adopt exact file line.
+        if "\n" not in candidate:
+            stripped = candidate.strip()
+            if not stripped:
+                return "", "empty_candidate"
+            line_matches = [
+                line for line in content_text.splitlines() if line.strip() == stripped
+            ]
+            if len(line_matches) == 1:
+                return line_matches[0], "line_trimmed_unique"
+            if candidate.lstrip() != candidate and candidate.lstrip() in content_text:
+                return candidate.lstrip(), "lstrip_exact"
+            return "", "not_found_single"
+
+        # Multi-line: match by stripped-line equivalence window.
+        cand_lines = candidate.splitlines()
+        file_lines = content_text.splitlines()
+        if not cand_lines:
+            return "", "empty_multiline"
+        n = len(cand_lines)
+        hits: list[str] = []
+        for i in range(0, len(file_lines) - n + 1):
+            ok = True
+            for j in range(n):
+                if file_lines[i + j].strip() != cand_lines[j].strip():
+                    ok = False
+                    break
+            if ok:
+                hits.append("\n".join(file_lines[i : i + n]))
+        if len(hits) == 1:
+            return hits[0], "multiline_trimmed_unique"
+        return "", "not_found_multiline"
+
+    resolved_old, reason = _resolve_old(content, old_string)
+    if not resolved_old:
+        return False, f"old_resolution_failed:{reason}", "", "", reason
+
+    resolved_new = new_string
+    if edit_type in {"insert_before", "insert_after"}:
+        # Recompose insertion around resolved anchor to avoid whitespace mismatch.
+        payload = None
+        if edit_type == "insert_before":
+            idx = new_string.rfind(old_string)
+            if idx >= 0:
+                payload = new_string[:idx]
+        else:
+            idx = new_string.find(old_string)
+            if idx >= 0:
+                payload = new_string[idx + len(old_string) :]
+
+        # Fallback: infer payload using stripped-line suffix/prefix relationship.
+        if payload is None:
+            new_lines = new_string.splitlines()
+            old_lines = old_string.splitlines()
+            if old_lines and len(new_lines) >= len(old_lines):
+                if edit_type == "insert_before":
+                    tail = new_lines[-len(old_lines) :]
+                    if all(
+                        tail[i].strip() == old_lines[i].strip()
+                        for i in range(len(old_lines))
+                    ):
+                        payload = "\n".join(new_lines[: -len(old_lines)])
+                        if new_string.endswith("\n"):
+                            payload += "\n"
+                else:
+                    head = new_lines[: len(old_lines)]
+                    if all(
+                        head[i].strip() == old_lines[i].strip()
+                        for i in range(len(old_lines))
+                    ):
+                        payload = "\n".join(new_lines[len(old_lines) :])
+                        if (
+                            payload
+                            and not payload.startswith("\n")
+                            and "\n" in new_string
+                        ):
+                            payload = "\n" + payload
+
+        if payload is None:
+            return (
+                False,
+                "insert_payload_derivation_failed",
+                resolved_old,
+                "",
+                "payload_missing",
+            )
+
+        if edit_type == "insert_before" and payload and not payload.endswith("\n"):
+            payload += "\n"
+        if edit_type == "insert_after" and payload and not payload.startswith("\n"):
+            payload = "\n" + payload
+
+        resolved_new = (
+            payload + resolved_old
+            if edit_type == "insert_before"
+            else resolved_old + payload
+        )
+
+    result = toolkit.str_replace_in_file(target_file, resolved_old, resolved_new)
     if result.startswith("SUCCESS"):
-        return True, result, ""
-    return False, result, ""
+        return True, result, resolved_old, resolved_new, reason
+    return False, result, resolved_old, resolved_new, reason
 
 
 def _diff_introduces_call_without_definition(diff_text: str) -> tuple[bool, str]:
@@ -378,6 +402,28 @@ def _file_has_method_declaration(
         return bool(pat.search(content))
     except Exception:
         return False
+
+
+def _looks_structurally_truncated(diff_text: str) -> tuple[bool, str]:
+    """
+    Cheap syntax artifact guard on added lines.
+    Detects obviously truncated declarations emitted by malformed edits.
+    """
+    added = [
+        line[1:]
+        for line in (diff_text or "").splitlines()
+        if line.startswith("+") and not line.startswith("+++")
+    ]
+    for line in added:
+        s = line.strip()
+        if s == "private static final":
+            return (
+                True,
+                "syntax_guard_failed: truncated declaration 'private static final'",
+            )
+        if s.endswith("=") and not s.endswith("=="):
+            return True, f"syntax_guard_failed: dangling assignment in added line '{s}'"
+    return False, ""
 
 
 def _resolve_operation_plan(
@@ -485,8 +531,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
     For each modified file in the patch:
       1. Reset file to HEAD (clean slate).
       2. Apply str_replace edits from the planning agent's plan.
-         - Try deterministically first (verified plans).
-         - Fall back to LLM+ReAct if deterministic fails.
+         - Deterministic-only execution with on-disk anchor resolution.
       3. Capture diff via `git diff HEAD -- <file>`.
       4. Reset file to HEAD again (leave repo clean for validation).
       5. Emit AdaptedHunk with hunk_text = git diff output.
@@ -495,7 +540,6 @@ async def file_editor_node(state: AgentState, config) -> dict:
     """
     print("Agent 3 (File Editor): Starting direct file-edit workflow...")
 
-    consistency_map: dict = state.get("consistency_map") or {}
     mapped_target_context: dict = state.get("mapped_target_context") or {}
     hunk_generation_plan: dict = state.get("hunk_generation_plan") or {}
     semantic_blueprint: SemanticBlueprint = state.get("semantic_blueprint")
@@ -507,7 +551,6 @@ async def file_editor_node(state: AgentState, config) -> dict:
     validation_attempts: int = state.get("validation_attempts") or 0
     error_context: str = state.get("validation_error_context") or ""
     retry_files_raw = state.get("validation_retry_files") or []
-    with_test_changes: bool = state.get("with_test_changes", False)
     previous_patch_hash = str(state.get("generated_patch_hash") or "")
 
     retry_files = {_normalize_rel_path(p) for p in retry_files_raw if p}
@@ -522,28 +565,14 @@ async def file_editor_node(state: AgentState, config) -> dict:
         print(msg)
         return {"messages": [HumanMessage(content=msg)]}
 
-    # Retry context string injected into LLM prompts on retries
-    retry_context_str = ""
     if validation_attempts > 0 and error_context:
-        retry_files_note = (
-            f"Files implicated: {sorted(retry_files)}\n" if retry_files else ""
+        print(
+            f"  Agent 3: Retry #{validation_attempts} - deterministic re-application with failure context."
         )
-        retry_context_str = (
-            f"## RETRY #{validation_attempts} - Previous Validation Failed\n"
-            f"```\n{error_context[:600]}\n```\n"
-            f"{retry_files_note}"
-            "Adjust your edits to fix the above error.\n"
-        )
-        print(f"  Agent 3: Retry #{validation_attempts} - injecting error context.")
 
     # Setup
     llm = get_llm(temperature=0)
     toolkit = HunkGeneratorToolkit(target_repo_path) if target_repo_path else None
-    react_agent = None
-    if toolkit:
-        react_agent = create_react_agent(
-            llm, tools=toolkit.get_tools(), prompt=_FILE_EDITOR_SYSTEM
-        )
 
     retriever = None
     if target_repo_path and mainline_repo_path:
@@ -551,17 +580,6 @@ async def file_editor_node(state: AgentState, config) -> dict:
             retriever = EnsembleRetriever(mainline_repo_path, target_repo_path)
         except Exception as e:
             print(f"  Agent 3: Retriever unavailable: {e}")
-
-    analyzer = PatchAnalyzer()
-    raw_hunks_by_file = (
-        analyzer.extract_raw_hunks(patch_diff, with_test_changes=with_test_changes)
-        if patch_diff
-        else {}
-    )
-
-    fix_logic = semantic_blueprint.get("fix_logic", "")
-    dependent_apis = semantic_blueprint.get("dependent_apis", [])
-    cm_formatted = _format_consistency_map(consistency_map)
 
     model_name = resolve_model_name()
     token_usage = {
@@ -633,12 +651,6 @@ async def file_editor_node(state: AgentState, config) -> dict:
             print(f"  Agent 3: No plan entries for {mainline_file} - skipping.")
             continue
 
-        # Get target context for prompt
-        mapped_ctx_list = mapped_target_context.get(mainline_file, [])
-        target_context = ""
-        if mapped_ctx_list:
-            target_context = mapped_ctx_list[0].get("code_snippet", "")
-
         print(
             f"  Agent 3: Processing {len(plan_entries)} edit(s) for "
             f"{target_file} (op={change_type})"
@@ -672,19 +684,26 @@ async def file_editor_node(state: AgentState, config) -> dict:
         file_edits_applied: list[FileEdit] = []
         all_edits_ok = True
 
-        # ----------------------------------------------------------------
-        # PRIMARY PATH: deterministic application of verified plan edits
-        # ----------------------------------------------------------------
+        # Deterministic-only execution with per-op anchor resolution.
         if toolkit:
-            for plan_entry in plan_entries:
-                edit_ok, apply_result, _ = _apply_edit_deterministically(
-                    toolkit, plan_entry, target_file
+            for op_idx, plan_entry in enumerate(plan_entries):
+                edit_ok, apply_result, resolved_old, resolved_new, resolution_reason = (
+                    _apply_edit_deterministically(
+                        toolkit,
+                        target_repo_path,
+                        plan_entry,
+                        target_file,
+                    )
                 )
                 fe: FileEdit = {
                     "target_file": target_file,
                     "mainline_file": mainline_file,
-                    "old_string": str(plan_entry.get("old_string") or ""),
-                    "new_string": str(plan_entry.get("new_string") or ""),
+                    "old_string": resolved_old
+                    if resolved_old
+                    else str(plan_entry.get("old_string") or ""),
+                    "new_string": resolved_new
+                    if resolved_new
+                    else str(plan_entry.get("new_string") or ""),
                     "edit_type": str(plan_entry.get("edit_type") or "replace"),
                     "verified": bool(plan_entry.get("verified", False)),
                     "verification_result": str(
@@ -697,104 +716,14 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 if edit_ok:
                     print(
                         f"    Agent 3: Deterministic edit OK for "
-                        f"{target_file}[{plan_entry.get('hunk_index')}]"
+                        f"{target_file}[{plan_entry.get('hunk_index')}:{op_idx}] "
+                        f"(resolve={resolution_reason})"
                     )
                 else:
                     all_edits_ok = False
                     print(
                         f"    Agent 3: Deterministic edit FAILED for "
-                        f"{target_file}[{plan_entry.get('hunk_index')}]: {apply_result}"
-                    )
-
-        # ----------------------------------------------------------------
-        # FALLBACK PATH: LLM+ReAct agent when deterministic fails
-        # ----------------------------------------------------------------
-        if not all_edits_ok and react_agent:
-            print(
-                f"    Agent 3: Falling back to LLM+ReAct for {target_file} "
-                "(some deterministic edits failed)."
-            )
-            # Reset and let LLM handle all edits for this file from scratch
-            if toolkit:
-                _git_reset_file(target_repo_path, target_file)
-
-            react_prompt = _FILE_EDITOR_USER.format(
-                target_file=target_file,
-                edit_plan=_format_edit_plan(plan_entries),
-                consistency_map=cm_formatted,
-                fix_logic=fix_logic,
-                dependent_apis=", ".join(dependent_apis),
-                target_context=target_context[:800],
-                retry_context=retry_context_str,
-            )
-
-            for attempt in range(2):
-                try:
-                    react_in_tokens = count_text_tokens(
-                        _FILE_EDITOR_SYSTEM + "\n" + react_prompt, model_name
-                    )
-                    react_result = await react_agent.ainvoke(
-                        {"messages": [("user", react_prompt)]},
-                        config={"recursion_limit": 35},
-                    )
-                    react_messages = react_result.get("messages", [])
-
-                    # Collect token usage
-                    exact_any = False
-                    for rm in react_messages:
-                        if getattr(rm, "type", "") != "ai":
-                            continue
-                        usage = extract_usage_from_response(rm)
-                        if usage and (usage["input_tokens"] or usage["output_tokens"]):
-                            add_usage(
-                                token_usage,
-                                usage["input_tokens"],
-                                usage["output_tokens"],
-                                "file_editor.react.provider_usage",
-                            )
-                            exact_any = True
-                    if not exact_any:
-                        raw_out = react_messages[-1].content if react_messages else ""
-                        add_usage(
-                            token_usage,
-                            react_in_tokens,
-                            count_text_tokens(str(raw_out), model_name),
-                            "file_editor.react.tiktoken",
-                        )
-                        token_usage["estimated"] = True
-
-                    # Mark as applied if the agent ran without fatal error
-                    # (the actual edits were applied by tool calls during the run)
-                    all_edits_ok = True
-                    # Update file_edits_applied with a synthetic record
-                    file_edits_applied = [
-                        {
-                            "target_file": target_file,
-                            "mainline_file": mainline_file,
-                            "old_string": "(llm_react)",
-                            "new_string": "(llm_react)",
-                            "edit_type": "replace",
-                            "verified": True,
-                            "verification_result": "llm_react_applied",
-                            "applied": True,
-                            "apply_result": "LLM+ReAct agent applied edits",
-                        }
-                    ]
-                    print(
-                        f"    Agent 3: LLM+ReAct completed for {target_file} "
-                        f"(attempt {attempt + 1}/2)"
-                    )
-                    break
-
-                except GraphRecursionError as e:
-                    print(
-                        f"    Agent 3: ReAct recursion limit on {target_file} "
-                        f"(attempt {attempt + 1}/2): {e}"
-                    )
-                except Exception as e:
-                    print(
-                        f"    Agent 3: ReAct error on {target_file} "
-                        f"(attempt {attempt + 1}/2): {e}"
+                        f"{target_file}[{plan_entry.get('hunk_index')}:{op_idx}]: {apply_result}"
                     )
 
         adapted_file_edits.extend(file_edits_applied)
@@ -808,7 +737,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
             if toolkit:
                 _git_reset_file(target_repo_path, target_file)
             task_entry["status"] = "failed"
-            task_entry["reason"] = "all_edit_attempts_failed"
+            task_entry["reason"] = "generation_contract_failed"
             continue
 
         # Step C: Capture diff via git diff (mechanically correct)
@@ -836,6 +765,15 @@ async def file_editor_node(state: AgentState, config) -> dict:
             f"    Agent 3: Captured diff for {target_file} "
             f"({len(diff_text.splitlines())} lines)"
         )
+
+        truncated_invalid, truncated_reason = _looks_structurally_truncated(diff_text)
+        if truncated_invalid:
+            print(f"    Agent 3: {truncated_reason}")
+            if toolkit and target_repo_path:
+                _git_reset_file(target_repo_path, target_file)
+            task_entry["status"] = "failed"
+            task_entry["reason"] = "generation_contract_failed"
+            continue
 
         # Semantic guard: detect missing helper-method declaration for newly added calls.
         semantic_invalid, semantic_reason = _diff_introduces_call_without_definition(

@@ -135,6 +135,12 @@ def route_validation(state: AgentState) -> str:
                 f"build diagnostics {sorted(build_issue_types)}. Routing to planning_agent."
             )
             return "planning_agent"
+        if failure_category == "empty_generation":
+            print(
+                f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
+                "empty generation output. Routing to planning_agent."
+            )
+            return "planning_agent"
         print(
             f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}). "
             "Routing back to hunk_generator for retry."

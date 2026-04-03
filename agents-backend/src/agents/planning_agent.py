@@ -21,6 +21,7 @@ Output schema per hunk entry:
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections import defaultdict
 from typing import Any
@@ -499,6 +500,137 @@ def _ensure_required_coverage(
     return out
 
 
+def _normalize_path(path: str) -> str:
+    p = (path or "").strip().replace("\\", "/").lstrip("/")
+    if p.startswith("a/") or p.startswith("b/"):
+        p = p[2:]
+    return p
+
+
+def _read_target_file(target_repo_path: str, rel_path: str) -> str:
+    try:
+        p = _normalize_path(rel_path)
+        full = os.path.normpath(os.path.join(target_repo_path, p))
+        with open(full, "r", encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except Exception:
+        return ""
+
+
+def _resolve_old_in_content(content: str, old_string: str) -> tuple[str, str]:
+    """Resolve old_string to exact on-disk text when possible."""
+    if not content or not old_string:
+        return "", "empty"
+    if old_string in content:
+        return old_string, "exact"
+
+    if "\n" not in old_string:
+        stripped = old_string.strip()
+        if stripped:
+            lines = [l for l in content.splitlines() if l.strip() == stripped]
+            if len(lines) == 1:
+                return lines[0], "line_trimmed_unique"
+        if old_string.lstrip() != old_string and old_string.lstrip() in content:
+            return old_string.lstrip(), "lstrip_exact"
+        return "", "not_found_single"
+
+    cand = old_string.splitlines()
+    file_lines = content.splitlines()
+    n = len(cand)
+    matches: list[str] = []
+    for i in range(0, len(file_lines) - n + 1):
+        ok = True
+        for j in range(n):
+            if file_lines[i + j].strip() != cand[j].strip():
+                ok = False
+                break
+        if ok:
+            matches.append("\n".join(file_lines[i : i + n]))
+    if len(matches) == 1:
+        return matches[0], "multiline_trimmed_unique"
+    return "", "not_found_multiline"
+
+
+def _sanitize_entry_against_target(
+    entry: dict[str, Any],
+    content: str,
+) -> dict[str, Any]:
+    """
+    Normalize planner entry against real file content.
+    Ensures old_string exists verbatim when possible and recomposes insertion new_string.
+    """
+    out = dict(entry)
+    edit_type = str(out.get("edit_type") or "").strip().lower()
+    old_s = str(out.get("old_string") or "")
+    new_s = str(out.get("new_string") or "")
+
+    resolved_old, reason = _resolve_old_in_content(content, old_s)
+    if not resolved_old:
+        out["verified"] = False
+        out["verification_result"] = f"sanitize_old_not_found:{reason}"
+        out["notes"] = (
+            str(out.get("notes") or "") + f"|sanitize_old_not_found:{reason}"
+        ).strip("|")
+        return out
+
+    out["old_string"] = resolved_old
+    out["verified"] = True
+    out["verification_result"] = f"sanitize_resolved:{reason}"
+
+    if edit_type in {"insert_before", "insert_after"}:
+        payload = None
+        if edit_type == "insert_before":
+            idx = new_s.rfind(old_s)
+            if idx >= 0:
+                payload = new_s[:idx]
+        else:
+            idx = new_s.find(old_s)
+            if idx >= 0:
+                payload = new_s[idx + len(old_s) :]
+
+        # Fallback: derive payload by suffix/prefix trimmed-line matching.
+        if payload is None:
+            new_lines = new_s.splitlines()
+            old_lines = old_s.splitlines()
+            if old_lines and len(new_lines) >= len(old_lines):
+                if edit_type == "insert_before":
+                    tail = new_lines[-len(old_lines) :]
+                    if all(
+                        tail[i].strip() == old_lines[i].strip()
+                        for i in range(len(old_lines))
+                    ):
+                        payload = "\n".join(new_lines[: -len(old_lines)])
+                        if new_s.endswith("\n"):
+                            payload += "\n"
+                else:
+                    head = new_lines[: len(old_lines)]
+                    if all(
+                        head[i].strip() == old_lines[i].strip()
+                        for i in range(len(old_lines))
+                    ):
+                        payload = "\n".join(new_lines[len(old_lines) :])
+                        if payload and not payload.startswith("\n") and "\n" in new_s:
+                            payload = "\n" + payload
+        if payload is None:
+            out["verified"] = False
+            out["verification_result"] = "sanitize_payload_missing"
+            out["notes"] = (
+                str(out.get("notes") or "") + "|sanitize_payload_missing"
+            ).strip("|")
+            return out
+        if edit_type == "insert_before" and payload and not payload.endswith("\n"):
+            payload += "\n"
+        if edit_type == "insert_after" and payload and not payload.startswith("\n"):
+            payload = "\n" + payload
+        out["new_string"] = (
+            payload + resolved_old
+            if edit_type == "insert_before"
+            else resolved_old + payload
+        )
+
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Node
 # ---------------------------------------------------------------------------
@@ -694,6 +826,13 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             planned_entries = _ensure_required_coverage(
                 planned_entries, required_entries
             )
+
+            target_content = _read_target_file(target_repo_path, target_file)
+            if target_content:
+                planned_entries = [
+                    _sanitize_entry_against_target(e, target_content)
+                    for e in planned_entries
+                ]
 
             # Sanitize + append all operations for this source hunk.
             for entry in planned_entries:
