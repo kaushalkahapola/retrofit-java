@@ -1,0 +1,34 @@
+{
+  "hunk_generation_plan": {
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plan/logical/Filter.java",
+        "edit_type": "replace",
+        "old_string": "",
+        "new_string": "",
+        "verified": false,
+        "verification_result": "mapping_low_confidence",
+        "notes": "mapping_low_confidence:start_line_out_of_range"
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+        "edit_type": "replace",
+        "old_string": "",
+        "new_string": "",
+        "verified": false,
+        "verification_result": "mapping_low_confidence",
+        "notes": "mapping_low_confidence:start_line_out_of_range"
+      }
+    ]
+  },
+  "last_plan_signature": "a6e7c404bcb27fb8cf3323001181bcc6c34c1fe5f31ce9668459ced59eec3a87",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

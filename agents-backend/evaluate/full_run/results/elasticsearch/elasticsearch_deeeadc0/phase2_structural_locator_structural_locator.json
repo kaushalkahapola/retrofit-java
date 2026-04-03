@@ -1,0 +1,38 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "checkFilterConditionType",
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plan/logical/Filter.java",
+        "target_method": "checkFilterConditionDataType",
+        "start_line": null,
+        "end_line": null,
+        "code_snippet": "public static void checkFilterConditionDataType(Expression expression, Failures failures) { /* ... */ }",
+        "anchor_confidence": "low",
+        "anchor_reason": "start_line_out_of_range",
+        "anchor_strategy": "llm_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "checkConditionExpressionDataType",
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+        "target_method": null,
+        "start_line": null,
+        "end_line": null,
+        "code_snippet": "None",
+        "anchor_confidence": "low",
+        "anchor_reason": "start_line_out_of_range",
+        "anchor_strategy": "llm_realign"
+      }
+    ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
+  }
+}

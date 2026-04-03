@@ -1,0 +1,26 @@
+{
+  "adapted_file_edits": [],
+  "adapted_code_hunks": [],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+      "hunk_index": 0,
+      "status": "failed",
+      "reason": "mapping_required",
+      "todo_steps": [
+        "remap"
+      ],
+      "completed_steps": []
+    }
+  ],
+  "generated_patch_hash": "",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

@@ -1,0 +1,218 @@
+{
+  "project": "elasticsearch",
+  "patch_id": "elasticsearch_deeeadc0",
+  "mainline_commit": "deeeadc01f86d08f887cbfcb0dc40caf3b7374f4",
+  "backport_commit": "655e3ce1310196a95b154773106699d36d9fc8cb",
+  "run_mode": "full",
+  "timestamp": "2026-04-03T12:47:26.774373",
+  "phases": {
+    "phase1_context_analyzer": {
+      "context_analyzer": {
+        "node": "context_analyzer",
+        "outputs": {
+          "semantic_blueprint": {
+            "root_cause_hypothesis": "Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.",
+            "fix_logic": "Apply each source hunk with target-verified context and symbol consistency while preserving behavior.",
+            "dependent_apis": [
+              "checkConditionExpressionDataType",
+              "if"
+            ],
+            "patch_intent_summary": "Backport patch behavior to target branch with minimal, context-correct edits.",
+            "hunk_chain": [
+              {
+                "hunk_index": 1,
+                "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+                "summary": "Modifies logic (+7/-3 lines).",
+                "role": "declaration",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 1
+              },
+              {
+                "hunk_index": 2,
+                "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+                "summary": "Modifies logic (+1/-3 lines).",
+                "role": "core_fix",
+                "connects_to_next": "",
+                "global_index": 2
+              }
+            ]
+          },
+          "patch_diff": "From deeeadc01f86d08f887cbfcb0dc40caf3b7374f4 Mon Sep 17 00:00:00 2001\nFrom: kanoshiou <73424326+kanoshiou@users.noreply.github.com>\nDate: Wed, 8 Jan 2025 23:43:11 +0800\nSubject: [PATCH] ESQL: Allow the data type of `null` in filters (#118324)\n\n* Allow the data type of `null` in filters\n---\n docs/changelog/118324.yaml                    |  6 +++++\n .../src/main/resources/null.csv-spec          | 12 +++++++++\n .../xpack/esql/analysis/Verifier.java         | 14 +++++-----\n .../xpack/esql/analysis/VerifierTests.java    | 27 +++++++++++++++++++\n .../optimizer/LogicalPlanOptimizerTests.java  | 13 +++++++++\n 5 files changed, 66 insertions(+), 6 deletions(-)\n create mode 100644 docs/changelog/118324.yaml\n\ndiff --git a/docs/changelog/118324.yaml b/docs/changelog/118324.yaml\nnew file mode 100644\nindex 00000000000..729ff56f6a2\n--- /dev/null\n+++ b/docs/changelog/118324.yaml\n@@ -0,0 +1,6 @@\n+pr: 118324\n+summary: Allow the data type of `null` in filters\n+area: ES|QL\n+type: bug\n+issues:\n+  - 116351\ndiff --git a/x-pack/plugin/esql/qa/testFixtures/src/main/resources/null.csv-spec b/x-pack/plugin/esql/qa/testFixtures/src/main/resources/null.csv-spec\nindex 9914d073a58..7bf3bc7613e 100644\n--- a/x-pack/plugin/esql/qa/testFixtures/src/main/resources/null.csv-spec\n+++ b/x-pack/plugin/esql/qa/testFixtures/src/main/resources/null.csv-spec\n@@ -191,3 +191,15 @@ emp_no:integer | languages:integer | height:double | x:double | y:double | z:dou\n          10020 | null              | 1.41          | 1.41     | 1.41     | 40031.0  | 40031\n          10021 | null              | 1.47          | 1.47     | 1.47     | 60408.0  | 60408\n ;\n+\n+whereNull\n+FROM employees\n+| WHERE NULL and emp_no <= 10021\n+| SORT first_name, last_name\n+| EVAL fullname = CONCAT(first_name, \" \", last_name)\n+| KEEP fullname, job_positions, salary, salary_change\n+| limit 5\n+;\n+\n+fullname:keyword | job_positions:keyword | salary:integer | salary_change:double\n+;\ndiff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java\nindex e146b517ad1..8245d09ed69 100644\n--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java\n+++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java\n@@ -237,9 +237,13 @@ public class Verifier {\n     private static void checkFilterConditionType(LogicalPlan p, Set<Failure> localFailures) {\n         if (p instanceof Filter f) {\n             Expression condition = f.condition();\n-            if (condition.dataType() != BOOLEAN) {\n-                localFailures.add(fail(condition, \"Condition expression needs to be boolean, found [{}]\", condition.dataType()));\n-            }\n+            checkConditionExpressionDataType(condition, localFailures);\n+        }\n+    }\n+\n+    private static void checkConditionExpressionDataType(Expression expression, Set<Failure> localFailures) {\n+        if (expression.dataType() != NULL && expression.dataType() != BOOLEAN) {\n+            localFailures.add(fail(expression, \"Condition expression needs to be boolean, found [{}]\", expression.dataType()));\n         }\n     }\n \n@@ -432,9 +436,7 @@ public class Verifier {\n             }\n             Expression f = fe.filter();\n             // check the filter has to be a boolean term, similar as checkFilterConditionType\n-            if (f.dataType() != NULL && f.dataType() != BOOLEAN) {\n-                failures.add(fail(f, \"Condition expression needs to be boolean, found [{}]\", f.dataType()));\n-            }\n+            checkConditionExpressionDataType(f, failures);\n             // but that the filter doesn't use grouping or aggregate functions\n             fe.filter().forEachDown(c -> {\n                 if (c instanceof AggregateFunction af) {\ndiff --git a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java\nindex fe6d1e00e5d..b2362b5c2aa 100644\n--- a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java\n+++ b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java\n@@ -945,6 +945,33 @@ public class VerifierTests extends ESTestCase {\n \n     public void testFilterNonBoolField() {\n         assertEquals(\"1:19: Condition expression needs to be boolean, found [INTEGER]\", error(\"from test | where emp_no\"));\n+\n+        assertEquals(\n+            \"1:19: Condition expression needs to be boolean, found [KEYWORD]\",\n+            error(\"from test | where concat(first_name, \\\"foobar\\\")\")\n+        );\n+    }\n+\n+    public void testFilterNullField() {\n+        // `where null` should return empty result set\n+        query(\"from test | where null\");\n+\n+        // Value null of type `BOOLEAN`\n+        query(\"from test | where null::boolean\");\n+\n+        // Provide `NULL` type in `EVAL`\n+        query(\"from t | EVAL x = null | where x\");\n+\n+        // `to_string(null)` is of `KEYWORD` type null, resulting in `to_string(null) == \"abc\"` being of `BOOLEAN`\n+        query(\"from t | where to_string(null) == \\\"abc\\\"\");\n+\n+        // Other DataTypes can contain null values\n+        assertEquals(\"1:19: Condition expression needs to be boolean, found [KEYWORD]\", error(\"from test | where null::string\"));\n+        assertEquals(\"1:19: Condition expression needs to be boolean, found [INTEGER]\", error(\"from test | where null::integer\"));\n+        assertEquals(\n+            \"1:45: Condition expression needs to be boolean, found [DATETIME]\",\n+            error(\"from test | EVAL x = null::datetime | where x\")\n+        );\n     }\n \n     public void testFilterDateConstant() {\ndiff --git a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/LogicalPlanOptimizerTests.java b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/LogicalPlanOptimizerTests.java\nindex d46572b7c85..4d175dea050 100644\n--- a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/LogicalPlanOptimizerTests.java\n+++ b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/LogicalPlanOptimizerTests.java\n@@ -6808,4 +6808,17 @@ public class LogicalPlanOptimizerTests extends ESTestCase {\n             containsString(\"[MATCH] function cannot operate on [text::keyword], which is not a field from an index mapping\")\n         );\n     }\n+\n+    public void testWhereNull() {\n+        var plan = plan(\"\"\"\n+            from test\n+            | sort salary\n+            | rename emp_no as e, first_name as f\n+            | keep salary, e, f\n+            | where null\n+            | LIMIT 12\n+            \"\"\");\n+        var local = as(plan, LocalRelation.class);\n+        assertThat(local.supplier(), equalTo(LocalSupplier.EMPTY));\n+    }\n }\n-- \n2.53.0\n\n",
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "reason": "deterministic_no_llm"
+          }
+        }
+      }
+    },
+    "phase2_structural_locator": {
+      "structural_locator": {
+        "node": "structural_locator",
+        "outputs": {
+          "consistency_map": {},
+          "mapped_target_context": {
+            "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java": [
+              {
+                "hunk_index": 1,
+                "mainline_method": "checkFilterConditionType",
+                "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plan/logical/Filter.java",
+                "target_method": "checkFilterConditionDataType",
+                "start_line": null,
+                "end_line": null,
+                "code_snippet": "public static void checkFilterConditionDataType(Expression expression, Failures failures) { /* ... */ }",
+                "anchor_confidence": "low",
+                "anchor_reason": "start_line_out_of_range",
+                "anchor_strategy": "llm_realign"
+              },
+              {
+                "hunk_index": 2,
+                "mainline_method": "checkConditionExpressionDataType",
+                "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+                "target_method": null,
+                "start_line": null,
+                "end_line": null,
+                "code_snippet": "None",
+                "anchor_confidence": "low",
+                "anchor_reason": "start_line_out_of_range",
+                "anchor_strategy": "llm_realign"
+              }
+            ]
+          },
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "reason": "llm_usage_not_collected_in_this_node"
+          }
+        }
+      }
+    },
+    "phase2_5_planning_agent": {
+      "planning_agent": {
+        "node": "planning_agent",
+        "outputs": {
+          "hunk_generation_plan": {
+            "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java": [
+              {
+                "hunk_index": 0,
+                "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plan/logical/Filter.java",
+                "edit_type": "replace",
+                "old_string": "",
+                "new_string": "",
+                "verified": false,
+                "verification_result": "mapping_low_confidence",
+                "notes": "mapping_low_confidence:start_line_out_of_range"
+              },
+              {
+                "hunk_index": 1,
+                "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+                "edit_type": "replace",
+                "old_string": "",
+                "new_string": "",
+                "verified": false,
+                "verification_result": "mapping_low_confidence",
+                "notes": "mapping_low_confidence:start_line_out_of_range"
+              }
+            ]
+          },
+          "last_plan_signature": "a6e7c404bcb27fb8cf3323001181bcc6c34c1fe5f31ce9668459ced59eec3a87",
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "sources": []
+          }
+        }
+      }
+    },
+    "phase3_hunk_generator": {
+      "hunk_generator": {
+        "node": "hunk_generator",
+        "outputs": {
+          "adapted_file_edits": [],
+          "adapted_code_hunks": [],
+          "adapted_test_hunks": [],
+          "generation_checklist": [
+            {
+              "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+              "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+              "hunk_index": 0,
+              "status": "failed",
+              "reason": "mapping_required",
+              "todo_steps": [
+                "remap"
+              ],
+              "completed_steps": []
+            }
+          ],
+          "generated_patch_hash": "",
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "sources": []
+          }
+        }
+      }
+    },
+    "phase4_validation": {
+      "validation": {
+        "node": "validation",
+        "outputs": {
+          "validation_passed": false,
+          "validation_attempts": 3,
+          "validation_error_context": "Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors.",
+          "validation_failure_category": "empty_generation",
+          "validation_retry_files": []
+        }
+      }
+    }
+  },
+  "pair_consistency": {
+    "mainline_java_files": [
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java"
+    ],
+    "developer_java_files": [
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/action/EsqlCapabilities.java",
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/expression/predicate/operator/comparison/In.java"
+    ],
+    "overlap_java_files": [],
+    "overlap_ratio_mainline": 0.0,
+    "pair_mismatch": true,
+    "reason": "mainline_backport_scope_mismatch"
+  },
+  "exact_developer_patch": true,
+  "developer_patch_comparison": {
+    "comparison_method": "file_state",
+    "compared_files": [
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java"
+    ],
+    "mismatched_files": [],
+    "developer_files": [
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/action/EsqlCapabilities.java",
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/expression/predicate/operator/comparison/In.java"
+    ],
+    "generated_files": [],
+    "pair_consistency": {
+      "mainline_java_files": [
+        "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java"
+      ],
+      "developer_java_files": [
+        "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/action/EsqlCapabilities.java",
+        "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/expression/predicate/operator/comparison/In.java"
+      ],
+      "overlap_java_files": [],
+      "overlap_ratio_mainline": 0.0,
+      "pair_mismatch": true,
+      "reason": "mainline_backport_scope_mismatch"
+    },
+    "error": null
+  },
+  "status": "completed"
+}
