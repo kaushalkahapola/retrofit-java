@@ -1,0 +1,89 @@
+{
+  "project": "elasticsearch",
+  "patch_id": "elasticsearch_21845ad7",
+  "mainline_commit": "21845ad7a18821ccd80927211285308bb3eb8038",
+  "backport_commit": "56e19e28bd098337f57e5b49f45ae14137fd3e72",
+  "run_mode": "full",
+  "timestamp": "2026-04-03T15:33:43.231061",
+  "phases": {
+    "phase1_context_analyzer": {
+      "context_analyzer": {
+        "node": "context_analyzer",
+        "outputs": {}
+      }
+    },
+    "phase2_structural_locator": {
+      "structural_locator": {
+        "node": "structural_locator",
+        "outputs": {}
+      }
+    },
+    "phase2_5_planning_agent": {
+      "planning_agent": {
+        "node": "planning_agent",
+        "outputs": {}
+      }
+    },
+    "phase3_hunk_generator": {
+      "hunk_generator": {
+        "node": "hunk_generator",
+        "outputs": {}
+      }
+    },
+    "phase4_validation": {
+      "validation": {
+        "node": "validation",
+        "outputs": {
+          "validation_passed": false,
+          "validation_attempts": 3,
+          "validation_error_context": "Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors.",
+          "validation_failure_category": "empty_generation",
+          "validation_retry_files": []
+        }
+      }
+    }
+  },
+  "pair_consistency": {
+    "mainline_java_files": [
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java",
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java"
+    ],
+    "developer_java_files": [
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlParser.java"
+    ],
+    "overlap_java_files": [],
+    "overlap_ratio_mainline": 0.0,
+    "pair_mismatch": true,
+    "reason": "mainline_backport_scope_mismatch"
+  },
+  "exact_developer_patch": true,
+  "developer_patch_comparison": {
+    "comparison_method": "file_state",
+    "compared_files": [
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java",
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java"
+    ],
+    "mismatched_files": [],
+    "developer_files": [
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlParser.java"
+    ],
+    "generated_files": [
+      "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlParser.java"
+    ],
+    "pair_consistency": {
+      "mainline_java_files": [
+        "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java",
+        "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java"
+      ],
+      "developer_java_files": [
+        "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlParser.java"
+      ],
+      "overlap_java_files": [],
+      "overlap_ratio_mainline": 0.0,
+      "pair_mismatch": true,
+      "reason": "mainline_backport_scope_mismatch"
+    },
+    "error": null
+  },
+  "status": "completed"
+}

@@ -4,27 +4,23 @@
 - **Root Cause**: Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.
 
 ## Hunk Segregation
-- Code files: 2
+- Code files: 1
 - Test files: 0
 
 ## Code File Mappings
 
-### `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java`
+### `server/src/main/java/org/elasticsearch/script/ScriptStats.java`
 
-**Hunks in this file**: 9
+**Hunks in this file**: 2
 
-**Git Resolution**: Found `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseLexer.java`
+**Git Resolution**: Found `server/src/main/java/org/elasticsearch/script/ScriptStats.java`
 
-**Fallback**: Using git resolution result (LLM refinement failed).
+**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
-### `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java`
-
-**Hunks in this file**: 16
-
-**Git Resolution**: Found `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlBaseParser.java`
-
-**Fallback**: Using git resolution result (LLM refinement failed).
-
+| Hunk Idx | Role | Mainline Method | Target Method | Lines |
+|---|---|---|---|---|
+| 1 | declaration | `<import>` | `<import>` | 26–26 |
+| 2 | core_fix | `hunk_2` | `None` | 215–215 |
 ## Test File Mappings
 
 

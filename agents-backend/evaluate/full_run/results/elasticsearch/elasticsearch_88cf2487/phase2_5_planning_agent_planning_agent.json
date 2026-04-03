@@ -1,0 +1,55 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/org/elasticsearch/script/ScriptStats.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+        "edit_type": "insert_before",
+        "old_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
+        "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:line_trimmed_unique",
+        "notes": "Inserted CACHE_EVICTIONS_HISTORY before COMPILATIONS_HISTORY."
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+        "edit_type": "replace",
+        "old_string": "                builder.startObject(COMPILATIONS_HISTORY);",
+        "new_string": "                builder.startObject(CACHE_EVICTIONS_HISTORY);",
+        "verified": false,
+        "verification_result": "sanitize_old_not_found:not_found_single",
+        "notes": "Replaced COMPILATIONS_HISTORY with CACHE_EVICTIONS_HISTORY in the toXContentChunked method.|sanitize_old_not_found:not_found_single"
+      }
+    ]
+  },
+  "last_plan_signature": "fb311c9615b66a3e296d8d94ce8601f1ad7b6e3c488988e415e34e1cfd182c35",
+  "token_usage": {
+    "input_tokens": 89453,
+    "output_tokens": 1009,
+    "total_tokens": 90462,
+    "estimated": false,
+    "sources": [
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage"
+    ]
+  }
+}
