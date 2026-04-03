@@ -825,7 +825,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                         )
                         res = await react.ainvoke(
                             {"messages": [("user", prompt)]},
-                            config={"recursion_limit": 25},
+                            config={"recursion_limit": 100},
                         )
                         msgs = res.get("messages", [])
 
