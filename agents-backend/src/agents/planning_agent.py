@@ -24,7 +24,7 @@ import json
 import os
 import re
 from collections import defaultdict
-from typing import Any
+from typing import Any, Optional
 
 from langchain_core.messages import HumanMessage
 from langgraph.prebuilt import create_react_agent
@@ -39,6 +39,7 @@ from utils.token_counter import (
     resolve_model_name,
 )
 from agents.hunk_generator_tools import HunkGeneratorToolkit
+from agents.semantic_hunk_adapter import SemanticHunkAdapter
 
 
 # ---------------------------------------------------------------------------
@@ -690,6 +691,120 @@ def _sanitize_entry_against_target(
     return out
 
 
+def _attempt_semantic_adapt_entry(
+    entry: dict[str, Any],
+    target_content: str,
+    target_file: str,
+) -> dict[str, Any]:
+    """
+    Attempt semantic adaptation for a planning entry that failed verification.
+
+    Args:
+        entry: Planning entry that may have failed verification
+        target_content: Full content of target file
+        target_file: Path to target file (for logging)
+
+    Returns:
+        Modified entry with potentially adapted old_string/new_string
+    """
+    # Only attempt adaptation if verification failed
+    if entry.get("verified", False):
+        return entry
+
+    # Only attempt for entries with resolvable content
+    old_string = entry.get("old_string", "").strip()
+    new_string = entry.get("new_string", "").strip()
+
+    if not old_string or not new_string:
+        return entry
+
+    # Check if failure is due to anchor not found
+    verification_result = entry.get("verification_result", "")
+    if (
+        "old_not_found" not in verification_result
+        and "not_found" not in verification_result
+    ):
+        return entry
+
+    # Attempt semantic adaptation
+    success, adapted_old, adapted_new = _attempt_semantic_adaptation(
+        hunk_old_string=old_string,
+        hunk_new_string=new_string,
+        target_file_path=target_file,
+        target_file_content=target_content,
+    )
+
+    if success and adapted_old and adapted_new:
+        # Verify adapted strings exist in target
+        if adapted_old in target_content:
+            entry["old_string"] = adapted_old
+            entry["new_string"] = adapted_new
+            entry["verified"] = True
+            entry["verification_result"] = f"semantic_adapted:{verification_result}"
+            entry["notes"] = (str(entry.get("notes", "")) + "|semantic_adapted").strip(
+                "|"
+            )
+            print(
+                f"    Semantic adaptation succeeded for {target_file}: "
+                f"adapted hunk for {verification_result}"
+            )
+        else:
+            entry["notes"] = (
+                str(entry.get("notes", "")) + "|semantic_adapted_but_anchor_not_found"
+            ).strip("|")
+
+    return entry
+
+
+def _attempt_semantic_adaptation(
+    hunk_old_string: str,
+    hunk_new_string: str,
+    target_file_path: str,
+    target_file_content: str,
+) -> tuple[bool, Optional[str], Optional[str]]:
+    """
+    Attempt semantic hunk adaptation for hunks that failed anchor resolution.
+
+    Args:
+        hunk_old_string: Old string from planning entry
+        hunk_new_string: New string from planning entry
+        target_file_path: Path to target file
+        target_file_content: Full content of target file
+
+    Returns:
+        (success: bool, adapted_old_string: str or None, adapted_new_string: str or None)
+    """
+    try:
+        adapter = SemanticHunkAdapter()
+        result = adapter.analyze_and_adapt(
+            hunk_old_string=hunk_old_string,
+            hunk_new_string=hunk_new_string,
+            target_file_content=target_file_content,
+            target_file_path=target_file_path,
+        )
+
+        # Only accept adaptations with high confidence
+        if result.success and result.confidence >= 0.6:
+            return (
+                True,
+                result.adapted_old_string,
+                result.adapted_new_string,
+            )
+
+        # Log adaptation attempts even if they failed
+        if result.confidence >= 0.4:
+            print(
+                f"  Semantic adaptation for {target_file_path}: "
+                f"confidence={result.confidence:.2f}, strategy={result.strategy.value}"
+            )
+
+    except Exception as e:
+        # Log but don't fail - adaptation is best-effort
+        print(f"  Semantic adaptation error for {target_file_path}: {e}")
+
+    return False, None, None
+
+
 # ---------------------------------------------------------------------------
 # Node
 # ---------------------------------------------------------------------------
@@ -909,6 +1024,13 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             if target_content:
                 planned_entries = [
                     _sanitize_entry_against_target(e, target_content)
+                    for e in planned_entries
+                ]
+
+                # Attempt semantic adaptation for entries that failed verification
+                # (This is a retry hook for hunks that failed anchor resolution)
+                planned_entries = [
+                    _attempt_semantic_adapt_entry(e, target_content, target_file)
                     for e in planned_entries
                 ]
 
