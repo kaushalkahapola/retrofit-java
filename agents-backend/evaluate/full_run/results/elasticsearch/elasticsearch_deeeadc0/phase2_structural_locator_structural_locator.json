@@ -1,0 +1,43 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "docs/changelog/118324.yaml": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "docs/changelog/118324.yaml",
+        "target_method": null,
+        "start_line": 1,
+        "end_line": 1,
+        "code_snippet": "pr: 118324"
+      }
+    ],
+    "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<class_declaration>",
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+        "target_method": "<class_declaration>",
+        "start_line": 369,
+        "end_line": 369,
+        "code_snippet": "            );\n        }\n        return null;\n    }\n\n    /**\n     * Negating an unsigned long is invalid.\n     */\n    private static Failure validateUnsignedLongNegation(Neg neg) {\n        DataType childExpressionType = neg.field().dataType();\n        if (childExpressionType.equals(DataType.UNSIGNED_LONG)) {\n            return fail(\n                neg,\n                \"negation unsupported for arguments of type [{}] in expression [{}]\",\n                childExpressionType.typeName(),\n                neg.sourceText()\n            );\n        }\n        return null;\n    }\n}"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+        "target_method": null,
+        "start_line": 369,
+        "end_line": 369,
+        "code_snippet": "            );\n        }\n        return null;\n    }\n\n    /**\n     * Negating an unsigned long is invalid.\n     */\n    private static Failure validateUnsignedLongNegation(Neg neg) {\n        DataType childExpressionType = neg.field().dataType();\n        if (childExpressionType.equals(DataType.UNSIGNED_LONG)) {\n            return fail(\n                neg,\n                \"negation unsupported for arguments of type [{}] in expression [{}]\",\n                childExpressionType.typeName(),\n                neg.sourceText()\n            );\n        }\n        return null;\n    }\n}"
+      }
+    ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": true,
+    "reason": "deterministic_no_llm"
+  }
+}

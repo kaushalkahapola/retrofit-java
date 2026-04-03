@@ -9,21 +9,27 @@
 
 ## Code File Mappings
 
-### `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java`
+### `docs/changelog/118324.yaml`
 
-**Hunks in this file**: 5
-
-**Git Resolution**: Found `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java`
+**Hunks in this file**: 1
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 17–17 |
-| 2 | declaration | `<import>` | `<import>` | 39–39 |
-| 3 | declaration | `<class_declaration>` | `<class_declaration>` | 59–59 |
-| 4 | declaration | `<class_declaration>` | `<class_declaration>` | 129–129 |
-| 5 | core_fix | `selectNodeRequests` | `selectNodeRequests` | 341–341 |
+| 1 | propagation | `hunk_1` | `None` | 1–1 |
+### `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java`
+
+**Hunks in this file**: 2
+
+**Git Resolution**: Found `x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java`
+
+**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
+
+| Hunk Idx | Role | Mainline Method | Target Method | Lines |
+|---|---|---|---|---|
+| 1 | declaration | `<class_declaration>` | `<class_declaration>` | 369–369 |
+| 2 | core_fix | `hunk_2` | `None` | 369–369 |
 ## Test File Mappings
 
 
