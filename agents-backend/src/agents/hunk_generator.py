@@ -1058,6 +1058,9 @@ def _hunk_sanity_check(hunk_text: str) -> tuple[bool, str]:
         return False, "missing_or_invalid_header"
 
     for idx, line in enumerate(lines[1:], start=2):
+        if line.startswith("@@"):
+            # Multi-hunk payload: allow additional hunk headers.
+            continue
         if not line:
             return False, f"line_{idx}_missing_diff_prefix"
         if line[0] not in {" ", "+", "-", "\\"}:
@@ -1374,11 +1377,14 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     validation_attempts: int = state.get("validation_attempts") or 0
     error_context: str = state.get("validation_error_context") or ""
     retry_files_raw = state.get("validation_retry_files") or []
+    retry_hunks_raw = state.get("validation_retry_hunks") or []
+    failed_stage: str = str(state.get("validation_failed_stage") or "").strip()
     with_test_changes: bool = state.get("with_test_changes", False)
     developer_aux_hunks: list[dict[str, Any]] = (
         state.get("developer_auxiliary_hunks") or []
     )
     retry_files = {_normalize_rel_path(p) for p in retry_files_raw if p}
+    retry_hunks = {int(h) for h in retry_hunks_raw if isinstance(h, int)}
     aux_consistency_map, aux_context = _extract_auxiliary_signals(developer_aux_hunks)
     if aux_consistency_map:
         merged_cm = dict(consistency_map)
@@ -1597,12 +1603,39 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
             insertion_line = mapped_ctx.get("start_line")
             target_body = mapped_ctx.get("code_snippet", "")
             plan_entries = hunk_generation_plan.get(mainline_file, [])
-            plan_entry = (
-                plan_entries[min(hunk_idx, len(plan_entries) - 1)]
-                if plan_entries
-                else {}
-            )
+            plan_by_index: dict[int, dict[str, Any]] = {}
+            for pe in plan_entries or []:
+                try:
+                    pi = int(pe.get("hunk_index"))
+                    plan_by_index[pi] = pe
+                except Exception:
+                    continue
+            plan_entry = plan_by_index.get(hunk_idx)
+            if plan_entry is None:
+                plan_entry = {}
+            task_entry = {
+                "mainline_file": mainline_file,
+                "target_file": target_file,
+                "hunk_index": hunk_idx,
+                "status": "in_progress",
+                "reason": "started",
+                "todo_steps": [
+                    "resolve_insertion_line",
+                    "construct_hunk",
+                    "sanity_check",
+                    "contract_check",
+                    "dry_run",
+                    "intent_check",
+                ],
+                "completed_steps": [],
+            }
+            generation_checklist.append(task_entry)
             planned_mode = str(plan_entry.get("generation_mode") or "").strip().lower()
+            force_deterministic_for_hunk = (
+                validation_attempts > 0
+                and failed_stage in {"hunk_sanity_failed", "generation_contract_failed"}
+                and (not retry_hunks or hunk_idx in retry_hunks)
+            )
             if (
                 isinstance(plan_entry.get("anchor_line"), int)
                 and plan_entry.get("anchor_line") > 0
@@ -1623,16 +1656,10 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     f"    Agent 3: Skipping {target_file}[{hunk_idx}] — unable to locate target insertion line"
                 )
                 trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
-                generation_checklist.append(
-                    {
-                        "mainline_file": mainline_file,
-                        "target_file": target_file,
-                        "hunk_index": hunk_idx,
-                        "status": "failed",
-                        "reason": "missing_insertion_line",
-                    }
-                )
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "missing_insertion_line"
                 continue
+            task_entry["completed_steps"].append("resolve_insertion_line")
 
             # If Agent 2 returned only a short snippet, enrich prompt context from target file.
             if len(str(target_body or "").splitlines()) < 8:
@@ -1661,20 +1688,14 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     print(
                         f"    Agent 3: Built import-aware hunk for {target_file}[{hunk_idx}]"
                     )
+                    task_entry["completed_steps"].append("construct_hunk")
                 else:
                     print(
                         f"    Agent 3: Skipping import-only hunk {target_file}[{hunk_idx}] — no new imports or no import anchor"
                     )
                     trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
-                    generation_checklist.append(
-                        {
-                            "mainline_file": mainline_file,
-                            "target_file": target_file,
-                            "hunk_index": hunk_idx,
-                            "status": "noop",
-                            "reason": "import_hunk_no_new_lines_or_anchor",
-                        }
-                    )
+                    task_entry["status"] = "noop"
+                    task_entry["reason"] = "import_hunk_no_new_lines_or_anchor"
                     continue
             else:
                 # ReAct tool loop (intelligent hunk generation) or simple LLM rewrite fallback
@@ -1735,7 +1756,11 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     else:
                         adapted_hunk_text = deterministic_candidate
 
-                if hg_react_agent and adapted_hunk_text is None:
+                if (
+                    hg_react_agent
+                    and adapted_hunk_text is None
+                    and not force_deterministic_for_hunk
+                ):
                     # ----------------------------------------------------------
                     # PRIMARY PATH: ReAct agent with file-reading tools.
                     # The agent will call read_file_window / grep_in_file /
@@ -1879,7 +1904,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                                 f"(attempt {attempt + 1}/2): {e}"
                             )
 
-                elif adapted_hunk_text is None:
+                elif adapted_hunk_text is None and not force_deterministic_for_hunk:
                     # ----------------------------------------------------------
                     # FALLBACK PATH: simple single LLM call (no tools).
                     # Used when target_repo_path is unavailable (local dev mode).
@@ -1999,6 +2024,9 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         f"    Agent 3: Fallback candidate generated for {target_file}[{hunk_idx}]"
                     )
 
+                if adapted_hunk_text:
+                    task_entry["completed_steps"].append("construct_hunk")
+
                 # Semantic guardrail: if original hunk had removals, candidate must
                 # preserve at least one required '-' removal; otherwise force baseline
                 # deterministic rewrite to avoid additive regressions.
@@ -2010,6 +2038,16 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         f"    Agent 3: Guardrail enforced for {target_file}[{hunk_idx}] "
                         "(missing required removals)"
                     )
+
+            if not adapted_hunk_text:
+                task_entry["status"] = "failed"
+                task_entry["reason"] = (
+                    "forced_deterministic_no_candidate"
+                    if force_deterministic_for_hunk
+                    else "no_candidate_generated"
+                )
+                trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                continue
 
             # Deterministic structural guardrails before dry-run.
             sane, sanity_msg = _hunk_sanity_check(adapted_hunk_text)
@@ -2023,17 +2061,11 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     f"    Agent 3: Structural hunk sanity failed for {target_file}[{hunk_idx}] ({sanity_msg})"
                 )
                 trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
-                generation_checklist.append(
-                    {
-                        "mainline_file": mainline_file,
-                        "target_file": target_file,
-                        "hunk_index": hunk_idx,
-                        "status": "failed",
-                        "reason": "hunk_sanity_failed",
-                        "error": sanity_msg,
-                    }
-                )
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "hunk_sanity_failed"
+                task_entry["error"] = sanity_msg
                 continue
+            task_entry["completed_steps"].append("sanity_check")
 
             contract_ok, contract_msg = _check_generation_contract(
                 adapted_hunk_text,
@@ -2049,17 +2081,11 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     f"    Agent 3: Generation contract failed for {target_file}[{hunk_idx}] ({contract_msg})"
                 )
                 trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
-                generation_checklist.append(
-                    {
-                        "mainline_file": mainline_file,
-                        "target_file": target_file,
-                        "hunk_index": hunk_idx,
-                        "status": "failed",
-                        "reason": "generation_contract_failed",
-                        "error": contract_msg,
-                    }
-                )
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "generation_contract_failed"
+                task_entry["error"] = contract_msg
                 continue
+            task_entry["completed_steps"].append("contract_check")
 
             # Dry-run validation
             dry_run_ok = False
@@ -2091,19 +2117,14 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     )
                     trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
                     # Fail-closed: do not emit unresolved bad hunks to Phase 4.
-                    generation_checklist.append(
-                        {
-                            "mainline_file": mainline_file,
-                            "target_file": target_file,
-                            "hunk_index": hunk_idx,
-                            "status": "failed",
-                            "reason": "dry_run_failed",
-                            "error": dr.get("output", ""),
-                        }
-                    )
+                    task_entry["status"] = "failed"
+                    task_entry["reason"] = "dry_run_failed"
+                    task_entry["error"] = dr.get("output", "")
                     continue
+                task_entry["completed_steps"].append("dry_run")
             else:
                 dry_run_ok = True  # No toolkit → assume ok (local dev mode)
+                task_entry["completed_steps"].append("dry_run")
 
             # Blueprint intent check
             intent_ok = await _check_intent(
@@ -2117,17 +2138,13 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                 print(
                     f"    Agent 3: Blueprint check failed for {target_file}[{hunk_idx}] — flagging."
                 )
+            task_entry["completed_steps"].append("intent_check")
 
-            generation_checklist.append(
-                {
-                    "mainline_file": mainline_file,
-                    "target_file": target_file,
-                    "hunk_index": hunk_idx,
-                    "status": "success",
-                    "reason": "generated_with_intent_warning"
-                    if not intent_ok
-                    else "generated_and_validated",
-                }
+            task_entry["status"] = "success"
+            task_entry["reason"] = (
+                "generated_with_intent_warning"
+                if not intent_ok
+                else "generated_and_validated"
             )
 
             hunk: AdaptedHunk = {

@@ -78,6 +78,7 @@ def route_validation(state: AgentState) -> str:
         failure_category = (
             (state.get("validation_failure_category") or "").strip().lower()
         )
+        failed_stage = (state.get("validation_failed_stage") or "").strip().lower()
         latest_hunk_apply_failed = bool(
             ((state.get("validation_results") or {}).get("hunk_application") or {}).get(
                 "success"
@@ -100,6 +101,16 @@ def route_validation(state: AgentState) -> str:
             print(
                 f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
                 "context mismatch. Routing to planning_agent for anchor replanning."
+            )
+            return "planning_agent"
+        if failure_category == "context_mismatch" and failed_stage in {
+            "hunk_sanity_failed",
+            "generation_contract_failed",
+            "incomplete_todo_steps",
+        }:
+            print(
+                f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) due "
+                f"generation stage '{failed_stage}'. Routing to planning_agent."
             )
             return "planning_agent"
         print(

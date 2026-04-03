@@ -197,6 +197,12 @@ class AgentState(TypedDict):
     validation_retry_files: NotRequired[
         list[str]
     ]  # Retry scope: files implicated in last validation failure
+    validation_retry_hunks: NotRequired[
+        list[int]
+    ]  # Retry scope: hunk indices implicated in last validation failure
+    validation_failed_stage: NotRequired[
+        str
+    ]  # Stage where generation/validation failed (e.g. hunk_sanity_failed)
     token_usage: NotRequired[
         dict[str, Any]
     ]  # Node-local token usage payload (used by evaluator aggregation)

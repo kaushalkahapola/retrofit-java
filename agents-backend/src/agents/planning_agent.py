@@ -116,6 +116,16 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     mapped_target_context = state.get("mapped_target_context") or {}
     target_repo_path = state.get("target_repo_path") or ""
     with_test_changes = state.get("with_test_changes", False)
+    validation_attempts = int(state.get("validation_attempts") or 0)
+    retry_files_raw = state.get("validation_retry_files") or []
+    retry_hunks_raw = state.get("validation_retry_hunks") or []
+
+    retry_files = {
+        str(p).replace("\\", "/").strip().lstrip("/")
+        for p in retry_files_raw
+        if str(p).strip()
+    }
+    retry_hunks = {int(h) for h in retry_hunks_raw if isinstance(h, int)}
 
     if not patch_diff:
         msg = "Planning Agent Error: missing patch_diff"
@@ -146,8 +156,19 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     model_name = resolve_model_name()
 
     for mainline_file, raw_hunks in (raw_hunks_by_file or {}).items():
+        normalized_mainline = str(mainline_file).replace("\\", "/").strip().lstrip("/")
+        if (
+            validation_attempts > 0
+            and retry_files
+            and normalized_mainline not in retry_files
+        ):
+            continue
+
         mapped = mapped_target_context.get(mainline_file, [])
         for hidx, raw_hunk in enumerate(raw_hunks):
+            if validation_attempts > 0 and retry_hunks and hidx not in retry_hunks:
+                continue
+
             ctx = mapped[min(hidx, len(mapped) - 1)] if mapped else {}
             target_file = (ctx.get("target_file") or mainline_file).replace("\\", "/")
             insertion_line = int(ctx.get("start_line") or 1)

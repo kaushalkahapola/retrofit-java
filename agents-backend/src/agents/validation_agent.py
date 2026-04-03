@@ -396,28 +396,52 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_retry_files": [],
         }
 
-    failed_generation_items = [
-        item
-        for item in generation_checklist
-        if str(item.get("status", "")).strip().lower() == "failed"
-    ]
-    if failed_generation_items:
+    incomplete_generation_items = []
+    for item in generation_checklist:
+        status = str(item.get("status", "")).strip().lower()
+        if status == "failed" or status == "in_progress" or status == "pending":
+            incomplete_generation_items.append(item)
+            continue
+        if status == "success":
+            required_steps = set(item.get("todo_steps") or [])
+            completed_steps = set(item.get("completed_steps") or [])
+            if required_steps and not required_steps.issubset(completed_steps):
+                item = dict(item)
+                item["reason"] = "incomplete_todo_steps"
+                item["missing_steps"] = sorted(required_steps - completed_steps)
+                incomplete_generation_items.append(item)
+
+    if incomplete_generation_items:
+        retry_hunks = sorted(
+            {
+                int(item.get("hunk_index"))
+                for item in incomplete_generation_items
+                if isinstance(item.get("hunk_index"), int)
+            }
+        )
+        failed_stages = [
+            str(item.get("reason") or "").strip()
+            for item in incomplete_generation_items
+            if str(item.get("reason") or "").strip()
+        ]
+        failed_stage = failed_stages[0] if failed_stages else "generation_incomplete"
+
         retry_files = sorted(
             {
                 str(item.get("mainline_file") or "").strip()
-                for item in failed_generation_items
+                for item in incomplete_generation_items
                 if item.get("mainline_file")
             }
             | {
                 str(item.get("target_file") or "").strip()
-                for item in failed_generation_items
+                for item in incomplete_generation_items
                 if item.get("target_file")
             }
         )
         msg = (
-            "Validation deferred: generator checklist contains unresolved failed hunks. "
+            "Validation deferred: generator checklist has incomplete hunk tasks. "
             "Route back to planning/generation before running build/tests. "
-            f"Failed hunks: {json.dumps(failed_generation_items, default=str)[:1500]}"
+            f"Incomplete hunks: {json.dumps(incomplete_generation_items, default=str)[:1500]}"
         )
         print(f"  Agent 4: {msg}")
         return {
@@ -426,6 +450,8 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_error_context": msg,
             "validation_failure_category": "context_mismatch",
             "validation_retry_files": retry_files,
+            "validation_retry_hunks": retry_hunks,
+            "validation_failed_stage": failed_stage,
         }
 
     # Ensure clean repo
