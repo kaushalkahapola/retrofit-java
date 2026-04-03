@@ -244,6 +244,14 @@ class EnsembleRetriever:
                 weight = 1.0 / count
 
                 for m_file in matches:
+                    # symbol_index stores target file indices; normalize to file paths.
+                    if isinstance(m_file, int):
+                        if 0 <= m_file < len(self.target_files):
+                            m_file = self.target_files[m_file]
+                        else:
+                            continue
+                    if not isinstance(m_file, str):
+                        continue
                     scores[m_file] = scores.get(m_file, 0) + weight
 
         results = []
@@ -289,6 +297,13 @@ class EnsembleRetriever:
         file_map = {}
         for c in candidates:
             f = c["file"]
+            if isinstance(f, int):
+                if 0 <= f < len(self.target_files):
+                    f = self.target_files[f]
+                else:
+                    continue
+            if not isinstance(f, str):
+                continue
             if f not in file_map:
                 file_map[f] = {"score": 0.0, "methods": set()}
             if c["score"] > file_map[f]["score"]:
@@ -566,7 +581,14 @@ class EnsembleRetriever:
         """Returns all Java files in the target repo where symbol_name is declared."""
         self._ensure_index_built()
         if symbol_name in self.symbol_index:
-            return [self.target_files[i] for i in self.symbol_index[symbol_name]]
+            out: list[str] = []
+            for v in self.symbol_index[symbol_name]:
+                if isinstance(v, int):
+                    if 0 <= v < len(self.target_files):
+                        out.append(self.target_files[v])
+                elif isinstance(v, str):
+                    out.append(v)
+            return sorted(set(out))
         return []
 
     def grep_repo(
