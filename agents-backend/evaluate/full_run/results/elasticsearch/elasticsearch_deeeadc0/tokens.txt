@@ -1,9 +1,9 @@
 {
-  "input_tokens": 131,
-  "output_tokens": 0,
-  "total_tokens": 131,
-  "messages_with_usage": 0,
-  "estimated_messages": 8,
+  "input_tokens": 96955,
+  "output_tokens": 2282,
+  "total_tokens": 99237,
+  "messages_with_usage": 2,
+  "estimated_messages": 6,
   "tokenizer": {
     "model": "apim-4o-mini",
     "library": "tiktoken",
@@ -31,14 +31,14 @@
       ]
     },
     "planning_agent": {
-      "input_tokens": 39,
-      "output_tokens": 0,
-      "total_tokens": 39,
-      "estimated_events": 3,
-      "exact_events": 0,
+      "input_tokens": 96863,
+      "output_tokens": 2282,
+      "total_tokens": 99145,
+      "estimated_events": 1,
+      "exact_events": 2,
       "sources": [
-        "estimated_from_message_chars",
-        "estimated_from_message_chars",
+        "node.token_usage",
+        "node.token_usage",
         "estimated_from_message_chars"
       ]
     },
@@ -55,5 +55,5 @@
       ]
     }
   },
-  "finished_at": "2026-04-03T12:47:49.662500"
+  "finished_at": "2026-04-03T13:24:38.864498"
 }

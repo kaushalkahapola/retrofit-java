@@ -4,7 +4,7 @@
   "mainline_commit": "deeeadc01f86d08f887cbfcb0dc40caf3b7374f4",
   "backport_commit": "655e3ce1310196a95b154773106699d36d9fc8cb",
   "run_mode": "full",
-  "timestamp": "2026-04-03T12:47:26.774373",
+  "timestamp": "2026-04-03T13:22:41.854836",
   "phases": {
     "phase1_context_analyzer": {
       "context_analyzer": {
@@ -58,29 +58,31 @@
               {
                 "hunk_index": 1,
                 "mainline_method": "checkFilterConditionType",
-                "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plan/logical/Filter.java",
-                "target_method": "checkFilterConditionDataType",
-                "start_line": null,
-                "end_line": null,
-                "code_snippet": "public static void checkFilterConditionDataType(Expression expression, Failures failures) { /* ... */ }",
-                "anchor_confidence": "low",
-                "anchor_reason": "start_line_out_of_range",
+                "target_file": "x-pack/plugin/ql/src/main/java/org/elasticsearch/xpack/ql/analyzer/VerifierChecks.java",
+                "target_method": "checkFilterConditionType",
+                "start_line": 25,
+                "end_line": 32,
+                "code_snippet": "public static void checkFilterConditionType(LogicalPlan p, Set<Failure> localFailures) {\n    if (p instanceof Filter) {\n        Expression condition = ((Filter) p).condition();\n        if (condition.dataType() != BOOLEAN) {\n            localFailures.add(fail(condition, \"Condition expression needs to be boolean, found [{}]\", condition.dataType()));\n        }\n    }\n}",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved",
                 "anchor_strategy": "llm_realign"
               },
               {
                 "hunk_index": 2,
                 "mainline_method": "checkConditionExpressionDataType",
-                "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
-                "target_method": null,
-                "start_line": null,
-                "end_line": null,
-                "code_snippet": "None",
-                "anchor_confidence": "low",
-                "anchor_reason": "start_line_out_of_range",
+                "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plan/logical/Filter.java",
+                "target_method": "checkFilterConditionDataType",
+                "start_line": 114,
+                "end_line": 118,
+                "code_snippet": "public static void checkFilterConditionDataType(Expression expression, Failures failures) {\n    if (expression.dataType() != NULL && expression.dataType() != BOOLEAN) {\n        failures.add(fail(expression, \"Condition expression needs to be boolean, found [{}]\", expression.dataType()));\n    }\n}",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved",
                 "anchor_strategy": "llm_realign"
               }
             ]
           },
+          "failed_locator_paths": [],
+          "structural_locator_retries": 1,
           "token_usage": {
             "input_tokens": 0,
             "output_tokens": 0,
@@ -99,27 +101,27 @@
             "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java": [
               {
                 "hunk_index": 0,
-                "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plan/logical/Filter.java",
+                "target_file": "x-pack/plugin/ql/src/main/java/org/elasticsearch/xpack/ql/analyzer/VerifierChecks.java",
                 "edit_type": "replace",
-                "old_string": "",
-                "new_string": "",
+                "old_string": "            if (condition.dataType() != BOOLEAN) {\n                localFailures.add(fail(condition, \"Condition expression needs to be boolean, found [{}]\", condition.dataType()));\n            }",
+                "new_string": "            checkConditionExpressionDataType(condition, localFailures);\n        }\n    }\n\n    private static void checkConditionExpressionDataType(Expression expression, Set<Failure> localFailures) {\n        if (expression.dataType() != NULL && expression.dataType() != BOOLEAN) {\n            localFailures.add(fail(expression, \"Condition expression needs to be boolean, found [{}]\", expression.dataType()));",
                 "verified": false,
-                "verification_result": "mapping_low_confidence",
-                "notes": "mapping_low_confidence:start_line_out_of_range"
+                "verification_result": "sanitize_old_not_found:not_found_multiline",
+                "notes": "required_op_replace|planner_tool_error:Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT|sanitize_old_not_found:not_found_multiline"
               },
               {
                 "hunk_index": 1,
-                "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+                "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plan/logical/Filter.java",
                 "edit_type": "replace",
-                "old_string": "",
-                "new_string": "",
+                "old_string": "            if (f.dataType() != NULL && f.dataType() != BOOLEAN) {\n                failures.add(fail(f, \"Condition expression needs to be boolean, found [{}]\", f.dataType()));\n            }",
+                "new_string": "            checkConditionExpressionDataType(f, failures);",
                 "verified": false,
-                "verification_result": "mapping_low_confidence",
-                "notes": "mapping_low_confidence:start_line_out_of_range"
+                "verification_result": "sanitize_old_not_found:not_found_multiline",
+                "notes": "required_op_replace|planner_tool_error:Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT|sanitize_old_not_found:not_found_multiline"
               }
             ]
           },
-          "last_plan_signature": "a6e7c404bcb27fb8cf3323001181bcc6c34c1fe5f31ce9668459ced59eec3a87",
+          "last_plan_signature": "9a2c1932dce6f9a929c1d50bcc27be6e2e473a40486c58c3997398b9d024ba60",
           "token_usage": {
             "input_tokens": 0,
             "output_tokens": 0,
@@ -134,7 +136,30 @@
       "hunk_generator": {
         "node": "hunk_generator",
         "outputs": {
-          "adapted_file_edits": [],
+          "adapted_file_edits": [
+            {
+              "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+              "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+              "old_string": "            if (condition.dataType() != BOOLEAN) {\n                localFailures.add(fail(condition, \"Condition expression needs to be boolean, found [{}]\", condition.dataType()));\n            }",
+              "new_string": "            checkConditionExpressionDataType(condition, localFailures);\n        }\n    }\n\n    private static void checkConditionExpressionDataType(Expression expression, Set<Failure> localFailures) {\n        if (expression.dataType() != NULL && expression.dataType() != BOOLEAN) {\n            localFailures.add(fail(expression, \"Condition expression needs to be boolean, found [{}]\", expression.dataType()));",
+              "edit_type": "replace",
+              "verified": false,
+              "verification_result": "sanitize_old_not_found:not_found_multiline",
+              "applied": false,
+              "apply_result": "old_resolution_failed:not_found_multiline | retry=file_check_retry_grep_no_hits:localFailures.add(fail(condition, \"Condition expression needs to be boolean, found [{}]\", condition.dataType()));"
+            },
+            {
+              "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+              "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+              "old_string": "            if (f.dataType() != NULL && f.dataType() != BOOLEAN) {\n                failures.add(fail(f, \"Condition expression needs to be boolean, found [{}]\", f.dataType()));\n            }",
+              "new_string": "            checkConditionExpressionDataType(f, failures);",
+              "edit_type": "replace",
+              "verified": false,
+              "verification_result": "sanitize_old_not_found:not_found_multiline",
+              "applied": false,
+              "apply_result": "old_resolution_failed:not_found_multiline | retry=file_check_retry_grep_no_hits:failures.add(fail(f, \"Condition expression needs to be boolean, found [{}]\", f.dataType()));"
+            }
+          ],
           "adapted_code_hunks": [],
           "adapted_test_hunks": [],
           "generation_checklist": [
@@ -143,11 +168,18 @@
               "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
               "hunk_index": 0,
               "status": "failed",
-              "reason": "mapping_required",
+              "reason": "generation_contract_failed",
               "todo_steps": [
-                "remap"
+                "reset_file",
+                "apply_edits",
+                "capture_diff",
+                "intent_check",
+                "restore_file"
               ],
-              "completed_steps": []
+              "completed_steps": [
+                "reset_file",
+                "apply_edits"
+              ]
             }
           ],
           "generated_patch_hash": "",
