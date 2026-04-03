@@ -1,7 +1,7 @@
 {
-  "input_tokens": 775692,
-  "output_tokens": 6016,
-  "total_tokens": 781708,
+  "input_tokens": 402402,
+  "output_tokens": 7732,
+  "total_tokens": 410134,
   "messages_with_usage": 1,
   "estimated_messages": 3,
   "tokenizer": {
@@ -31,9 +31,9 @@
       ]
     },
     "planning_agent": {
-      "input_tokens": 775640,
-      "output_tokens": 6016,
-      "total_tokens": 781656,
+      "input_tokens": 402350,
+      "output_tokens": 7732,
+      "total_tokens": 410082,
       "estimated_events": 0,
       "exact_events": 1,
       "sources": [
@@ -51,5 +51,5 @@
       ]
     }
   },
-  "finished_at": "2026-04-03T07:43:31.446692"
+  "finished_at": "2026-04-03T08:57:49.420332"
 }

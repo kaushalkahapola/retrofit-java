@@ -3,7 +3,7 @@ project=elasticsearch
 mainline_commit=deeeadc01f86d08f887cbfcb0dc40caf3b7374f4
 backport_commit=655e3ce1310196a95b154773106699d36d9fc8cb
 mode=full
-started_at=2026-04-03T07:40:59.144115
+started_at=2026-04-03T08:55:37.438150
 ----------------------------------------
 Running full workflow graph
 Completed node=context_analyzer
@@ -21,6 +21,7 @@ Agent 1: Complete. Files=1 hunks=2 (deterministic).
   Completed: context_analyzer
 Agent 2 (Structural Locator): Starting target location mapping...
   Agent 2: 1 code file(s), 0 test file(s)
+LLM Provider: azure, Model: apim-4o-mini, Temperature: 0
   Agent 2: Found 2 hunk(s) in hunk_chain
   Agent 2: Locating target for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java (2 hunk(s))...
 Blob Hunting: Searching for SHA c2663650685ebe0a449fa76ed8aa210acf81ec73 (x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java)
@@ -35,7 +36,6 @@ Agent 2: Complete. Mapped 1 file(s). Total hunk mappings: 2. ConsistencyMap has 
 Planning Agent: Building per-hunk str_replace edit plans...
 LLM Provider: azure, Model: apim-4o-mini, Temperature: 0
     Planning Agent: Could not parse JSON for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java[0] op=0 - using required fallback.
-    Planning Agent: Could not parse JSON for x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java[1] op=0 - using required fallback.
 Planning Agent: Complete. Planned 2 edit(s).
   Completed: planning_agent
 Agent 3 (File Editor): Starting direct file-edit workflow...

@@ -575,7 +575,7 @@ class EnsembleRetriever:
 
     def grep_repo(
         self, search_text: str, is_regex: bool = False
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Dict[str, any]]:
         """
         Performs a repository-wide search for search_text in Java files.
         Uses git grep for high performance.

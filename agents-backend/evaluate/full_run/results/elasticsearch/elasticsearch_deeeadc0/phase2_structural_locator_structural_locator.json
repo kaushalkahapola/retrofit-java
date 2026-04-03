@@ -32,7 +32,7 @@
     "input_tokens": 0,
     "output_tokens": 0,
     "total_tokens": 0,
-    "estimated": true,
-    "reason": "deterministic_no_llm"
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
   }
 }
