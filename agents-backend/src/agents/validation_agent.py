@@ -607,6 +607,7 @@ async def validation_agent(state: AgentState, config) -> dict:
             "success": test_res.get("success", False),
             "raw": test_res.get("output", ""),
             "mode": test_res.get("mode", "unknown"),
+            "test_state": test_res.get("test_state", {}),
             "state_transition": transition_eval,
         }
 

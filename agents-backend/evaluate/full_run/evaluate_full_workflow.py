@@ -376,7 +376,30 @@ def _build_auxiliary_hunks_from_developer_patch(
     return hunks
 
 
-def _build_hunk_comparison_markdown(adapted_code_hunks, developer_patch_diff, analyzer):
+def _extract_hunks_by_file_from_patch(
+    patch_diff: str,
+    analyzer: PatchAnalyzer,
+    code_only: bool = True,
+) -> dict[str, list[str]]:
+    if not patch_diff:
+        return {}
+
+    hunks_by_file = analyzer.extract_raw_hunks(patch_diff, with_test_changes=False)
+    if code_only:
+        hunks_by_file = {
+            file: hunks
+            for file, hunks in hunks_by_file.items()
+            if _is_java_code_file(file)
+        }
+    return hunks_by_file
+
+
+def _build_hunk_comparison_markdown(
+    developer_patch_diff: str,
+    generated_patch_diff: str,
+    analyzer: PatchAnalyzer,
+    heading: str = "Hunk-by-Hunk Comparison",
+):
     developer_hunks_by_file = analyzer.extract_raw_hunks(
         developer_patch_diff, with_test_changes=False
     )
@@ -386,24 +409,32 @@ def _build_hunk_comparison_markdown(adapted_code_hunks, developer_patch_diff, an
         if _is_java_code_file(file)
     }
 
-    generated_hunks_by_file = {}
-    for hunk in adapted_code_hunks:
-        file = hunk["target_file"]
-        if file not in generated_hunks_by_file:
-            generated_hunks_by_file[file] = []
-        generated_hunks_by_file[file].append(hunk["hunk_text"])
+    generated_hunks_by_file = _extract_hunks_by_file_from_patch(
+        generated_patch_diff,
+        analyzer,
+        code_only=True,
+    )
 
     all_files = set(generated_hunks_by_file.keys()) | set(
         developer_hunks_by_file.keys()
     )
 
-    markdown = ""
+    markdown = f"## {heading}\n\n"
+    if not all_files:
+        return (
+            markdown
+            + "No Java code hunks found in either developer or generated patch.\n\n"
+        )
+
     for file in sorted(all_files):
         gen_hunks = generated_hunks_by_file.get(file, [])
         dev_hunks = developer_hunks_by_file.get(file, [])
         max_hunks = max(len(gen_hunks), len(dev_hunks))
 
         markdown += f"### {file}\n\n"
+        markdown += f"- Developer hunks: {len(dev_hunks)}\n"
+        markdown += f"- Generated hunks: {len(gen_hunks)}\n\n"
+
         for i in range(max_hunks):
             gen = gen_hunks[i] if i < len(gen_hunks) else "*No hunk*"
             dev = dev_hunks[i] if i < len(dev_hunks) else "*No hunk*"
@@ -698,11 +729,16 @@ def _apply_patch_with_temp_index(repo_path, patch_file_path, env):
 def compare_generated_with_developer_patch(
     adapted_code_hunks, developer_patch_diff, backport_commit, target_repo_path
 ):
-    generated_patch_diff = _build_generated_patch_from_hunks(adapted_code_hunks or [])
+    code_only_hunks = [
+        h
+        for h in (adapted_code_hunks or [])
+        if _is_java_code_file((h or {}).get("target_file", ""))
+    ]
+    generated_patch_diff = _build_generated_patch_from_hunks(code_only_hunks)
     generated_files = sorted(
         {
             h.get("target_file")
-            for h in (adapted_code_hunks or [])
+            for h in code_only_hunks
             if h.get("target_file") and _is_java_code_file(h.get("target_file"))
         }
     )
@@ -927,18 +963,22 @@ def _extract_baseline_and_patched_test_results(
         or {}
     )
 
-    patched_result = (
-        phase0_outputs.get("phase_0_post_patch_test_result")
-        or (
-            phase_outputs.get("phase4_validation", {})
-            .get("validation", {})
-            .get("outputs", {})
-            .get("validation_results", {})
-            .get("tests", {})
-        )
-        or (phase0_cache or {}).get("phase_0_post_patch_test_result")
-        or {}
+    phase4_tests = (
+        phase_outputs.get("phase4_validation", {})
+        .get("validation", {})
+        .get("outputs", {})
+        .get("validation_results", {})
+        .get("tests", {})
     )
+
+    if (phase4_tests or {}).get("test_state"):
+        patched_result = {"test_state": (phase4_tests or {}).get("test_state") or {}}
+    else:
+        patched_result = (
+            phase0_outputs.get("phase_0_post_patch_test_result")
+            or (phase0_cache or {}).get("phase_0_post_patch_test_result")
+            or {}
+        )
 
     return baseline_result, patched_result
 
@@ -958,6 +998,7 @@ def _build_touched_test_state_markdown(
     patched_cases = patched_state.get("test_cases") or {}
     baseline_classes = baseline_state.get("classes") or {}
     patched_classes = patched_state.get("classes") or {}
+    patched_missing = not patched_cases and not patched_classes
 
     lines = [f"- Touched tests (from patch): {touched_classes}"]
     for cls in touched_classes:
@@ -971,11 +1012,15 @@ def _build_touched_test_state_markdown(
         if class_case_keys:
             for key in class_case_keys:
                 old_status = baseline_cases.get(key, "absent")
-                new_status = patched_cases.get(key, "absent")
+                new_status = patched_cases.get(
+                    key, "unknown" if patched_missing else "absent"
+                )
                 lines.append(f"  - {key}: baseline={old_status}, patched={new_status}")
         else:
             old_status = baseline_classes.get(cls, "absent")
-            new_status = patched_classes.get(cls, "absent")
+            new_status = patched_classes.get(
+                cls, "unknown" if patched_missing else "absent"
+            )
             lines.append(f"  - {cls}: baseline={old_status}, patched={new_status}")
 
     return "\n".join(lines) + "\n"
@@ -1571,6 +1616,33 @@ async def run_full_pipeline(
             "error": comparison.get("error"),
         }
 
+        agent_only_generated_patch_diff = _build_generated_patch_from_hunks(
+            [
+                h
+                for h in (latest_adapted_code_hunks or [])
+                if _is_java_code_file((h or {}).get("target_file", ""))
+            ]
+        )
+        final_generated_patch_diff = comparison.get("generated_patch_diff", "")
+
+        agent_hunk_markdown = _build_hunk_comparison_markdown(
+            developer_patch_diff=developer_patch_diff,
+            generated_patch_diff=agent_only_generated_patch_diff,
+            analyzer=analyzer,
+            heading="Agent-Only Hunk Comparison (code files)",
+        )
+
+        final_hunk_markdown = ""
+        if (agent_only_generated_patch_diff or "").strip() != (
+            final_generated_patch_diff or ""
+        ).strip():
+            final_hunk_markdown = _build_hunk_comparison_markdown(
+                developer_patch_diff=developer_patch_diff,
+                generated_patch_diff=final_generated_patch_diff,
+                analyzer=analyzer,
+                heading="Final Effective Hunk Comparison (agent + developer aux, code files)",
+            )
+
         save_pipeline_log(
             project,
             patch_id,
@@ -1582,12 +1654,15 @@ async def run_full_pipeline(
             f"- Compared files: {comparison.get('compared_files', [])}\n"
             f"- Mismatched files: {comparison.get('mismatched_files', [])}\n"
             f"- Error: {comparison.get('error')}\n\n"
-            "## Hunk-by-Hunk Comparison\n\n"
-            + _build_hunk_comparison_markdown(
-                final_adapted_code_hunks, developer_patch_diff, analyzer
-            )
-            + "\n## Full Generated Patch (code-only)\n"
-            f"```diff\n{comparison['generated_patch_diff']}\n```\n"
+            "## Comparison Scope\n"
+            "- Agent-only patch: code hunks produced by Agent 3\n"
+            "- Final effective patch: agent code hunks + developer auxiliary hunks (still code-only for this report)\n\n"
+            + agent_hunk_markdown
+            + (final_hunk_markdown if final_hunk_markdown else "")
+            + "\n## Full Generated Patch (Agent-Only, code-only)\n"
+            f"```diff\n{agent_only_generated_patch_diff}\n```\n"
+            "\n## Full Generated Patch (Final Effective, code-only)\n"
+            f"```diff\n{final_generated_patch_diff}\n```\n"
             "## Full Developer Backport Patch (full commit diff)\n"
             f"```diff\n{developer_patch_diff}\n```\n",
         )
