@@ -20,4 +20,4 @@
 **Final Status: BUILD FAILED**
 
 **Agent Analysis:**
-API/signature mismatch in generated patch against target branch.
+Java syntax errors detected after patch application (likely malformed hunk output).

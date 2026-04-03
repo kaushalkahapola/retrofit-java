@@ -1,0 +1,73 @@
+{
+  "adapted_file_edits": [
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "old_string": "(llm_react)",
+      "new_string": "(llm_react)",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "llm_react_applied",
+      "applied": true,
+      "apply_result": "LLM+ReAct agent applied edits"
+    }
+  ],
+  "adapted_code_hunks": [
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_text": "diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java\nindex 3c2855c9534..21eeeb67886 100644\n--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java\n+++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java\n@@ -19,6 +19,7 @@ import org.elasticsearch.action.search.ShardSearchFailure;\n import org.elasticsearch.action.support.TransportActions;\n import org.elasticsearch.cluster.node.DiscoveryNode;\n import org.elasticsearch.cluster.service.ClusterService;\n+import org.elasticsearch.cluster.node.DiscoveryNodeRole;\n import org.elasticsearch.common.breaker.CircuitBreakingException;\n import org.elasticsearch.common.util.Maps;\n import org.elasticsearch.common.util.concurrent.ConcurrentCollections;\n@@ -126,6 +127,11 @@ abstract class DataNodeRequestSender {\n                     )\n                 )\n             ) {\n+    /**\n+     * Query order according to the\n+     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n+     */\n+    private static final \n                 pendingShardIds.addAll(targetShards.shards.keySet());\n                 trySendingRequestsForPendingShards(targetShards, computeListener);\n             }\n@@ -338,7 +344,7 @@ abstract class DataNodeRequestSender {\n      */\n     private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {\n         assert sendingLock.isHeldByCurrentThread();\n-        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new HashMap<>();\n+        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();\n         final Iterator<ShardId> shardsIt = pendingShardIds.iterator();\n \n         while (shardsIt.hasNext()) {\n",
+      "insertion_line": 19,
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+      "hunk_index": 0,
+      "status": "success",
+      "reason": "generated_with_intent_warning",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    }
+  ],
+  "generated_patch_hash": "f73ba320b49c67ca84454cc3e35203c58dd21fc5b78f3349affdcb1cbe6f2d22",
+  "token_usage": {
+    "input_tokens": 57400,
+    "output_tokens": 3364,
+    "total_tokens": 60764,
+    "estimated": false,
+    "sources": [
+      "file_editor.react.provider_usage",
+      "file_editor.react.provider_usage",
+      "file_editor.react.provider_usage",
+      "file_editor.react.provider_usage",
+      "file_editor.react.provider_usage",
+      "file_editor.react.provider_usage",
+      "file_editor.react.provider_usage",
+      "file_editor.react.provider_usage",
+      "file_editor.react.provider_usage",
+      "file_editor.react.provider_usage",
+      "file_editor.react.provider_usage",
+      "file_editor.intent.provider_usage"
+    ]
+  }
+}
