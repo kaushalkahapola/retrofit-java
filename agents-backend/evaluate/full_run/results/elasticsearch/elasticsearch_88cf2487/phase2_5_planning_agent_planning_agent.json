@@ -1,0 +1,34 @@
+{
+  "hunk_generation_plan": {
+    "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+        "edit_type": "replace",
+        "old_string": "",
+        "new_string": "",
+        "verified": false,
+        "verification_result": "mapping_low_confidence",
+        "notes": "mapping_low_confidence:target_file_missing_or_unreadable"
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+        "edit_type": "replace",
+        "old_string": "",
+        "new_string": "",
+        "verified": false,
+        "verification_result": "mapping_low_confidence",
+        "notes": "mapping_low_confidence:target_file_missing_or_unreadable"
+      }
+    ]
+  },
+  "last_plan_signature": "4fbb747e1193cb5a0e9670b2d95b5176e410d1955afe3563f05d8254039e15ac",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

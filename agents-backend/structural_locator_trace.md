@@ -9,18 +9,16 @@
 
 ## Code File Mappings
 
-### `server/src/main/java/org/elasticsearch/script/ScriptStats.java`
+### `b/server/src/main/java/org/elasticsearch/script/ScriptStats.java`
 
 **Hunks in this file**: 2
-
-**Git Resolution**: Found `server/src/main/java/org/elasticsearch/script/ScriptStats.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 26–26 |
-| 2 | core_fix | `hunk_2` | `None` | 215–215 |
+| 1 | declaration | `<import>` | `<import>` | 28–28 |
+| 2 | core_fix | `hunk_2` | `None` | 206–206 |
 ## Test File Mappings
 
 

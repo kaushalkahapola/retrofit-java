@@ -1,0 +1,206 @@
+{
+  "project": "elasticsearch",
+  "patch_id": "elasticsearch_88cf2487",
+  "mainline_commit": "88cf2487e7deb38686870e40bf08b2b729b7d848",
+  "backport_commit": "223d50f0524d3d3e9a19f18a3b146212ff830042",
+  "run_mode": "full",
+  "timestamp": "2026-04-03T16:15:58.222955",
+  "phases": {
+    "phase1_context_analyzer": {
+      "context_analyzer": {
+        "node": "context_analyzer",
+        "outputs": {
+          "semantic_blueprint": {
+            "root_cause_hypothesis": "Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.",
+            "fix_logic": "Apply each source hunk with target-verified context and symbol consistency while preserving behavior.",
+            "dependent_apis": [],
+            "patch_intent_summary": "Backport patch behavior to target branch with minimal, context-correct edits.",
+            "hunk_chain": [
+              {
+                "hunk_index": 1,
+                "file": "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+                "summary": "Adds logic (+1 lines).",
+                "role": "declaration",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 1
+              },
+              {
+                "hunk_index": 2,
+                "file": "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+                "summary": "Modifies logic (+1/-1 lines).",
+                "role": "core_fix",
+                "connects_to_next": "",
+                "global_index": 2
+              }
+            ]
+          },
+          "patch_diff": "diff --git a/a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\nindex 0000000..0000000 100644\n--- a/a/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n+++ b/b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n@@ -28,6 +28,7 @@\n import java.util.Objects;\n \n import static org.elasticsearch.common.collect.Iterators.single;\n+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\n import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\n import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n@@ -205,7 +206,7 @@\n                 builder.endObject();\n             }\n             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n-                builder.startObject(COMPILATIONS_HISTORY);\n+                builder.startObject(CACHE_EVICTIONS_HISTORY);\n                 cacheEvictionsHistory.toXContent(builder, params);\n                 builder.endObject();\n             }\n",
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "reason": "deterministic_no_llm"
+          }
+        }
+      }
+    },
+    "phase2_structural_locator": {
+      "structural_locator": {
+        "node": "structural_locator",
+        "outputs": {
+          "consistency_map": {},
+          "mapped_target_context": {
+            "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java": [
+              {
+                "hunk_index": 1,
+                "mainline_method": "<import>",
+                "target_file": "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+                "target_method": "<import>",
+                "start_line": 28,
+                "end_line": 28,
+                "code_snippet": "import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;",
+                "anchor_confidence": "low",
+                "anchor_reason": "target_file_missing_or_unreadable",
+                "anchor_strategy": "deterministic_realign"
+              },
+              {
+                "hunk_index": 2,
+                "mainline_method": "hunk_2",
+                "target_file": "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+                "target_method": null,
+                "start_line": 206,
+                "end_line": 206,
+                "code_snippet": "builder.startObject(CACHE_EVICTIONS_HISTORY);",
+                "anchor_confidence": "low",
+                "anchor_reason": "target_file_missing_or_unreadable",
+                "anchor_strategy": "deterministic_realign"
+              }
+            ]
+          },
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "reason": "llm_usage_not_collected_in_this_node"
+          }
+        }
+      }
+    },
+    "phase2_5_planning_agent": {
+      "planning_agent": {
+        "node": "planning_agent",
+        "outputs": {
+          "hunk_generation_plan": {
+            "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java": [
+              {
+                "hunk_index": 0,
+                "target_file": "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+                "edit_type": "replace",
+                "old_string": "",
+                "new_string": "",
+                "verified": false,
+                "verification_result": "mapping_low_confidence",
+                "notes": "mapping_low_confidence:target_file_missing_or_unreadable"
+              },
+              {
+                "hunk_index": 1,
+                "target_file": "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+                "edit_type": "replace",
+                "old_string": "",
+                "new_string": "",
+                "verified": false,
+                "verification_result": "mapping_low_confidence",
+                "notes": "mapping_low_confidence:target_file_missing_or_unreadable"
+              }
+            ]
+          },
+          "last_plan_signature": "4fbb747e1193cb5a0e9670b2d95b5176e410d1955afe3563f05d8254039e15ac",
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "sources": []
+          }
+        }
+      }
+    },
+    "phase3_hunk_generator": {
+      "hunk_generator": {
+        "node": "hunk_generator",
+        "outputs": {
+          "adapted_file_edits": [],
+          "adapted_code_hunks": [],
+          "adapted_test_hunks": [],
+          "generation_checklist": [],
+          "generated_patch_hash": "",
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "sources": []
+          }
+        }
+      }
+    },
+    "phase4_validation": {
+      "validation": {
+        "node": "validation",
+        "outputs": {
+          "validation_passed": false,
+          "validation_attempts": 3,
+          "validation_error_context": "Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors.",
+          "validation_failure_category": "empty_generation",
+          "validation_retry_files": []
+        }
+      }
+    }
+  },
+  "pair_consistency": {
+    "mainline_java_files": [
+      "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
+    ],
+    "developer_java_files": [
+      "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
+    ],
+    "overlap_java_files": [
+      "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
+    ],
+    "overlap_ratio_mainline": 1.0,
+    "pair_mismatch": false,
+    "reason": "scope_overlap_ok"
+  },
+  "exact_developer_patch": false,
+  "developer_patch_comparison": {
+    "comparison_method": "file_state",
+    "compared_files": [
+      "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
+    ],
+    "mismatched_files": [
+      "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
+    ],
+    "developer_files": [
+      "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
+    ],
+    "generated_files": [],
+    "pair_consistency": {
+      "mainline_java_files": [
+        "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
+      ],
+      "developer_java_files": [
+        "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
+      ],
+      "overlap_java_files": [
+        "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
+      ],
+      "overlap_ratio_mainline": 1.0,
+      "pair_mismatch": false,
+      "reason": "scope_overlap_ok"
+    },
+    "error": null
+  },
+  "status": "completed"
+}
