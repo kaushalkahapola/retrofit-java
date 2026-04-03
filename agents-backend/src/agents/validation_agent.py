@@ -297,6 +297,7 @@ async def validation_agent(state: AgentState, config) -> dict:
     # 3.0 Setup
     code_hunks = state.get("adapted_code_hunks", [])
     test_hunks = state.get("adapted_test_hunks", [])
+    generation_checklist = state.get("generation_checklist", []) or []
     developer_aux_hunks = state.get("developer_auxiliary_hunks", [])
     attempts = state.get("validation_attempts", 0)
     blueprint = state.get("semantic_blueprint", {})
@@ -333,6 +334,38 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_error_context": msg,
             "validation_failure_category": "empty_generation",
             "validation_retry_files": [],
+        }
+
+    failed_generation_items = [
+        item
+        for item in generation_checklist
+        if str(item.get("status", "")).strip().lower() == "failed"
+    ]
+    if failed_generation_items:
+        retry_files = sorted(
+            {
+                str(item.get("mainline_file") or "").strip()
+                for item in failed_generation_items
+                if item.get("mainline_file")
+            }
+            | {
+                str(item.get("target_file") or "").strip()
+                for item in failed_generation_items
+                if item.get("target_file")
+            }
+        )
+        msg = (
+            "Validation deferred: generator checklist contains unresolved failed hunks. "
+            "Route back to planning/generation before running build/tests. "
+            f"Failed hunks: {json.dumps(failed_generation_items, default=str)[:1500]}"
+        )
+        print(f"  Agent 4: {msg}")
+        return {
+            "validation_passed": False,
+            "validation_attempts": attempts + 1,
+            "validation_error_context": msg,
+            "validation_failure_category": "context_mismatch",
+            "validation_retry_files": retry_files,
         }
 
     # Ensure clean repo

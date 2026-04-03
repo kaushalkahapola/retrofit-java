@@ -18,6 +18,12 @@ from langgraph.prebuilt import create_react_agent
 from state import AgentState
 from utils.llm_provider import get_llm
 from utils.patch_analyzer import PatchAnalyzer
+from utils.token_counter import (
+    add_usage,
+    count_text_tokens,
+    extract_usage_from_response,
+    resolve_model_name,
+)
 from agents.hunk_generator_tools import HunkGeneratorToolkit
 
 
@@ -119,7 +125,9 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         "output_tokens": 0,
         "total_tokens": 0,
         "estimated": False,
+        "sources": [],
     }
+    model_name = resolve_model_name()
 
     for mainline_file, raw_hunks in (raw_hunks_by_file or {}).items():
         mapped = mapped_target_context.get(mainline_file, [])
@@ -155,30 +163,40 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                     "Use tools to verify exact anchors and return JSON."
                 )
                 try:
+                    prompt_input_tokens = count_text_tokens(
+                        _PLANNER_SYSTEM + "\n" + prompt, model_name
+                    )
                     res = await react.ainvoke(
                         {"messages": [("user", prompt)]},
                         config={"recursion_limit": 20},
                     )
                     msgs = res.get("messages", [])
+                    exact_any = False
                     for m in msgs:
-                        md = getattr(m, "response_metadata", {}) or {}
-                        usage = (
-                            md.get("token_usage", {}) if isinstance(md, dict) else {}
+                        if getattr(m, "type", "") != "ai":
+                            continue
+                        usage = extract_usage_from_response(m)
+                        if usage and (usage["input_tokens"] or usage["output_tokens"]):
+                            add_usage(
+                                token_usage,
+                                usage["input_tokens"],
+                                usage["output_tokens"],
+                                "planner.provider_usage",
+                            )
+                            exact_any = True
+
+                    if not exact_any:
+                        final_content = msgs[-1].content if msgs else ""
+                        output_tokens = count_text_tokens(
+                            str(final_content), model_name
                         )
-                        if usage:
-                            token_usage["input_tokens"] += int(
-                                usage.get("prompt_tokens", usage.get("input_tokens", 0))
-                                or 0
-                            )
-                            token_usage["output_tokens"] += int(
-                                usage.get(
-                                    "completion_tokens", usage.get("output_tokens", 0)
-                                )
-                                or 0
-                            )
-                    token_usage["total_tokens"] = (
-                        token_usage["input_tokens"] + token_usage["output_tokens"]
-                    )
+                        add_usage(
+                            token_usage,
+                            prompt_input_tokens,
+                            output_tokens,
+                            "planner.tiktoken",
+                        )
+                        token_usage["estimated"] = True
 
                     final = msgs[-1].content if msgs else ""
                     parsed = _extract_json_obj(final)

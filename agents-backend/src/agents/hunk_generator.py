@@ -30,6 +30,13 @@ from langgraph.errors import GraphRecursionError
 from state import AgentState, AdaptedHunk, SemanticBlueprint
 from utils.patch_analyzer import PatchAnalyzer
 from utils.llm_provider import get_llm
+from utils.token_counter import (
+    add_usage,
+    count_messages_tokens,
+    count_text_tokens,
+    extract_usage_from_response,
+    resolve_model_name,
+)
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from agents.validation_tools import ValidationToolkit
 from agents.hunk_generator_tools import HunkGeneratorToolkit
@@ -224,6 +231,8 @@ async def _check_intent(
     llm,
     hunk_text: str,
     blueprint: SemanticBlueprint,
+    token_usage: dict[str, Any] | None = None,
+    model_name: str | None = None,
 ) -> bool:
     """
     Sends a short verification prompt to the LLM asking if the generated hunk
@@ -241,7 +250,28 @@ async def _check_intent(
         ),
     ]
     try:
+        approx_in = count_messages_tokens(messages, model_name)
         response = await llm.ainvoke(messages)
+        usage = extract_usage_from_response(response)
+        if token_usage is not None:
+            if usage and (usage["input_tokens"] or usage["output_tokens"]):
+                add_usage(
+                    token_usage,
+                    usage["input_tokens"],
+                    usage["output_tokens"],
+                    "hunk_generator.intent.provider_usage",
+                )
+            else:
+                out_text = (
+                    response.content if hasattr(response, "content") else str(response)
+                )
+                add_usage(
+                    token_usage,
+                    approx_in,
+                    count_text_tokens(str(out_text), model_name),
+                    "hunk_generator.intent.tiktoken",
+                )
+                token_usage["estimated"] = True
         content = response.content if hasattr(response, "content") else str(response)
         return content.strip().upper().startswith("YES")
     except Exception as e:
@@ -666,6 +696,111 @@ def _build_pure_insertion_hunk_from_plan(
 
     header = f"@@ -{line_no},{old_count} +{line_no},{new_count} @@"
     out = "\n".join([header] + body)
+    if not out.endswith("\n"):
+        out += "\n"
+    return out
+
+
+def _select_replacement_line(removed_line: str, added_lines: list[str]) -> str | None:
+    if not removed_line or not added_lines:
+        return None
+    removed_norm = removed_line.strip()
+    prefix = (
+        removed_norm.split("(", 1)[0].strip() if "(" in removed_norm else removed_norm
+    )
+    for a in added_lines:
+        a_norm = (a or "").strip()
+        if not a_norm:
+            continue
+        if a_norm == removed_norm:
+            continue
+        if prefix and prefix in a_norm:
+            return a
+    for a in added_lines:
+        a_norm = (a or "").strip()
+        if a_norm and a_norm != removed_norm:
+            return a
+    return None
+
+
+def _build_rewrite_hunk_from_plan(
+    *,
+    target_repo_path: str,
+    target_file: str,
+    pre_rewritten_hunk: str,
+    anchor_before: str,
+    anchor_after: str,
+) -> str | None:
+    """
+    Deterministically build a rewrite hunk (or two hunks) using planner anchors.
+    Useful when model output fails dry-run on large mixed replace+insert hunks.
+    """
+    target_lines = _load_target_file_lines(target_repo_path, target_file)
+    if not target_lines:
+        return None
+
+    removed_lines = _extract_removed_lines(pre_rewritten_hunk)
+    added_lines = _extract_added_lines(pre_rewritten_hunk)
+    if not removed_lines or not added_lines:
+        return None
+
+    remove_exact = None
+    remove_line_no = None
+    if anchor_before.strip():
+        remove_line_no = _find_line_in_target(target_lines, anchor_before)
+    if remove_line_no is None:
+        for r in removed_lines:
+            found = _find_line_in_target(target_lines, r)
+            if found is not None:
+                remove_line_no = found
+                break
+    if remove_line_no is not None and 1 <= remove_line_no <= len(target_lines):
+        remove_exact = target_lines[remove_line_no - 1]
+
+    if not remove_exact or remove_line_no is None:
+        return None
+
+    replacement = _select_replacement_line(remove_exact, added_lines)
+    if not replacement:
+        return None
+
+    remaining_added = list(added_lines)
+    try:
+        remaining_added.remove(replacement)
+    except ValueError:
+        pass
+
+    hunk_parts: list[str] = []
+
+    # Sub-hunk A: line replacement
+    hunk_parts.extend(
+        [
+            f"@@ -{remove_line_no},1 +{remove_line_no},1 @@",
+            f"-{remove_exact}",
+            f"+{replacement}",
+        ]
+    )
+
+    # Sub-hunk B: insert additional helper block before anchor_after (if available)
+    if remaining_added:
+        anchor_after_no = None
+        if anchor_after.strip():
+            anchor_after_no = _find_line_in_target(target_lines, anchor_after)
+        if anchor_after_no is None:
+            # Fallback: insert after replacement line.
+            anchor_after_no = min(remove_line_no + 1, len(target_lines))
+
+        if 1 <= anchor_after_no <= len(target_lines):
+            anchor_after_exact = target_lines[anchor_after_no - 1]
+            hunk_parts.extend(
+                [
+                    f"@@ -{anchor_after_no},1 +{anchor_after_no},{1 + len(remaining_added)} @@",
+                    *[f"+{l}" for l in remaining_added],
+                    f" {anchor_after_exact}",
+                ]
+            )
+
+    out = "\n".join(hunk_parts)
     if not out.endswith("\n"):
         out += "\n"
     return out
@@ -1291,13 +1426,15 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
 
     adapted_code_hunks: list[AdaptedHunk] = []
     adapted_test_hunks: list[AdaptedHunk] = []
+    generation_checklist: list[dict[str, Any]] = []
     token_usage = {
         "input_tokens": 0,
         "output_tokens": 0,
         "total_tokens": 0,
-        "estimated": True,
-        "reason": "usage_metadata_not_available_from_llm_calls",
+        "estimated": False,
+        "sources": [],
     }
+    model_name = resolve_model_name()
     trace = "# Hunk Generator Trace\n\n"
     trace += f"| target_file | hunk_index | dry_run | intent_ok |\n|---|---|---|---|\n"
 
@@ -1405,6 +1542,15 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     f"    Agent 3: Skipping {target_file}[{hunk_idx}] — unable to locate target insertion line"
                 )
                 trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                generation_checklist.append(
+                    {
+                        "mainline_file": mainline_file,
+                        "target_file": target_file,
+                        "hunk_index": hunk_idx,
+                        "status": "failed",
+                        "reason": "missing_insertion_line",
+                    }
+                )
                 continue
 
             # If Agent 2 returned only a short snippet, enrich prompt context from target file.
@@ -1439,6 +1585,15 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         f"    Agent 3: Skipping import-only hunk {target_file}[{hunk_idx}] — no new imports or no import anchor"
                     )
                     trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                    generation_checklist.append(
+                        {
+                            "mainline_file": mainline_file,
+                            "target_file": target_file,
+                            "hunk_index": hunk_idx,
+                            "status": "noop",
+                            "reason": "import_hunk_no_new_lines_or_anchor",
+                        }
+                    )
                     continue
             else:
                 # ReAct tool loop (intelligent hunk generation) or simple LLM rewrite fallback
@@ -1465,6 +1620,24 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
 
                 # Prefer deterministic rewrite for replacement hunks (contains removals)
                 # to preserve semantic intent and avoid additive regressions.
+                if planned_mode == "rewrite" and adapted_hunk_text is None:
+                    planned_rewrite_candidate = _build_rewrite_hunk_from_plan(
+                        target_repo_path=target_repo_path,
+                        target_file=target_file,
+                        pre_rewritten_hunk=pre_rewritten,
+                        anchor_before=str(plan_entry.get("anchor_before") or ""),
+                        anchor_after=str(plan_entry.get("anchor_after") or ""),
+                    )
+                    if planned_rewrite_candidate and toolkit:
+                        dr_plan = toolkit.apply_hunk_dry_run(
+                            target_file, planned_rewrite_candidate
+                        )
+                        if dr_plan.get("success"):
+                            adapted_hunk_text = planned_rewrite_candidate
+                            print(
+                                f"    Agent 3: Planned rewrite passed dry-run for {target_file}[{hunk_idx}]"
+                            )
+
                 if planned_mode == "rewrite" and adapted_hunk_text is None:
                     deterministic_candidate = _adjust_hunk_header(
                         pre_rewritten, insertion_line
@@ -1509,11 +1682,43 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
 
                     for attempt in range(2):
                         try:
+                            react_in_tokens = count_text_tokens(
+                                _HUNK_REWRITE_SYSTEM_TOOLS + "\n" + react_prompt,
+                                model_name,
+                            )
                             react_result = await hg_react_agent.ainvoke(
                                 {"messages": [("user", react_prompt)]},
                                 config={"recursion_limit": 30},
                             )
-                            raw_content = react_result["messages"][-1].content
+                            react_messages = react_result.get("messages", [])
+                            raw_content = (
+                                react_messages[-1].content if react_messages else ""
+                            )
+
+                            exact_any = False
+                            for rm in react_messages:
+                                if getattr(rm, "type", "") != "ai":
+                                    continue
+                                usage = extract_usage_from_response(rm)
+                                if usage and (
+                                    usage["input_tokens"] or usage["output_tokens"]
+                                ):
+                                    add_usage(
+                                        token_usage,
+                                        usage["input_tokens"],
+                                        usage["output_tokens"],
+                                        "hunk_generator.react.provider_usage",
+                                    )
+                                    exact_any = True
+                            if not exact_any:
+                                add_usage(
+                                    token_usage,
+                                    react_in_tokens,
+                                    count_text_tokens(str(raw_content), model_name),
+                                    "hunk_generator.react.tiktoken",
+                                )
+                                token_usage["estimated"] = True
+
                             # Strip leading WARNING comment if present (allowed by system prompt)
                             raw_content_clean = re.sub(
                                 r"^#\s*WARNING:.*\n",
@@ -1614,12 +1819,38 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                             retry_context=retry_context_str,
                         )
                         try:
-                            response = await llm.ainvoke(
-                                [
-                                    SystemMessage(content=_HUNK_REWRITE_SYSTEM),
-                                    HumanMessage(content=prompt),
-                                ]
-                            )
+                            llm_msgs = [
+                                SystemMessage(content=_HUNK_REWRITE_SYSTEM),
+                                HumanMessage(content=prompt),
+                            ]
+                            llm_in_tokens = count_messages_tokens(llm_msgs, model_name)
+                            response = await llm.ainvoke(llm_msgs)
+                            usage = extract_usage_from_response(response)
+                            if usage and (
+                                usage["input_tokens"] or usage["output_tokens"]
+                            ):
+                                add_usage(
+                                    token_usage,
+                                    usage["input_tokens"],
+                                    usage["output_tokens"],
+                                    "hunk_generator.rewrite.provider_usage",
+                                )
+                            else:
+                                fallback_content = (
+                                    response.content
+                                    if hasattr(response, "content")
+                                    else str(response)
+                                )
+                                add_usage(
+                                    token_usage,
+                                    llm_in_tokens,
+                                    count_text_tokens(
+                                        str(fallback_content), model_name
+                                    ),
+                                    "hunk_generator.rewrite.tiktoken",
+                                )
+                                token_usage["estimated"] = True
+
                             raw_content = (
                                 response.content
                                 if hasattr(response, "content")
@@ -1729,16 +1960,44 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     )
                     trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
                     # Fail-closed: do not emit unresolved bad hunks to Phase 4.
+                    generation_checklist.append(
+                        {
+                            "mainline_file": mainline_file,
+                            "target_file": target_file,
+                            "hunk_index": hunk_idx,
+                            "status": "failed",
+                            "reason": "dry_run_failed",
+                            "error": dr.get("output", ""),
+                        }
+                    )
                     continue
             else:
                 dry_run_ok = True  # No toolkit → assume ok (local dev mode)
 
             # Blueprint intent check
-            intent_ok = await _check_intent(llm, adapted_hunk_text, semantic_blueprint)
+            intent_ok = await _check_intent(
+                llm,
+                adapted_hunk_text,
+                semantic_blueprint,
+                token_usage=token_usage,
+                model_name=model_name,
+            )
             if not intent_ok:
                 print(
                     f"    Agent 3: Blueprint check failed for {target_file}[{hunk_idx}] — flagging."
                 )
+
+            generation_checklist.append(
+                {
+                    "mainline_file": mainline_file,
+                    "target_file": target_file,
+                    "hunk_index": hunk_idx,
+                    "status": "success",
+                    "reason": "generated_with_intent_warning"
+                    if not intent_ok
+                    else "generated_and_validated",
+                }
+            )
 
             hunk: AdaptedHunk = {
                 "target_file": target_file,
@@ -1831,12 +2090,34 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     retry_context=retry_context_str,
                 )
                 try:
-                    response = await llm.ainvoke(
-                        [
-                            SystemMessage(content=_HUNK_REWRITE_SYSTEM),
-                            HumanMessage(content=prompt),
-                        ]
-                    )
+                    test_llm_msgs = [
+                        SystemMessage(content=_HUNK_REWRITE_SYSTEM),
+                        HumanMessage(content=prompt),
+                    ]
+                    test_in_tokens = count_messages_tokens(test_llm_msgs, model_name)
+                    response = await llm.ainvoke(test_llm_msgs)
+                    usage = extract_usage_from_response(response)
+                    if usage and (usage["input_tokens"] or usage["output_tokens"]):
+                        add_usage(
+                            token_usage,
+                            usage["input_tokens"],
+                            usage["output_tokens"],
+                            "hunk_generator.test_rewrite.provider_usage",
+                        )
+                    else:
+                        fallback_content = (
+                            response.content
+                            if hasattr(response, "content")
+                            else str(response)
+                        )
+                        add_usage(
+                            token_usage,
+                            test_in_tokens,
+                            count_text_tokens(str(fallback_content), model_name),
+                            "hunk_generator.test_rewrite.tiktoken",
+                        )
+                        token_usage["estimated"] = True
+
                     raw_content = (
                         response.content
                         if hasattr(response, "content")
@@ -1976,6 +2257,7 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
         ],
         "adapted_code_hunks": adapted_code_hunks,
         "adapted_test_hunks": adapted_test_hunks,
+        "generation_checklist": generation_checklist,
         "token_usage": token_usage,
     }
 

@@ -163,6 +163,9 @@ class AgentState(TypedDict):
     hunk_generation_plan: Optional[
         HunkGenerationPlan
     ]  # Planner output: verified per-hunk anchors/context for generation
+    generation_checklist: NotRequired[
+        list[dict[str, Any]]
+    ]  # Per-hunk generation status (success/failed/noop) for fail-closed orchestration
 
     # --- Legacy / Agent 2 compatibility ---
     implementation_plan: (

@@ -35,6 +35,7 @@ from graph import app
 from agents.context_analyzer import context_analyzer_node
 from agents.structural_locator import structural_locator_node
 from utils.patch_analyzer import PatchAnalyzer
+from utils.token_counter import has_tiktoken, resolve_model_name
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -1008,6 +1009,11 @@ async def run_full_pipeline(
         "total_tokens": 0,
         "messages_with_usage": 0,
         "estimated_messages": 0,
+        "tokenizer": {
+            "model": resolve_model_name(),
+            "library": "tiktoken",
+            "available": has_tiktoken(),
+        },
         "by_node": {},
     }
 
