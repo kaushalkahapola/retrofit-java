@@ -408,10 +408,14 @@ def _prepare_pipeline_inputs(
         developer_patch_diff
     )
 
+    # Build agent-eligible patch (excludes test files, non-Java files, auto-generated files, non-code content)
+    agent_eligible_patch = _build_agent_eligible_patch(patch_output)
+
     return (
         {
             "patch_path": patch_path,
             "patch_output": patch_output,
+            "agent_eligible_patch": agent_eligible_patch,
             "developer_patch_diff": developer_patch_diff,
             "java_only_patch_analysis": java_only_patch_analysis,
             "pair_consistency": pair_consistency,
@@ -526,6 +530,119 @@ def _build_auxiliary_hunks_from_developer_patch(
             )
 
     return hunks
+
+
+def _build_agent_eligible_patch(
+    patch_diff: str,
+) -> str:
+    """
+    Build a patch containing only hunks that agents should process.
+
+    Filters out:
+    - All test file hunks
+    - All non-Java file hunks
+    - Auto-generated Java file hunks (ANTLR, Protobuf, gRPC)
+    - Non-code content hunks within .java files (SQL, YAML, JSON, XML, etc.)
+
+    Returns a valid patch diff that agents can safely modify.
+
+    Args:
+        patch_diff: Full patch diff
+
+    Returns:
+        Filtered patch containing only agent-eligible hunks
+    """
+    if not patch_diff.strip():
+        return ""
+
+    patch_set = PatchSet(io.StringIO(patch_diff))
+    eligible_files = []
+
+    def _norm_path(path: str | None) -> str:
+        p = (path or "").strip().replace("\\", "/")
+        if p.startswith("a/") or p.startswith("b/"):
+            p = p[2:]
+        if p == "dev/null":
+            return ""
+        return p
+
+    for patched_file in patch_set:
+        file_path = _norm_path(patched_file.path)
+
+        # Skip non-agent-eligible files
+        is_test_file = _is_test_file(file_path)
+        is_non_java_file = not file_path.lower().endswith(".java")
+        is_auto_generated = _is_auto_generated_java_file(file_path)
+
+        if is_test_file or is_non_java_file or is_auto_generated:
+            continue
+
+        # Filter hunks within the file
+        source_path = _norm_path(getattr(patched_file, "source_file", None))
+        target_path = (
+            _norm_path(getattr(patched_file, "target_file", None)) or file_path
+        )
+
+        if patched_file.is_rename or (
+            source_path and target_path and source_path != target_path
+        ):
+            op = "RENAMED"
+        elif patched_file.is_added_file:
+            op = "ADDED"
+        elif patched_file.is_removed_file:
+            op = "DELETED"
+        else:
+            op = "MODIFIED"
+
+        # Filter hunks: only keep those without non-code content
+        eligible_hunks = []
+        for hunk in patched_file:
+            lines = [
+                f"@@ -{hunk.source_start},{hunk.source_length} +{hunk.target_start},{hunk.target_length} @@\n"
+            ]
+            for line in hunk:
+                if line.is_added:
+                    lines.append(f"+{line.value}")
+                elif line.is_removed:
+                    lines.append(f"-{line.value}")
+                else:
+                    lines.append(f" {line.value}")
+
+            hunk_text = "".join(lines)
+            if not hunk_text.endswith("\n"):
+                hunk_text += "\n"
+
+            # Check if this hunk contains non-code content
+            is_non_code = _is_non_java_hunk_in_java_file(file_path, hunk_text)
+
+            if not is_non_code:
+                eligible_hunks.append(hunk)
+
+        # If the file has eligible hunks, include it in the output patch
+        if eligible_hunks or (len(list(patched_file)) == 0 and not is_auto_generated):
+            # Reconstruct the patched file with only eligible hunks
+            new_patched_file = patched_file.__class__(
+                patched_file.source_file,
+                patched_file.target_file,
+                is_added_file=patched_file.is_added_file,
+                is_removed_file=patched_file.is_removed_file,
+                is_rename=patched_file.is_rename,
+            )
+            # Copy hunks
+            for hunk in eligible_hunks:
+                new_patched_file.append(hunk)
+
+            eligible_files.append(new_patched_file)
+
+    # Rebuild patch from eligible files
+    if not eligible_files:
+        return ""
+
+    # Reconstruct patch string
+    output = io.StringIO()
+    patch_output = PatchSet(eligible_files)
+    output.write(str(patch_output))
+    return output.getvalue()
 
 
 def _extract_hunks_by_file_from_patch(
@@ -1490,6 +1607,7 @@ async def run_full_pipeline(
 
         patch_path = prepared_inputs["patch_path"]
         patch_output = prepared_inputs["patch_output"]
+        agent_eligible_patch = prepared_inputs.get("agent_eligible_patch", patch_output)
         developer_patch_diff = prepared_inputs["developer_patch_diff"]
         java_only_patch_analysis = prepared_inputs["java_only_patch_analysis"]
         pair_consistency = prepared_inputs.get("pair_consistency") or {}
@@ -1518,7 +1636,7 @@ async def run_full_pipeline(
         base_inputs = {
             "messages": ["Start"],
             "patch_path": patch_path,
-            "patch_diff": patch_output,
+            "patch_diff": agent_eligible_patch,
             "patch_analysis": java_only_patch_analysis,
             "target_repo_path": target_repo_path,
             "mainline_repo_path": mainline_repo_path,
