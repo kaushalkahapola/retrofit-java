@@ -556,7 +556,7 @@ def _build_agent_eligible_patch(
         return ""
 
     patch_set = PatchSet(io.StringIO(patch_diff))
-    eligible_files = []
+    output_lines = []
 
     def _norm_path(path: str | None) -> str:
         p = (path or "").strip().replace("\\", "/")
@@ -576,23 +576,6 @@ def _build_agent_eligible_patch(
 
         if is_test_file or is_non_java_file or is_auto_generated:
             continue
-
-        # Filter hunks within the file
-        source_path = _norm_path(getattr(patched_file, "source_file", None))
-        target_path = (
-            _norm_path(getattr(patched_file, "target_file", None)) or file_path
-        )
-
-        if patched_file.is_rename or (
-            source_path and target_path and source_path != target_path
-        ):
-            op = "RENAMED"
-        elif patched_file.is_added_file:
-            op = "ADDED"
-        elif patched_file.is_removed_file:
-            op = "DELETED"
-        else:
-            op = "MODIFIED"
 
         # Filter hunks: only keep those without non-code content
         eligible_hunks = []
@@ -619,30 +602,48 @@ def _build_agent_eligible_patch(
                 eligible_hunks.append(hunk)
 
         # If the file has eligible hunks, include it in the output patch
-        if eligible_hunks or (len(list(patched_file)) == 0 and not is_auto_generated):
-            # Reconstruct the patched file with only eligible hunks
-            new_patched_file = patched_file.__class__(
-                patched_file.source_file,
-                patched_file.target_file,
-                is_added_file=patched_file.is_added_file,
-                is_removed_file=patched_file.is_removed_file,
-                is_rename=patched_file.is_rename,
+        if eligible_hunks:
+            # Write the file header
+            source_file = (
+                getattr(patched_file, "source_file", None) or patched_file.path
             )
-            # Copy hunks
+            target_file = (
+                getattr(patched_file, "target_file", None) or patched_file.path
+            )
+
+            output_lines.append(f"diff --git a/{source_file} b/{target_file}\n")
+
+            # Write file operation markers
+            if patched_file.is_new_file:
+                output_lines.append("new file mode 100644\n")
+            if patched_file.is_removed_file:
+                output_lines.append("deleted file mode 100644\n")
+
+            # Write index line (simplified)
+            output_lines.append(f"index 0000000..0000000 100644\n")
+
+            # Write --- and +++ lines
+            src = source_file if not patched_file.is_new_file else "/dev/null"
+            tgt = target_file if not patched_file.is_removed_file else "/dev/null"
+            output_lines.append(f"--- a/{src}\n")
+            output_lines.append(f"+++ b/{tgt}\n")
+
+            # Write hunks
             for hunk in eligible_hunks:
-                new_patched_file.append(hunk)
+                lines = [
+                    f"@@ -{hunk.source_start},{hunk.source_length} +{hunk.target_start},{hunk.target_length} @@\n"
+                ]
+                for line in hunk:
+                    if line.is_added:
+                        lines.append(f"+{line.value}")
+                    elif line.is_removed:
+                        lines.append(f"-{line.value}")
+                    else:
+                        lines.append(f" {line.value}")
 
-            eligible_files.append(new_patched_file)
+                output_lines.extend(lines)
 
-    # Rebuild patch from eligible files
-    if not eligible_files:
-        return ""
-
-    # Reconstruct patch string
-    output = io.StringIO()
-    patch_output = PatchSet(eligible_files)
-    output.write(str(patch_output))
-    return output.getvalue()
+    return "".join(output_lines)
 
 
 def _extract_hunks_by_file_from_patch(
