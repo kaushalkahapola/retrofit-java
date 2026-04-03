@@ -3,6 +3,7 @@ from typing import List, Optional
 from unidiff import PatchSet
 import io
 
+
 @dataclass
 class FileChange:
     file_path: str
@@ -11,6 +12,7 @@ class FileChange:
     removed_lines: List[str]
     is_test_file: bool
     previous_file_path: Optional[str] = None  # old path for RENAMED files
+
 
 class PatchAnalyzer:
     def __init__(self):
@@ -22,15 +24,17 @@ class PatchAnalyzer:
         """
         return PatchSet(io.StringIO(diff_text))
 
-    def analyze(self, diff_text: str, with_test_changes: bool = False) -> List[FileChange]:
+    def analyze(
+        self, diff_text: str, with_test_changes: bool = False
+    ) -> List[FileChange]:
         """
         Analyzes a raw git diff and returns structured information about each file change.
-        
+
         Args:
             diff_text: Raw unified diff text
             with_test_changes: If False (default), filters out test file changes.
                              If True, includes all changes including test files.
-        
+
         Returns:
             List[FileChange]: File changes, optionally filtered to exclude test files
         """
@@ -62,19 +66,21 @@ class PatchAnalyzer:
 
             file_path = patched_file.path
             is_test_file = self._is_test_file(file_path)
-            
+
             # Skip test file changes if with_test_changes is False
             if not with_test_changes and is_test_file:
                 continue
 
-            changes.append(FileChange(
-                file_path=file_path,
-                change_type=change_type,
-                added_lines=added_lines,
-                removed_lines=removed_lines,
-                is_test_file=is_test_file,
-                previous_file_path=previous_file_path,
-            ))
+            changes.append(
+                FileChange(
+                    file_path=file_path,
+                    change_type=change_type,
+                    added_lines=added_lines,
+                    removed_lines=removed_lines,
+                    is_test_file=is_test_file,
+                    previous_file_path=previous_file_path,
+                )
+            )
 
         return changes
 
@@ -85,7 +91,9 @@ class PatchAnalyzer:
         lower_path = file_path.lower()
         return "test" in lower_path or lower_path.endswith("test.java")
 
-    def extract_raw_hunks(self, diff_text: str, with_test_changes: bool = False) -> dict:
+    def extract_raw_hunks(
+        self, diff_text: str, with_test_changes: bool = False
+    ) -> dict:
         """
         Extracts raw hunk text per file from a unified diff.
 
@@ -105,6 +113,8 @@ class PatchAnalyzer:
 
         for patched_file in patch_set:
             file_path = patched_file.path
+            # Strip a/ and b/ prefixes from unified diff notation
+            file_path = file_path.lstrip("a/").lstrip("b/")
 
             # Skip test files if with_test_changes is False
             if not with_test_changes and self._is_test_file(file_path):
@@ -133,7 +143,9 @@ class PatchAnalyzer:
 
         return result
 
-    def extract_file_only_operations(self, diff_text: str, with_test_changes: bool = False) -> list:
+    def extract_file_only_operations(
+        self, diff_text: str, with_test_changes: bool = False
+    ) -> list:
         """
         Extracts file-only operations (rename, pure add, pure delete, etc.) that have NO hunks.
         These operations must be handled separately from hunk-based changes.
@@ -178,17 +190,19 @@ class PatchAnalyzer:
                 change_type = "RENAMED"
                 new_path = file_path
                 # Extract old path from source_file (which has a/ prefix)
-                source_file = getattr(patched_file, 'source_file', None)
+                source_file = getattr(patched_file, "source_file", None)
                 if source_file:
                     old_path = source_file.lstrip("a/").lstrip("b/")
                 else:
                     old_path = file_path
 
-            result.append({
-                "file_path": old_path,
-                "change_type": change_type,
-                "new_path": new_path,
-                "is_test_file": is_test,
-            })
+            result.append(
+                {
+                    "file_path": old_path,
+                    "change_type": change_type,
+                    "new_path": new_path,
+                    "is_test_file": is_test,
+                }
+            )
 
         return result
