@@ -79,6 +79,8 @@ STEP 3 — GENERATE (emit the final hunk)
   Only after ALL todos are completed, emit the final adapted unified diff hunk.
   The context lines you write MUST exactly match the lines you verified in STEP 2.
   The @@ header line numbers MUST reflect the actual target file lines you found.
+  Use build_unified_hunk to construct the final diff body safely (avoid malformed
+  prefixes like '++' or '--' in payload lines).
 
 Rules (follow ALL of them strictly):
 1. Context lines (' ' lines) MUST match the real target file content exactly (character-for-character).
@@ -385,6 +387,17 @@ def _extract_added_lines(hunk_text: str) -> list[str]:
     if not lines:
         return []
     return [line for line in lines[1:] if line.startswith("+")]
+
+
+def _extract_added_payload_lines(hunk_text: str) -> list[str]:
+    """Return '+' line payloads (prefix stripped)."""
+    if not hunk_text:
+        return []
+    out: list[str] = []
+    for line in hunk_text.splitlines()[1:]:
+        if line.startswith("+") and not line.startswith("+++"):
+            out.append(line[1:])
+    return out
 
 
 def _is_import_only_hunk(hunk_text: str) -> bool:
@@ -740,7 +753,7 @@ def _build_rewrite_hunk_from_plan(
         return None
 
     removed_lines = _extract_removed_lines(pre_rewritten_hunk)
-    added_lines = _extract_added_lines(pre_rewritten_hunk)
+    added_lines = _extract_added_payload_lines(pre_rewritten_hunk)
     if not removed_lines or not added_lines:
         return None
 
@@ -1012,6 +1025,74 @@ def _preserves_required_removals(base_hunk: str, candidate_hunk: str) -> bool:
     if not base_norm or not cand_norm:
         return bool(cand_norm)
     return len(base_norm & cand_norm) > 0
+
+
+def _normalize_accidental_double_prefixes(hunk_text: str) -> str:
+    """Best-effort repair for accidental '++'/'--' payload prefix artifacts."""
+    if not hunk_text:
+        return hunk_text
+    out: list[str] = []
+    for i, line in enumerate(hunk_text.splitlines()):
+        if i == 0 or line.startswith("@@"):
+            out.append(line)
+            continue
+        if re.match(r"^\+\+[ \t].*", line):
+            out.append(line[1:])
+            continue
+        if re.match(r"^--[ \t].*", line):
+            out.append(line[1:])
+            continue
+        out.append(line)
+    repaired = "\n".join(out)
+    if hunk_text.endswith("\n") and not repaired.endswith("\n"):
+        repaired += "\n"
+    return repaired
+
+
+def _hunk_sanity_check(hunk_text: str) -> tuple[bool, str]:
+    """Deterministic structural validation before dry-run/apply."""
+    if not hunk_text:
+        return False, "empty_hunk"
+    lines = hunk_text.splitlines()
+    if not lines or not lines[0].startswith("@@"):
+        return False, "missing_or_invalid_header"
+
+    for idx, line in enumerate(lines[1:], start=2):
+        if not line:
+            return False, f"line_{idx}_missing_diff_prefix"
+        if line[0] not in {" ", "+", "-", "\\"}:
+            return False, f"line_{idx}_invalid_prefix"
+        if re.match(r"^\+\+[ \t].*", line):
+            return False, f"line_{idx}_accidental_double_plus"
+        if re.match(r"^--[ \t].*", line):
+            return False, f"line_{idx}_accidental_double_minus"
+
+    return True, "ok"
+
+
+def _line_present_with_prefix(hunk_text: str, prefix: str, payload: str) -> bool:
+    needle = f"{prefix}{payload}"
+    return needle in (hunk_text or "").splitlines()
+
+
+def _check_generation_contract(
+    hunk_text: str,
+    must_add_lines: list[str] | None,
+    must_remove_lines: list[str] | None,
+) -> tuple[bool, str]:
+    must_add = [x for x in (must_add_lines or []) if str(x).strip()]
+    must_remove = [x for x in (must_remove_lines or []) if str(x).strip()]
+
+    for line in must_add:
+        if not _line_present_with_prefix(hunk_text, "+", line):
+            return False, "missing_must_add_line"
+    if must_remove:
+        has_any_remove = any(
+            _line_present_with_prefix(hunk_text, "-", line) for line in must_remove
+        )
+        if not has_any_remove:
+            return False, "missing_required_remove_line"
+    return True, "ok"
 
 
 def _normalize_rel_path(path: str) -> str:
@@ -1930,7 +2011,57 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         "(missing required removals)"
                     )
 
-            # Dry-run validation (CLAW-inspired: collect errors, don't drop hunks)
+            # Deterministic structural guardrails before dry-run.
+            sane, sanity_msg = _hunk_sanity_check(adapted_hunk_text)
+            if not sane:
+                repaired_text = _normalize_accidental_double_prefixes(adapted_hunk_text)
+                if repaired_text != adapted_hunk_text:
+                    adapted_hunk_text = repaired_text
+                    sane, sanity_msg = _hunk_sanity_check(adapted_hunk_text)
+            if not sane:
+                print(
+                    f"    Agent 3: Structural hunk sanity failed for {target_file}[{hunk_idx}] ({sanity_msg})"
+                )
+                trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                generation_checklist.append(
+                    {
+                        "mainline_file": mainline_file,
+                        "target_file": target_file,
+                        "hunk_index": hunk_idx,
+                        "status": "failed",
+                        "reason": "hunk_sanity_failed",
+                        "error": sanity_msg,
+                    }
+                )
+                continue
+
+            contract_ok, contract_msg = _check_generation_contract(
+                adapted_hunk_text,
+                plan_entry.get("must_add_lines")
+                if isinstance(plan_entry, dict)
+                else [],
+                plan_entry.get("must_remove_lines")
+                if isinstance(plan_entry, dict)
+                else [],
+            )
+            if not contract_ok:
+                print(
+                    f"    Agent 3: Generation contract failed for {target_file}[{hunk_idx}] ({contract_msg})"
+                )
+                trace += f"| `{target_file}` | {hunk_idx} | ❌ | ❌ |\n"
+                generation_checklist.append(
+                    {
+                        "mainline_file": mainline_file,
+                        "target_file": target_file,
+                        "hunk_index": hunk_idx,
+                        "status": "failed",
+                        "reason": "generation_contract_failed",
+                        "error": contract_msg,
+                    }
+                )
+                continue
+
+            # Dry-run validation
             dry_run_ok = False
             dry_run_error_info = None
             if toolkit:

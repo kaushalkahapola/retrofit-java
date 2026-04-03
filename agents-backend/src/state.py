@@ -197,6 +197,9 @@ class AgentState(TypedDict):
     validation_retry_files: NotRequired[
         list[str]
     ]  # Retry scope: files implicated in last validation failure
+    token_usage: NotRequired[
+        dict[str, Any]
+    ]  # Node-local token usage payload (used by evaluator aggregation)
     agent_token_usage: NotRequired[
         dict[str, dict[str, Any]]
     ]  # Per-node token accounting (exact or estimated)

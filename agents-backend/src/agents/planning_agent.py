@@ -93,6 +93,22 @@ def _extract_added_text(hunk_text: str) -> str:
     return "\n".join(out)
 
 
+def _extract_removed_lines(hunk_text: str) -> list[str]:
+    out: list[str] = []
+    for l in (hunk_text or "").splitlines()[1:]:
+        if l.startswith("-") and not l.startswith("---"):
+            out.append(l[1:])
+    return out
+
+
+def _extract_added_lines(hunk_text: str) -> list[str]:
+    out: list[str] = []
+    for l in (hunk_text or "").splitlines()[1:]:
+        if l.startswith("+") and not l.startswith("+++"):
+            out.append(l[1:])
+    return out
+
+
 async def planning_agent_node(state: AgentState, config) -> dict:
     print("Planning Agent: Building per-hunk generation plan...")
 
@@ -152,6 +168,8 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 "anchor_after": "",
                 "notes": "deterministic_default",
                 "raw_added_preview": _extract_added_text(raw_hunk)[:500],
+                "must_remove_lines": _extract_removed_lines(raw_hunk),
+                "must_add_lines": _extract_added_lines(raw_hunk),
             }
 
             if react and toolkit:

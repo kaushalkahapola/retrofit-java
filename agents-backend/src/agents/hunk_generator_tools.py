@@ -410,6 +410,52 @@ class HunkGeneratorToolkit:
         )
 
     # ------------------------------------------------------------------
+    # Tool 7: build_unified_hunk
+    # ------------------------------------------------------------------
+
+    def build_unified_hunk(
+        self,
+        file_path: str,
+        start_line: int,
+        old_count: int,
+        context_before: str = "",
+        removed_lines: str = "",
+        added_lines: str = "",
+        context_after: str = "",
+    ) -> str:
+        """
+        Build a syntactically valid unified diff hunk from structured pieces.
+
+        Inputs `removed_lines` and `added_lines` are newline-separated payload lines
+        (WITHOUT '-'/'+' prefixes). This tool applies correct diff prefixes and
+        computes a valid +count from the resulting body shape.
+        """
+        before = [x for x in str(context_before or "").splitlines()]
+        removed = [x for x in str(removed_lines or "").splitlines()]
+        added = [x for x in str(added_lines or "").splitlines()]
+        after = [x for x in str(context_after or "").splitlines()]
+
+        body: list[str] = []
+        body.extend([f" {x}" for x in before])
+        body.extend([f"-{x}" for x in removed])
+        body.extend([f"+{x}" for x in added])
+        body.extend([f" {x}" for x in after])
+
+        src_count = sum(1 for ln in body if ln.startswith(" ") or ln.startswith("-"))
+        tgt_count = sum(1 for ln in body if ln.startswith(" ") or ln.startswith("+"))
+
+        src_start = max(0, int(start_line or 0))
+        src_count = int(old_count or src_count)
+        if src_count < 0:
+            src_count = 0
+
+        header = f"@@ -{src_start},{src_count} +{src_start},{tgt_count} @@"
+        out = "\n".join([header] + body)
+        if not out.endswith("\n"):
+            out += "\n"
+        return out
+
+    # ------------------------------------------------------------------
     # LangChain tool registration
     # ------------------------------------------------------------------
 
@@ -469,6 +515,15 @@ class HunkGeneratorToolkit:
                 description=(
                     "Return total line count and first 10 lines of a target file. "
                     "Quick sanity-check to confirm you are looking at the right file."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.build_unified_hunk,
+                name="build_unified_hunk",
+                description=(
+                    "Build a valid unified diff hunk from structured fields. "
+                    "Pass removed/added lines WITHOUT diff prefixes; tool adds '-', '+' "
+                    "and computes header counts safely to avoid malformed hunks."
                 ),
             ),
         ]
