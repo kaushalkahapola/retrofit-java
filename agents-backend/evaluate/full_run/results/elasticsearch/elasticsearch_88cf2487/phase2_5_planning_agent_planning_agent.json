@@ -1,34 +1,60 @@
 {
   "hunk_generation_plan": {
-    "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java": [
+    "server/src/main/java/org/elasticsearch/script/ScriptStats.java": [
       {
         "hunk_index": 0,
-        "target_file": "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "edit_type": "replace",
-        "old_string": "",
-        "new_string": "",
-        "verified": false,
-        "verification_result": "mapping_low_confidence",
-        "notes": "mapping_low_confidence:target_file_missing_or_unreadable"
+        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+        "edit_type": "insert_before",
+        "old_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
+        "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:line_trimmed_unique",
+        "notes": "Inserted CACHE_EVICTIONS_HISTORY import before COMPILATIONS_HISTORY import."
       },
       {
         "hunk_index": 1,
-        "target_file": "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
         "edit_type": "replace",
-        "old_string": "",
-        "new_string": "",
+        "old_string": "                ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);",
+        "new_string": "                ob.xContentObject(CACHE_EVICTIONS_HISTORY, compilationsHistory);",
         "verified": false,
-        "verification_result": "mapping_low_confidence",
-        "notes": "mapping_low_confidence:target_file_missing_or_unreadable"
+        "verification_result": "sanitize_old_not_found:not_found_single",
+        "notes": "Replaced COMPILATIONS_HISTORY with CACHE_EVICTIONS_HISTORY in the toXContentChunked method.|sanitize_old_not_found:not_found_single"
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+        "edit_type": "replace",
+        "old_string": "                builder.startObject(COMPILATIONS_HISTORY);",
+        "new_string": "                builder.startObject(CACHE_EVICTIONS_HISTORY);",
+        "verified": false,
+        "verification_result": "sanitize_old_not_found:not_found_single",
+        "notes": "required_op_replace|coverage_backfill|sanitize_old_not_found:not_found_single"
       }
     ]
   },
-  "last_plan_signature": "4fbb747e1193cb5a0e9670b2d95b5176e410d1955afe3563f05d8254039e15ac",
+  "last_plan_signature": "a0f4b3f54838b02710390eeb21f087b7d35965232df96973660b233888bdf04e",
   "token_usage": {
-    "input_tokens": 0,
-    "output_tokens": 0,
-    "total_tokens": 0,
+    "input_tokens": 49259,
+    "output_tokens": 821,
+    "total_tokens": 50080,
     "estimated": false,
-    "sources": []
+    "sources": [
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage",
+      "planner.provider_usage"
+    ]
   }
 }

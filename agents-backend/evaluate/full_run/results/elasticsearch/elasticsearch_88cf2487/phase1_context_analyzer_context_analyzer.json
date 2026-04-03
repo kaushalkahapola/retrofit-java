@@ -7,7 +7,7 @@
     "hunk_chain": [
       {
         "hunk_index": 1,
-        "file": "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+        "file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
         "summary": "Adds logic (+1 lines).",
         "role": "declaration",
         "connects_to_next": "Prepares next hunk in same file with related context.",
@@ -15,7 +15,7 @@
       },
       {
         "hunk_index": 2,
-        "file": "b/server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+        "file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
         "summary": "Modifies logic (+1/-1 lines).",
         "role": "core_fix",
         "connects_to_next": "",
