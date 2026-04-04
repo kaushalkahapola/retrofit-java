@@ -44,24 +44,29 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def _model_disallows_temperature(model_name: str) -> bool:
+def _identifier_disallows_temperature(identifier: str) -> bool:
     """
     Some newer GPT-5 family deployments reject explicit temperature values
     and only accept provider defaults.
     """
-    m = (model_name or "").lower()
+    m = (identifier or "").lower()
     return "gpt-5" in m
 
 
-def _build_model_kwargs(model: str, temperature: float) -> dict:
+def _build_model_kwargs(
+    model: str, temperature: float, *extra_identifiers: str
+) -> dict:
     kwargs = {"model": model}
-    if not _model_disallows_temperature(model):
+    disallow = _identifier_disallows_temperature(model) or any(
+        _identifier_disallows_temperature(x) for x in extra_identifiers if x
+    )
+    if not disallow:
         kwargs["temperature"] = temperature
     return kwargs
 
 
 def _bedrock_temperature_value(model: str, temperature: float) -> Optional[float]:
-    if _model_disallows_temperature(model):
+    if _identifier_disallows_temperature(model):
         return None
     return temperature
 
@@ -191,7 +196,7 @@ def _get_azure_openai(model: str, temperature: float) -> BaseChatModel:
             "AZURE_OPENAI_API_KEY or OPENAI_API_KEY environment variable is required for Azure OpenAI"
         )
 
-    model_kwargs = _build_model_kwargs(model, temperature)
+    model_kwargs = _build_model_kwargs(model, temperature, azure_deployment)
     model_kwargs.pop("model", None)
 
     return AzureChatOpenAI(
