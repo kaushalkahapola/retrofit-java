@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import List, Dict, Optional, Any
 from utils.mcp_client import get_client
 from utils.validation_models import (

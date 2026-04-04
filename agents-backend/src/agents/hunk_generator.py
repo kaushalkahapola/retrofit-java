@@ -81,6 +81,10 @@ STEP 3 — GENERATE (emit the final hunk)
   The @@ header line numbers MUST reflect the actual target file lines you found.
   Use build_unified_hunk to construct the final diff body safely (avoid malformed
   prefixes like '++' or '--' in payload lines).
+  CRITICAL: Ensure your '+' lines do not duplicate existing code in the target file.
+  (e.g., if you are adding an @Inject annotation, verify that the lines surrounding
+  your insertion point don't already contain the same code). Use read_file_window
+  to double-check before emitting the final hunk.
 
 Rules (follow ALL of them strictly):
 1. Context lines (' ' lines) MUST match the real target file content exactly (character-for-character).

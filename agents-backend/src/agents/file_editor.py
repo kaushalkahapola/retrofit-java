@@ -29,6 +29,8 @@ Key outputs to state:
   - adapted_test_hunks:  list[AdaptedHunk] - always [] (tests handled by aux hunks)
 """
 
+from __future__ import annotations
+
 import os
 import re
 import subprocess
@@ -49,6 +51,7 @@ from utils.token_counter import (
 from langgraph.prebuilt import create_react_agent
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from agents.hunk_generator_tools import HunkGeneratorToolkit
+from utils.semantic_adaptation_helper import analyze_anchor_failure_quick
 
 
 # ---------------------------------------------------------------------------
@@ -63,8 +66,16 @@ You MUST follow this exact Todo Checklist loop to complete your task:
 3. For EACH distinct hunk/change in the patch (e.g., adding imports, modifying a constructor, modifying a method):
    a. PRIORITY 1 (AST Methods): USE the AST tools (`replace_method_body`, `replace_field`, `insert_import`, `remove_method`). These are immune to line shifting and should be your absolute default.
    b. PRIORITY 2 (Line Methods): Only if the edit CANNOT be done purely via AST methods, USE `read_file_window` or `grep_in_file` to locate the exact line boundaries. DETERMINE the exact `start_line` and `end_line` and use `replace_lines`.
-4. VERIFY your changes: After ALL edits are complete, call `git_diff_file` to see the actual diff, then call `verify_guidelines` with the diff to catch syntax errors before returning.
-5. Output "DONE" only when EVERY required piece of logic from the patch (including imports and fields) is perfectly edited into the target file AND `verify_guidelines` confirms the diff is correct.
+   c. VERIFY IMMEDIATELY: After applying a change, call `read_file_window` around the modified area. Check for:
+      - Did the edit apply correctly?
+      - Are there any duplicates (e.g., did you add an @Inject that already existed above the matched block)?
+      - Is the indentation consistent with surrounding code?
+      - Are there any obvious syntax errors? Use `check_java_syntax` for a fast compilation sanity check.
+4. VERIFY all changes: After ALL edits are complete:
+   - Call `check_java_syntax` one last time on the whole file.
+   - Call `git_diff_file` to see the actual diff.
+   - Call `verify_guidelines` with the diff to catch structured issues.
+5. Output "DONE" only when EVERY required piece of logic from the patch (including imports and fields) is perfectly edited into the target file AND all verification tools pass.
 
 ## str_replace Edit Plan (Hints)
 The following atomic operations were proposed by the Planning Agent. Use them as high-quality hints for anchor discovery and adaptation, but always verify they match the actual file content before applying.
@@ -89,16 +100,21 @@ The following atomic operations were proposed by the Planning Agent. Use them as
    - Use for: Simple single-line changes that don't involve decorators
    - Requires careful line number tracking and delta management
 
+### Verification Tools (Mandatory)
+- **check_java_syntax**: Fast syntax check using `javac`. Use this after EVERY edit to catch typos/braces early. It ignores symbol/classpath errors, so it only fails on real syntax mistakes.
+- **read_full_file**: Use this to see the whole file state if you get lost in line numbers.
+- **verify_guidelines**: Run this on the output of `git_diff_file` to catch dangling assignments or static fields inside methods.
+
 ### How to Use edit_file Correctly
 1. Read the section with `read_file_window` or `grep_in_file`
 2. Copy EXACT old_string (including decorators, @annotations, all lines, exact spacing/indentation)
 3. Create new_string with your changes (must be exact too)
 4. Call: `edit_file(file_path, old_string, new_string, replace_all=False)`
-5. Verify with `verify_guidelines()` on git_diff_file() output
+5. Verify with `check_java_syntax()` and `verify_guidelines()`
 
 ### Why edit_file Solves Elasticsearch Duplicate @Inject Problem
 - **OLD WAY (FAILED)**: `replace_lines(55-77, new_content_WITH_@Inject)` → Decorator at line 54 was context, new_content also had it → duplicate
-- **NEW WAY (WORKS)**: `edit_file(old_string="""@Inject\n    public TransportGetAllocationStatsAction(...)\n...""", new_string=...)` → Decorator included in exact match, can't duplicate
+- **NEW WAY (WORKS)**: `edit_file(old_string=\"\"\"@Inject\n    public TransportGetAllocationStatsAction(...)\n...\"\"\", new_string=...)` → Decorator included in exact match, can't duplicate
 
 - **Use the Plan as a Hint**: The 'str_replace Edit Plan' above contains candidate `old_string` and `new_string` values. If the Planning Agent marked them as `verified: true`, they are extremely likely to match the target file exactly. **Try these first with edit_file()!**
 - **No Hallucinations**: You cannot call any methods or variables that are not explicitly defined in the file or standard JDK, UNLESS they are explicitly mapped in the Consistency Map. NEVER invent static helper methods or "simplify" object instantiations if they deviate from the mainline patch logic.

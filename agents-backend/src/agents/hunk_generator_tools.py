@@ -24,6 +24,7 @@ import subprocess
 from typing import Any, Optional
 
 from langchain_core.tools import StructuredTool
+from agents.claw_file_editor import edit_file as claw_edit_file, verify_edit_output
 
 
 class HunkGeneratorToolkit:
@@ -763,6 +764,80 @@ class HunkGeneratorToolkit:
         except Exception as exc:
             return f"ERROR: Cannot write file '{file_path}': {exc}"
 
+    def check_java_syntax(self, file_path: str) -> dict[str, Any]:
+        """
+        Run a fast syntax-only check using javac.
+        Ignores 'cannot find symbol' and other classpath-related errors.
+        Focuses on structural syntax errors (unclosed braces, missing semicolons, etc).
+        
+        Args:
+            file_path: Repo-relative path to the file.
+        """
+        full_path = self._full_path(file_path)
+        if not os.path.isfile(full_path):
+            return {"success": False, "output": f"ERROR: File not found: {file_path}"}
+
+        # -proc:none skips annotation processing
+        # -Xlint:none disables all warnings
+        # -nowarn suppresses warnings
+        # -d /tmp/ ensures we don't pollute the local directory
+        cmd = ["javac", "-proc:none", "-Xlint:none", "-nowarn", "-d", "/tmp/", full_path]
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=self.target_repo_path
+            )
+            output = (result.stdout or "") + "\n" + (result.stderr or "")
+        except Exception as e:
+            return {"success": False, "output": f"ERROR executing javac: {e}"}
+
+        # Filter output for actual syntax errors
+        lines = output.strip().splitlines()
+        syntax_errors = []
+        ignore_patterns = [
+            r"cannot find symbol",
+            r"package .* does not exist",
+            r"should be declared in a file named",
+            r"symbol:\s+class",
+            r"symbol:\s+variable",
+            r"location:\s+class",
+            r"location:\s+interface",
+            r"import\s+.*",
+        ]
+        
+        current_error = []
+        is_syntax_error = False
+        
+        for line in lines:
+            if ": error:" in line:
+                if current_error and is_syntax_error:
+                    syntax_errors.append("\n".join(current_error))
+                
+                current_error = [line]
+                # Check if this new error is something we should ignore
+                is_syntax_error = not any(re.search(pat, line) for pat in ignore_patterns)
+            elif line.strip() == "^" or line.startswith("  symbol:") or line.startswith("  location:"):
+                current_error.append(line)
+            elif current_error:
+                current_error.append(line)
+        
+        if current_error and is_syntax_error:
+            syntax_errors.append("\n".join(current_error))
+
+        if not syntax_errors:
+            return {
+                "success": True,
+                "output": "No significant syntax errors found (classpath/symbol errors ignored)."
+            }
+        
+        return {
+            "success": False,
+            "output": "SYNTAX_ERRORS_FOUND:\n\n" + "\n\n".join(syntax_errors)
+        }
+
     # ------------------------------------------------------------------
     # Tool 10b: edit_file (CLAW-inspired: exact string matching, no line drift)
     # ------------------------------------------------------------------
@@ -775,106 +850,54 @@ class HunkGeneratorToolkit:
         replace_all: bool = False,
     ) -> str:
         """
-            Edit a file using exact string matching (CLAW-inspired method).
+            Edit a file using exact string matching (CLAW module).
 
             This approach COMPLETELY AVOIDS line number drift by:
             1. Matching exact old_string in file
             2. Replacing with exact new_string
-            3. No line number calculations needed
-            4. Decorators/braces handled automatically (must match exactly)
-
-            Why use this instead of replace_lines:
-            - Safer for method changes (decorators included in match)
-            - No brace counting needed (must balance exactly)
-            - No context overlap issues (exact match prevents duplication)
-            - Better for structural edits (signatures, methods, fields)
+            3. Verification of file state after edit
 
             Args:
                 file_path: Repo-relative path to file
-                old_string: EXACT string to find (including decorators, full lines, exact spacing)
+                old_string: EXACT string to find
                 new_string: EXACT string to replace it with
-                replace_all: If False (default), replace first occurrence only.
-                            If True, replace all occurrences.
+                replace_all: Replace all occurrences if True
 
             Returns:
-                SUCCESS message with diff summary, or ERROR message.
-
-            Example (fixing elasticsearch duplicate @Inject):
-                old_str = '''@Inject
-        public TransportGetAllocationStatsAction(
-            TransportService transportService,
-            ...
-        ) {
-            super(...);
-            // OLD IMPLEMENTATION
-        }'''
-
-                new_str = '''@Inject
-        public TransportGetAllocationStatsAction(
-            TransportService transportService,
-            ...
-        ) {
-            super(...);
-            // NEW IMPLEMENTATION
-        }'''
-
-                edit_file(file_path, old_str, new_str)
-                # Result: ✅ No duplicate @Inject (decorator part of exact match)
+                SUCCESS or ERROR message.
         """
         full_path = self._full_path(file_path)
 
-        # Read original file
         try:
-            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
-                original_file = f.read()
-        except FileNotFoundError:
-            return f"ERROR: File '{file_path}' not found."
-        except Exception as exc:
-            return f"ERROR: Cannot read file '{file_path}': {exc}"
-
-        # VALIDATION FIRST (CLAW pattern)
-        if old_string == new_string:
-            return "ERROR: old_string and new_string must differ. There is nothing to change."
-
-        if old_string not in original_file:
-            return (
-                f"ERROR: old_string not found in '{file_path}'. "
-                f"Verify the exact string (spacing, decorators, line breaks) matches the file. "
-                f"First 100 chars of search: {old_string[:100]}"
+            # Delegate to the standalone claw_file_editor module
+            result = claw_edit_file(
+                file_path=full_path,
+                old_string=old_string,
+                new_string=new_string,
+                replace_all=replace_all
             )
 
-        # Count occurrences
-        occurrence_count = original_file.count(old_string)
+            # Perform extra verification
+            verification = verify_edit_output(result)
+            if verification != "ALL_GOOD":
+                return verification
 
-        # THEN mutate
-        if replace_all:
-            updated = original_file.replace(old_string, new_string)
-        else:
-            updated = original_file.replace(old_string, new_string, 1)
+            # Calculate statistics for response
+            old_lines = len(old_string.splitlines())
+            new_lines = len(new_string.splitlines())
+            line_delta = old_lines - new_lines
+            sign = "+" if line_delta > 0 else ""
 
-        # Write back
-        try:
-            with open(full_path, "w", encoding="utf-8") as f:
-                f.write(updated)
-        except Exception as exc:
-            return f"ERROR: Cannot write file '{file_path}': {exc}"
+            return (
+                f"SUCCESS: edit_file replaced {old_lines} lines with {new_lines} lines in '{file_path}'. "
+                f"Line delta: {sign}{line_delta}. "
+                f"Verified on disk using claw_file_editor logic."
+            )
 
-        # Calculate statistics for response
-        old_lines = len(old_string.splitlines())
-        new_lines = len(new_string.splitlines())
-        line_delta = old_lines - new_lines
-
-        sign = "+" if line_delta > 0 else ""
-        occurrence_info = (
-            f" ({occurrence_count} occurrence{'s' if occurrence_count != 1 else ''})"
-        )
-
-        return (
-            f"SUCCESS: edit_file replaced {old_lines} lines with {new_lines} lines in '{file_path}'{occurrence_info}. "
-            f"Line delta: {sign}{line_delta}. "
-            f"This edit uses exact string matching (CLAW-inspired) so it avoids line number drift. "
-            f"Call verify_guidelines() next to validate the patch."
-        )
+        except ValueError as e:
+            return f"ERROR: {str(e)}"
+        except Exception as e:
+            return f"ERROR: Unexpected failure during edit: {str(e)}"
 
     # ------------------------------------------------------------------
     # Tool 11: git_diff_file  (mechanically correct diff after edits)
@@ -1458,6 +1481,15 @@ class HunkGeneratorToolkit:
                     "in the target file on disk. Returns SUCCESS, NOT_FOUND, AMBIGUOUS, "
                     "or ERROR. This is the primary editing primitive - use it instead of "
                     "generating unified diff hunks. Always verify old_string exists first."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.check_java_syntax,
+                name="check_java_syntax",
+                description=(
+                    "Run a fast syntax-only check using javac. Ignores symbol/classpath "
+                    "errors. Use this as a lightweight pre-validation step after an edit "
+                    "to catch unclosed braces, missing semicolons, etc. before full testing."
                 ),
             ),
             StructuredTool.from_function(

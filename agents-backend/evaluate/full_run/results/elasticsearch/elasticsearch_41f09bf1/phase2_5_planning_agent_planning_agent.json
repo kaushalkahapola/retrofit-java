@@ -100,33 +100,9 @@
         "verification_result": "sanitize_resolved:exact",
         "notes": "required_op_replace"
       }
-    ],
-    "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java": [
-      {
-        "hunk_index": 0,
-        "target_file": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
-        "operation_index": 0,
-        "edit_type": "insert_before",
-        "old_string": "import java.util.Map;",
-        "new_string": "import org.elasticsearch.transport.Transports;\nimport java.util.Map;",
-        "verified": true,
-        "verification_result": "sanitize_resolved:line_trimmed_unique",
-        "notes": "required_op_insert_before"
-      },
-      {
-        "hunk_index": 1,
-        "target_file": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
-        "operation_index": 0,
-        "edit_type": "insert_before",
-        "old_string": "        var state = clusterService.state();",
-        "new_string": "        assert Transports.assertNotTransportThread(\"too expensive for a transport worker\");\n\n        var state = clusterService.state();",
-        "verified": true,
-        "verification_result": "sanitize_resolved:line_trimmed_unique",
-        "notes": "required_op_insert_before"
-      }
     ]
   },
-  "last_plan_signature": "4509001052bc11247ea4f77c5a4ab6c6bffed7c797174ea94cc8ec941d5c322e",
+  "last_plan_signature": "71b16639ebe6049b5d210c7d2237b4483401dc1f769f7f3d689e49372d3b04e0",
   "token_usage": {
     "input_tokens": 0,
     "output_tokens": 0,
