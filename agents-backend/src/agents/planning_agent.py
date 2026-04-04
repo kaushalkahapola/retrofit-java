@@ -119,6 +119,15 @@ Output schema:
 """
 
 
+_FRAMEWORK_CHAIN_SYMBOLS = {
+    "newForked",
+    "andThen",
+    "andThenApply",
+    "addListener",
+    "delegateFailure",
+}
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -866,6 +875,28 @@ def _derive_required_invariants_from_hunk(
     return invariants
 
 
+def _derive_must_preserve_symbols_from_hunk(
+    raw_hunk: str,
+    consistency_map: dict[str, str],
+) -> list[str]:
+    """
+    Derive symbols that should remain present in the final method flow even when
+    not necessarily newly added in the diff.
+    """
+    added = _apply_consistency_map(_extract_added_text(raw_hunk), consistency_map)
+    out: list[str] = []
+    seen: set[str] = set()
+    for target in _extract_lambda_target_calls(added):
+        if target in {"if", "for", "while", "switch", "return", "new"}:
+            continue
+        if _is_framework_chain_symbol(target):
+            continue
+        if target not in seen:
+            seen.add(target)
+            out.append(target)
+    return out
+
+
 def _extract_declared_methods(content: str) -> set[str]:
     methods: set[str] = set()
     for line in (content or "").splitlines():
@@ -883,6 +914,10 @@ def _extract_declared_methods(content: str) -> set[str]:
 
 def _extract_lambda_target_calls(text: str) -> list[str]:
     return re.findall(r"->\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(", text or "")
+
+
+def _is_framework_chain_symbol(symbol: str) -> bool:
+    return str(symbol or "").strip() in _FRAMEWORK_CHAIN_SYMBOLS
 
 
 def _derive_chain_constraints_from_hunk(
@@ -904,7 +939,7 @@ def _derive_chain_constraints_from_hunk(
     chain_calls: list[str] = []
     for ln in added_lines:
         s = ln.strip()
-        if "newForked" in s or ".andThen(" in s or "andThenApply(" in s:
+        if "newForked" in s or "andThen(" in s or "andThenApply(" in s:
             targets = _extract_lambda_target_calls(s)
             if targets:
                 chain_calls.append(targets[-1])
@@ -938,6 +973,8 @@ def _derive_required_symbols_from_hunk(
     # Lambda target calls in listener chains.
     for target in _extract_lambda_target_calls(added):
         if target in {"if", "for", "while", "switch", "return", "new"}:
+            continue
+        if _is_framework_chain_symbol(target):
             continue
         if target not in seen:
             seen.add(target)
@@ -2161,6 +2198,10 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 raw_hunk,
                 consistency_map,
             )
+            must_preserve_symbols = _derive_must_preserve_symbols_from_hunk(
+                raw_hunk,
+                consistency_map,
+            )
             chain_constraints = _derive_chain_constraints_from_hunk(
                 raw_hunk,
                 consistency_map,
@@ -2190,6 +2231,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 entry["required_invariants"] = required_invariants
                 entry["required_symbols"] = required_symbols
                 entry["protected_symbols"] = required_symbols
+                entry["must_preserve_symbols"] = must_preserve_symbols
                 entry["chain_constraints"] = chain_constraints
                 entry["api_inventory"] = api_inventory
                 if force_type_v:

@@ -1016,6 +1016,12 @@ def _diff_has_symbol(diff_text: str, symbol: str) -> bool:
     return False
 
 
+def _file_has_symbol(file_text: str, symbol: str) -> bool:
+    if not file_text or not symbol:
+        return False
+    return bool(re.search(rf"\b{re.escape(symbol)}\s*\(", file_text))
+
+
 def _find_near_miss_symbol(symbol: str, diff_text: str) -> str:
     """
     Detect potentially wrong renamed symbols in added lines.
@@ -1094,6 +1100,21 @@ def _collect_file_plan_required_symbols(
     out: list[str] = []
     for e in plan_entries or []:
         for sym in (e or {}).get("required_symbols") or []:
+            s = str(sym or "").strip()
+            if not s or s in seen:
+                continue
+            seen.add(s)
+            out.append(s)
+    return out
+
+
+def _collect_file_plan_must_preserve_symbols(
+    plan_entries: list[dict[str, Any]],
+) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for e in plan_entries or []:
+        for sym in (e or {}).get("must_preserve_symbols") or []:
             s = str(sym or "").strip()
             if not s or s in seen:
                 continue
@@ -2030,6 +2051,61 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         "token_usage": token_usage,
                     }
 
+            must_preserve_symbols = _collect_file_plan_must_preserve_symbols(
+                plan_entries
+            )
+            target_after_text = _load_file_text(target_repo_path, target_file)
+            for sym in must_preserve_symbols:
+                if not _file_has_symbol(target_after_text, sym):
+                    print(
+                        f"    Agent 3: Type V preserve-symbol gate failed for {target_file}: missing {sym} in final file"
+                    )
+                    task_entry["status"] = "failed"
+                    task_entry["reason"] = "generation_contract_failed"
+                    task_entry["error"] = f"missing_preserve_symbol:{sym}"
+                    _git_reset_file(target_repo_path, target_file)
+                    return {
+                        "messages": [
+                            HumanMessage(
+                                content=(
+                                    "Agent 3 (File Editor): Type V preserve-symbol gate failed; "
+                                    "requesting sticky Type V replanning."
+                                )
+                            )
+                        ],
+                        "adapted_file_edits": adapted_file_edits,
+                        "all_adapted_file_edits": list(
+                            state.get("all_adapted_file_edits") or []
+                        )
+                        + [adapted_file_edits],
+                        "agent_trajectory_edits": agent_trajectory_edits
+                        + [current_attempt_trajectory],
+                        "adapted_code_hunks": adapted_code_hunks,
+                        "adapted_test_hunks": [],
+                        "generation_checklist": [
+                            {
+                                "mainline_file": mainline_file,
+                                "target_file": target_file,
+                                "hunk_index": 0,
+                                "status": "failed",
+                                "reason": "generation_contract_failed",
+                                "todo_steps": ["replan"],
+                                "completed_steps": [],
+                                "error": f"missing_preserve_symbol:{sym}",
+                                "execution_types": ["TYPE_V"],
+                            }
+                        ],
+                        "validation_failed_stage": "generation_contract_failed",
+                        "validation_failure_category": "context_mismatch",
+                        "validation_retry_files": [mainline_file, target_file],
+                        "validation_retry_hunks": [],
+                        "validation_attempts": validation_attempts,
+                        "force_type_v_until_success": True,
+                        "force_type_v_reason": f"missing_preserve_symbol:{sym}",
+                        "generated_patch_hash": "",
+                        "token_usage": token_usage,
+                    }
+
             protected_symbols = _collect_file_plan_protected_symbols(plan_entries)
             prot_ok, prot_reason = _protected_symbols_no_near_miss(
                 diff_text,
@@ -2086,7 +2162,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 }
 
             chain_constraints = _collect_file_chain_constraints(plan_entries)
-            target_after = _load_file_text(target_repo_path, target_file)
+            target_after = target_after_text
             chain_ok, chain_reason = _chain_constraints_satisfied(
                 target_after,
                 chain_constraints,
