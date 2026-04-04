@@ -28,6 +28,7 @@ from collections import defaultdict
 from typing import Any, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.prebuilt import create_react_agent
 from state import AgentState
 from utils.llm_provider import get_llm
 from utils.patch_analyzer import PatchAnalyzer
@@ -116,6 +117,16 @@ Output schema:
   "reason": "short explanation",
   "confidence": 0.0
 }
+"""
+
+
+_TYPE_V_REPAIR_HUMAN = """Run this TODO exactly:
+1) Build symbol lists from MAINLINE added/removed code and TARGET file using tools.
+2) Remove common symbols and focus on non-common symbols that must be adapted.
+3) Use grep/find methods + read windows to locate equivalent chain/method anchors in target.
+4) Produce ONE corrected operation with exact old_string from target.
+5) If single-line replace is fragile, switch strategy to replace_method_block or anchored insert.
+6) Return JSON only.
 """
 
 
@@ -1165,6 +1176,44 @@ def _build_method_block_map(content: str) -> dict[str, str]:
     return out
 
 
+def _extract_call_symbols_from_text(text: str) -> set[str]:
+    out: set[str] = set()
+    for token in re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", text or ""):
+        if token in {"if", "for", "while", "switch", "return", "new"}:
+            continue
+        if _is_framework_chain_symbol(token):
+            continue
+        out.add(token)
+    return out
+
+
+def _build_type_v_symbol_inventory(
+    *,
+    raw_hunk: str,
+    target_content: str,
+) -> dict[str, list[str]]:
+    removed = _extract_removed_text(raw_hunk)
+    added = _extract_added_text(raw_hunk)
+
+    added_symbols = _extract_call_symbols_from_text(added)
+    removed_symbols = _extract_call_symbols_from_text(removed)
+    target_declared = _extract_declared_methods(target_content)
+
+    common_added = added_symbols & target_declared
+    common_removed = removed_symbols & target_declared
+
+    uncommon_added = sorted(added_symbols - common_added)
+    uncommon_removed = sorted(removed_symbols - common_removed)
+
+    return {
+        "added": sorted(added_symbols),
+        "removed": sorted(removed_symbols),
+        "target_declared": sorted(target_declared),
+        "uncommon_added": uncommon_added,
+        "uncommon_removed": uncommon_removed,
+    }
+
+
 def _extract_primary_method_name_from_text(text: str) -> str:
     m = re.search(
         r"\b(?:public|protected|private)\s+(?:static\s+)?(?:final\s+)?[\w<>,\[\]\s?]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
@@ -1276,6 +1325,11 @@ def _build_type_v_repair_prompt(
     chain_constraints: list[list[str]],
     retry_failure_context: str,
     anchor_candidates: list[str],
+    mainline_symbols_added: list[str],
+    mainline_symbols_removed: list[str],
+    target_declared_symbols: list[str],
+    uncommon_added_symbols: list[str],
+    uncommon_removed_symbols: list[str],
 ) -> str:
     focused_windows = target_method_windows[:10]
     return f"""Repair one unresolved TYPE_V operation.
@@ -1304,6 +1358,21 @@ Target method windows (truncated):
 
 Anchor candidates (must choose from these for insert_before/insert_after):
 {json.dumps(anchor_candidates or [], ensure_ascii=False)}
+
+Mainline symbols added:
+{json.dumps(mainline_symbols_added or [], ensure_ascii=False)}
+
+Mainline symbols removed:
+{json.dumps(mainline_symbols_removed or [], ensure_ascii=False)}
+
+Target declared symbols:
+{json.dumps(target_declared_symbols or [], ensure_ascii=False)}
+
+Uncommon added symbols (priority):
+{json.dumps(uncommon_added_symbols or [], ensure_ascii=False)}
+
+Uncommon removed symbols (priority):
+{json.dumps(uncommon_removed_symbols or [], ensure_ascii=False)}
 
 Retry/failure context:
 {retry_failure_context or "<none>"}
@@ -1336,6 +1405,7 @@ async def _repair_type_v_unverified_entries_with_subagent(
     retry_failure_context: str,
     token_usage: dict[str, Any],
     model_name: str,
+    toolkit: HunkGeneratorToolkit | None = None,
 ) -> list[dict[str, Any]]:
     """
     TYPE_V planning repair subagent:
@@ -1351,6 +1421,10 @@ async def _repair_type_v_unverified_entries_with_subagent(
     method_windows = _extract_method_windows_from_content(target_content)
     anchor_candidates = _extract_anchor_candidates_from_content(target_content)
     method_block_map = _build_method_block_map(target_content)
+    inventory = _build_type_v_symbol_inventory(
+        raw_hunk=raw_hunk,
+        target_content=target_content,
+    )
 
     for entry in entries:
         if entry.get("verified", False):
@@ -1371,17 +1445,52 @@ async def _repair_type_v_unverified_entries_with_subagent(
             chain_constraints=chain_constraints,
             retry_failure_context=retry_failure_context,
             anchor_candidates=anchor_candidates,
+            mainline_symbols_added=inventory.get("added", []),
+            mainline_symbols_removed=inventory.get("removed", []),
+            target_declared_symbols=inventory.get("target_declared", []),
+            uncommon_added_symbols=inventory.get("uncommon_added", []),
+            uncommon_removed_symbols=inventory.get("uncommon_removed", []),
         )
 
         repaired = dict(entry)
         try:
-            response = await llm.ainvoke(
-                [
-                    SystemMessage(content=_TYPE_V_REPAIR_SYSTEM),
-                    HumanMessage(content=prompt),
-                ]
-            )
-            usage = extract_usage_from_response(response)
+            if toolkit is not None:
+                # Tool-enabled TYPE_V repair subagent for complex anchor discovery.
+                type_v_agent = create_react_agent(llm, toolkit.get_tools())
+                response = await type_v_agent.ainvoke(
+                    {
+                        "messages": [
+                            SystemMessage(content=_TYPE_V_REPAIR_SYSTEM),
+                            HumanMessage(
+                                content=prompt + "\n\n" + _TYPE_V_REPAIR_HUMAN
+                            ),
+                        ]
+                    }
+                )
+                # For ReAct responses, use the final assistant message text.
+                resp_msgs = (
+                    response.get("messages", []) if isinstance(response, dict) else []
+                )
+                final_text = ""
+                if resp_msgs:
+                    last = resp_msgs[-1]
+                    final_text = str(getattr(last, "content", "") or last)
+                else:
+                    final_text = str(response)
+                response_text = final_text
+                usage = None
+            else:
+                response = await llm.ainvoke(
+                    [
+                        SystemMessage(content=_TYPE_V_REPAIR_SYSTEM),
+                        HumanMessage(content=prompt),
+                    ]
+                )
+                usage = extract_usage_from_response(response)
+                response_text = (
+                    response.content if hasattr(response, "content") else str(response)
+                )
+
             if usage and (usage["input_tokens"] or usage["output_tokens"]):
                 add_usage(
                     token_usage,
@@ -1390,9 +1499,6 @@ async def _repair_type_v_unverified_entries_with_subagent(
                     "planning_agent.type_v_subagent.provider_usage",
                 )
             else:
-                response_text = (
-                    response.content if hasattr(response, "content") else str(response)
-                )
                 add_usage(
                     token_usage,
                     count_text_tokens(
@@ -1403,9 +1509,6 @@ async def _repair_type_v_unverified_entries_with_subagent(
                 )
                 token_usage["estimated"] = True
 
-            response_text = (
-                response.content if hasattr(response, "content") else str(response)
-            )
             payload = _extract_json_payload(str(response_text))
             if isinstance(payload, dict) and payload.get("found_equivalent"):
                 repaired = _apply_anchor_strategy_to_payload(
@@ -2236,6 +2339,9 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                     retry_failure_context=truncated_failure_context,
                     token_usage=token_usage,
                     model_name=model_name,
+                    toolkit=HunkGeneratorToolkit(target_repo_path)
+                    if target_repo_path
+                    else None,
                 )
                 post_unverified = _count_unverified_entries(entries)
                 if post_unverified > 0:

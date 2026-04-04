@@ -1023,6 +1023,22 @@ def _collect_required_symbols_from_invariants(invariants: list[str]) -> list[str
     return symbols
 
 
+def _dedupe_nonframework_symbols(symbols: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for sym in symbols or []:
+        s = str(sym or "").strip()
+        if not s:
+            continue
+        if _is_framework_chain_symbol(s):
+            continue
+        if s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+    return out
+
+
 def _diff_has_symbol(diff_text: str, symbol: str) -> bool:
     pat = re.compile(rf"\b{re.escape(symbol)}\s*\(")
     for line in _extract_added_lines_from_unified_diff(diff_text):
@@ -1059,7 +1075,11 @@ def _find_near_miss_symbol(symbol: str, diff_text: str) -> str:
     return ""
 
 
-def _invariants_satisfied(diff_text: str, invariants: list[str]) -> tuple[bool, str]:
+def _invariants_satisfied(
+    diff_text: str,
+    invariants: list[str],
+    file_text_after: str = "",
+) -> tuple[bool, str]:
     normalized_added = [
         _normalize_code_line(l)
         for l in _extract_added_lines_from_unified_diff(diff_text)
@@ -1079,6 +1099,8 @@ def _invariants_satisfied(diff_text: str, invariants: list[str]) -> tuple[bool, 
     # Second pass: symbol-level semantic presence for non-exactly matched lines.
     required_symbols = _collect_required_symbols_from_invariants(missing_lines)
     for sym in required_symbols:
+        if _file_has_symbol(file_text_after, sym):
+            continue
         if not _diff_has_symbol(diff_text, sym):
             near = _find_near_miss_symbol(sym, diff_text)
             if near:
@@ -1913,7 +1935,12 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
         if "TYPE_V" in execution_types:
             invariants = _collect_file_plan_invariants(plan_entries)
-            inv_ok, inv_reason = _invariants_satisfied(diff_text, invariants)
+            target_after_text = _load_file_text(target_repo_path, target_file)
+            inv_ok, inv_reason = _invariants_satisfied(
+                diff_text,
+                invariants,
+                target_after_text,
+            )
             if not inv_ok:
                 print(
                     f"    Agent 3: Type V invariant gate failed for {target_file}: {inv_reason}"
@@ -1965,8 +1992,9 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 }
 
             required_symbols = _collect_file_plan_required_symbols(plan_entries)
+            required_symbols = _dedupe_nonframework_symbols(required_symbols)
             for sym in required_symbols:
-                if _is_framework_chain_symbol(sym):
+                if _file_has_symbol(target_after_text, sym):
                     continue
                 if not _diff_has_symbol(diff_text, sym):
                     print(
@@ -2021,7 +2049,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
             must_preserve_symbols = _collect_file_plan_must_preserve_symbols(
                 plan_entries
             )
-            target_after_text = _load_file_text(target_repo_path, target_file)
+            must_preserve_symbols = _dedupe_nonframework_symbols(must_preserve_symbols)
             for sym in must_preserve_symbols:
                 if not _file_has_symbol(target_after_text, sym):
                     print(
@@ -2074,6 +2102,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     }
 
             protected_symbols = _collect_file_plan_protected_symbols(plan_entries)
+            protected_symbols = _dedupe_nonframework_symbols(protected_symbols)
             prot_ok, prot_reason = _protected_symbols_no_near_miss(
                 diff_text,
                 protected_symbols,
