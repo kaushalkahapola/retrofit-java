@@ -1,9 +1,8 @@
 # Transition Summary
 
-- Source: phase0_cache
+- Source: phase_outputs
 - Valid backport signal: False
-- Reason: Invalid: git apply --check failed. error: patch failed: x-pack/plugin/migrate/src/internalClusterTest/java/org/elasticsearch/xpack/migrate/action/ReindexDatastreamIndexTransportActionIT.java:7
-error: x-pack/plugin/migrate/src/internalC
+- Reason: Inconclusive: Relevant target tests were not observed in baseline or patched runs.
 - fail->pass (0): []
 - newly passing (0): []
 - pass->fail (0): []
