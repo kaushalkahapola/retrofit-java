@@ -1,5 +1,50 @@
 {
-  "adapted_file_edits": [],
+  "adapted_file_edits": [
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java",
+      "old_string": "<deterministic file-editor diff>",
+      "new_string": "diff --git a/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java b/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java\nindex ae6140a1caf..4a44ad2f360 100644\n--- a/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java\n+++ b/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java\n@@ -1228,7 +1228,7 @@ public class DenseVectorFieldMapper extends FieldMapper {\n         }\n     }\n \n-    private enum VectorIndexType {\n+    public enum VectorIndexType {\n         HNSW(\"hnsw\", false) {\n             @Override\n             public IndexOptions parseIndexOptions(String fieldName, Map<String, ?> indexOptionsMap) {",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "Deterministic file editor applied",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    },
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java",
+      "old_string": "<deterministic file-editor diff>",
+      "new_string": "diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java\nindex 2855fe8bcf0..37708be09e1 100644\n--- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java\n+++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java\n@@ -17,12 +17,14 @@ import org.apache.lucene.search.IndexSearcher;\n import org.apache.lucene.search.MatchNoDocsQuery;\n import org.apache.lucene.search.Query;\n import org.apache.lucene.search.QueryVisitor;\n+import org.apache.lucene.search.ScoreDoc;\n import org.apache.lucene.search.ScoreMode;\n import org.apache.lucene.search.Scorer;\n import org.apache.lucene.search.Weight;\n \n import java.io.IOException;\n import java.util.Arrays;\n+import java.util.Comparator;\n import java.util.Objects;\n \n import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;\n@@ -30,9 +32,9 @@ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;\n /**\n  * A query that matches the provided docs with their scores.\n  *\n- * Note: this query was adapted from Lucene's DocAndScoreQuery from the class\n+ * Note: this query was originally adapted from Lucene's DocAndScoreQuery from the class\n  * {@link org.apache.lucene.search.KnnFloatVectorQuery}, which is package-private.\n- * There are no changes to the behavior, just some renames.\n+\n  */\n public class KnnScoreDocQuery extends Query {\n     private final int[] docs;\n@@ -49,13 +51,18 @@ public class KnnScoreDocQuery extends Query {\n     /**\n      * Creates a query.\n      *\n-     * @param docs the global doc IDs of documents that match, in ascending order\n-     * @param scores the scores of the matching documents\n+     * @param scoreDocs an array of ScoreDocs to use for the query\n      * @param reader IndexReader\n      */\n-    KnnScoreDocQuery(int[] docs, float[] scores, IndexReader reader) {\n-        this.docs = docs;\n-        this.scores = scores;\n+    KnnScoreDocQuery(ScoreDoc[] scoreDocs, IndexReader reader) {\n+        // Ensure that the docs are sorted by docId, as they are later searched using binary search\n+        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));\n+        this.docs = new int[scoreDocs.length];\n+        this.scores = new float[scoreDocs.length];\n+        for (int i = 0; i < scoreDocs.length; i++) {\n+            docs[i] = scoreDocs[i].doc;\n+            scores[i] = scoreDocs[i].score;\n+        }\n         this.segmentStarts = findSegmentStarts(reader, docs);\n         this.contextIdentity = reader.getContext().id();\n     }",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "Deterministic file editor applied",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    },
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java",
+      "old_string": "<deterministic file-editor diff>",
+      "new_string": "diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java\nindex 6fa83ccfb6a..1a81f4b984e 100644\n--- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java\n+++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java\n@@ -141,15 +141,7 @@ public class KnnScoreDocQueryBuilder extends AbstractQueryBuilder<KnnScoreDocQue\n \n     @Override\n     protected Query doToQuery(SearchExecutionContext context) throws IOException {\n-        int numDocs = scoreDocs.length;\n-        int[] docs = new int[numDocs];\n-        float[] scores = new float[numDocs];\n-        for (int i = 0; i < numDocs; i++) {\n-            docs[i] = scoreDocs[i].doc;\n-            scores[i] = scoreDocs[i].score;\n-        }\n-\n-        return new KnnScoreDocQuery(docs, scores, context.getIndexReader());\n+        return new KnnScoreDocQuery(scoreDocs, context.getIndexReader());\n     }\n \n     @Override",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "Deterministic file editor applied",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    },
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+      "old_string": "<deterministic file-editor diff>",
+      "new_string": "diff --git a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java\nindex 967f310f935..c08b531a3b0 100644\n--- a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java\n+++ b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java\n@@ -16,14 +16,14 @@ import org.apache.lucene.search.DoubleValuesSource;\n import org.apache.lucene.search.IndexSearcher;\n import org.apache.lucene.search.Query;\n import org.apache.lucene.search.QueryVisitor;\n-import org.apache.lucene.search.ScoreDoc;\n+\n import org.apache.lucene.search.TopDocs;\n import org.elasticsearch.index.mapper.vectors.VectorSimilarityFloatValueSource;\n import org.elasticsearch.search.profile.query.QueryProfiler;\n \n import java.io.IOException;\n import java.util.Arrays;\n-import java.util.Comparator;\n+\n import java.util.Objects;\n \n /**\n@@ -60,16 +60,7 @@ public class RescoreKnnVectorQuery extends Query implements QueryProfilerProvide\n         // Retrieve top k documents from the rescored query\n         TopDocs topDocs = searcher.search(query, k);\n         vectorOperations = topDocs.totalHits.value;\n-        ScoreDoc[] scoreDocs = topDocs.scoreDocs;\n-        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));\n-        int[] docIds = new int[scoreDocs.length];\n-        float[] scores = new float[scoreDocs.length];\n-        for (int i = 0; i < scoreDocs.length; i++) {\n-            docIds[i] = scoreDocs[i].doc;\n-            scores[i] = scoreDocs[i].score;\n-        }\n-\n-        return new KnnScoreDocQuery(docIds, scores, searcher.getIndexReader());\n+        return new KnnScoreDocQuery(topDocs.scoreDocs, searcher.getIndexReader());\n     }\n \n     public Query innerQuery() {",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "Deterministic file editor applied",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    }
+  ],
   "all_adapted_file_edits": [
     [
       {
@@ -47,6 +92,7 @@
         "apply_result": "SUCCESS"
       }
     ],
+    [],
     [
       {
         "target_file": "server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java",
@@ -92,8 +138,7 @@
         "applied": true,
         "apply_result": "SUCCESS"
       }
-    ],
-    []
+    ]
   ],
   "agent_trajectory_edits": [
     [
@@ -219,6 +264,7 @@
         }
       }
     ],
+    [],
     [
       {
         "target_file": "server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java",
@@ -341,13 +387,146 @@
           "resolved_new_preview": "        return new KnnScoreDocQuery(topDocs.scoreDocs, searcher.getIndexReader());"
         }
       }
-    ],
-    []
+    ]
   ],
-  "adapted_code_hunks": [],
+  "adapted_code_hunks": [
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java",
+      "hunk_text": "diff --git a/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java b/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java\nindex ae6140a1caf..4a44ad2f360 100644\n--- a/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java\n+++ b/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java\n@@ -1228,7 +1228,7 @@ public class DenseVectorFieldMapper extends FieldMapper {\n         }\n     }\n \n-    private enum VectorIndexType {\n+    public enum VectorIndexType {\n         HNSW(\"hnsw\", false) {\n             @Override\n             public IndexOptions parseIndexOptions(String fieldName, Map<String, ?> indexOptionsMap) {\n",
+      "insertion_line": 1228,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java",
+      "hunk_text": "diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java\nindex 2855fe8bcf0..37708be09e1 100644\n--- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java\n+++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java\n@@ -17,12 +17,14 @@ import org.apache.lucene.search.IndexSearcher;\n import org.apache.lucene.search.MatchNoDocsQuery;\n import org.apache.lucene.search.Query;\n import org.apache.lucene.search.QueryVisitor;\n+import org.apache.lucene.search.ScoreDoc;\n import org.apache.lucene.search.ScoreMode;\n import org.apache.lucene.search.Scorer;\n import org.apache.lucene.search.Weight;\n \n import java.io.IOException;\n import java.util.Arrays;\n+import java.util.Comparator;\n import java.util.Objects;\n \n import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;\n@@ -30,9 +32,9 @@ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;\n /**\n  * A query that matches the provided docs with their scores.\n  *\n- * Note: this query was adapted from Lucene's DocAndScoreQuery from the class\n+ * Note: this query was originally adapted from Lucene's DocAndScoreQuery from the class\n  * {@link org.apache.lucene.search.KnnFloatVectorQuery}, which is package-private.\n- * There are no changes to the behavior, just some renames.\n+\n  */\n public class KnnScoreDocQuery extends Query {\n     private final int[] docs;\n@@ -49,13 +51,18 @@ public class KnnScoreDocQuery extends Query {\n     /**\n      * Creates a query.\n      *\n-     * @param docs the global doc IDs of documents that match, in ascending order\n-     * @param scores the scores of the matching documents\n+     * @param scoreDocs an array of ScoreDocs to use for the query\n      * @param reader IndexReader\n      */\n-    KnnScoreDocQuery(int[] docs, float[] scores, IndexReader reader) {\n-        this.docs = docs;\n-        this.scores = scores;\n+    KnnScoreDocQuery(ScoreDoc[] scoreDocs, IndexReader reader) {\n+        // Ensure that the docs are sorted by docId, as they are later searched using binary search\n+        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));\n+        this.docs = new int[scoreDocs.length];\n+        this.scores = new float[scoreDocs.length];\n+        for (int i = 0; i < scoreDocs.length; i++) {\n+            docs[i] = scoreDocs[i].doc;\n+            scores[i] = scoreDocs[i].score;\n+        }\n         this.segmentStarts = findSegmentStarts(reader, docs);\n         this.contextIdentity = reader.getContext().id();\n     }\n",
+      "insertion_line": 17,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java",
+      "hunk_text": "diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java\nindex 6fa83ccfb6a..1a81f4b984e 100644\n--- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java\n+++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java\n@@ -141,15 +141,7 @@ public class KnnScoreDocQueryBuilder extends AbstractQueryBuilder<KnnScoreDocQue\n \n     @Override\n     protected Query doToQuery(SearchExecutionContext context) throws IOException {\n-        int numDocs = scoreDocs.length;\n-        int[] docs = new int[numDocs];\n-        float[] scores = new float[numDocs];\n-        for (int i = 0; i < numDocs; i++) {\n-            docs[i] = scoreDocs[i].doc;\n-            scores[i] = scoreDocs[i].score;\n-        }\n-\n-        return new KnnScoreDocQuery(docs, scores, context.getIndexReader());\n+        return new KnnScoreDocQuery(scoreDocs, context.getIndexReader());\n     }\n \n     @Override\n",
+      "insertion_line": 141,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+      "hunk_text": "diff --git a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java\nindex 967f310f935..c08b531a3b0 100644\n--- a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java\n+++ b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java\n@@ -16,14 +16,14 @@ import org.apache.lucene.search.DoubleValuesSource;\n import org.apache.lucene.search.IndexSearcher;\n import org.apache.lucene.search.Query;\n import org.apache.lucene.search.QueryVisitor;\n-import org.apache.lucene.search.ScoreDoc;\n+\n import org.apache.lucene.search.TopDocs;\n import org.elasticsearch.index.mapper.vectors.VectorSimilarityFloatValueSource;\n import org.elasticsearch.search.profile.query.QueryProfiler;\n \n import java.io.IOException;\n import java.util.Arrays;\n-import java.util.Comparator;\n+\n import java.util.Objects;\n \n /**\n@@ -60,16 +60,7 @@ public class RescoreKnnVectorQuery extends Query implements QueryProfilerProvide\n         // Retrieve top k documents from the rescored query\n         TopDocs topDocs = searcher.search(query, k);\n         vectorOperations = topDocs.totalHits.value;\n-        ScoreDoc[] scoreDocs = topDocs.scoreDocs;\n-        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));\n-        int[] docIds = new int[scoreDocs.length];\n-        float[] scores = new float[scoreDocs.length];\n-        for (int i = 0; i < scoreDocs.length; i++) {\n-            docIds[i] = scoreDocs[i].doc;\n-            scores[i] = scoreDocs[i].score;\n-        }\n-\n-        return new KnnScoreDocQuery(docIds, scores, searcher.getIndexReader());\n+        return new KnnScoreDocQuery(topDocs.scoreDocs, searcher.getIndexReader());\n     }\n \n     public Query innerQuery() {\n",
+      "insertion_line": 16,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
   "adapted_test_hunks": [],
-  "generation_checklist": [],
-  "generated_patch_hash": "",
+  "generation_checklist": [
+    {
+      "mainline_file": "server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java",
+      "target_file": "server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "status": "success",
+      "reason": "generated_and_validated",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    },
+    {
+      "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java",
+      "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "status": "success",
+      "reason": "generated_and_validated",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    },
+    {
+      "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java",
+      "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "status": "success",
+      "reason": "generated_and_validated",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    },
+    {
+      "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+      "target_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "status": "success",
+      "reason": "generated_and_validated",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    }
+  ],
+  "generated_patch_hash": "14ae635aab7c422e8ce2a4fb8edf0772f8313d2c36450432222339d1bb35a20d",
   "token_usage": {
     "input_tokens": 0,
     "output_tokens": 0,
