@@ -769,7 +769,7 @@ class HunkGeneratorToolkit:
         Run a fast syntax-only check using javac.
         Ignores 'cannot find symbol' and other classpath-related errors.
         Focuses on structural syntax errors (unclosed braces, missing semicolons, etc).
-        
+
         Args:
             file_path: Repo-relative path to the file.
         """
@@ -781,69 +781,151 @@ class HunkGeneratorToolkit:
         # -Xlint:none disables all warnings
         # -nowarn suppresses warnings
         # -d /tmp/ ensures we don't pollute the local directory
-        cmd = ["javac", "-proc:none", "-Xlint:none", "-nowarn", "-d", "/tmp/", full_path]
-        
+        cmd = [
+            "javac",
+            "-proc:none",
+            "-Xlint:none",
+            "-nowarn",
+            "-d",
+            "/tmp/",
+            full_path,
+        ]
+
         try:
             result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                cwd=self.target_repo_path
+                cmd, capture_output=True, text=True, cwd=self.target_repo_path
             )
             output = (result.stdout or "") + "\n" + (result.stderr or "")
         except Exception as e:
             return {"success": False, "output": f"ERROR executing javac: {e}"}
 
-        # Filter output for actual syntax errors
+        # Classify javac errors into structural syntax vs non-structural (type/classpath/API).
         lines = output.strip().splitlines()
-        syntax_errors = []
-        ignore_patterns = [
+
+        non_structural_patterns = [
             r"cannot find symbol",
             r"package .* does not exist",
             r"should be declared in a file named",
+            r"does not override or implement a method from a supertype",
+            r"is not abstract and does not override abstract method",
+            r"has private access",
+            r"has protected access",
+            r"incompatible types",
+            r"method .* cannot be applied to given types",
+            r"reference to .* is ambiguous",
+            r"name clash:",
+            r"cannot infer type arguments",
+            r"no suitable method found",
             r"symbol:\s+class",
             r"symbol:\s+variable",
             r"location:\s+class",
             r"location:\s+interface",
+            r"location:\s+package",
             r"import\s+.*",
         ]
-        
-        current_error = []
-        is_syntax_error = False
-        
+
+        structural_patterns = [
+            r"';' expected",
+            r"'\)' expected",
+            r"'\(' expected",
+            r"'\]' expected",
+            r"'\[' expected",
+            r"'\}' expected",
+            r"'\{' expected",
+            r"'<' expected",
+            r"'>' expected",
+            r"<identifier> expected",
+            r"not a statement",
+            r"illegal start of expression",
+            r"illegal start of type",
+            r"reached end of file while parsing",
+            r"class, interface, enum, or record expected",
+            r"unclosed string literal",
+            r"unclosed character literal",
+            r"unclosed comment",
+            r"invalid method declaration; return type required",
+            r"orphaned case",
+            r"case, default, or '}' expected",
+            r"else without if",
+            r"'catch' without 'try'",
+            r"'finally' without 'try'",
+            r"'try' without 'catch', 'finally' or resource declarations",
+        ]
+
+        def _extract_error_message(error_header_line: str) -> str:
+            if ": error:" not in error_header_line:
+                return error_header_line.strip()
+            return error_header_line.split(": error:", 1)[1].strip()
+
+        def _classify_error_message(msg: str) -> str:
+            text = (msg or "").strip()
+            if any(re.search(pat, text) for pat in structural_patterns):
+                return "structural"
+            if any(re.search(pat, text) for pat in non_structural_patterns):
+                return "non_structural"
+            # Default unknown javac errors to non-structural to avoid false hard-fail
+            # on classpath/API mismatches when compiling a single file in isolation.
+            return "non_structural"
+
+        structural_errors: list[str] = []
+        non_structural_errors: list[str] = []
+
+        current_error: list[str] = []
+        current_kind = "non_structural"
+
         for line in lines:
             if ": error:" in line:
-                if current_error and is_syntax_error:
-                    syntax_errors.append("\n".join(current_error))
-                
+                if current_error:
+                    payload = "\n".join(current_error)
+                    if current_kind == "structural":
+                        structural_errors.append(payload)
+                    else:
+                        non_structural_errors.append(payload)
+
                 current_error = [line]
-                # Check if this new error is something we should ignore
-                is_syntax_error = not any(re.search(pat, line) for pat in ignore_patterns)
-            elif line.strip() == "^" or line.startswith("  symbol:") or line.startswith("  location:"):
+                current_kind = _classify_error_message(_extract_error_message(line))
+            elif (
+                line.strip() == "^"
+                or line.startswith("  symbol:")
+                or line.startswith("  location:")
+            ):
                 current_error.append(line)
             elif current_error:
                 current_error.append(line)
-        
-        if current_error and is_syntax_error:
-            syntax_errors.append("\n".join(current_error))
 
-        if not syntax_errors:
+        if current_error:
+            payload = "\n".join(current_error)
+            if current_kind == "structural":
+                structural_errors.append(payload)
+            else:
+                non_structural_errors.append(payload)
+
+        if not structural_errors:
+            non_structural_summary = ""
+            if non_structural_errors:
+                non_structural_summary = f" Non-structural compile issues ignored: {len(non_structural_errors)}."
             return {
                 "success": True,
                 "syntax_valid": True,
-                "output": "PASSED: No significant syntax errors found (classpath/symbol errors ignored)."
+                "error_class": "none"
+                if not non_structural_errors
+                else "non_structural",
+                "output": (
+                    "PASSED: No structural syntax errors found."
+                    + non_structural_summary
+                ),
             }
-        
+
         return {
             "success": False,
             "syntax_valid": False,
+            "error_class": "structural",
             "output": (
-                "CRITICAL: PROBABLE SYNTAX ERROR(S) FOUND.\n"
-                "These are structural errors (like extra braces or missing semicolons) that MUST be fixed "
-                "before submitting. Do NOT ignore these as 'unrelated' – they are almost certainly "
-                "caused by the edit you just applied.\n\n"
-                "ERRORS:\n\n" + "\n\n".join(syntax_errors)
-            )
+                "CRITICAL: STRUCTURAL SYNTAX ERROR(S) FOUND.\n"
+                "These are parse/structure errors (e.g., braces, separators, malformed blocks) "
+                "that MUST be fixed before submitting.\n\n"
+                "ERRORS:\n\n" + "\n\n".join(structural_errors)
+            ),
         }
 
     # ------------------------------------------------------------------
@@ -858,21 +940,21 @@ class HunkGeneratorToolkit:
         replace_all: bool = False,
     ) -> str:
         """
-            Edit a file using exact string matching (CLAW module).
+        Edit a file using exact string matching (CLAW module).
 
-            This approach COMPLETELY AVOIDS line number drift by:
-            1. Matching exact old_string in file
-            2. Replacing with exact new_string
-            3. Verification of file state after edit
+        This approach COMPLETELY AVOIDS line number drift by:
+        1. Matching exact old_string in file
+        2. Replacing with exact new_string
+        3. Verification of file state after edit
 
-            Args:
-                file_path: Repo-relative path to file
-                old_string: EXACT string to find
-                new_string: EXACT string to replace it with
-                replace_all: Replace all occurrences if True
+        Args:
+            file_path: Repo-relative path to file
+            old_string: EXACT string to find
+            new_string: EXACT string to replace it with
+            replace_all: Replace all occurrences if True
 
-            Returns:
-                SUCCESS or ERROR message.
+        Returns:
+            SUCCESS or ERROR message.
         """
         full_path = self._full_path(file_path)
 
@@ -882,7 +964,7 @@ class HunkGeneratorToolkit:
                 file_path=full_path,
                 old_string=old_string,
                 new_string=new_string,
-                replace_all=replace_all
+                replace_all=replace_all,
             )
 
             # Perform extra verification
@@ -1484,9 +1566,7 @@ class HunkGeneratorToolkit:
             StructuredTool.from_function(
                 func=self.edit_file,
                 name="str_replace_in_file",
-                description=(
-                    "DEPRECATED: Alias for edit_file. Use edit_file instead."
-                ),
+                description=("DEPRECATED: Alias for edit_file. Use edit_file instead."),
             ),
             StructuredTool.from_function(
                 func=self.check_java_syntax,
