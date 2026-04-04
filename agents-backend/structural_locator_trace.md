@@ -4,38 +4,27 @@
 - **Root Cause**: Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.
 
 ## Hunk Segregation
-- Code files: 2
+- Code files: 1
 - Test files: 0
 
 ## Code File Mappings
 
-### `server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java`
+### `x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java`
 
-**Hunks in this file**: 5
+**Hunks in this file**: 6
 
-**Git Resolution**: Found `server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 13–13 |
-| 2 | declaration | `<import>` | `<import>` | 28–28 |
-| 3 | declaration | `<class_declaration>` | `<class_declaration>` | 50–50 |
-| 4 | guard | `hunk_4` | `None` | 72–72 |
-| 5 | core_fix | `hunk_5` | `None` | 91–91 |
-### `server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java`
-
-**Hunks in this file**: 2
-
-**Git Resolution**: Found `server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java`
+**Git Resolution**: Found `x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 17–17 |
-| 2 | guard | `stats` | `stats` | 8–8 |
+| 1 | declaration | `<import>` | `<import>` | 24–24 |
+| 2 | declaration | `<import>` | `<import>` | 66–66 |
+| 3 | core_fix | `hunk_3` | `None` | 152–152 |
+| 4 | core_fix | `hunk_4` | `None` | 171–171 |
+| 5 | core_fix | `setBlockWrites` | `setBlockWrites` | 225–225 |
+| 6 | core_fix | `getIndexDocCount` | `getIndexDocCount` | 420–420 |
 ## Test File Mappings
 
 

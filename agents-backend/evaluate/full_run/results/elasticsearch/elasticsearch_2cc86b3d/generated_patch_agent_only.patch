@@ -1,0 +1,78 @@
+diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
+index 93c005532e0..ad35eac4362 100644
+--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
++++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
+@@ -161,6 +161,8 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+         }
+         final boolean wasClosed = isClosed(sourceIndex);
+         SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
++            .<AcknowledgedResponse>andThen(l -> removeMetadataBlocks(sourceIndexName, taskId, l))
++            .<AcknowledgedResponse>andThen(l -> setBlockReads(sourceIndexName, l, taskId))
+             .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))
+             .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))
+             .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))
+@@ -230,7 +232,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+                 if (response.isAcknowledged()) {
+                     listener.onResponse(null);
+                 } else {
+-                    var errorMessage = String.format(Locale.ROOT, "Could not set read-only on source index [%s]", sourceIndexName);
++                    var errorMessage = String.format(Locale.ROOT, "Could not set write block on source index [%s]", sourceIndexName);
+                     listener.onFailure(new ElasticsearchException(errorMessage));
+                 }
+             }
+@@ -420,6 +422,55 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);
+     }
+ 
++    /**
++     * All metadata blocks need to be removed at the start for the following reasons:
++     * 1) If the source index has a metadata only block, the read-only block can't be added.
++     * 2) If the source index is read-only and closed, it can't be opened.
++     */
++    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {
++        logger.debug("Removing metadata blocks from index [{}]", indexName);
++        removeAPIBlocks(indexName, parentTaskId, listener, IndexMetadata.APIBlock.METADATA, IndexMetadata.APIBlock.READ_ONLY);
++    }
++
++    private void setBlockReads(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {
++        logger.debug("Setting read-only on source index [{}]", sourceIndexName);
++        addBlockToIndex(IndexMetadata.APIBlock.READ_ONLY, sourceIndexName, new ActionListener<>() {
++            @Override
++            public void onResponse(AddIndexBlockResponse response) {
++                if (response.isAcknowledged()) {
++                    listener.onResponse(null);
++                } else {
++                    var errorMessage = String.format(Locale.ROOT, "Could not set read-only on source index [%s]", sourceIndexName);
++                    listener.onFailure(new ElasticsearchException(errorMessage));
++                }
++            }
++
++            @Override
++            public void onFailure(Exception e) {
++                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {
++                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set
++                    // In this case, we can proceed
++                    listener.onResponse(null);
++                } else {
++                    listener.onFailure(e);
++                }
++            }
++        }, parentTaskId);
++    }
++
++    private void removeAPIBlocks(
++        String indexName,
++        TaskId parentTaskId,
++        ActionListener<AcknowledgedResponse> listener,
++        IndexMetadata.APIBlock... blocks
++    ) {
++        Settings.Builder settings = Settings.builder();
++        java.util.Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));
++        UpdateSettingsRequest updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);
++        updateSettingsRequest.setParentTask(parentTaskId);
++        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);
++    }
++
+     private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {
+         SearchRequest countRequest = new SearchRequest(index);
+         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);

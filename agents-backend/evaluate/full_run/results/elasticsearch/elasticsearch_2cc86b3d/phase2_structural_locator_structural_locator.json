@@ -1,0 +1,86 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<import>",
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "target_method": "<import>",
+        "start_line": 24,
+        "end_line": 24,
+        "code_snippet": " * 2.0; you may not use this file except in compliance with the Elastic License\n * 2.0.\n */\npackage org.elasticsearch.xpack.migrate.action;\n\nimport org.apache.logging.log4j.LogManager;\nimport org.apache.logging.log4j.Logger;\nimport org.apache.lucene.search.TotalHits;\nimport org.elasticsearch.ElasticsearchException;\nimport org.elasticsearch.ResourceNotFoundException;\nimport org.elasticsearch.action.ActionListener;\nimport org.elasticsearch.action.admin.indices.close.CloseIndexRequest;\nimport org.elasticsearch.action.admin.indices.close.CloseIndexResponse;\nimport org.elasticsearch.action.admin.indices.close.TransportCloseIndexAction;\nimport org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;\nimport org.elasticsearch.action.admin.indices.open.OpenIndexAction;\nimport org.elasticsearch.action.admin.indices.open.OpenIndexRequest;\nimport org.elasticsearch.action.admin.indices.open.OpenIndexResponse;\nimport org.elasticsearch.action.admin.indices.readonly.AddIndexBlockRequest;\nimport org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;\nimport org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;\nimport org.elasticsearch.action.admin.indices.refresh.RefreshAction;\nimport org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\nimport org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\nimport org.elasticsearch.action.bulk.BulkItemResponse;\nimport org.elasticsearch.action.search.SearchRequest;\nimport org.elasticsearch.action.support.ActionFilters;\nimport org.elasticsearch.action.support.HandledTransportAction;\nimport org.elasticsearch.action.support.IndicesOptions;\nimport org.elasticsearch.action.support.SubscribableListener;\nimport org.elasticsearch.action.support.broadcast.BroadcastResponse;\nimport org.elasticsearch.action.support.master.AcknowledgedResponse;\nimport org.elasticsearch.client.internal.Client;\nimport org.elasticsearch.cluster.block.ClusterBlockException;\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.settings.Setting;\nimport org.elasticsearch.common.settings.Settings;\nimport org.elasticsearch.core.Assertions;\nimport org.elasticsearch.core.TimeValue;\nimport org.elasticsearch.index.IndexSettings;",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "<import>",
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "target_method": "<import>",
+        "start_line": 66,
+        "end_line": 66,
+        "code_snippet": "import org.elasticsearch.index.reindex.BulkByScrollResponse;\nimport org.elasticsearch.index.reindex.ReindexAction;\nimport org.elasticsearch.index.reindex.ReindexRequest;\nimport org.elasticsearch.index.reindex.ScrollableHitSource;\nimport org.elasticsearch.injection.guice.Inject;\nimport org.elasticsearch.protocol.xpack.frozen.FreezeRequest;\nimport org.elasticsearch.protocol.xpack.frozen.FreezeResponse;\nimport org.elasticsearch.search.builder.SearchSourceBuilder;\nimport org.elasticsearch.tasks.Task;\nimport org.elasticsearch.tasks.TaskId;\nimport org.elasticsearch.threadpool.ThreadPool;\nimport org.elasticsearch.transport.TransportService;\nimport org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;\nimport org.elasticsearch.xpack.core.frozen.action.FreezeIndexAction;\nimport org.elasticsearch.xpack.migrate.MigrateTemplateRegistry;\n\nimport java.util.Locale;\nimport java.util.Map;\nimport java.util.Objects;\n\nimport static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;\n\npublic class ReindexDataStreamIndexTransportAction extends HandledTransportAction<\n    ReindexDataStreamIndexAction.Request,\n    ReindexDataStreamIndexAction.Response> {\n\n    public static final String REINDEX_MAX_REQUESTS_PER_SECOND_KEY = \"migrate.data_stream_reindex_max_request_per_second\";\n\n    public static final Setting<Float> REINDEX_MAX_REQUESTS_PER_SECOND_SETTING = new Setting<>(\n        REINDEX_MAX_REQUESTS_PER_SECOND_KEY,\n        Float.toString(1000f),\n        s -> {\n            if (s.equals(\"-1\")) {\n                return Float.POSITIVE_INFINITY;\n            } else {\n                return Float.parseFloat(s);\n            }\n        },\n        value -> {\n            if (value <= 0f) {\n                throw new IllegalArgumentException(",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "hunk_3",
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "target_method": null,
+        "start_line": 152,
+        "end_line": 152,
+        "code_snippet": "        var destIndexName = generateDestIndexName(sourceIndexName);\n        TaskId taskId = new TaskId(clusterService.localNode().getId(), task.getId());\n        IndexMetadata sourceIndex = clusterService.state().getMetadata().index(sourceIndexName);\n        if (sourceIndex == null) {\n            listener.onFailure(new ResourceNotFoundException(\"source index [{}] does not exist\", sourceIndexName));\n            return;\n        }\n\n        Settings settingsBefore = sourceIndex.getSettings();\n\n        var hasOldVersion = DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterService.state().metadata(), false);\n        if (hasOldVersion.test(sourceIndex.getIndex()) == false) {\n            logger.warn(\n                \"Migrating index [{}] with version [{}] is unnecessary as its version is not before [{}]\",\n                sourceIndexName,\n                sourceIndex.getCreationVersion(),\n                DeprecatedIndexPredicate.MINIMUM_WRITEABLE_VERSION_AFTER_UPGRADE\n            );\n        }\n\n        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a metadata block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "hunk_4",
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "target_method": null,
+        "start_line": 171,
+        "end_line": 171,
+        "code_snippet": "\n        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a metadata block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n            .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n            .addListener(listener);\n    }\n\n    private void openIndexIfClosed(String indexName, boolean isClosed, ActionListener<OpenIndexResponse> listener, TaskId parentTaskId) {\n        if (isClosed) {\n            logger.debug(\"Opening index [{}]\", indexName);\n            var request = new OpenIndexRequest(indexName);\n            request.setParentTask(parentTaskId);\n            client.execute(OpenIndexAction.INSTANCE, request, listener);\n        } else {\n            listener.onResponse(null);\n        }\n    }\n\n    private void closeIndexIfWasClosed(\n        String indexName,\n        boolean wasClosed,",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 5,
+        "mainline_method": "setBlockWrites",
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "target_method": "setBlockWrites",
+        "start_line": 225,
+        "end_line": 225,
+        "code_snippet": "    private static boolean isClosed(IndexMetadata indexMetadata) {\n        return indexMetadata.getState().equals(IndexMetadata.State.CLOSE);\n    }\n\n    private void unfreezeIfFrozen(\n        String sourceIndexName,\n        IndexMetadata indexMetadata,\n        ActionListener<FreezeResponse> listener,\n        TaskId parentTaskId\n    ) {\n        if (FrozenEngine.INDEX_FROZEN.get(indexMetadata.getSettings()).equals(Boolean.TRUE)) {\n            logger.debug(\"Unfreezing source index [{}]\", sourceIndexName);\n            FreezeRequest freezeRequest = new FreezeRequest(TimeValue.MAX_VALUE, TimeValue.MAX_VALUE, sourceIndexName).setFreeze(false);\n            freezeRequest.setParentTask(parentTaskId);\n            client.execute(FreezeIndexAction.INSTANCE, freezeRequest, listener);\n        } else {\n            listener.onResponse(null);\n        }\n    }\n\n    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 6,
+        "mainline_method": "getIndexDocCount",
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "target_method": "getIndexDocCount",
+        "start_line": 420,
+        "end_line": 420,
+        "code_snippet": "        String errorMessage\n    ) {\n        return listener.delegateFailure((delegate, response) -> {\n            if (response.isAcknowledged()) {\n                delegate.onResponse(null);\n            } else {\n                delegate.onFailure(new ElasticsearchException(errorMessage));\n            }\n        });\n    }\n\n    private void addBlockToIndex(\n        IndexMetadata.APIBlock block,\n        String index,\n        ActionListener<AddIndexBlockResponse> listener,\n        TaskId parentTaskId\n    ) {\n        AddIndexBlockRequest addIndexBlockRequest = new AddIndexBlockRequest(block, index);\n        addIndexBlockRequest.markVerified(false);\n        addIndexBlockRequest.setParentTask(parentTaskId);\n        client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n    }\n\n    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n        SearchRequest countRequest = new SearchRequest(index);\n        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n        countRequest.allowPartialSearchResults(false);\n        countRequest.source(searchSourceBuilder);\n        countRequest.setParentTask(parentTaskId);\n        client.search(countRequest, listener.delegateFailure((delegate, response) -> {\n            var totalHits = response.getHits().getTotalHits();\n            assert totalHits.relation == TotalHits.Relation.EQUAL_TO;\n            delegate.onResponse(totalHits.value);\n        }));\n    }\n\n    private void sanityCheck(\n        String sourceIndexName,\n        String destIndexName,\n        ActionListener<AcknowledgedResponse> listener,\n        TaskId parentTaskId",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
+  }
+}
