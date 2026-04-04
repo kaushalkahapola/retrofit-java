@@ -10,7 +10,7 @@
         "new_string": "import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\nimport org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before|forced_type_v:failed_stage_generation_contract",
         "surround_before_3": [
           "import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;",
           "import org.elasticsearch.action.admin.indices.refresh.RefreshAction;",
@@ -49,7 +49,7 @@
         "new_string": "import java.util.Arrays;\nimport java.util.Locale;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "Insert new import for Arrays before Locale import|forced_type_v:failed_stage_generation_contract",
         "surround_before_3": [
           "import org.elasticsearch.xpack.core.frozen.action.FreezeIndexAction;",
           "import org.elasticsearch.xpack.migrate.MigrateTemplateRegistry;",
@@ -65,13 +65,15 @@
         "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target surrounding context does not match mainline pre-patch surrounding context",
-          "Detected target start line (66) differs from mainline old start line (55)",
-          "Build failure due to method signature conflicts indicates structural differences"
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [
+          {
+            "from": "import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;",
+            "to": "import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\nimport static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;",
+            "reason": "APIBlock enum constants changed, requiring import update"
+          }
         ],
-        "namespace_only_possible": false,
-        "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
         "protected_symbols": [],
@@ -92,7 +94,7 @@
         "new_string": "import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\nimport static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "Replace WRITE import with METADATA and READ_ONLY imports|forced_type_v:failed_stage_generation_contract",
         "surround_before_3": [
           "import java.util.Map;",
           "import java.util.Objects;",
@@ -108,13 +110,15 @@
         "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target surrounding context does not match mainline pre-patch surrounding context",
-          "Detected target start line (66) differs from mainline old start line (55)",
-          "Build failure due to method signature conflicts indicates structural differences"
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [
+          {
+            "from": "import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;",
+            "to": "import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\nimport static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;",
+            "reason": "APIBlock enum constants changed, requiring import update"
+          }
         ],
-        "namespace_only_possible": false,
-        "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
         "protected_symbols": [],
@@ -135,7 +139,7 @@
         "new_string": "",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_delete|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_delete|forced_type_v:failed_stage_generation_contract",
         "surround_before_3": [
           "            );",
           "        }",
@@ -151,12 +155,8 @@
         "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target start line (152) differs from mainline old-start line (145)",
-          "Pre-patch surrounding context in target differs from mainline pre-patch context",
-          "API/signature mismatch errors in target prevent direct application of mainline edits"
-        ],
-        "namespace_only_possible": false,
+        "blockers": [],
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [
           "SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))",
@@ -186,32 +186,28 @@
         "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
         "operation_index": 1,
         "edit_type": "replace",
-        "old_string": "        SubscribableListener.<AcknowledgedResponse>newForked(l -> setBlockWrites(sourceIndexName, l, taskId))",
-        "new_string": "        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))",
-        "verified": false,
-        "verification_result": "sanitize_old_not_found:not_found_single",
-        "notes": "required_op_replace|sanitize_old_not_found:not_found_single|sanitize_old_not_found:not_found_single|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "old_string": "        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))",
+        "new_string": "        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace|sanitize_old_not_found:not_found_single|type_v_subagent_repaired|forced_type_v:failed_stage_generation_contract",
         "surround_before_3": [
-          "        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {",
-          "            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);",
-          "            listener.onFailure(new ElasticsearchException(errorMessage));"
+          "            return;",
+          "        }",
+          "        final boolean wasClosed = isClosed(sourceIndex);"
         ],
         "surround_after_3": [
-          "            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))",
-          "            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))",
-          "            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))"
+          "            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))",
+          "            .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))",
+          "            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))"
         ],
         "adaptation_type": "TYPE_V",
         "base_adaptation_type": "TYPE_II",
         "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target start line (152) differs from mainline old-start line (145)",
-          "Pre-patch surrounding context in target differs from mainline pre-patch context",
-          "API/signature mismatch errors in target prevent direct application of mainline edits"
-        ],
-        "namespace_only_possible": false,
+        "blockers": [],
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [
           "SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))",
@@ -245,7 +241,7 @@
         "new_string": "            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before|forced_type_v:failed_stage_generation_contract",
         "surround_before_3": [
           "        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))",
           "            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))",
@@ -261,12 +257,8 @@
         "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target start line (152) differs from mainline old-start line (145)",
-          "Pre-patch surrounding context in target differs from mainline pre-patch context",
-          "API/signature mismatch errors in target prevent direct application of mainline edits"
-        ],
-        "namespace_only_possible": false,
+        "blockers": [],
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [
           "SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))",
@@ -300,7 +292,7 @@
         "new_string": "            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "Insert removeAPIBlocks call before andThenApply as in mainline|forced_type_v:failed_stage_generation_contract",
         "surround_before_3": [
           "            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))",
           "            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))",
@@ -347,7 +339,7 @@
         "new_string": "    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace|forced_type_v:failed_stage_generation_contract",
         "surround_before_3": [
           "        }",
           "    }",
@@ -396,7 +388,7 @@
         "new_string": "    /**\n     * All metadata blocks need to be removed at the start for the following reasons:\n     * 1) If the source index has a metadata only block, the read-only block can't be added.\n     * 2) If the source index is read-only and closed, it can't be opened.\n     */\n    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n    }\n\n    private void removeAPIBlocks(\n        String indexName,\n        TaskId parentTaskId,\n        ActionListener<AcknowledgedResponse> listener,\n        IndexMetadata.APIBlock... blocks\n    ) {\n        Settings.Builder settings = Settings.builder();\n        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n        updateSettingsRequest.setParentTask(parentTaskId);\n        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n    }\n\n    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Duplicate method definition error blocks direct insertion; location mismatch requires adjustment|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before|forced_type_v:failed_stage_generation_contract",
         "surround_before_3": [
           "        client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);",
           "    }",
@@ -412,11 +404,8 @@
         "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": true,
-        "blockers": [
-          "Detected target location for insertion differs from mainline location by 21 lines",
-          "Compiler errors indicate method getIndexDocCount is already defined, suggesting duplicate method definitions"
-        ],
-        "namespace_only_possible": false,
+        "blockers": [],
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [
           "private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {",
@@ -449,18 +438,19 @@
       }
     ]
   },
-  "last_plan_signature": "4f1a314b220036a40e8ed29528da7fedea5c3888e5e4b4e46c4889a76496567a",
+  "last_plan_signature": "0e6f361333fe682aa82b38ffa84b11a3ae7bf5ed348332053f9ddd023c639e07",
   "force_type_v_until_success": true,
-  "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
+  "force_type_v_reason": "failed_stage_generation_contract",
   "token_usage": {
-    "input_tokens": 10062,
-    "output_tokens": 3073,
-    "total_tokens": 13135,
+    "input_tokens": 13915,
+    "output_tokens": 3280,
+    "total_tokens": 17195,
     "estimated": false,
     "sources": [
       "planning_agent.provider_usage",
       "planning_agent.provider_usage",
       "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.provider_usage",
       "planning_agent.provider_usage",
       "planning_agent.provider_usage",
       "planning_agent.provider_usage"
