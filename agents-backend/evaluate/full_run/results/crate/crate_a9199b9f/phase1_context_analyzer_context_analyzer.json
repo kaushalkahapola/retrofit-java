@@ -1,0 +1,46 @@
+{
+  "semantic_blueprint": {
+    "root_cause_hypothesis": "Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.",
+    "fix_logic": "Apply each source hunk with target-verified context and symbol consistency while preserving behavior.",
+    "dependent_apis": [
+      "withOutputs",
+      "Collect",
+      "FetchRewrite"
+    ],
+    "patch_intent_summary": "Backport patch behavior to target branch with minimal, context-correct edits.",
+    "hunk_chain": [
+      {
+        "hunk_index": 1,
+        "file": "server/src/main/java/io/crate/planner/operators/Collect.java",
+        "summary": "Adds logic (+8 lines).",
+        "role": "guard",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 1
+      },
+      {
+        "hunk_index": 2,
+        "file": "server/src/main/java/io/crate/planner/operators/Collect.java",
+        "summary": "Modifies logic (+1/-1 lines).",
+        "role": "guard",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 2
+      },
+      {
+        "hunk_index": 3,
+        "file": "server/src/main/java/io/crate/planner/operators/Collect.java",
+        "summary": "Modifies logic (+1/-8 lines).",
+        "role": "guard",
+        "connects_to_next": "",
+        "global_index": 3
+      }
+    ]
+  },
+  "patch_diff": "From a9199b9f781a9db3a49c1a8341e6837d63ed7980 Mon Sep 17 00:00:00 2001\nFrom: Mathias Fussenegger <f.mathias@zignar.net>\nDate: Tue, 14 Oct 2025 09:29:27 +0200\nSubject: [PATCH] Preserve detailedQuery in Collect on prune & fetch rewrite\n\nFixes https://github.com/crate/crate/issues/18501\n---\n docs/appendices/release-notes/6.0.4.rst       | 11 +++++-\n .../io/crate/planner/operators/Collect.java   | 19 +++++-----\n .../java/io/crate/planner/PlannerTest.java    | 35 +++++++++++++++++++\n 3 files changed, 55 insertions(+), 10 deletions(-)\n\ndiff --git a/docs/appendices/release-notes/6.0.4.rst b/docs/appendices/release-notes/6.0.4.rst\nindex 44fbcb9b43..340f78a4d4 100644\n--- a/docs/appendices/release-notes/6.0.4.rst\n+++ b/docs/appendices/release-notes/6.0.4.rst\n@@ -46,4 +46,13 @@ series.\n Fixes\n =====\n \n-None\n+- Improved ``WHERE`` clause analysis for queries on tables with both ``PARTITION\n+  BY`` and ``CLUSTERED BY`` clause to narrow the partitions and shards that are\n+  hit if the query filters on the ``PARTITIONED BY`` and ``CLUSTERED BY``\n+  columns. An example::\n+\n+    CREATE TABLE tbl (x int, c int, p int) clustered by (c) partitioned by (p);\n+    SELECT * FROM tbl WHERE c = 1 and p = 1;\n+\n+  In this case the query will only search in the partition ``p=1`` and hit a\n+  single shard depending on the routing for ``c=1``\ndiff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java\nindex d28ee920b2..21d3c496d5 100644\n--- a/server/src/main/java/io/crate/planner/operators/Collect.java\n+++ b/server/src/main/java/io/crate/planner/operators/Collect.java\n@@ -123,6 +123,14 @@ public class Collect implements LogicalPlan {\n         this.tableInfo = relation.tableInfo();\n     }\n \n+    /// @return a new Collect operator with changed outputs\n+    public Collect withOutputs(List<Symbol> newOutputs) {\n+        Collect collect = new Collect(relation, newOutputs, immutableWhere);\n+        collect.mutableBoundWhere = mutableBoundWhere;\n+        collect.detailedQuery = detailedQuery;\n+        return collect;\n+    }\n+\n     @Override\n     public ExecutionPlan build(DependencyCarrier executor,\n                                PlannerContext plannerContext,\n@@ -348,7 +356,7 @@ public class Collect implements LogicalPlan {\n         if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {\n             return this;\n         }\n-        return new Collect(relation, List.copyOf(newOutputs), immutableWhere);\n+        return withOutputs(List.copyOf(newOutputs));\n     }\n \n     @Nullable\n@@ -385,14 +393,7 @@ public class Collect implements LogicalPlan {\n             return null;\n         }\n         newOutputs.add(0, fetchMarker);\n-        return new FetchRewrite(\n-            replacedOutputs,\n-            new Collect(\n-                relation,\n-                newOutputs,\n-                immutableWhere\n-            )\n-        );\n+        return new FetchRewrite(replacedOutputs, withOutputs(newOutputs));\n     }\n \n     @Override\ndiff --git a/server/src/test/java/io/crate/planner/PlannerTest.java b/server/src/test/java/io/crate/planner/PlannerTest.java\nindex ebd04cc0c0..dd6be06895 100644\n--- a/server/src/test/java/io/crate/planner/PlannerTest.java\n+++ b/server/src/test/java/io/crate/planner/PlannerTest.java\n@@ -32,6 +32,8 @@ import static org.mockito.Mockito.when;\n import java.io.IOException;\n import java.util.Collections;\n import java.util.List;\n+import java.util.Map;\n+import java.util.Map.Entry;\n import java.util.UUID;\n \n import org.elasticsearch.action.UnavailableShardsException;\n@@ -40,13 +42,18 @@ import org.elasticsearch.index.shard.ShardId;\n import org.junit.Before;\n import org.junit.Test;\n \n+import com.carrotsearch.hppc.IntIndexedContainer;\n+\n import io.crate.data.Row1;\n import io.crate.exceptions.ConversionException;\n+import io.crate.execution.dsl.phases.RoutedCollectPhase;\n import io.crate.expression.symbol.Literal;\n import io.crate.metadata.CoordinatorTxnCtx;\n import io.crate.metadata.RoutingProvider;\n import io.crate.metadata.settings.CoordinatorSessionSettings;\n import io.crate.planner.node.ddl.UpdateSettingsPlan;\n+import io.crate.planner.node.dql.Collect;\n+import io.crate.planner.node.dql.QueryThenFetch;\n import io.crate.planner.operators.LogicalPlan;\n import io.crate.planner.operators.LogicalPlanner;\n import io.crate.planner.operators.SubQueryResults;\n@@ -152,4 +159,32 @@ public class PlannerTest extends CrateDummyClusterServiceUnitTest {\n             .hasHTTPError(INTERNAL_SERVER_ERROR, 5002)\n             .hasMessageContaining(\"[tbl] shard 11 is not available\");\n     }\n+\n+    @Test\n+    public void test_table_with_clustered_by_and_partition_filter_routing() throws Exception {\n+        e.addTable(\n+            \"\"\"\n+            CREATE TABLE t1 (\n+               a int,\n+               impression_id text,\n+               \"time\" TIMESTAMP WITH TIME ZONE,\n+               \"daypart\" TIMESTAMP WITH TIME ZONE GENERATED ALWAYS AS date_trunc('day', \"time\")\n+           ) CLUSTERED BY (\"impression_id\") INTO 10 SHARDS PARTITIONED BY (\"daypart\")\n+            \"\"\",\n+            List.of(\"1760392800000\"),\n+            List.of(\"1760306400000\"),\n+            List.of(\"1760220000000\")\n+        );\n+        QueryThenFetch qtf = e.plan(\n+            \"SELECT * FROM t1 WHERE impression_id='10-uuid' AND daypart=1760306400000 ORDER BY a DESC LIMIT 3\");\n+        RoutedCollectPhase collectPhase = (RoutedCollectPhase) ((Collect) qtf.subPlan()).collectPhase();\n+        Map<String, IntIndexedContainer> indicesAndShards = collectPhase.routing().locations().entrySet().iterator().next().getValue();\n+        assertThat(indicesAndShards)\n+            .as(\"Routing includes only one partition because of daypart filter\")\n+            .hasSize(1);\n+        Entry<String, IntIndexedContainer> firstEntry = indicesAndShards.entrySet().iterator().next();\n+        assertThat(firstEntry.getValue())\n+            .as(\"Routing includes only one shard because of impression_id filter (clustered by)\")\n+            .hasSize(1);\n+    }\n }\n-- \n2.53.0\n\n",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "deterministic_no_llm"
+  }
+}

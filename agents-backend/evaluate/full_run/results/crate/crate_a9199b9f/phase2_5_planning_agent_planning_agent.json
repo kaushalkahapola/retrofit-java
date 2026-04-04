@@ -1,0 +1,99 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/io/crate/planner/operators/Collect.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "@Override",
+        "new_string": "    /// @return a new Collect operator with changed outputs\n    public Collect withOutputs(List<Symbol> newOutputs) {\n        Collect collect = new Collect(relation, newOutputs, immutableWhere);\n        collect.mutableBoundWhere = mutableBoundWhere;\n        collect.detailedQuery = detailedQuery;\n        return collect;\n    }\n\n@Override",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        this.tableInfo = relation.tableInfo();",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "    public ExecutionPlan build(DependencyCarrier executor,",
+          "                               PlannerContext plannerContext,",
+          "                               Set<PlanHint> hints,"
+        ],
+        "adaptation_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": []
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "        return new Collect(relation, List.copyOf(newOutputs), immutableWhere);",
+        "new_string": "        return withOutputs(List.copyOf(newOutputs));",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "        if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {",
+          "            return this;",
+          "        }"
+        ],
+        "surround_after_3": [
+          "    }",
+          "",
+          "    @Nullable"
+        ],
+        "adaptation_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": []
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "        return new FetchRewrite(\n            replacedOutputs,\n            new Collect(\n                relation,\n                newOutputs,\n                immutableWhere\n            )\n        );",
+        "new_string": "        return new FetchRewrite(replacedOutputs, withOutputs(newOutputs));",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "            return null;",
+          "        }",
+          "        newOutputs.add(0, fetchMarker);"
+        ],
+        "surround_after_3": [
+          "    }",
+          "",
+          "    @Override"
+        ],
+        "adaptation_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": []
+      }
+    ]
+  },
+  "last_plan_signature": "086691363d568ad41e6a06ba31e6e98e25f4d7e49ddc6bbd15339a8b20057bf5",
+  "token_usage": {
+    "input_tokens": 3450,
+    "output_tokens": 747,
+    "total_tokens": 4197,
+    "estimated": false,
+    "sources": [
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage"
+    ]
+  }
+}

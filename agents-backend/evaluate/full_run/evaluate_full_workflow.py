@@ -56,7 +56,7 @@ REPOS_DIR = os.path.join(BASE_DIR, "temp_repo_storage")
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 PHASE0_CACHE_DIR = os.path.join(os.path.dirname(__file__), "phase0_cache")
 
-TARGET_PROJECTS = ["elasticsearch"]
+TARGET_PROJECTS = ["elasticsearch", "crate"]
 MAX_PATCHES_PER_PROJECT = 10
 
 RUN_MODE_FULL = "full"
