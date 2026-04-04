@@ -682,61 +682,69 @@ class HunkGeneratorToolkit:
     # Tool 10a: replace_lines
     # ------------------------------------------------------------------
 
-    def replace_lines(
-        self,
-        file_path: str,
-        start_line: int,
-        end_line: int,
-        new_content: str,
-    ) -> str:
-        """
-        Replace lines `start_line` to `end_line` (inclusive, 1-indexed) in the target file
-        with `new_content`.
-        
-        To insert new lines without replacing any existing lines, set `start_line` to N and
-        `end_line` to N-1 (e.g. start_line=27, end_line=26 will insert before line 27).
+     def replace_lines(
+         self,
+         file_path: str,
+         start_line: int,
+         end_line: int,
+         new_content: str,
+     ) -> str:
+         """
+         Replace lines `start_line` to `end_line` (inclusive, 1-indexed) in the target file
+         with `new_content`.
+         
+         To insert new lines without replacing any existing lines, set `start_line` to N and
+         `end_line` to N-1 (e.g. start_line=27, end_line=26 will insert before line 27).
 
-        Args:
-            file_path: Repo-relative path to the file.
-            start_line: 1-indexed start line to replace (or N for insertion).
-            end_line: 1-indexed end line to replace (or N-1 for insertion).
-            new_content: The new complete code block to insert/replace.
+         Args:
+             file_path: Repo-relative path to the file.
+             start_line: 1-indexed start line to replace (or N for insertion).
+             end_line: 1-indexed end line to replace (or N-1 for insertion).
+             new_content: The new complete code block to insert/replace.
 
-        Returns:
-            SUCCESS message or ERROR message.
-        """
-        full_path = self._full_path(file_path)
-        try:
-            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
-                original = f.read()
-        except Exception as exc:
-            return f"ERROR: Cannot read file '{file_path}': {exc}"
+         Returns:
+             SUCCESS message (including line delta for tracking subsequent edits) or ERROR message.
+         """
+         full_path = self._full_path(file_path)
+         try:
+             with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                 original = f.read()
+         except Exception as exc:
+             return f"ERROR: Cannot read file '{file_path}': {exc}"
 
-        lines = original.splitlines(keepends=True)
-        total = len(lines)
-        if start_line < 1 or end_line > total or start_line > end_line + 1:
-            return f"ERROR: Invalid range {start_line}-{end_line}. File has {total} lines."
+         lines = original.splitlines(keepends=True)
+         total = len(lines)
+         if start_line < 1 or end_line > total or start_line > end_line + 1:
+             return f"ERROR: Invalid range {start_line}-{end_line}. File has {total} lines."
 
-        # Support inserting lines by letting start_line == end_line + 1
-        s_idx = start_line - 1
-        e_idx = end_line # Exclusive
+         # Support inserting lines by letting start_line == end_line + 1
+         s_idx = start_line - 1
+         e_idx = end_line # Exclusive
 
-        if new_content and not new_content.endswith("\n") and s_idx < total and lines[s_idx].endswith("\n"):
-            # Ensure proper newline behavior
-            new_content += "\n"
+         if new_content and not new_content.endswith("\n") and s_idx < total and lines[s_idx].endswith("\n"):
+             # Ensure proper newline behavior
+             new_content += "\n"
 
-        lines_before = lines[:s_idx]
-        lines_after = lines[e_idx:]
+         lines_before = lines[:s_idx]
+         lines_after = lines[e_idx:]
 
-        new_resolved = lines_before + [new_content] + lines_after
+         # Calculate line delta: how many lines the file grows or shrinks
+         old_line_count = max(1, end_line - start_line + 1)
+         new_line_count = new_content.count('\n')
+         if new_content and not new_content.endswith('\n'):
+             new_line_count += 1
+         delta = new_line_count - old_line_count
 
-        try:
-            with open(full_path, "w", encoding="utf-8") as f:
-                f.write("".join(new_resolved))
-            # Also register the generic file edit to the local memory for auditing if desired
-            return f"SUCCESS: lines {start_line} to {end_line} replaced."
-        except Exception as exc:
-            return f"ERROR: Cannot write file '{file_path}': {exc}"
+         new_resolved = lines_before + [new_content] + lines_after
+
+         try:
+             with open(full_path, "w", encoding="utf-8") as f:
+                 f.write("".join(new_resolved))
+             # Return success with delta information for tracking line number shifts
+             sign = "+" if delta >= 0 else ""
+             return f"SUCCESS: lines {start_line} to {end_line} replaced. Line delta: {sign}{delta} (subsequent edits below line {end_line} must shift by {sign}{delta})."
+         except Exception as exc:
+             return f"ERROR: Cannot write file '{file_path}': {exc}"
 
     # ------------------------------------------------------------------
     # Tool 11: git_diff_file  (mechanically correct diff after edits)
@@ -784,7 +792,7 @@ class HunkGeneratorToolkit:
             return f"ERROR: {exc}"
 
     # ------------------------------------------------------------------
-    # Tool 12: reset_file  (undo all edits for a file)
+    # Tool 13: reset_file  (undo all edits for a file)
     # ------------------------------------------------------------------
 
     def reset_file(self, file_path: str) -> str:
@@ -807,13 +815,227 @@ class HunkGeneratorToolkit:
                 text=True,
                 timeout=30,
             )
-            if result.returncode != 0:
+            if result.returncode == 0:
+                return f"SUCCESS: '{file_path}' reset to HEAD state."
+            else:
                 return f"ERROR: git checkout failed: {result.stderr.strip()}"
-            return f"SUCCESS: '{file_path}' reset to HEAD state."
         except subprocess.TimeoutExpired:
             return "ERROR: git checkout timed out."
         except Exception as exc:
             return f"ERROR: {exc}"
+
+    # ------------------------------------------------------------------
+    # Tool 14: replace_method_body (AST-based, immune to line drift)
+    # ------------------------------------------------------------------
+
+    def replace_method_body(
+        self,
+        file_path: str,
+        method_signature: str,
+        new_body: str,
+    ) -> str:
+        """
+        Replace the body of a method or constructor using AST-based approach.
+        This is structurally immune to line number drift - the tool locates the method
+        by its signature in the AST, not by line numbers.
+
+        This tool calls the Java MCP server's replace_method_body endpoint.
+
+        Args:
+            file_path: Repo-relative path to the Java file.
+            method_signature: Method/constructor signature (e.g., "doSomething(String arg1, int arg2)"
+                            or "ClassName(...)" for constructors with any params).
+            new_body: Complete method body code (without curly braces).
+
+        Returns:
+            "SUCCESS: ..." or "ERROR: ..." message with details.
+        """
+        try:
+            from mcp_client import McpClient
+            
+            client = McpClient(self.target_repo_path)
+            arguments = {
+                "target_repo_path": self.target_repo_path,
+                "file_path": file_path,
+                "method_signature": method_signature,
+                "new_body": new_body
+            }
+            
+            result = client.call_tool("replace_method_body", arguments)
+            
+            if result.get("success"):
+                return f"SUCCESS: {result.get('message', 'Method replaced')}"
+            else:
+                return f"ERROR: {result.get('error', 'Unknown error')}"
+                
+        except Exception as exc:
+            return f"ERROR: Failed to call MCP server: {exc}"
+
+    # ------------------------------------------------------------------
+    # Tool 15: get_method_boundaries (AST-based line lookup)
+    # ------------------------------------------------------------------
+
+    def get_method_boundaries(
+        self,
+        file_path: str,
+        method_signature: str,
+    ) -> str:
+        """
+        Get the exact line number boundaries of a method or constructor.
+        Uses AST analysis to find precise boundaries without guessing.
+
+        This is useful for determining if a line-based edit will work safely
+        after multiple edits have shifted lines.
+
+        Args:
+            file_path: Repo-relative path to the Java file.
+            method_signature: Method/constructor signature to locate.
+
+        Returns:
+            Formatted string with start_line and end_line, or error message.
+        """
+        try:
+            from mcp_client import McpClient
+            
+            client = McpClient(self.target_repo_path)
+            arguments = {
+                "target_repo_path": self.target_repo_path,
+                "file_path": file_path,
+                "method_signature": method_signature
+            }
+            
+            result = client.call_tool("get_method_boundaries", arguments)
+            
+            if result.get("success"):
+                start = result.get("start_line")
+                end = result.get("end_line")
+                return f"Method boundaries found: lines {start}-{end}"
+            else:
+                return f"ERROR: {result.get('error', 'Unknown error')}"
+                
+        except Exception as exc:
+            return f"ERROR: Failed to call MCP server: {exc}"
+
+    # ------------------------------------------------------------------
+    # Tool 16: replace_field (AST-based field replacement)
+    # ------------------------------------------------------------------
+
+    def replace_field(
+        self,
+        file_path: str,
+        field_name: str,
+        new_declaration: str,
+    ) -> str:
+        """
+        Replace a field declaration in a Java file using AST-based approach.
+        
+        Args:
+            file_path: Repo-relative path to the Java file.
+            field_name: Name of the field to replace.
+            new_declaration: Complete field declaration (e.g., "private final String name;").
+            
+        Returns:
+            "SUCCESS: ..." or "ERROR: ..." message.
+        """
+        try:
+            from mcp_client import McpClient
+            
+            client = McpClient(self.target_repo_path)
+            arguments = {
+                "target_repo_path": self.target_repo_path,
+                "file_path": file_path,
+                "field_name": field_name,
+                "new_declaration": new_declaration
+            }
+            
+            result = client.call_tool("replace_field", arguments)
+            
+            if result.get("success"):
+                return f"SUCCESS: {result.get('message', 'Field replaced')}"
+            else:
+                return f"ERROR: {result.get('error', 'Unknown error')}"
+                
+        except Exception as exc:
+            return f"ERROR: Failed to call MCP server: {exc}"
+
+    # ------------------------------------------------------------------
+    # Tool 17: insert_import (AST-based import management)
+    # ------------------------------------------------------------------
+
+    def insert_import(
+        self,
+        file_path: str,
+        import_statement: str,
+    ) -> str:
+        """
+        Insert an import statement into a Java file using AST-based approach.
+        Automatically avoids duplicate imports.
+        
+        Args:
+            file_path: Repo-relative path to the Java file.
+            import_statement: Import statement (e.g., "java.util.List" or "java.util.*").
+            
+        Returns:
+            "SUCCESS: ..." or "ERROR: ..." message.
+        """
+        try:
+            from mcp_client import McpClient
+            
+            client = McpClient(self.target_repo_path)
+            arguments = {
+                "target_repo_path": self.target_repo_path,
+                "file_path": file_path,
+                "import_statement": import_statement
+            }
+            
+            result = client.call_tool("insert_import", arguments)
+            
+            if result.get("success"):
+                return f"SUCCESS: {result.get('message', 'Import inserted')}"
+            else:
+                return f"ERROR: {result.get('error', 'Unknown error')}"
+                
+        except Exception as exc:
+            return f"ERROR: Failed to call MCP server: {exc}"
+
+    # ------------------------------------------------------------------
+    # Tool 18: remove_method (AST-based method deletion)
+    # ------------------------------------------------------------------
+
+    def remove_method(
+        self,
+        file_path: str,
+        method_signature: str,
+    ) -> str:
+        """
+        Remove a method from a Java file using AST-based approach.
+        
+        Args:
+            file_path: Repo-relative path to the Java file.
+            method_signature: Method signature to remove (supports wildcards like "method(...)").
+            
+        Returns:
+            "SUCCESS: ..." or "ERROR: ..." message.
+        """
+        try:
+            from mcp_client import McpClient
+            
+            client = McpClient(self.target_repo_path)
+            arguments = {
+                "target_repo_path": self.target_repo_path,
+                "file_path": file_path,
+                "method_signature": method_signature
+            }
+            
+            result = client.call_tool("remove_method", arguments)
+            
+            if result.get("success"):
+                return f"SUCCESS: {result.get('message', 'Method removed')}"
+            else:
+                return f"ERROR: {result.get('error', 'Unknown error')}"
+                
+        except Exception as exc:
+            return f"ERROR: Failed to call MCP server: {exc}"
 
     # ------------------------------------------------------------------
     # Tool 13: ripgrep_in_file  (regex search with offset/limit)
@@ -1158,6 +1380,49 @@ class HunkGeneratorToolkit:
                 description=(
                     "Reset a target file to its HEAD state, discarding all working-tree "
                     "edits. Use if edits went wrong and you need to start over for a file."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.replace_method_body,
+                name="replace_method_body",
+                description=(
+                    "Replace method body using AST-based approach via Java MCP server. "
+                    "Immune to line number drift. Locates method by signature not line numbers. "
+                    "Supports wildcards: 'method(...)' matches any params, 'method(String, *)' matches String and any type."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.get_method_boundaries,
+                name="get_method_boundaries",
+                description=(
+                    "Get exact line boundaries of a method using AST analysis. "
+                    "Returns start_line and end_line without drift. Useful for verifying "
+                    "line ranges after multiple edits."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.replace_field,
+                name="replace_field",
+                description=(
+                    "Replace a field declaration in a Java file using AST-based approach. "
+                    "Immune to line drift. Specify field name and new declaration."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.insert_import,
+                name="insert_import",
+                description=(
+                    "Insert an import statement into a Java file using AST-based approach. "
+                    "Automatically avoids duplicate imports. "
+                    "Examples: 'java.util.List' or 'java.util.*'"
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.remove_method,
+                name="remove_method",
+                description=(
+                    "Remove a method from a Java file using AST-based approach. "
+                    "Supports wildcard signatures like 'method(...)' to match any parameters."
                 ),
             ),
         ]

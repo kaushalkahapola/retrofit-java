@@ -64,8 +64,8 @@ You MUST follow this exact Todo Checklist loop to complete your task:
    a. USE `read_file_window` or `grep_in_file` to locate the exact line boundaries of the target code that needs to be replaced.
    b. DETERMINE the exact `start_line` and `end_line` for the change.
    c. EDIT the file exclusively using the `replace_lines` (or `insert_after_line`) tool.
-4. VERIFY your guidelines. Check that your new code did not invent new methods and strictly preserves ALL the logic across ALL hunks from the Semantic Blueprint.
-5. Output "DONE" only when EVERY required piece of logic from the patch (including imports and fields) is perfectly edited into the target file.
+4. VERIFY your changes: After ALL edits are complete, call `git_diff_file` to see the actual diff, then call `verify_guidelines` with the diff to catch syntax errors before returning.
+5. Output "DONE" only when EVERY required piece of logic from the patch (including imports and fields) is perfectly edited into the target file AND `verify_guidelines` confirms the diff is correct.
 
 ## Essential Guidelines (CRITICAL)
 - **Line Editing Only**: Use `replace_lines(start_line, end_line, new_content)` for all changes. Do NOT try to use string-replace unless line numbers are unavailable.
@@ -73,6 +73,25 @@ You MUST follow this exact Todo Checklist loop to complete your task:
 - **Exact Line Matches**: When replacing lines, ensure you replace the entire block correctly. To just insert new code without replacing anything, use start_line = N, end_line = N-1.
 - **Loyalty to Mainline Patterns**: Stick as closely as possible to the mainline patch's implementation patterns (e.g., lambda structures, specific class constructors). Only deviate if a symbol in the target file is renamed or missing (check Consistency Map and grep first).
 - **Adapt to Target Syntax**: The target file may use completely different variables (e.g. `ob` instead of `builder`) or slightly different method names. YOU MUST READ the target code and ADAPT the logic. DO NOT blindly copy-paste the mainline diff syntax if the target file uses different patterns!
+
+## CRITICAL: Line Number Drift After Edits (Non-Negotiable)
+**THIS IS THE MOST COMMON FAILURE MODE.** After EVERY replace_lines or insert_after_line call:
+1. Note the line delta from the tool's response (e.g., "Line delta: +5" means the file grew by 5 lines)
+2. IMMEDIATELY adjust ALL subsequent line numbers for this file by that delta
+3. Example: If you replace lines 67-82 with +10 net lines, any later edits originally at lines 100+ must shift to 110+
+4. OR: Before each subsequent edit, call read_file_window around your next target to re-verify current line numbers
+
+**DO NOT use line numbers from the start of the session for edits after the first.** They become stale and cause overlapping edits and syntax corruption.
+
+## Edit Ordering Rule (Bottom-to-Top Prevents Drift)
+Collect ALL line ranges you need to edit BEFORE making ANY edit. Then apply edits in **bottom-to-top order** (highest line number first). This ensures earlier line numbers never shift.
+
+Example:
+- File has edits needed at lines 30, 67, 100
+- Apply them in reverse: 100 first, then 67, then 30
+- This way, edits at 30 are unaffected by edits at 67 and 100
+
+**Special Rule for Multiple Edits in Same File**: If you have 3+ distinct edits for a single file, PLAN THE LINE NUMBERS FIRST, then execute bottom-to-top.
 
 ## Fix Intent (Semantic Blueprint)
 {semantic_blueprint}
@@ -94,7 +113,7 @@ The structural locator has provided hints about where these hunks might belong i
 `{target_file}` (Mapped from `{mainline_file}`)
 
 {retry_context}
-Begin your work now by reading the target file around the expected areas. Follow the Todo checklist strictly.
+Begin your work now by reading the target file around the expected areas. Follow the Todo checklist strictly. REMEMBER: Plan all line numbers first, apply edits bottom-to-top, and track deltas carefully. Always call verify_guidelines on the final diff before returning "DONE".
 """
 
 _INTENT_CHECK_SYSTEM = """\
@@ -127,7 +146,6 @@ Does the diff correctly implement the fix logic? Answer YES or NO.
 # ---------------------------------------------------------------------------
 
 
-
 def _analyze_anchor_failure_semantic(
     anchor_text: str,
     target_file_content: str,
@@ -136,10 +154,10 @@ def _analyze_anchor_failure_semantic(
 ) -> dict[str, Any]:
     """
     Perform semantic analysis on an anchor failure.
-    
+
     Called when 4-pass deterministic algorithm fails and grep retry fails.
     Attempts to diagnose why anchor couldn't be found and suggest recovery.
-    
+
     Returns:
         Dict with diagnosis, severity, confidence, recovery strategy, etc.
     """
@@ -150,7 +168,7 @@ def _analyze_anchor_failure_semantic(
             target_file_path=target_file_path,
             resolution_reason=resolution_reason,
         )
-        
+
         return {
             "success": True,
             "diagnosis": result.diagnosis.value,
@@ -844,7 +862,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
     error_context: str = state.get("validation_error_context") or ""
     retry_files_raw = state.get("validation_retry_files") or []
     previous_patch_hash = str(state.get("generated_patch_hash") or "")
-    
+
     agent_trajectory_edits = list(state.get("agent_trajectory_edits") or [])
     current_attempt_trajectory = []
 
@@ -999,7 +1017,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
         # Step B: Apply edits using ReAct Agent!
         if toolkit:
             import json
-            
+
             # Reconstruct mapping hints to give the agent some structural guidance
             mapping_hints = []
             if mainline_file in state.get("mapped_target_context", {}):
@@ -1009,16 +1027,32 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
             system_prompt = _FILE_EDITOR_AGENT_SYSTEM.format(
                 patch_diff=state.get("patch_diff") or "<no patch diff found>",
-                mapping_hints="\n---\n".join(mapping_hints) if mapping_hints else "No structural mapping hints available.",
-                semantic_blueprint=json.dumps(state.get("semantic_blueprint", {}), indent=2),
+                mapping_hints="\n---\n".join(mapping_hints)
+                if mapping_hints
+                else "No structural mapping hints available.",
+                semantic_blueprint=json.dumps(
+                    state.get("semantic_blueprint", {}), indent=2
+                ),
                 consistency_map=json.dumps(state.get("consistency_map", {}), indent=2),
                 mainline_file=mainline_file,
                 target_file=target_file,
-                retry_context=f"RETRY LOGS:\n{error_context}" if validation_attempts > 0 else ""
+                retry_context=f"RETRY LOGS:\n{error_context}"
+                if validation_attempts > 0
+                else "",
             )
 
+            # Add heuristic for multi-edit files: prefer str_replace_in_file over line numbers
+            if len(plan_entries) >= 3:
+                system_prompt += (
+                    "\n\n## IMPORTANT: Multi-Edit File Detection\n"
+                    "This file has 3+ distinct edits. Consider using str_replace_in_file "
+                    "(exact string matching) instead of line numbers to avoid line drift.\n"
+                    "Line numbers are inherently fragile across multiple sequential edits.\n"
+                    "Use replace_lines only for pure insertions with no overlapping content."
+                )
+
             editor_agent = create_react_agent(llm, toolkit.get_tools())
-            
+
             try:
                 print(f"    Agent 3: Invoking ReAct agent for {target_file}")
                 response = await editor_agent.ainvoke(
@@ -1031,26 +1065,34 @@ async def file_editor_node(state: AgentState, config) -> dict:
                                 "2. For EACH distinct change (imports, fields, constructor, methods), use read_file_window to find the target code.\n"
                                 "3. Write a short analysis on how the mainline syntax differs from the target syntax.\n"
                                 "4. Use replace_lines (or insert_after_line) REPEATEDLY to apply EVERY part of the adapted logic. Remember to use start_line=N, end_line=N-1 to insert without deleting!"
-                            )
+                            ),
                         ]
                     }
                 )
-                
+
                 # We can calculate usage roughly for the loop here for tokens tracking
                 # Usage extraction can be aggregated
                 last_msg = response["messages"][-1]
-                print(f"    Agent 3: Agent finished. Last msg: {last_msg.content[:100]}")
+                print(
+                    f"    Agent 3: Agent finished. Last msg: {last_msg.content[:100]}"
+                )
 
                 # Extract agent tool calls for trace logs
                 for m in response.get("messages", []):
                     if hasattr(m, "tool_calls") and m.tool_calls:
                         for tc in m.tool_calls:
-                            if tc["name"] in ("replace_lines", "insert_after_line", "verify_guidelines"):
-                                current_attempt_trajectory.append({
-                                    "target_file": target_file,
-                                    "tool": tc["name"],
-                                    "args": tc["args"]
-                                })
+                            if tc["name"] in (
+                                "replace_lines",
+                                "insert_after_line",
+                                "verify_guidelines",
+                            ):
+                                current_attempt_trajectory.append(
+                                    {
+                                        "target_file": target_file,
+                                        "tool": tc["name"],
+                                        "args": tc["args"],
+                                    }
+                                )
             except Exception as e:
                 print(f"    Agent 3: Agent failed: {e}")
                 task_entry["status"] = "failed"
@@ -1173,7 +1215,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
     all_edits_history = list(state.get("all_adapted_file_edits") or [])
     all_edits_history.append(adapted_file_edits)
-    
+
     agent_trajectory_edits.append(current_attempt_trajectory)
 
     if (
