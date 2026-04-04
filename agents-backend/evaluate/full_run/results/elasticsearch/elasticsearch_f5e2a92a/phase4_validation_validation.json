@@ -1,29 +1,7 @@
 {
   "validation_passed": false,
   "validation_attempts": 3,
-  "validation_error_context": "Hunk application failed: The patch attempts to delete the test file `RescoreKnnVectorQueryIT.java` which is missing in the target branch, causing the failure. This indicates the file was likely already removed or never added in the backport base. To fix, verify the file's presence in the backport branch and regenerate the patch excluding this deletion if the file is intentionally absent.",
-  "validation_results": {
-    "hunk_application": {
-      "success": false,
-      "raw": "Patch application failed for server/src/internalClusterTest/java/org/elasticsearch/search/query/RescoreKnnVectorQueryIT.java at line 1:\n[git-apply-strict] error: server/src/internalClusterTest/java/org/elasticsearch/search/query/RescoreKnnVectorQueryIT.java: No such file or directory\n\n[git-apply-whitespace-tolerant] error: server/src/internalClusterTest/java/org/elasticsearch/search/query/RescoreKnnVectorQueryIT.java: No such file or directory\n\n[gnu-patch-dry-run] The next patch would delete the file server/src/internalClusterTest/java/org/elasticsearch/search/query/RescoreKnnVectorQueryIT.java,\nwhich does not exist!  Skipping patch.\n1 out of 1 hunk ignored",
-      "agent_evaluation": "The patch attempts to delete the test file `RescoreKnnVectorQueryIT.java` which is missing in the target branch, causing the failure. This indicates the file was likely already removed or never added in the backport base. To fix, verify the file's presence in the backport branch and regenerate the patch excluding this deletion if the file is intentionally absent.",
-      "error_context": "The patch attempts to delete the test file `RescoreKnnVectorQueryIT.java` which is missing in the target branch, causing the failure. This indicates the file was likely already removed or never added in the backport base. To fix, verify the file's presence in the backport branch and regenerate the patch excluding this deletion if the file is intentionally absent.",
-      "diagnostics": {
-        "category": "path_or_file_operation",
-        "retry_files": [
-          "server/src/internalClusterTest/java/org/elasticsearch/search/query/RescoreKnnVectorQueryIT.java"
-        ],
-        "issues": [
-          {
-            "error_type": "missing_file",
-            "suggested_action": "remap"
-          }
-        ]
-      }
-    }
-  },
-  "validation_failure_category": "path_or_file_operation",
-  "validation_retry_files": [
-    "server/src/internalClusterTest/java/org/elasticsearch/search/query/RescoreKnnVectorQueryIT.java"
-  ]
+  "validation_error_context": "Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors.",
+  "validation_failure_category": "empty_generation",
+  "validation_retry_files": []
 }
