@@ -1,0 +1,240 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║              ELASTICSEARCH FAILURE: ROOT CAUSE & SOLUTION FLOW                  ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ CURRENT BEHAVIOR (WITHOUT FIX)                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────┐
+│ Attempt #1              │
+├─────────────────────────┤
+│ Agent: apply hunks      │
+│        ↓                │
+│ replace_lines(55-77,    │
+│   new_content_WITH_     │
+│   @Inject annotation)   │
+│        ↓                │
+│ Generated code:         │
+│   @Inject          ← Line 54 (from context)
+│   @Inject          ← From new_content (DUPLICATE!)
+│   public Ctor(...) │
+│        ↓                │
+│ Compile fails: ✗        │
+│ GOTO Attempt #2         │
+└─────────────────────────┘
+
+┌─────────────────────────┐
+│ Attempt #2              │
+├─────────────────────────┤
+│ Agent (unaware of       │
+│ mistake) retries same   │
+│ strategy                │
+│        ↓                │
+│ replace_lines(55-77,    │
+│   new_content_WITH_     │
+│   @Inject annotation)   │
+│        ↓                │
+│ SAME ERROR! ✗           │
+│ GOTO Attempt #3         │
+└─────────────────────────┘
+
+... INFINITE RETRY LOOP ...
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ NEW BEHAVIOR (WITH FIX - PHASE 4A)                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────┐
+│ Attempt #1                   │
+├──────────────────────────────┤
+│ Agent: apply hunks           │
+│        ↓                     │
+│ replace_lines(55-77, ... )   │
+│        ↓                     │
+│ Generated diff with          │
+│ duplicate @Inject            │
+│        ↓                     │
+│ verify_guidelines() called   │
+│        ↓                     │
+│ NEW VALIDATOR DETECTS:       │
+│ ❌ duplicate @Inject         │
+│    at lines ~54, ~74         │
+│        ↓                     │
+│ Enhanced error message:      │
+│ "The annotation is already   │
+│  present in context.         │
+│  Remove it from new_content" │
+│        ↓                     │
+│ Compile fails but NOW        │
+│ agent knows WHY! ✗           │
+│ GOTO Attempt #2 (SMART)      │
+└──────────────────────────────┘
+
+┌──────────────────────────────┐
+│ Attempt #2 (SELF-CORRECTING) │
+├──────────────────────────────┤
+│ Agent learns: Don't include  │
+│ @Inject in new_content       │
+│        ↓                     │
+│ replace_lines(55-77,         │
+│   new_content_WITHOUT_       │
+│   @Inject annotation)        │
+│        ↓                     │
+│ Generated code:              │
+│   @Inject          ← Line 54 │
+│   public Ctor(...) ← CORRECT │
+│        ↓                     │
+│ verify_guidelines() passes   │
+│   for TransportAction ✓      │
+│        ↓                     │
+│ But AllocationStatsService   │
+│ has extra brace issue        │
+│ GOTO Attempt #3              │
+└──────────────────────────────┘
+
+┌──────────────────────────────┐
+│ Attempt #3                   │
+├──────────────────────────────┤
+│ replace_lines(44-83,         │
+│   AllocationStatsService     │
+│   method content)            │
+│        ↓                     │
+│ Generated code has           │
+│ extra closing brace          │
+│        ↓                     │
+│ verify_guidelines() detects: │
+│ ❌ Brace imbalance           │
+│    Opening: 1, Closing: 2    │
+│        ↓                     │
+│ Agent learns: Count braces!  │
+│        ↓                     │
+│ Removes extra brace          │
+│        ↓                     │
+│ verify_guidelines() passes ✓ │
+│        ↓                     │
+│ CONVERGED! ✅               │
+└──────────────────────────────┘
+
+
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                          THE PROBLEM AT A GLANCE                               ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+MISTAKE #1: Duplicate Annotation
+┌──────────────────────────────────────────┐
+│ Original context:                        │
+│ Line 54: @Inject                         │
+│ Line 55: public TransportGetAllocation...│
+│                                          │
+│ Agent does: replace_lines(55-77, ...)    │
+│ With content starting: "@Inject\npublic"│
+│                                          │
+│ Result (WRONG):                          │
+│ Line 54: @Inject                         │  ← From context
+│ Line 75: +    @Inject                    │  ← From replacement (DUPLICATE!)
+│ Line 76:      @Inject                    │  ← EXTRA LINE!
+│ Line 77:      public TransportGetAll...  │
+└──────────────────────────────────────────┘
+
+MISTAKE #2: Extra Closing Brace
+┌──────────────────────────────────────────┐
+│ Original method:                         │
+│ public Map<String, ...> stats() {        │
+│     ... 40 lines of method body ...      │
+│ }                                        │
+│                                          │
+│ Agent replacement content includes       │
+│ the full method WITH closing brace       │
+│                                          │
+│ But when placed, it creates:             │
+│ public Map<String, ...> stats() {        │
+│     ... 40 lines of method body ...      │
+│ }                                        │
+│ }  ← EXTRA BRACE! (orphaned)             │
+│                                          │
+│ Next method now has broken structure     │
+└──────────────────────────────────────────┘
+
+
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                              THE FIX: 4 LAYERS                                 ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+LAYER 1: VALIDATION CHECKERS
+════════════════════════════════════════════════════════════════════════════════
+In verify_guidelines(), add:
+  ✓ Check for duplicate annotations
+  ✓ Check for unmatched braces  
+  ✓ Check for duplicate imports
+
+LAYER 2: SEMANTIC ERROR MESSAGES
+════════════════════════════════════════════════════════════════════════════════
+Replace:
+  ✗ "GUIDELINE_FAILURES: error"
+With:
+  ✓ "❌ duplicate annotation '@Inject'
+       → annotation already at line 54
+       → remove from new_content"
+
+LAYER 3: CONTEXT VALIDATION
+════════════════════════════════════════════════════════════════════════════════
+Before replace_lines():
+  ✓ Verify lines match expected content
+  ✓ Warn if decorator nearby
+  ✓ Check brace balance in new_content
+
+LAYER 4: SMART RETRY (OPTIONAL)
+════════════════════════════════════════════════════════════════════════════════
+Track failures:
+  ✓ If replace_lines() fails 2x → suggest replace_method_body()
+  ✓ Provide reasoning in error message
+  ✓ Agent learns when to switch tools
+
+
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                         IMPLEMENTATION SUMMARY                                 ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+PHASE 4A (Quick Wins - 5 hours)
+──────────────────────────────────────────────────────────────────────────────
+File: hunk_generator_tools.py
+  1. Add _check_duplicate_annotations() method
+  2. Add _check_method_brace_balance() method
+  3. Add _check_import_validity() method
+  4. Enhance error messages in verify_guidelines()
+
+File: file_editor.py
+  5. Add tool selection strategy to system prompt
+
+RESULT: elasticsearch passes in 2-3 attempts ✅
+
+
+PHASE 4B (Robustness - 3.5 hours - OPTIONAL)
+──────────────────────────────────────────────────────────────────────────────
+File: edit_attempt_history.py (NEW)
+  6. Create EditAttemptHistory tracker
+  7. Implement smart retry logic
+
+File: hunk_generator_tools.py
+  8. Add context validation to replace_lines()
+
+File: file_editor.py
+  9. Integrate history tracking into agent loop
+
+RESULT: Agent becomes smarter about tool selection ✅
+
+
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                            KEY INSIGHT                                         ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+Before Fix:
+  Agent generates code → Compile fails → Agent retries blindly → Infinite loop
+
+After Fix:
+  Agent generates code → Validate semantics → Report structured errors → 
+  Agent learns why it failed → Agent self-corrects → Converges to solution
+
+The fix teaches the agent what's wrong BEFORE it tries to compile. This allows
+self-correction through semantic feedback instead of blind retry.

@@ -638,7 +638,7 @@ class HunkGeneratorToolkit:
         Call this tool right before finishing your work to double check your edit.
         """
         issues = []
-        
+
         # 1. Truncated structs
         added = [
             line[1:]
@@ -648,12 +648,16 @@ class HunkGeneratorToolkit:
         for line in added:
             s = line.strip()
             if s == "private static final":
-                issues.append("syntax_guard_failed: truncated declaration 'private static final'")
+                issues.append(
+                    "syntax_guard_failed: truncated declaration 'private static final'"
+                )
             elif re.match(r"^(private|public|protected)\s+(static\s+)?(final\s+)?$", s):
                 issues.append(f"syntax_guard_failed: truncated declaration '{s}'")
             elif s.endswith("=") and not s.endswith("=="):
-                issues.append(f"syntax_guard_failed: dangling assignment in added line '{s}'")
-                
+                issues.append(
+                    f"syntax_guard_failed: dangling assignment in added line '{s}'"
+                )
+
         # 2. Static fields inside method body
         lines = (diff_text or "").splitlines()
         context_before = []
@@ -671,11 +675,17 @@ class HunkGeneratorToolkit:
                     close_braces = combined.count("}")
                     depth = open_braces - close_braces
                     if depth > 1:
-                        issues.append(f"semantic_guard_failed: static field inserted inside method body (brace depth={depth})")
-                        
+                        issues.append(
+                            f"semantic_guard_failed: static field inserted inside method body (brace depth={depth})"
+                        )
+
         if issues:
-            return "GUIDELINE_FAILURES:\n- " + "\n- ".join(issues) + "\n\nFix these issues using `replace_lines` again."
-            
+            return (
+                "GUIDELINE_FAILURES:\n- "
+                + "\n- ".join(issues)
+                + "\n\nFix these issues using `replace_lines` again."
+            )
+
         return "ALL_GOOD"
 
     # ------------------------------------------------------------------
@@ -692,7 +702,7 @@ class HunkGeneratorToolkit:
         """
         Replace lines `start_line` to `end_line` (inclusive, 1-indexed) in the target file
         with `new_content`.
-        
+
         To insert new lines without replacing any existing lines, set `start_line` to N and
         `end_line` to N-1 (e.g. start_line=27, end_line=26 will insert before line 27).
 
@@ -715,13 +725,20 @@ class HunkGeneratorToolkit:
         lines = original.splitlines(keepends=True)
         total = len(lines)
         if start_line < 1 or end_line > total or start_line > end_line + 1:
-            return f"ERROR: Invalid range {start_line}-{end_line}. File has {total} lines."
+            return (
+                f"ERROR: Invalid range {start_line}-{end_line}. File has {total} lines."
+            )
 
         # Support inserting lines by letting start_line == end_line + 1
         s_idx = start_line - 1
-        e_idx = end_line # Exclusive
+        e_idx = end_line  # Exclusive
 
-        if new_content and not new_content.endswith("\n") and s_idx < total and lines[s_idx].endswith("\n"):
+        if (
+            new_content
+            and not new_content.endswith("\n")
+            and s_idx < total
+            and lines[s_idx].endswith("\n")
+        ):
             # Ensure proper newline behavior
             new_content += "\n"
 
@@ -730,8 +747,8 @@ class HunkGeneratorToolkit:
 
         # Calculate line delta: how many lines the file grows or shrinks
         old_line_count = max(1, end_line - start_line + 1)
-        new_line_count = new_content.count('\n')
-        if new_content and not new_content.endswith('\n'):
+        new_line_count = new_content.count("\n")
+        if new_content and not new_content.endswith("\n"):
             new_line_count += 1
         delta = new_line_count - old_line_count
 
@@ -745,6 +762,119 @@ class HunkGeneratorToolkit:
             return f"SUCCESS: lines {start_line} to {end_line} replaced. Line delta: {sign}{delta} (subsequent edits below line {end_line} must shift by {sign}{delta})."
         except Exception as exc:
             return f"ERROR: Cannot write file '{file_path}': {exc}"
+
+    # ------------------------------------------------------------------
+    # Tool 10b: edit_file (CLAW-inspired: exact string matching, no line drift)
+    # ------------------------------------------------------------------
+
+    def edit_file(
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+    ) -> str:
+        """
+            Edit a file using exact string matching (CLAW-inspired method).
+
+            This approach COMPLETELY AVOIDS line number drift by:
+            1. Matching exact old_string in file
+            2. Replacing with exact new_string
+            3. No line number calculations needed
+            4. Decorators/braces handled automatically (must match exactly)
+
+            Why use this instead of replace_lines:
+            - Safer for method changes (decorators included in match)
+            - No brace counting needed (must balance exactly)
+            - No context overlap issues (exact match prevents duplication)
+            - Better for structural edits (signatures, methods, fields)
+
+            Args:
+                file_path: Repo-relative path to file
+                old_string: EXACT string to find (including decorators, full lines, exact spacing)
+                new_string: EXACT string to replace it with
+                replace_all: If False (default), replace first occurrence only.
+                            If True, replace all occurrences.
+
+            Returns:
+                SUCCESS message with diff summary, or ERROR message.
+
+            Example (fixing elasticsearch duplicate @Inject):
+                old_str = '''@Inject
+        public TransportGetAllocationStatsAction(
+            TransportService transportService,
+            ...
+        ) {
+            super(...);
+            // OLD IMPLEMENTATION
+        }'''
+
+                new_str = '''@Inject
+        public TransportGetAllocationStatsAction(
+            TransportService transportService,
+            ...
+        ) {
+            super(...);
+            // NEW IMPLEMENTATION
+        }'''
+
+                edit_file(file_path, old_str, new_str)
+                # Result: ✅ No duplicate @Inject (decorator part of exact match)
+        """
+        full_path = self._full_path(file_path)
+
+        # Read original file
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                original_file = f.read()
+        except FileNotFoundError:
+            return f"ERROR: File '{file_path}' not found."
+        except Exception as exc:
+            return f"ERROR: Cannot read file '{file_path}': {exc}"
+
+        # VALIDATION FIRST (CLAW pattern)
+        if old_string == new_string:
+            return "ERROR: old_string and new_string must differ. There is nothing to change."
+
+        if old_string not in original_file:
+            return (
+                f"ERROR: old_string not found in '{file_path}'. "
+                f"Verify the exact string (spacing, decorators, line breaks) matches the file. "
+                f"First 100 chars of search: {old_string[:100]}"
+            )
+
+        # Count occurrences
+        occurrence_count = original_file.count(old_string)
+
+        # THEN mutate
+        if replace_all:
+            updated = original_file.replace(old_string, new_string)
+        else:
+            updated = original_file.replace(old_string, new_string, 1)
+
+        # Write back
+        try:
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(updated)
+        except Exception as exc:
+            return f"ERROR: Cannot write file '{file_path}': {exc}"
+
+        # Calculate statistics for response
+        old_lines = len(old_string.splitlines())
+        new_lines = len(new_string.splitlines())
+        line_delta = old_lines - new_lines
+
+        sign = "+" if line_delta > 0 else ""
+        occurrence_info = (
+            f" ({occurrence_count} occurrence{'s' if occurrence_count != 1 else ''})"
+        )
+
+        return (
+            f"SUCCESS: edit_file replaced {old_lines} lines with {new_lines} lines in '{file_path}'{occurrence_info}. "
+            f"Line delta: {sign}{line_delta}. "
+            f"This edit uses exact string matching (CLAW-inspired) so it avoids line number drift. "
+            f"Call verify_guidelines() next to validate the patch."
+        )
 
     # ------------------------------------------------------------------
     # Tool 11: git_diff_file  (mechanically correct diff after edits)
@@ -852,22 +982,22 @@ class HunkGeneratorToolkit:
         """
         try:
             from mcp_client import McpClient
-            
+
             client = McpClient(self.target_repo_path)
             arguments = {
                 "target_repo_path": self.target_repo_path,
                 "file_path": file_path,
                 "method_signature": method_signature,
-                "new_body": new_body
+                "new_body": new_body,
             }
-            
+
             result = client.call_tool("replace_method_body", arguments)
-            
+
             if result.get("success"):
                 return f"SUCCESS: {result.get('message', 'Method replaced')}"
             else:
                 return f"ERROR: {result.get('error', 'Unknown error')}"
-                
+
         except Exception as exc:
             return f"ERROR: Failed to call MCP server: {exc}"
 
@@ -896,23 +1026,23 @@ class HunkGeneratorToolkit:
         """
         try:
             from mcp_client import McpClient
-            
+
             client = McpClient(self.target_repo_path)
             arguments = {
                 "target_repo_path": self.target_repo_path,
                 "file_path": file_path,
-                "method_signature": method_signature
+                "method_signature": method_signature,
             }
-            
+
             result = client.call_tool("get_method_boundaries", arguments)
-            
+
             if result.get("success"):
                 start = result.get("start_line")
                 end = result.get("end_line")
                 return f"Method boundaries found: lines {start}-{end}"
             else:
                 return f"ERROR: {result.get('error', 'Unknown error')}"
-                
+
         except Exception as exc:
             return f"ERROR: Failed to call MCP server: {exc}"
 
@@ -928,33 +1058,33 @@ class HunkGeneratorToolkit:
     ) -> str:
         """
         Replace a field declaration in a Java file using AST-based approach.
-        
+
         Args:
             file_path: Repo-relative path to the Java file.
             field_name: Name of the field to replace.
             new_declaration: Complete field declaration (e.g., "private final String name;").
-            
+
         Returns:
             "SUCCESS: ..." or "ERROR: ..." message.
         """
         try:
             from mcp_client import McpClient
-            
+
             client = McpClient(self.target_repo_path)
             arguments = {
                 "target_repo_path": self.target_repo_path,
                 "file_path": file_path,
                 "field_name": field_name,
-                "new_declaration": new_declaration
+                "new_declaration": new_declaration,
             }
-            
+
             result = client.call_tool("replace_field", arguments)
-            
+
             if result.get("success"):
                 return f"SUCCESS: {result.get('message', 'Field replaced')}"
             else:
                 return f"ERROR: {result.get('error', 'Unknown error')}"
-                
+
         except Exception as exc:
             return f"ERROR: Failed to call MCP server: {exc}"
 
@@ -970,31 +1100,31 @@ class HunkGeneratorToolkit:
         """
         Insert an import statement into a Java file using AST-based approach.
         Automatically avoids duplicate imports.
-        
+
         Args:
             file_path: Repo-relative path to the Java file.
             import_statement: Import statement (e.g., "java.util.List" or "java.util.*").
-            
+
         Returns:
             "SUCCESS: ..." or "ERROR: ..." message.
         """
         try:
             from mcp_client import McpClient
-            
+
             client = McpClient(self.target_repo_path)
             arguments = {
                 "target_repo_path": self.target_repo_path,
                 "file_path": file_path,
-                "import_statement": import_statement
+                "import_statement": import_statement,
             }
-            
+
             result = client.call_tool("insert_import", arguments)
-            
+
             if result.get("success"):
                 return f"SUCCESS: {result.get('message', 'Import inserted')}"
             else:
                 return f"ERROR: {result.get('error', 'Unknown error')}"
-                
+
         except Exception as exc:
             return f"ERROR: Failed to call MCP server: {exc}"
 
@@ -1009,31 +1139,31 @@ class HunkGeneratorToolkit:
     ) -> str:
         """
         Remove a method from a Java file using AST-based approach.
-        
+
         Args:
             file_path: Repo-relative path to the Java file.
             method_signature: Method signature to remove (supports wildcards like "method(...)").
-            
+
         Returns:
             "SUCCESS: ..." or "ERROR: ..." message.
         """
         try:
             from mcp_client import McpClient
-            
+
             client = McpClient(self.target_repo_path)
             arguments = {
                 "target_repo_path": self.target_repo_path,
                 "file_path": file_path,
-                "method_signature": method_signature
+                "method_signature": method_signature,
             }
-            
+
             result = client.call_tool("remove_method", arguments)
-            
+
             if result.get("success"):
                 return f"SUCCESS: {result.get('message', 'Method removed')}"
             else:
                 return f"ERROR: {result.get('error', 'Unknown error')}"
-                
+
         except Exception as exc:
             return f"ERROR: Failed to call MCP server: {exc}"
 
@@ -1363,6 +1493,16 @@ class HunkGeneratorToolkit:
                     "Replace a specific block of lines (start_line to end_line, inclusive, 1-indexed) "
                     "with new_content. This is extremely robust as it does not rely on old_string text matching. "
                     "To insert new lines without replacing any, use start_line = N, end_line = N-1."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.edit_file,
+                name="edit_file",
+                description=(
+                    "Edit a file using exact string matching (CLAW-inspired). "
+                    "Find old_string (exact match including decorators) and replace with new_string. "
+                    "PREFERRED for method changes, decorators, structural edits - avoids line drift completely. "
+                    "Set replace_all=true to replace all occurrences, false for first only."
                 ),
             ),
             StructuredTool.from_function(

@@ -71,13 +71,37 @@ The following atomic operations were proposed by the Planning Agent. Use them as
 {hunk_generation_plan}
 
 ## Essential Guidelines (CRITICAL)
-- **Use the Plan as a Hint**: The 'str_replace Edit Plan' above contains candidate `old_string` and `new_string` values. If the Planning Agent marked them as `verified: true`, they are extremely likely to match the target file exactly.
-- **AST First, Plan Second, Lines Last**:
-    1. Try AST tools (`replace_method_body`, etc.) first.
-    2. If AST is not applicable, try using the exact `old_string` from the Edit Plan with `str_replace_in_file` (if you are sure it exists).
-    3. If that fails, use `read_file_window` to find the code and use `replace_lines`.
+
+### Tool Selection Priority (CLAW-Inspired String Matching First)
+**NEW APPROACH**: Use exact string matching (`edit_file`) for structural changes - it avoids all line drift issues!
+
+1. **HIGHEST PRIORITY: edit_file (CLAW-inspired, exact string matching)**
+   - Use for: Method changes, decorators (@Inject, @Override), constructors, class structure
+   - Why: No line number calculations, exact match prevents decorator duplication, braces must balance
+   - Syntax: Provide complete `old_string` (with decorators, all lines, exact spacing) and `new_string`
+   - Example: To change a @Inject constructor, copy ENTIRE constructor (including @Inject line) as old_string
+
+2. **SECOND PRIORITY: AST tools (replace_method_body, replace_field, insert_import, remove_method)**
+   - Use for: When edit_file is too complex or AST is specifically needed
+   - Immune to line drift, locates by method signature not line numbers
+
+3. **LAST RESORT: replace_lines (line-based, fallback only)**
+   - Use for: Simple single-line changes that don't involve decorators
+   - Requires careful line number tracking and delta management
+
+### How to Use edit_file Correctly
+1. Read the section with `read_file_window` or `grep_in_file`
+2. Copy EXACT old_string (including decorators, @annotations, all lines, exact spacing/indentation)
+3. Create new_string with your changes (must be exact too)
+4. Call: `edit_file(file_path, old_string, new_string, replace_all=False)`
+5. Verify with `verify_guidelines()` on git_diff_file() output
+
+### Why edit_file Solves Elasticsearch Duplicate @Inject Problem
+- **OLD WAY (FAILED)**: `replace_lines(55-77, new_content_WITH_@Inject)` → Decorator at line 54 was context, new_content also had it → duplicate
+- **NEW WAY (WORKS)**: `edit_file(old_string="""@Inject\n    public TransportGetAllocationStatsAction(...)\n...""", new_string=...)` → Decorator included in exact match, can't duplicate
+
+- **Use the Plan as a Hint**: The 'str_replace Edit Plan' above contains candidate `old_string` and `new_string` values. If the Planning Agent marked them as `verified: true`, they are extremely likely to match the target file exactly. **Try these first with edit_file()!**
 - **No Hallucinations**: You cannot call any methods or variables that are not explicitly defined in the file or standard JDK, UNLESS they are explicitly mapped in the Consistency Map. NEVER invent static helper methods or "simplify" object instantiations if they deviate from the mainline patch logic.
-- **Exact Line Matches**: When relying on line fallbacks, ensure you replace the entire block correctly. To just insert new code without replacing anything, use start_line = N, end_line = N-1.
 - **Loyalty to Mainline Patterns**: Stick as closely as possible to the mainline patch's implementation patterns (e.g., lambda structures, specific class constructors). Only deviate if a symbol in the target file is renamed or missing (check Consistency Map and grep first).
 - **Adapt to Target Syntax**: The target file may use completely different variables (e.g. `ob` instead of `builder`) or slightly different method names. YOU MUST READ the target code and ADAPT the logic. DO NOT blindly copy-paste the mainline diff syntax if the target file uses different patterns!
 
