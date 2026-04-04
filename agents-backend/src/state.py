@@ -166,6 +166,9 @@ class AgentState(TypedDict):
 
     # --- Phase 0: Pre-computed analysis ---
     patch_analysis: list  # List[FileChange] - from PatchAnalyzer
+    patch_complexity: NotRequired[str]  # TRIVIAL | STRUCTURAL | REWRITE
+    complexity_reason: NotRequired[str]  # Deterministic classifier reason
+    complexity_details: NotRequired[dict[str, Any]]  # Classifier diagnostics
 
     # --- Phase 0 fast-path result ---
     fast_path_success: bool  # True if git apply --check & tests passed cleanly
@@ -231,6 +234,12 @@ class AgentState(TypedDict):
     validation_results: dict[
         str, dict
     ]  # Detailed results per step (e.g. "hunk_application": {...})
+    validation_infrastructure_failure: NotRequired[
+        bool
+    ]  # True when failure is test infra/runner related (not code generation)
+    validation_infrastructure_inconclusive: NotRequired[
+        bool
+    ]  # True when result is infra-inconclusive and should stop retries
     validation_failure_category: NotRequired[
         str
     ]  # "path_or_file_operation" | "context_mismatch" | ...

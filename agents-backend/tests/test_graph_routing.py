@@ -1,0 +1,38 @@
+import os
+import sys
+import unittest
+
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
+
+from graph import route_after_structural, route_validation
+
+
+class TestGraphRouting(unittest.TestCase):
+    def test_route_after_structural_skips_planning_for_structural(self):
+        state = {"patch_complexity": "STRUCTURAL"}
+        self.assertEqual(route_after_structural(state), "hunk_generator")
+
+    def test_route_after_structural_keeps_planning_for_rewrite(self):
+        state = {"patch_complexity": "REWRITE"}
+        self.assertEqual(route_after_structural(state), "planning_agent")
+
+    def test_validation_infra_inconclusive_ends(self):
+        state = {
+            "validation_passed": False,
+            "validation_attempts": 1,
+            "validation_infrastructure_inconclusive": True,
+        }
+        self.assertEqual(route_validation(state), "END")
+
+    def test_validation_infra_category_ends(self):
+        state = {
+            "validation_passed": False,
+            "validation_attempts": 1,
+            "validation_failure_category": "test_runner_config",
+        }
+        self.assertEqual(route_validation(state), "END")
+
+
+if __name__ == "__main__":
+    unittest.main()

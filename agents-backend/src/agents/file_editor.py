@@ -42,6 +42,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from state import AgentState, AdaptedHunk, FileEdit, SemanticBlueprint
 from utils.llm_provider import get_llm
+from utils.patch_analyzer import PatchAnalyzer
 from utils.token_counter import (
     add_usage,
     count_messages_tokens,
@@ -234,6 +235,87 @@ def _normalize_rel_path(path: str) -> str:
     if p.startswith("a/") or p.startswith("b/"):
         p = p[2:]
     return p
+
+
+def _extract_removed_text(hunk_text: str) -> str:
+    out = []
+    for line in (hunk_text or "").splitlines()[1:]:
+        if line.startswith("-") and not line.startswith("---"):
+            out.append(line[1:])
+    return "\n".join(out)
+
+
+def _extract_added_text(hunk_text: str) -> str:
+    out = []
+    for line in (hunk_text or "").splitlines()[1:]:
+        if line.startswith("+") and not line.startswith("+++"):
+            out.append(line[1:])
+    return "\n".join(out)
+
+
+def _extract_context_lines(hunk_text: str) -> list[str]:
+    out = []
+    for line in (hunk_text or "").splitlines()[1:]:
+        if line.startswith(" "):
+            out.append(line[1:])
+    return out
+
+
+def _classify_edit_type(hunk_text: str) -> str:
+    lines = (hunk_text or "").splitlines()[1:]
+    has_add = any(l.startswith("+") and not l.startswith("+++") for l in lines)
+    has_del = any(l.startswith("-") and not l.startswith("---") for l in lines)
+    if has_add and not has_del:
+        return "insert_after"
+    if has_del and not has_add:
+        return "delete"
+    return "replace"
+
+
+def _apply_consistency_map(text: str, consistency_map: dict[str, str]) -> str:
+    if not text or not consistency_map:
+        return text
+    adapted = text
+    for old, new in consistency_map.items():
+        adapted = re.sub(rf"\b{re.escape(str(old))}\b", str(new), adapted)
+    return adapted
+
+
+def _build_fallback_plan_entries(
+    raw_hunks: list[str],
+    target_file: str,
+    consistency_map: dict[str, str],
+) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for idx, raw_hunk in enumerate(raw_hunks or []):
+        edit_type = _classify_edit_type(raw_hunk)
+        old_string = _extract_removed_text(raw_hunk)
+        new_string = _apply_consistency_map(
+            _extract_added_text(raw_hunk), consistency_map or {}
+        )
+
+        if edit_type in {"insert_after", "insert_before"}:
+            context = _extract_context_lines(raw_hunk)
+            anchor = context[0] if context else ""
+            old_string = anchor
+            new_string = (anchor + "\n" + new_string) if anchor else new_string
+
+        entries.append(
+            {
+                "hunk_index": idx,
+                "target_file": target_file,
+                "edit_type": edit_type,
+                "old_string": old_string,
+                "new_string": new_string,
+                "verified": False,
+                "verification_result": "file_editor_fallback_no_planner",
+                "notes": "fallback_no_planning_agent",
+                "adaptation_type": "TYPE_II",
+                "base_adaptation_type": "TYPE_II",
+                "execution_type": "TYPE_II",
+            }
+        )
+    return entries
 
 
 def _git_diff_file(target_repo_path: str, rel_path: str) -> str:
@@ -1410,6 +1492,15 @@ async def _invoke_react_with_backoff(
     raise RuntimeError("ReAct invocation failed without explicit exception")
 
 
+def _react_tool_budget_for_complexity(complexity: str) -> int:
+    c = str(complexity or "").strip().upper()
+    if c == "TRIVIAL":
+        return 4
+    if c == "STRUCTURAL":
+        return 8
+    return 15
+
+
 def _trajectory_has_surrounding_code_read(
     *,
     trajectory: list[dict[str, Any]],
@@ -1441,6 +1532,7 @@ async def _run_react_edit_pass(
     error_context: str,
     current_attempt_trajectory: list[dict[str, Any]],
     extra_retry_context: str = "",
+    patch_complexity: str = "REWRITE",
 ) -> tuple[bool, str]:
     import json
 
@@ -1507,6 +1599,7 @@ async def _run_react_edit_pass(
             "using read_file_window/read_full_file/get_exact_lines before applying fixes."
         )
 
+    tool_budget = _react_tool_budget_for_complexity(patch_complexity)
     editor_agent = create_react_agent(llm, toolkit.get_tools())
 
     try:
@@ -1527,6 +1620,13 @@ async def _run_react_edit_pass(
                 ]
             },
         )
+
+        tool_calls_count = 0
+        for m in response.get("messages", []):
+            if hasattr(m, "tool_calls") and m.tool_calls:
+                tool_calls_count += len(m.tool_calls)
+        if tool_calls_count > tool_budget:
+            return False, f"tool_budget_exceeded:{tool_calls_count}>{tool_budget}"
 
         last_msg = response["messages"][-1]
         print(f"    Agent 3: Agent finished. Last msg: {str(last_msg.content)[:100]}")
@@ -1631,6 +1731,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
     mapped_target_context: dict = state.get("mapped_target_context") or {}
     hunk_generation_plan: dict = state.get("hunk_generation_plan") or {}
+    patch_complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
     semantic_blueprint: SemanticBlueprint = state.get("semantic_blueprint")
     patch_analysis: list = state.get("patch_analysis") or []
     patch_diff: str = state.get("patch_diff") or ""
@@ -1677,6 +1778,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
     # Setup
     llm = get_llm(temperature=0)
     toolkit = HunkGeneratorToolkit(target_repo_path) if target_repo_path else None
+    analyzer = PatchAnalyzer()
+    raw_hunks_by_file = analyzer.extract_raw_hunks(patch_diff)
 
     retriever = None
     if target_repo_path and mainline_repo_path:
@@ -1751,6 +1854,18 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
         # Get plan entries for this file
         plan_entries: list[dict[str, Any]] = hunk_generation_plan.get(mainline_file, [])
+        if not plan_entries and patch_complexity in {"TRIVIAL", "STRUCTURAL"}:
+            fallback_raw_hunks = raw_hunks_by_file.get(mainline_file, [])
+            plan_entries = _build_fallback_plan_entries(
+                raw_hunks=fallback_raw_hunks,
+                target_file=target_file,
+                consistency_map=state.get("consistency_map") or {},
+            )
+            if plan_entries:
+                print(
+                    f"  Agent 3: Built {len(plan_entries)} deterministic fallback edit(s) for {mainline_file}."
+                )
+
         if not plan_entries:
             print(f"  Agent 3: No plan entries for {mainline_file} - skipping.")
             continue
@@ -1884,6 +1999,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     error_context=error_context,
                     current_attempt_trajectory=current_attempt_trajectory,
                     extra_retry_context=apply_reason,
+                    patch_complexity=patch_complexity,
                 )
                 if not react_ok:
                     task_entry["status"] = "failed"
@@ -1905,6 +2021,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 validation_attempts=validation_attempts,
                 error_context=error_context,
                 current_attempt_trajectory=current_attempt_trajectory,
+                patch_complexity=patch_complexity,
             )
             if not react_ok:
                 print(f"    Agent 3: Agent failed: {react_reason}")

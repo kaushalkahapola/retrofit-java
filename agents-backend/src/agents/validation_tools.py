@@ -95,6 +95,69 @@ def _clean_spotbugs_output(output: str) -> str:
     return result.strip() if result.strip() else "SpotBugs completed with no findings."
 
 
+def classify_test_failure_signal(
+    *,
+    output_text: str,
+    transition_reason: str = "",
+    success: bool | None = None,
+    compile_error: bool = False,
+) -> Dict[str, Any]:
+    """Classify test-stage failures into code vs infrastructure categories."""
+    out = str(output_text or "")
+    out_lower = out.lower()
+    reason = str(transition_reason or "")
+    reason_lower = reason.lower()
+
+    if (
+        "retrofittest_runner_config_unresolved" in out_lower
+        or "cannot locate tasks that match" in out_lower
+        or "task 'test' is ambiguous" in out_lower
+    ):
+        return {
+            "category": "test_runner_config",
+            "infrastructure_failure": True,
+            "infrastructure_inconclusive": True,
+            "reason": "Gradle test task resolution failed (ambiguous/missing task).",
+        }
+
+    if "inconclusive: relevant target tests were not observed" in reason_lower:
+        return {
+            "category": "inconclusive_tests_observed_none",
+            "infrastructure_failure": True,
+            "infrastructure_inconclusive": True,
+            "reason": "Relevant target tests were not observed in baseline/patched runs.",
+        }
+
+    if compile_error:
+        return {
+            "category": "context_mismatch",
+            "infrastructure_failure": False,
+            "infrastructure_inconclusive": False,
+            "reason": "Test execution failed due to compilation errors.",
+        }
+
+    if success is False and (
+        "connection refused" in out_lower
+        or "timed out" in out_lower
+        or "daemon disappeared" in out_lower
+        or "could not resolve" in out_lower
+        and "dependency" in out_lower
+    ):
+        return {
+            "category": "test_infrastructure",
+            "infrastructure_failure": True,
+            "infrastructure_inconclusive": True,
+            "reason": "Test execution failed due to infrastructure/runtime issues.",
+        }
+
+    return {
+        "category": "unknown",
+        "infrastructure_failure": False,
+        "infrastructure_inconclusive": False,
+        "reason": "No infrastructure-specific signal detected.",
+    }
+
+
 class ValidationToolkit:
     def test_and_restore(self, test_classes: List[str]) -> Dict:
         """

@@ -1,6 +1,7 @@
 """
 Tests for ValidationToolkit — specifically the new Phase 3 dry-run methods.
 """
+
 import unittest
 import sys
 import os
@@ -16,6 +17,7 @@ class TestApplyHunkDryRun(unittest.TestCase):
         # Patch get_client so we don't need a live MCP server
         with patch("agents.validation_tools.get_client", return_value=MagicMock()):
             from agents.validation_tools import ValidationToolkit
+
             return ValidationToolkit("/fake/repo")
 
     def test_dry_run_success(self):
@@ -27,8 +29,7 @@ class TestApplyHunkDryRun(unittest.TestCase):
 
         with patch("agents.validation_tools.subprocess.run", return_value=mock_result):
             result = toolkit.apply_hunk_dry_run(
-                "src/Foo.java",
-                "@@ -1,2 +1,3 @@\n int x;\n+int y;\n"
+                "src/Foo.java", "@@ -1,2 +1,3 @@\n int x;\n+int y;\n"
             )
         self.assertTrue(result["success"])
 
@@ -41,8 +42,7 @@ class TestApplyHunkDryRun(unittest.TestCase):
 
         with patch("agents.validation_tools.subprocess.run", return_value=mock_result):
             result = toolkit.apply_hunk_dry_run(
-                "src/Foo.java",
-                "@@ -999,2 +999,3 @@\n int x;\n+bad;\n"
+                "src/Foo.java", "@@ -999,2 +999,3 @@\n int x;\n+bad;\n"
             )
         self.assertFalse(result["success"])
         self.assertIn("error", result["output"])
@@ -63,8 +63,10 @@ class TestApplyHunkDryRun(unittest.TestCase):
         def capture_unlink(path):
             unlinked.append(path)
 
-        with patch("agents.validation_tools.subprocess.run", return_value=mock_result), \
-             patch("agents.validation_tools.os.unlink", side_effect=capture_unlink):
+        with (
+            patch("agents.validation_tools.subprocess.run", return_value=mock_result),
+            patch("agents.validation_tools.os.unlink", side_effect=capture_unlink),
+        ):
             result = toolkit.apply_hunk_dry_run("src/Foo.java", "@@ -1 +1 @@\n+x;\n")
 
         self.assertTrue(result["success"])
@@ -76,8 +78,16 @@ class TestApplyHunkDryRun(unittest.TestCase):
         toolkit = self._make_toolkit()
         unlinked = []
 
-        with patch("agents.validation_tools.subprocess.run", side_effect=OSError("disk error")), \
-             patch("agents.validation_tools.os.unlink", side_effect=lambda p: unlinked.append(p)):
+        with (
+            patch(
+                "agents.validation_tools.subprocess.run",
+                side_effect=OSError("disk error"),
+            ),
+            patch(
+                "agents.validation_tools.os.unlink",
+                side_effect=lambda p: unlinked.append(p),
+            ),
+        ):
             result = toolkit.apply_hunk_dry_run("src/Foo.java", "@@ -1 +1 @@\n+x;\n")
 
         self.assertFalse(result["success"])
@@ -91,6 +101,7 @@ class TestBuildPatchFile(unittest.TestCase):
     def _make_toolkit(self):
         with patch("agents.validation_tools.get_client", return_value=MagicMock()):
             from agents.validation_tools import ValidationToolkit
+
             return ValidationToolkit("/fake/repo")
 
     def test_patch_file_has_expected_headers(self):
@@ -132,6 +143,7 @@ class TestRunTargetedTests(unittest.TestCase):
     def _make_toolkit(self):
         with patch("agents.validation_tools.get_client", return_value=MagicMock()):
             from agents.validation_tools import ValidationToolkit
+
             return ValidationToolkit("/fake/repo")
 
     def test_run_targeted_tests_success(self):
@@ -167,15 +179,22 @@ class TestRunTargetedTests(unittest.TestCase):
         self.assertFalse(res["success"])
         self.assertFalse(res["compile_error"])
 
+
 class TestRestoreRepoState(unittest.TestCase):
     def _make_toolkit(self):
         with patch("agents.validation_tools.get_client", return_value=MagicMock()):
             from agents.validation_tools import ValidationToolkit
+
             return ValidationToolkit("/fake/repo")
 
     def test_restore_repo_success(self):
         toolkit = self._make_toolkit()
         with patch("agents.validation_tools.subprocess.run") as mock_run:
+            reset_res = MagicMock()
+            reset_res.returncode = 0
+            clean_res = MagicMock()
+            clean_res.returncode = 0
+            mock_run.side_effect = [reset_res, clean_res]
             res = toolkit.restore_repo_state()
             self.assertTrue(res)
             self.assertEqual(mock_run.call_count, 2)
@@ -185,8 +204,9 @@ class TestRunBuildScript(unittest.TestCase):
     def _make_toolkit(self):
         with patch("agents.validation_tools.get_client", return_value=MagicMock()):
             from agents.validation_tools import ValidationToolkit
+
             return ValidationToolkit("/fake/repo")
-            
+
     @patch("agents.validation_tools.os.path.exists", return_value=False)
     @patch("agents.validation_tools.subprocess.run")
     def test_maven_build(self, mock_run, mock_exists):
@@ -196,15 +216,19 @@ class TestRunBuildScript(unittest.TestCase):
         mock_result.stdout = "BUILD SUCCESS"
         mock_result.stderr = ""
         mock_run.return_value = mock_result
-        
+
         res = toolkit.run_build_script()
         self.assertTrue(res["success"])
         mock_run.assert_called_with(
             ["mvn", "clean", "compile"],
-            capture_output=True, text=True, cwd="/fake/repo"
+            capture_output=True,
+            text=True,
+            cwd="/fake/repo",
         )
-        
-    @patch("agents.validation_tools.os.path.exists", return_value=True) # returns true for build.gradle
+
+    @patch(
+        "agents.validation_tools.os.path.exists", return_value=True
+    )  # returns true for build.gradle
     @patch("agents.validation_tools.subprocess.run")
     def test_gradle_build(self, mock_run, mock_exists):
         toolkit = self._make_toolkit()
@@ -213,21 +237,27 @@ class TestRunBuildScript(unittest.TestCase):
         mock_result.stdout = "BUILD SUCCESSFUL"
         mock_result.stderr = ""
         mock_run.return_value = mock_result
-        
+
         res = toolkit.run_build_script()
         self.assertTrue(res["success"])
         mock_run.assert_called_with(
-            ["gradle", "build", "-x", "test"],
-            capture_output=True, text=True, cwd="/fake/repo"
+            ["gradle", "testClasses"],
+            capture_output=True,
+            text=True,
+            cwd="/fake/repo",
         )
+
 
 class TestRunTargetedTestsGradle(unittest.TestCase):
     def _make_toolkit(self):
         with patch("agents.validation_tools.get_client", return_value=MagicMock()):
             from agents.validation_tools import ValidationToolkit
+
             return ValidationToolkit("/fake/repo")
-            
-    @patch("agents.validation_tools.os.path.exists", return_value=True) # returns true for build.gradle
+
+    @patch(
+        "agents.validation_tools.os.path.exists", return_value=True
+    )  # returns true for build.gradle
     @patch("agents.validation_tools.subprocess.run")
     def test_run_gradle_tests(self, mock_run, mock_exists):
         toolkit = self._make_toolkit()
@@ -236,13 +266,50 @@ class TestRunTargetedTestsGradle(unittest.TestCase):
         mock_result.stdout = "BUILD SUCCESSFUL"
         mock_result.stderr = ""
         mock_run.return_value = mock_result
-        
+
         res = toolkit.run_targeted_tests(["org.example.TestA", "org.example.TestB"])
         self.assertTrue(res["success"])
         mock_run.assert_called_with(
-            ["gradle", "test", "--tests", "org.example.TestA", "--tests", "org.example.TestB"],
-            capture_output=True, text=True, cwd="/fake/repo"
+            [
+                "gradle",
+                "test",
+                "--tests",
+                "org.example.TestA",
+                "--tests",
+                "org.example.TestB",
+            ],
+            capture_output=True,
+            text=True,
+            cwd="/fake/repo",
         )
+
+
+class TestClassifyTestFailureSignal(unittest.TestCase):
+    def test_detects_ambiguous_gradle_task_as_runner_config(self):
+        from agents.validation_tools import classify_test_failure_signal
+
+        res = classify_test_failure_signal(
+            output_text="Task 'test' is ambiguous in project ':x-pack:qa:rolling-upgrade'",
+            transition_reason="",
+            success=False,
+            compile_error=False,
+        )
+        self.assertEqual(res["category"], "test_runner_config")
+        self.assertTrue(res["infrastructure_failure"])
+        self.assertTrue(res["infrastructure_inconclusive"])
+
+    def test_detects_inconclusive_transition_as_infra(self):
+        from agents.validation_tools import classify_test_failure_signal
+
+        res = classify_test_failure_signal(
+            output_text="",
+            transition_reason="Inconclusive: Relevant target tests were not observed in baseline or patched runs.",
+            success=False,
+            compile_error=False,
+        )
+        self.assertEqual(res["category"], "inconclusive_tests_observed_none")
+        self.assertTrue(res["infrastructure_failure"])
+        self.assertTrue(res["infrastructure_inconclusive"])
 
 
 if __name__ == "__main__":

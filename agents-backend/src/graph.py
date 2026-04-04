@@ -65,6 +65,24 @@ def route_phase_0(state: AgentState) -> str:
     return "context_analyzer"
 
 
+def route_after_structural(state: AgentState) -> str:
+    """
+    Route after structural locator using deterministic complexity class.
+
+    - REWRITE: keep planning node.
+    - TRIVIAL/STRUCTURAL: skip planning and go directly to file editor.
+    """
+    complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
+    if complexity == "REWRITE":
+        print("Router: complexity=REWRITE -> planning_agent.")
+        return "planning_agent"
+
+    print(
+        f"Router: complexity={complexity or 'UNKNOWN'} -> skip planning, go hunk_generator."
+    )
+    return "hunk_generator"
+
+
 def route_validation(state: AgentState) -> str:
     """
     After Agent 4 (validation):
@@ -79,19 +97,48 @@ def route_validation(state: AgentState) -> str:
         print(f"Router: Validation PASSED after {attempts} attempt(s). Done.")
         return "END"
 
-    if attempts < MAX_VALIDATION_ATTEMPTS:
-        failure_category = (
-            (state.get("validation_failure_category") or "").strip().lower()
+    failure_category = (state.get("validation_failure_category") or "").strip().lower()
+    infra_inconclusive = bool(
+        state.get("validation_infrastructure_inconclusive", False)
+    )
+    infra_failure = bool(state.get("validation_infrastructure_failure", False))
+
+    if infra_inconclusive or failure_category in {
+        "test_runner_config",
+        "test_infrastructure",
+        "inconclusive_tests_observed_none",
+    }:
+        print(
+            "Router: Validation failed due to test infrastructure/runner issue. "
+            "Stopping retries as infrastructure-inconclusive."
         )
+        return "END"
+
+    if infra_failure:
+        print(
+            "Router: Validation reported infrastructure failure. "
+            "Not retrying generation."
+        )
+        return "END"
+
+    if attempts < MAX_VALIDATION_ATTEMPTS:
         failed_stage = (state.get("validation_failed_stage") or "").strip().lower()
+        complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
 
         # 1. Identical Patch Guard: force replanning if the patch didn't change
         # but validation still fails.
         if failed_stage == "generation_contract_failed":
+            if complexity == "REWRITE":
+                print(
+                    "Router: Generation contract FAILED on REWRITE patch. "
+                    "Routing to planning_agent."
+                )
+                return "planning_agent"
             print(
-                f"Router: Generation contract FAILED. Routing to planning_agent for structural fix."
+                "Router: Generation contract FAILED on non-REWRITE patch. "
+                "Routing to hunk_generator deterministic/reactive retry."
             )
-            return "planning_agent"
+            return "hunk_generator"
 
         build_diagnostics = (
             (state.get("validation_results") or {}).get("build") or {}
@@ -120,36 +167,60 @@ def route_validation(state: AgentState) -> str:
             "context_mismatch",
             "hunk_application_failed",
         }:
+            if complexity == "REWRITE":
+                print(
+                    f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
+                    "context mismatch on REWRITE patch. Routing to planning_agent."
+                )
+                return "planning_agent"
             print(
                 f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
-                "context mismatch. Routing to planning_agent for anchor replanning."
+                "context mismatch on non-REWRITE patch. Routing to hunk_generator."
             )
-            return "planning_agent"
+            return "hunk_generator"
         if failure_category == "context_mismatch" and failed_stage in {
             "hunk_sanity_failed",
             "generation_contract_failed",
             "incomplete_todo_steps",
         }:
+            if complexity == "REWRITE":
+                print(
+                    f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) due "
+                    f"generation stage '{failed_stage}' on REWRITE patch. Routing to planning_agent."
+                )
+                return "planning_agent"
             print(
                 f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) due "
-                f"generation stage '{failed_stage}'. Routing to planning_agent."
+                f"generation stage '{failed_stage}' on non-REWRITE patch. Routing to hunk_generator."
             )
-            return "planning_agent"
+            return "hunk_generator"
         if failure_category == "context_mismatch" and (
             "api_or_signature_mismatch" in build_issue_types
             or "java_syntax_or_patch_artifact" in build_issue_types
         ):
+            if complexity == "REWRITE":
+                print(
+                    f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
+                    f"build diagnostics {sorted(build_issue_types)} on REWRITE patch. Routing to planning_agent."
+                )
+                return "planning_agent"
             print(
                 f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
-                f"build diagnostics {sorted(build_issue_types)}. Routing to planning_agent."
+                f"build diagnostics {sorted(build_issue_types)} on non-REWRITE patch. Routing to hunk_generator."
             )
-            return "planning_agent"
+            return "hunk_generator"
         if failure_category == "empty_generation":
+            if complexity == "REWRITE":
+                print(
+                    f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
+                    "empty generation output on REWRITE patch. Routing to planning_agent."
+                )
+                return "planning_agent"
             print(
                 f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
-                "empty generation output. Routing to planning_agent."
+                "empty generation output on non-REWRITE patch. Routing to hunk_generator."
             )
-            return "planning_agent"
+            return "hunk_generator"
         print(
             f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}). "
             "Routing back to hunk_generator for retry."
@@ -201,7 +272,14 @@ workflow.add_conditional_edges(
 
 # Linear pipeline: Agent 1 -> Agent 2 -> Planner -> Agent 3
 workflow.add_edge("context_analyzer", "structural_locator")
-workflow.add_edge("structural_locator", "planning_agent")
+workflow.add_conditional_edges(
+    "structural_locator",
+    route_after_structural,
+    {
+        "planning_agent": "planning_agent",
+        "hunk_generator": "hunk_generator",
+    },
+)
 workflow.add_edge("planning_agent", "hunk_generator")
 workflow.add_edge("hunk_generator", "validation")
 
