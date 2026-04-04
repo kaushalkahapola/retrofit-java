@@ -9,22 +9,22 @@
 
 ## Code File Mappings
 
-### `server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java`
+### `x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java`
 
 **Hunks in this file**: 6
 
-**Git Resolution**: Found `server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java`
+**Git Resolution**: Found `x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 31–31 |
-| 2 | declaration | `<import>` | `<import>` | 40–40 |
-| 3 | declaration | `<class_declaration>` | `<class_declaration>` | 58–58 |
-| 4 | core_fix | `hunk_4` | `None` | 77–77 |
-| 5 | declaration | `<class_declaration>` | `<class_declaration>` | 105–105 |
-| 6 | guard | `hunk_6` | `None` | 135–135 |
+| 1 | declaration | `<import>` | `<import>` | 24–24 |
+| 2 | declaration | `<import>` | `<import>` | 66–66 |
+| 3 | core_fix | `hunk_3` | `None` | 152–152 |
+| 4 | core_fix | `hunk_4` | `None` | 171–171 |
+| 5 | core_fix | `setBlockWrites` | `setBlockWrites` | 225–225 |
+| 6 | core_fix | `getIndexDocCount` | `getIndexDocCount` | 420–420 |
 ## Test File Mappings
 
 

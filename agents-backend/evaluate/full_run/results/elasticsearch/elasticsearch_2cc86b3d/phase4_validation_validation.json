@@ -5,5 +5,5 @@
   "validation_failure_category": "empty_generation",
   "validation_retry_files": [],
   "force_type_v_until_success": true,
-  "force_type_v_reason": "missing_required_symbol:newForked"
+  "force_type_v_reason": "type_v_unverified_plan_entries"
 }
