@@ -92,6 +92,33 @@ Rules:
 """
 
 
+_TYPE_V_REPAIR_SYSTEM = """\
+You are a specialized TYPE_V repair subagent for backport planning.
+
+You receive one unresolved operation where old_string did not match target file text.
+Your task is to produce ONE corrected operation that preserves semantic intent and can apply on target.
+
+Rules:
+- Be conservative and minimal.
+- Reuse existing target symbols and call chains.
+- old_string MUST be verbatim from target file.
+- Prefer deterministic anchor-based edits from provided candidates.
+- Return JSON only.
+
+Output schema:
+{
+  "found_equivalent": true|false,
+  "strategy": "replace_exact|replace_method_block|insert_before_anchor|insert_after_anchor",
+  "edit_type": "replace|insert_before|insert_after|delete",
+  "anchor_line_text": "exact anchor line chosen from candidates or empty",
+  "old_string": "...",
+  "new_string": "...",
+  "reason": "short explanation",
+  "confidence": 0.0
+}
+"""
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -940,6 +967,395 @@ def _derive_api_inventory_signals(
     }
 
 
+def _extract_method_windows_from_content(
+    content: str, max_methods: int = 24
+) -> list[dict[str, Any]]:
+    lines = (content or "").splitlines()
+    out: list[dict[str, Any]] = []
+    if not lines:
+        return out
+
+    sig_rx = re.compile(
+        r"\b(?:public|protected|private)\s+(?:static\s+)?(?:final\s+)?[\w<>,\[\]\s?]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("
+    )
+    i = 0
+    while i < len(lines) and len(out) < max_methods:
+        line = lines[i]
+        m = sig_rx.search(line)
+        if not m:
+            i += 1
+            continue
+
+        name = m.group(1)
+        start = i
+        depth = 0
+        began = False
+        j = i
+        while j < len(lines):
+            l = lines[j]
+            for ch in l:
+                if ch == "{":
+                    depth += 1
+                    began = True
+                elif ch == "}":
+                    depth -= 1
+            if began and depth <= 0:
+                break
+            j += 1
+        end = min(j, len(lines) - 1)
+        snippet = "\n".join(lines[start : end + 1])
+        out.append(
+            {
+                "name": name,
+                "start_line": start + 1,
+                "end_line": end + 1,
+                "snippet": snippet,
+            }
+        )
+        i = end + 1
+
+    return out
+
+
+def _extract_anchor_candidates_from_content(
+    content: str, max_candidates: int = 120
+) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in (content or "").splitlines():
+        line = raw.rstrip("\n")
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith(("//", "/*", "*", "package ")):
+            continue
+        if len(s) < 10:
+            continue
+        if (
+            s.startswith("import ")
+            or s.startswith("private ")
+            or s.startswith("protected ")
+            or s.startswith("public ")
+            or ".andThen(" in s
+            or "newForked(" in s
+            or "andThenApply(" in s
+            or "listener." in s
+            or "return " in s
+        ):
+            key = re.sub(r"\s+", " ", s)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(line)
+            if len(out) >= max_candidates:
+                break
+    return out
+
+
+def _build_method_block_map(content: str) -> dict[str, str]:
+    windows = _extract_method_windows_from_content(content, max_methods=200)
+    out: dict[str, str] = {}
+    for w in windows:
+        name = str(w.get("name") or "").strip()
+        snippet = str(w.get("snippet") or "")
+        if name and snippet:
+            out[name] = snippet
+    return out
+
+
+def _extract_primary_method_name_from_text(text: str) -> str:
+    m = re.search(
+        r"\b(?:public|protected|private)\s+(?:static\s+)?(?:final\s+)?[\w<>,\[\]\s?]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+        text or "",
+    )
+    if m:
+        return m.group(1)
+    return ""
+
+
+def _apply_anchor_strategy_to_payload(
+    payload: dict[str, Any],
+    target_content: str,
+    method_block_map: dict[str, str],
+    fallback_entry: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Convert subagent strategy output into a deterministic operation shape.
+    """
+    out = dict(fallback_entry)
+    strategy = str(payload.get("strategy") or "").strip()
+    edit_type = str(
+        payload.get("edit_type") or out.get("edit_type") or "replace"
+    ).strip()
+    anchor = str(payload.get("anchor_line_text") or "")
+    old_s = str(payload.get("old_string") or "")
+    new_s = str(payload.get("new_string") or "")
+
+    if strategy == "replace_method_block":
+        method_name = _extract_primary_method_name_from_text(
+            old_s
+        ) or _extract_primary_method_name_from_text(new_s)
+        if method_name and method_name in method_block_map:
+            out["edit_type"] = "replace"
+            out["old_string"] = method_block_map[method_name]
+            out["new_string"] = new_s
+            return out
+
+    if strategy == "insert_before_anchor" and anchor and new_s:
+        out["edit_type"] = "insert_before"
+        out["old_string"] = anchor
+        out["new_string"] = f"{new_s}\n{anchor}"
+        return out
+
+    if strategy == "insert_after_anchor" and anchor and new_s:
+        out["edit_type"] = "insert_after"
+        out["old_string"] = anchor
+        out["new_string"] = f"{anchor}\n{new_s}"
+        return out
+
+    out["edit_type"] = edit_type
+    out["old_string"] = old_s
+    out["new_string"] = new_s
+    return out
+
+
+def _entry_requires_chain_sensitive_repair(entry: dict[str, Any]) -> bool:
+    return bool((entry or {}).get("chain_constraints") or [])
+
+
+def _promote_unverified_chain_entry_to_method_block(
+    entry: dict[str, Any],
+    target_content: str,
+    method_block_map: dict[str, str],
+) -> dict[str, Any]:
+    """
+    Deterministic fallback: if a chain-sensitive operation is unresolved, turn it into
+    method-block replace anchored on nearest declaration.
+    """
+    out = dict(entry)
+    old_s = str(out.get("old_string") or "")
+    new_s = str(out.get("new_string") or "")
+    if not old_s or not new_s:
+        return out
+
+    method_name = _extract_primary_method_name_from_text(
+        old_s
+    ) or _extract_primary_method_name_from_text(new_s)
+    if not method_name:
+        idx = target_content.find(old_s.splitlines()[0]) if old_s.splitlines() else -1
+        if idx >= 0:
+            upto = target_content[:idx]
+            decls = re.findall(
+                r"\b(?:public|protected|private)\s+(?:static\s+)?(?:final\s+)?[\w<>,\[\]\s?]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+                upto,
+            )
+            if decls:
+                method_name = decls[-1]
+
+    if method_name and method_name in method_block_map:
+        out["edit_type"] = "replace"
+        out["old_string"] = method_block_map[method_name]
+        out["new_string"] = new_s
+        out["notes"] = (
+            str(out.get("notes") or "") + "|chain_promoted_to_method_block"
+        ).strip("|")
+    return out
+
+
+def _build_type_v_repair_prompt(
+    *,
+    mainline_file: str,
+    target_file: str,
+    raw_hunk: str,
+    entry: dict[str, Any],
+    target_method_windows: list[dict[str, Any]],
+    consistency_map: dict[str, str],
+    required_symbols: list[str],
+    chain_constraints: list[list[str]],
+    retry_failure_context: str,
+    anchor_candidates: list[str],
+) -> str:
+    focused_windows = target_method_windows[:10]
+    return f"""Repair one unresolved TYPE_V operation.
+
+Mainline file: {mainline_file}
+Target file: {target_file}
+Raw hunk:
+```diff
+{raw_hunk}
+```
+
+Unresolved operation:
+{json.dumps(entry, indent=2, ensure_ascii=False)}
+
+Required symbols:
+{json.dumps(required_symbols or [], ensure_ascii=False)}
+
+Chain constraints:
+{json.dumps(chain_constraints or [], ensure_ascii=False)}
+
+Consistency map:
+{json.dumps(consistency_map or {}, ensure_ascii=False)}
+
+Target method windows (truncated):
+{json.dumps(focused_windows, indent=2, ensure_ascii=False)}
+
+Anchor candidates (must choose from these for insert_before/insert_after):
+{json.dumps(anchor_candidates or [], ensure_ascii=False)}
+
+Retry/failure context:
+{retry_failure_context or "<none>"}
+
+Return JSON only with schema:
+{{
+  "found_equivalent": true,
+  "strategy": "replace_exact|replace_method_block|insert_before_anchor|insert_after_anchor",
+  "edit_type": "replace|insert_before|insert_after|delete",
+  "anchor_line_text": "",
+  "old_string": "",
+  "new_string": "",
+  "reason": "",
+  "confidence": 0.0
+}}"""
+
+
+async def _repair_type_v_unverified_entries_with_subagent(
+    *,
+    llm,
+    entries: list[dict[str, Any]],
+    required_entries: list[dict[str, Any]],
+    mainline_file: str,
+    target_file: str,
+    raw_hunk: str,
+    target_content: str,
+    consistency_map: dict[str, str],
+    required_symbols: list[str],
+    chain_constraints: list[list[str]],
+    retry_failure_context: str,
+    token_usage: dict[str, Any],
+    model_name: str,
+) -> list[dict[str, Any]]:
+    """
+    TYPE_V planning repair subagent:
+    - only for entries still unverified after deterministic sanitization
+    - repairs one operation at a time with strict JSON output
+    """
+    out: list[dict[str, Any]] = []
+    req_by_idx = {
+        (r.get("hunk_index"), r.get("operation_index")): r
+        for r in (required_entries or [])
+    }
+
+    method_windows = _extract_method_windows_from_content(target_content)
+    anchor_candidates = _extract_anchor_candidates_from_content(target_content)
+    method_block_map = _build_method_block_map(target_content)
+
+    for entry in entries:
+        if entry.get("verified", False):
+            out.append(entry)
+            continue
+
+        op_key = (entry.get("hunk_index"), entry.get("operation_index"))
+        fallback = req_by_idx.get(op_key, entry)
+
+        prompt = _build_type_v_repair_prompt(
+            mainline_file=mainline_file,
+            target_file=target_file,
+            raw_hunk=raw_hunk,
+            entry=entry,
+            target_method_windows=method_windows,
+            consistency_map=consistency_map,
+            required_symbols=required_symbols,
+            chain_constraints=chain_constraints,
+            retry_failure_context=retry_failure_context,
+            anchor_candidates=anchor_candidates,
+        )
+
+        repaired = dict(entry)
+        try:
+            response = await llm.ainvoke(
+                [
+                    SystemMessage(content=_TYPE_V_REPAIR_SYSTEM),
+                    HumanMessage(content=prompt),
+                ]
+            )
+            usage = extract_usage_from_response(response)
+            if usage and (usage["input_tokens"] or usage["output_tokens"]):
+                add_usage(
+                    token_usage,
+                    usage["input_tokens"],
+                    usage["output_tokens"],
+                    "planning_agent.type_v_subagent.provider_usage",
+                )
+            else:
+                response_text = (
+                    response.content if hasattr(response, "content") else str(response)
+                )
+                add_usage(
+                    token_usage,
+                    count_text_tokens(
+                        _TYPE_V_REPAIR_SYSTEM + "\n" + prompt, model_name
+                    ),
+                    count_text_tokens(str(response_text), model_name),
+                    "planning_agent.type_v_subagent.tiktoken",
+                )
+                token_usage["estimated"] = True
+
+            response_text = (
+                response.content if hasattr(response, "content") else str(response)
+            )
+            payload = _extract_json_payload(str(response_text))
+            if isinstance(payload, dict) and payload.get("found_equivalent"):
+                repaired = _apply_anchor_strategy_to_payload(
+                    payload,
+                    target_content,
+                    method_block_map,
+                    repaired,
+                )
+                repaired["verified"] = True
+                repaired["verification_result"] = (
+                    f"type_v_subagent:{float(payload.get('confidence', 0.0)):.2f}"
+                )
+                repaired["notes"] = (
+                    str(repaired.get("notes") or "") + "|type_v_subagent_repaired"
+                ).strip("|")
+            else:
+                repaired["notes"] = (
+                    str(repaired.get("notes") or "") + "|type_v_subagent_no_equivalent"
+                ).strip("|")
+        except Exception as e:
+            repaired["notes"] = (
+                str(repaired.get("notes") or "") + f"|type_v_subagent_error:{e}"
+            ).strip("|")
+
+            # Deterministic sanitize after subagent attempt (must be applicable on target)
+            repaired = _sanitize_entry_against_target(repaired, target_content)
+            if (
+                not repaired.get("verified", False)
+            ) and _entry_requires_chain_sensitive_repair(entry):
+                promoted = _promote_unverified_chain_entry_to_method_block(
+                    repaired,
+                    target_content,
+                    method_block_map,
+                )
+                repaired = _sanitize_entry_against_target(promoted, target_content)
+            if not repaired.get("verified", False):
+                # Fallback to deterministic required entry if it sanitizes better.
+                det_fallback = _sanitize_entry_against_target(
+                    dict(fallback), target_content
+                )
+            if det_fallback.get("verified", False):
+                repaired = det_fallback
+
+        out.append(repaired)
+
+    return out
+
+
+def _count_unverified_entries(entries: list[dict[str, Any]]) -> int:
+    return sum(1 for e in (entries or []) if not bool((e or {}).get("verified", False)))
+
+
 def _attach_entry_surround_context(
     entry: dict[str, Any], target_content: str
 ) -> dict[str, Any]:
@@ -1676,6 +2092,39 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 llm_entries = list(sanitized_entries)
 
             entries = _ensure_required_coverage(llm_entries, required_entries)
+
+            # TYPE_V repair subagent pass for unresolved operations.
+            if force_type_v and target_content:
+                pre_unverified = _count_unverified_entries(entries)
+                required_symbols = _derive_required_symbols_from_hunk(
+                    raw_hunk,
+                    consistency_map,
+                )
+                chain_constraints = _derive_chain_constraints_from_hunk(
+                    raw_hunk,
+                    consistency_map,
+                )
+                entries = await _repair_type_v_unverified_entries_with_subagent(
+                    llm=llm,
+                    entries=entries,
+                    required_entries=required_entries,
+                    mainline_file=mainline_file,
+                    target_file=target_file,
+                    raw_hunk=raw_hunk,
+                    target_content=target_content,
+                    consistency_map=consistency_map,
+                    required_symbols=required_symbols,
+                    chain_constraints=chain_constraints,
+                    retry_failure_context=truncated_failure_context,
+                    token_usage=token_usage,
+                    model_name=model_name,
+                )
+                post_unverified = _count_unverified_entries(entries)
+                if post_unverified > 0:
+                    print(
+                        "    Planning Agent: Type V subagent unresolved entries "
+                        f"for {target_file}[{hidx}] pre={pre_unverified} post={post_unverified}"
+                    )
 
             blockers = []
             namespace_only_possible = False
