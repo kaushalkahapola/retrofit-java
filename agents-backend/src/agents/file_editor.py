@@ -58,18 +58,20 @@ from agents.hunk_generator_tools import HunkGeneratorToolkit
 _FILE_EDITOR_AGENT_SYSTEM = """You are an expert autonomous Java backporting engineer. Your goal is to apply a semantic fix into a single target file using line-number-based editing.
 
 You MUST follow this exact Todo Checklist loop to complete your task:
-1. REVIEW the Semantic Blueprint so you understand exactly what behavior needs to be fixed. Note any required dependent APIs or logic changes.
+1. REVIEW the Semantic Blueprint so you understand exactly what behavior needs to be fixed. Note all required dependent APIs, imports, fields, constructors, or logic changes.
 2. CHECK the Consistency Map to see if any variables/methods from the mainline patch were renamed in this target version. You MUST use the renamed symbols for any newly written code.
-3. USE `read_file_window` or `ripgrep_in_file` to locate the exact line boundaries of the target code that needs to be replaced.
-4. DETERMINE the exact `start_line` and `end_line` for your change. 
-5. EDIT the file exclusively using the `replace_lines` (or `insert_after_line`) tool. 
-6. VERIFY your guidelines. Check that your new code did not invent new methods and strictly preserves the Semantic Blueprint logic.
-7. Output "DONE" when the file is perfectly edited.
+3. For EACH distinct hunk/change in the patch (e.g., adding imports, modifying a constructor, modifying a method):
+   a. USE `read_file_window` or `grep_in_file` to locate the exact line boundaries of the target code that needs to be replaced.
+   b. DETERMINE the exact `start_line` and `end_line` for the change.
+   c. EDIT the file exclusively using the `replace_lines` (or `insert_after_line`) tool.
+4. VERIFY your guidelines. Check that your new code did not invent new methods and strictly preserves ALL the logic across ALL hunks from the Semantic Blueprint.
+5. Output "DONE" only when EVERY required piece of logic from the patch (including imports and fields) is perfectly edited into the target file.
 
 ## Essential Guidelines (CRITICAL)
 - **Line Editing Only**: Use `replace_lines(start_line, end_line, new_content)` for all changes. Do NOT try to use string-replace unless line numbers are unavailable.
-- **No Hallucinations**: You cannot call any methods or variables that are not explicitly defined in the file or standard JDK, UNLESS they are explicitly mapped in the Consistency Map. 
+- **No Hallucinations**: You cannot call any methods or variables that are not explicitly defined in the file or standard JDK, UNLESS they are explicitly mapped in the Consistency Map. NEVER invent static helper methods or "simplify" object instantiations if they deviate from the mainline patch logic.
 - **Exact Line Matches**: When replacing lines, ensure you replace the entire block correctly. To just insert new code without replacing anything, use start_line = N, end_line = N-1.
+- **Loyalty to Mainline Patterns**: Stick as closely as possible to the mainline patch's implementation patterns (e.g., lambda structures, specific class constructors). Only deviate if a symbol in the target file is renamed or missing (check Consistency Map and grep first).
 - **Adapt to Target Syntax**: The target file may use completely different variables (e.g. `ob` instead of `builder`) or slightly different method names. YOU MUST READ the target code and ADAPT the logic. DO NOT blindly copy-paste the mainline diff syntax if the target file uses different patterns!
 
 ## Fix Intent (Semantic Blueprint)
@@ -1025,10 +1027,10 @@ async def file_editor_node(state: AgentState, config) -> dict:
                             SystemMessage(content=system_prompt),
                             HumanMessage(
                                 content="Start your Todo list now.\n"
-                                "1. Write a short analysis of the logic change in the patch.\n"
-                                "2. Use read_file_window to find the target code.\n"
-                                "3. Write a short analysis on how the mainline syntax differs from the target syntax (e.g. variable names, method signatures).\n"
-                                "4. Use replace_lines (or insert_after_line) to apply the adapted logic. Remember to use start_line=N, end_line=N-1 to insert without deleting!"
+                                "1. Write a short analysis of the logic changes across ALL hunks in the patch for this file.\n"
+                                "2. For EACH distinct change (imports, fields, constructor, methods), use read_file_window to find the target code.\n"
+                                "3. Write a short analysis on how the mainline syntax differs from the target syntax.\n"
+                                "4. Use replace_lines (or insert_after_line) REPEATEDLY to apply EVERY part of the adapted logic. Remember to use start_line=N, end_line=N-1 to insert without deleting!"
                             )
                         ]
                     }

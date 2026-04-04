@@ -274,8 +274,6 @@ def _is_non_java_hunk_in_java_file(file_path: str, hunk_text: str) -> bool:
         # XML patterns
         r"<\?xml",
         r"<[a-zA-Z]+\s+[a-zA-Z:_][a-zA-Z0-9:_\-]*\s*=\s*[\"']",
-        # Properties file patterns (key=value)
-        r"^[a-zA-Z_][a-zA-Z0-9._-]*\s*=\s*[^\s]",
         # Multi-line string/comment markers
         r'"""\s*$|""".+$',  # Triple quotes
         r"\/\*\*.*\*\/",  # Large block comments
