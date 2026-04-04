@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import os
 import re
+import asyncio
 import subprocess
 import hashlib
 from typing import Any
@@ -807,6 +808,277 @@ def _resolve_operation_plan(
     return plan
 
 
+def _load_file_text(repo_path: str, rel_path: str) -> str:
+    try:
+        full_path = os.path.normpath(
+            os.path.join(repo_path, _normalize_rel_path(rel_path))
+        )
+        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except Exception:
+        return ""
+
+
+def _classify_file_edit_type(
+    *,
+    mainline_file: str,
+    target_file: str,
+    plan_entries: list[dict[str, Any]],
+    target_repo_path: str,
+    change_type: str,
+) -> str:
+    """
+    Classify adaptation complexity into TYPE_I..TYPE_V.
+
+    Heuristic mapping:
+      - TYPE_I: same path, all old_string anchors exact in target file
+      - TYPE_II: path differs, all old_string anchors exact
+      - TYPE_III: same path, some anchors not exact but edits are small/local
+      - TYPE_IV: path differs and some anchors not exact, edits still local
+      - TYPE_V: structural/large rewrite, or file op outside MODIFIED
+    """
+    op = (change_type or "MODIFIED").upper()
+    if op not in {"MODIFIED"}:
+        return "TYPE_V"
+
+    file_text = _load_file_text(target_repo_path, target_file)
+    if not file_text:
+        return "TYPE_V"
+
+    norm_main = _normalize_rel_path(mainline_file)
+    norm_target = _normalize_rel_path(target_file)
+    same_path = norm_main == norm_target
+
+    total = 0
+    exact_hits = 0
+    has_large_block = False
+    has_nonlocal_shape = False
+
+    for entry in plan_entries or []:
+        old_string = str((entry or {}).get("old_string") or "")
+        new_string = str((entry or {}).get("new_string") or "")
+        edit_type = str((entry or {}).get("edit_type") or "replace").lower()
+
+        if edit_type not in {"replace", "insert_before", "insert_after", "delete"}:
+            has_nonlocal_shape = True
+
+        line_span = max(old_string.count("\n"), new_string.count("\n"))
+        if line_span >= 25:
+            has_large_block = True
+
+        if not old_string:
+            has_nonlocal_shape = True
+            continue
+
+        total += 1
+        if old_string in file_text:
+            exact_hits += 1
+
+    unresolved = max(0, total - exact_hits)
+    if has_large_block or has_nonlocal_shape:
+        return "TYPE_V"
+
+    if unresolved == 0 and same_path:
+        return "TYPE_I"
+    if unresolved == 0 and not same_path:
+        return "TYPE_II"
+    if unresolved > 0 and same_path:
+        return "TYPE_III"
+    if unresolved > 0 and not same_path:
+        return "TYPE_IV"
+    return "TYPE_V"
+
+
+def _syntax_is_valid(result: Any) -> bool:
+    if isinstance(result, dict):
+        if "syntax_valid" in result:
+            return bool(result.get("syntax_valid"))
+        if "success" in result:
+            return bool(result.get("success"))
+    return False
+
+
+def _syntax_output(result: Any) -> str:
+    if isinstance(result, dict):
+        return str(result.get("output") or result)
+    return str(result)
+
+
+def _run_mandatory_file_checks(
+    *,
+    toolkit: HunkGeneratorToolkit,
+    target_repo_path: str,
+    target_file: str,
+    run_guideline: bool,
+) -> tuple[bool, str, str]:
+    """
+    Mandatory host-enforced verification checks.
+
+    Returns:
+      (ok, reason, diff_text)
+    """
+    syntax = toolkit.check_java_syntax(target_file)
+    if not _syntax_is_valid(syntax):
+        return (
+            False,
+            f"syntax_check_failed: {_syntax_output(syntax)[:500]}",
+            "",
+        )
+
+    diff_text = _git_diff_file(target_repo_path, target_file)
+    if not diff_text.strip():
+        return False, "no_diff_after_edits", ""
+
+    truncated, truncated_reason = _looks_structurally_truncated(diff_text)
+    if truncated:
+        return False, truncated_reason, diff_text
+
+    static_in_method, static_reason = _check_static_field_in_method_body(diff_text)
+    if static_in_method:
+        return False, static_reason, diff_text
+
+    missing_def, missing_def_reason = _diff_introduces_call_without_definition(
+        diff_text
+    )
+    if missing_def:
+        if "order(...)" in missing_def_reason and _file_has_method_declaration(
+            target_repo_path, target_file, "order"
+        ):
+            missing_def = False
+    if missing_def:
+        return False, missing_def_reason, diff_text
+
+    if run_guideline:
+        guideline = toolkit.verify_guidelines(diff_text)
+        if str(guideline).strip() != "ALL_GOOD":
+            return False, f"guideline_check_failed: {str(guideline)[:500]}", diff_text
+
+    return True, "verified", diff_text
+
+
+def _apply_plan_entries_deterministically(
+    *,
+    toolkit: HunkGeneratorToolkit,
+    target_repo_path: str,
+    target_file: str,
+    plan_entries: list[dict[str, Any]],
+    current_attempt_trajectory: list[dict[str, Any]],
+) -> tuple[bool, str]:
+    """
+    Deterministic execution path with immediate syntax checks after each edit.
+    """
+    for entry in plan_entries:
+        ok, msg, resolved_old, resolved_new, reason = _apply_edit_deterministically(
+            toolkit,
+            target_repo_path,
+            entry,
+            target_file,
+        )
+        if not ok:
+            ok2, msg2, resolved_old2, resolved_new2, reason2 = _retry_with_file_check(
+                toolkit,
+                target_repo_path,
+                entry,
+                target_file,
+            )
+            if ok2:
+                ok = True
+                msg = msg2
+                resolved_old = resolved_old2
+                resolved_new = resolved_new2
+                reason = reason2
+
+        if not ok:
+            return False, f"deterministic_apply_failed: {msg}"
+
+        current_attempt_trajectory.append(
+            {
+                "target_file": target_file,
+                "tool": "str_replace_in_file",
+                "args": {
+                    "file_path": target_file,
+                    "edit_type": str((entry or {}).get("edit_type") or "replace"),
+                    "resolution_reason": reason,
+                    "resolved_old_preview": resolved_old[:200],
+                    "resolved_new_preview": resolved_new[:200],
+                },
+            }
+        )
+
+        syntax = toolkit.check_java_syntax(target_file)
+        if not _syntax_is_valid(syntax):
+            return (
+                False,
+                f"post_edit_syntax_failed: {_syntax_output(syntax)[:500]}",
+            )
+
+    return True, "deterministic_apply_success"
+
+
+def _is_rate_limit_error(error_text: str) -> bool:
+    text = (error_text or "").lower()
+    return (
+        "rate limit" in text
+        or "rate_limit_exceeded" in text
+        or "error code: 429" in text
+        or "too many requests" in text
+    )
+
+
+def _extract_rate_limit_wait_seconds(error_text: str, attempt: int) -> float:
+    text = error_text or ""
+    lower = text.lower()
+
+    m_sec = re.search(r"try again in\s*([0-9]*\.?[0-9]+)s", lower)
+    if m_sec:
+        try:
+            return max(0.2, min(15.0, float(m_sec.group(1)) + 0.2))
+        except Exception:
+            pass
+
+    m_ms = re.search(r"try again in\s*([0-9]*\.?[0-9]+)ms", lower)
+    if m_ms:
+        try:
+            return max(0.2, min(15.0, (float(m_ms.group(1)) / 1000.0) + 0.2))
+        except Exception:
+            pass
+
+    # Exponential fallback with jitterless cap.
+    return min(12.0, 0.8 * (2**attempt))
+
+
+async def _invoke_react_with_backoff(
+    *,
+    editor_agent,
+    payload: dict[str, Any],
+    target_file: str,
+    max_attempts: int = 4,
+):
+    last_error: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            return await editor_agent.ainvoke(payload)
+        except Exception as e:
+            last_error = e
+            err = str(e)
+            if not _is_rate_limit_error(err):
+                raise
+
+            if attempt >= max_attempts - 1:
+                raise
+
+            wait_s = _extract_rate_limit_wait_seconds(err, attempt)
+            print(
+                f"    Agent 3: ReAct rate-limited for {target_file}; "
+                f"retrying in {wait_s:.2f}s (attempt {attempt + 1}/{max_attempts})."
+            )
+            await asyncio.sleep(wait_s)
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("ReAct invocation failed without explicit exception")
+
+
 async def _check_intent(
     llm,
     diff_text: str,
@@ -1017,10 +1289,24 @@ async def file_editor_node(state: AgentState, config) -> dict:
             f"{target_file} (op={change_type})"
         )
 
+        adaptation_type = _classify_file_edit_type(
+            mainline_file=mainline_file,
+            target_file=target_file,
+            plan_entries=plan_entries,
+            target_repo_path=target_repo_path,
+            change_type=change_type,
+        )
+        deterministic_only = adaptation_type in {"TYPE_I", "TYPE_II", "TYPE_III"}
+        print(
+            f"    Agent 3: Classified {target_file} as {adaptation_type} "
+            f"({'deterministic' if deterministic_only else 'reactive'} path)"
+        )
+
         task_entry = {
             "mainline_file": mainline_file,
             "target_file": target_file,
             "hunk_index": 0,
+            "adaptation_type": adaptation_type,
             "status": "in_progress",
             "reason": "started",
             "todo_steps": [
@@ -1041,28 +1327,56 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 print(f"    Agent 3: Warning - could not reset {target_file} to HEAD.")
         task_entry["completed_steps"].append("reset_file")
 
-        # Step B: Apply edits using ReAct Agent!
-        if toolkit:
+        if not toolkit:
+            task_entry["status"] = "failed"
+            task_entry["reason"] = "toolkit_unavailable"
+            continue
+
+        # Step B: Apply edits via deterministic or ReAct path.
+        if deterministic_only:
+            ok, apply_reason = _apply_plan_entries_deterministically(
+                toolkit=toolkit,
+                target_repo_path=target_repo_path,
+                target_file=target_file,
+                plan_entries=plan_entries,
+                current_attempt_trajectory=current_attempt_trajectory,
+            )
+            if not ok:
+                print(
+                    f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}"
+                )
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "generation_contract_failed"
+                task_entry["error"] = apply_reason
+                _git_reset_file(target_repo_path, target_file)
+                continue
+        else:
             import json
 
-            # Reconstruct mapping hints to give the agent some structural guidance
             mapping_hints = []
             if mainline_file in state.get("mapped_target_context", {}):
                 for m in state["mapped_target_context"][mainline_file]:
                     hint = f"Hunk suggests mapping around line {m.get('start_line', 'unknown')} with context:\n```java\n{m.get('code_snippet', '')[:300]}\n```"
                     mapping_hints.append(hint)
 
-            # Truncate build logs if they are massive (they often repeat)
             truncated_error_context = error_context
             if len(error_context) > 8000:
                 truncated_error_context = (
-                    error_context[:4000] 
-                    + "\n\n... [TRUNCATED DUE TO LENGTH] ...\n\n" 
+                    error_context[:4000]
+                    + "\n\n... [TRUNCATED DUE TO LENGTH] ...\n\n"
                     + error_context[-4000:]
                 )
 
+            patch_diff_for_prompt = state.get("patch_diff") or "<no patch diff found>"
+            if len(patch_diff_for_prompt) > 6000:
+                patch_diff_for_prompt = (
+                    patch_diff_for_prompt[:3000]
+                    + "\n\n... [TRUNCATED PATCH BODY] ...\n\n"
+                    + patch_diff_for_prompt[-3000:]
+                )
+
             system_prompt = _FILE_EDITOR_AGENT_SYSTEM.format(
-                patch_diff=state.get("patch_diff") or "<no patch diff found>",
+                patch_diff=patch_diff_for_prompt,
                 hunk_generation_plan=json.dumps(plan_entries, indent=2),
                 mapping_hints="\n---\n".join(mapping_hints)
                 if mapping_hints
@@ -1078,7 +1392,6 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 else "",
             )
 
-            # Heuristic for multi-edit files: prioritize edit_file
             if len(plan_entries) >= 3:
                 system_prompt += (
                     "\n\n## IMPORTANT: Multi-Edit File Detection\n"
@@ -1091,29 +1404,28 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
             try:
                 print(f"    Agent 3: Invoking ReAct agent for {target_file}")
-                response = await editor_agent.ainvoke(
-                    {
+                response = await _invoke_react_with_backoff(
+                    editor_agent=editor_agent,
+                    target_file=target_file,
+                    payload={
                         "messages": [
                             SystemMessage(content=system_prompt),
-                             HumanMessage(
-                                 content="Start your Todo list now.\n"
-                                 "1. Analyze logic changes and structural differences.\n"
-                                 "2. Apply changes using AST tools (Priority 1) or `edit_file` (Priority 2).\n"
-                                 "3. Use `check_java_syntax` after edits to catch errors immediately.\n"
-                                 "4. Use `read_file_window` to verify context and avoid duplication."
-                             ),
+                            HumanMessage(
+                                content="Start your Todo list now.\n"
+                                "1. Analyze logic changes and structural differences.\n"
+                                "2. Apply changes using AST tools (Priority 1) or `edit_file` (Priority 2).\n"
+                                "3. Use `check_java_syntax` after edits to catch errors immediately.\n"
+                                "4. Use `read_file_window` to verify context and avoid duplication."
+                            ),
                         ]
-                    }
+                    },
                 )
 
-                # We can calculate usage roughly for the loop here for tokens tracking
-                # Usage extraction can be aggregated
                 last_msg = response["messages"][-1]
                 print(
-                    f"    Agent 3: Agent finished. Last msg: {last_msg.content[:100]}"
+                    f"    Agent 3: Agent finished. Last msg: {str(last_msg.content)[:100]}"
                 )
 
-                # Extract agent tool calls for trace logs
                 for m in response.get("messages", []):
                     if hasattr(m, "tool_calls") and m.tool_calls:
                         for tc in m.tool_calls:
@@ -1121,6 +1433,9 @@ async def file_editor_node(state: AgentState, config) -> dict:
                                 "replace_lines",
                                 "insert_after_line",
                                 "verify_guidelines",
+                                "check_java_syntax",
+                                "edit_file",
+                                "str_replace_in_file",
                             ):
                                 current_attempt_trajectory.append(
                                     {
@@ -1133,30 +1448,27 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 print(f"    Agent 3: Agent failed: {e}")
                 task_entry["status"] = "failed"
                 task_entry["reason"] = "generation_contract_failed"
-                if toolkit:
-                    _git_reset_file(target_repo_path, target_file)
+                task_entry["error"] = str(e)[:500]
+                _git_reset_file(target_repo_path, target_file)
                 continue
 
         task_entry["completed_steps"].append("apply_edits")
 
-        # Step C: Capture diff via git diff (mechanically correct)
-        diff_text = ""
-        if target_repo_path:
-            diff_text = _git_diff_file(target_repo_path, target_file)
-
-        if not diff_text.strip():
+        # Step C: Host-enforced mandatory checks + diff capture.
+        checks_ok, checks_reason, diff_text = _run_mandatory_file_checks(
+            toolkit=toolkit,
+            target_repo_path=target_repo_path,
+            target_file=target_file,
+            run_guideline=True,
+        )
+        if not checks_ok:
             print(
-                f"    Agent 3: No diff captured for {target_file} - "
-                "edits may have been no-ops or file is unchanged."
+                f"    Agent 3: Mandatory checks failed for {target_file}: {checks_reason}"
             )
-            # Still reset and continue - might be a legitimate no-op
-            if toolkit:
-                _git_reset_file(target_repo_path, target_file)
-            task_entry["status"] = "noop"
-            task_entry["reason"] = "no_diff_after_edits"
-            task_entry["completed_steps"].extend(
-                ["capture_diff", "intent_check", "restore_file"]
-            )
+            task_entry["status"] = "failed"
+            task_entry["reason"] = "generation_contract_failed"
+            task_entry["error"] = checks_reason
+            _git_reset_file(target_repo_path, target_file)
             continue
 
         task_entry["completed_steps"].append("capture_diff")
@@ -1169,17 +1481,19 @@ async def file_editor_node(state: AgentState, config) -> dict:
         fe: FileEdit = {
             "target_file": target_file,
             "mainline_file": mainline_file,
-            "old_string": "<line-based ReAct agent diff>",
+            "old_string": "<deterministic file-editor diff>"
+            if deterministic_only
+            else "<line-based ReAct agent diff>",
             "new_string": diff_text.strip(),
             "edit_type": "replace",
             "verified": True,
-            "verification_result": "ReAct agent applied",
+            "verification_result": "Deterministic file editor applied"
+            if deterministic_only
+            else "ReAct agent applied",
             "applied": True,
             "apply_result": "SUCCESS",
         }
         adapted_file_edits.append(fe)
-
-        # Removed the deterministic semantic guards here because the Agent runs them via `verify_guidelines` tool!
 
         # Step D: Extract just the hunk portions from the full git diff output
         # git diff HEAD produces: diff --git a/... b/... \n--- a/... \n+++ b/...\n@@...
@@ -1200,14 +1514,20 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     pass
                 break
 
-        # Step E: Intent check
-        intent_ok = await _check_intent(
-            llm, diff_text, semantic_blueprint, token_usage, model_name
-        )
-        if not intent_ok:
+        # Step E: Intent check (skip extra LLM call for deterministic TYPE I/II/III)
+        if deterministic_only:
+            intent_ok = True
             print(
-                f"    Agent 3: Blueprint intent check FAILED for {target_file} - flagging."
+                f"    Agent 3: Skipping LLM intent check for {target_file} ({adaptation_type})."
             )
+        else:
+            intent_ok = await _check_intent(
+                llm, diff_text, semantic_blueprint, token_usage, model_name
+            )
+            if not intent_ok:
+                print(
+                    f"    Agent 3: Blueprint intent check FAILED for {target_file} - flagging."
+                )
         task_entry["completed_steps"].append("intent_check")
 
         # Step F: Reset file to HEAD (leave repo clean for validation)
