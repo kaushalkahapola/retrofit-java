@@ -29,7 +29,16 @@
         "blockers": [],
         "namespace_only_possible": true,
         "namespace_changes": [],
-        "required_invariants": []
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 1,
@@ -40,7 +49,7 @@
         "new_string": "import java.util.Arrays;\nimport java.util.Locale;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Insert import java.util.Arrays before import java.util.Locale|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "import org.elasticsearch.xpack.core.frozen.action.FreezeIndexAction;",
           "import org.elasticsearch.xpack.migrate.MigrateTemplateRegistry;",
@@ -57,12 +66,22 @@
         "location_match": false,
         "surrounding_match": false,
         "blockers": [
-          "Detected target start line (66) differs from mainline old-start line (55)",
-          "Pre-patch surrounding context differs between mainline and target"
+          "Detected target surrounding context does not match mainline pre-patch surrounding context",
+          "Detected target start line (66) differs from mainline old start line (55)",
+          "Build failure due to method signature conflicts indicates structural differences"
         ],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
-        "required_invariants": []
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 1,
@@ -73,7 +92,7 @@
         "new_string": "import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\nimport static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Replace import static WRITE with METADATA and READ_ONLY|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "import java.util.Map;",
           "import java.util.Objects;",
@@ -90,12 +109,22 @@
         "location_match": false,
         "surrounding_match": false,
         "blockers": [
-          "Detected target start line (66) differs from mainline old-start line (55)",
-          "Pre-patch surrounding context differs between mainline and target"
+          "Detected target surrounding context does not match mainline pre-patch surrounding context",
+          "Detected target start line (66) differs from mainline old start line (55)",
+          "Build failure due to method signature conflicts indicates structural differences"
         ],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
-        "required_invariants": []
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 2,
@@ -123,16 +152,34 @@
         "location_match": false,
         "surrounding_match": false,
         "blockers": [
-          "Detected target location line (152) differs from mainline old-start line (145).",
-          "Pre-patch surrounding context in target differs from mainline pre-patch surrounding context.",
-          "Old string for replacement 'SubscribableListener.<AcknowledgedResponse>newForked(l -> setBlockWrites(sourceIndexName, l, taskId))' not found in target file at expected location."
+          "Detected target start line (152) differs from mainline old-start line (145)",
+          "Pre-patch surrounding context in target differs from mainline pre-patch context",
+          "API/signature mismatch errors in target prevent direct application of mainline edits"
         ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))",
           ".<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))"
-        ]
+        ],
+        "required_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "protected_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "removeMetadataBlocks",
+            "setReadOnly"
+          ]
+        }
       },
       {
         "hunk_index": 2,
@@ -145,14 +192,14 @@
         "verification_result": "sanitize_old_not_found:not_found_single",
         "notes": "required_op_replace|sanitize_old_not_found:not_found_single|sanitize_old_not_found:not_found_single|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
-          "            );",
-          "        }",
-          ""
+          "        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {",
+          "            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);",
+          "            listener.onFailure(new ElasticsearchException(errorMessage));"
         ],
         "surround_after_3": [
-          "            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))",
-          "            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))",
-          "            .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))"
+          "            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))",
+          "            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))",
+          "            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))"
         ],
         "adaptation_type": "TYPE_V",
         "base_adaptation_type": "TYPE_II",
@@ -160,16 +207,34 @@
         "location_match": false,
         "surrounding_match": false,
         "blockers": [
-          "Detected target location line (152) differs from mainline old-start line (145).",
-          "Pre-patch surrounding context in target differs from mainline pre-patch surrounding context.",
-          "Old string for replacement 'SubscribableListener.<AcknowledgedResponse>newForked(l -> setBlockWrites(sourceIndexName, l, taskId))' not found in target file at expected location."
+          "Detected target start line (152) differs from mainline old-start line (145)",
+          "Pre-patch surrounding context in target differs from mainline pre-patch context",
+          "API/signature mismatch errors in target prevent direct application of mainline edits"
         ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))",
           ".<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))"
-        ]
+        ],
+        "required_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "protected_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "removeMetadataBlocks",
+            "setReadOnly"
+          ]
+        }
       },
       {
         "hunk_index": 2,
@@ -197,16 +262,34 @@
         "location_match": false,
         "surrounding_match": false,
         "blockers": [
-          "Detected target location line (152) differs from mainline old-start line (145).",
-          "Pre-patch surrounding context in target differs from mainline pre-patch surrounding context.",
-          "Old string for replacement 'SubscribableListener.<AcknowledgedResponse>newForked(l -> setBlockWrites(sourceIndexName, l, taskId))' not found in target file at expected location."
+          "Detected target start line (152) differs from mainline old-start line (145)",
+          "Pre-patch surrounding context in target differs from mainline pre-patch context",
+          "API/signature mismatch errors in target prevent direct application of mainline edits"
         ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))",
           ".<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))"
-        ]
+        ],
+        "required_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "protected_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "removeMetadataBlocks",
+            "setReadOnly"
+          ]
+        }
       },
       {
         "hunk_index": 3,
@@ -238,7 +321,22 @@
         "namespace_changes": [],
         "required_invariants": [
           ".<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))"
-        ]
+        ],
+        "required_symbols": [
+          "removeAPIBlocks"
+        ],
+        "protected_symbols": [
+          "removeAPIBlocks"
+        ],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "removeAPIBlocks"
+          ]
+        }
       },
       {
         "hunk_index": 4,
@@ -272,7 +370,22 @@
           "private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {",
           "logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);",
           "addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {"
-        ]
+        ],
+        "required_symbols": [
+          "setReadOnly"
+        ],
+        "protected_symbols": [
+          "setReadOnly"
+        ],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "setReadOnly"
+          ]
+        }
       },
       {
         "hunk_index": 5,
@@ -283,7 +396,7 @@
         "new_string": "    /**\n     * All metadata blocks need to be removed at the start for the following reasons:\n     * 1) If the source index has a metadata only block, the read-only block can't be added.\n     * 2) If the source index is read-only and closed, it can't be opened.\n     */\n    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n    }\n\n    private void removeAPIBlocks(\n        String indexName,\n        TaskId parentTaskId,\n        ActionListener<AcknowledgedResponse> listener,\n        IndexMetadata.APIBlock... blocks\n    ) {\n        Settings.Builder settings = Settings.builder();\n        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n        updateSettingsRequest.setParentTask(parentTaskId);\n        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n    }\n\n    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "Duplicate method definition error blocks direct insertion; location mismatch requires adjustment|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "        client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);",
           "    }",
@@ -299,8 +412,11 @@
         "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": true,
-        "blockers": [],
-        "namespace_only_possible": true,
+        "blockers": [
+          "Detected target location for insertion differs from mainline location by 21 lines",
+          "Compiler errors indicate method getIndexDocCount is already defined, suggesting duplicate method definitions"
+        ],
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {",
@@ -311,17 +427,35 @@
           "ActionListener<AcknowledgedResponse> listener,",
           "IndexMetadata.APIBlock... blocks",
           "Settings.Builder settings = Settings.builder();"
-        ]
+        ],
+        "required_symbols": [
+          "removeAPIBlocks",
+          "removeMetadataBlocks"
+        ],
+        "protected_symbols": [
+          "removeAPIBlocks",
+          "removeMetadataBlocks"
+        ],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "removeAPIBlocks",
+            "removeMetadataBlocks"
+          ]
+        }
       }
     ]
   },
-  "last_plan_signature": "392dc6085aa7f7d5c7a9cefe7624ae0c7b7a95bdc92bf894999802e2e83d1608",
+  "last_plan_signature": "4f1a314b220036a40e8ed29528da7fedea5c3888e5e4b4e46c4889a76496567a",
   "force_type_v_until_success": true,
   "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
   "token_usage": {
-    "input_tokens": 9138,
-    "output_tokens": 2932,
-    "total_tokens": 12070,
+    "input_tokens": 10062,
+    "output_tokens": 3073,
+    "total_tokens": 13135,
     "estimated": false,
     "sources": [
       "planning_agent.provider_usage",

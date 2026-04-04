@@ -20,4 +20,4 @@
 **Final Status: BUILD FAILED**
 
 **Agent Analysis:**
-API/signature mismatch in generated patch against target branch.
+API/signature mismatch in generated patch against target branch. Compiler errors: /repo/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java:446: error: method getIndexDocCount(String,TaskId,ActionListener<Long>) is already defined in class ReindexDataStreamIndexTransportAction | /repo/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java:440: error: cannot find symbol | /repo/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java:446: error: method getIndexDocCount(String,TaskId,ActionListener<Long>) is already defined in class ReindexDataStreamIndexTransportAction

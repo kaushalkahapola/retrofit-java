@@ -1,24 +1,12 @@
 {
-  "adapted_file_edits": [
-    {
-      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-      "old_string": "<line-based ReAct agent diff>",
-      "new_string": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 93c005532e0..8d571f039ed 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;\n import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\n+import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\n import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\n import org.elasticsearch.action.bulk.BulkItemResponse;\n import org.elasticsearch.action.search.SearchRequest;\n@@ -63,6 +64,8 @@ import java.util.Locale;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\n import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;\n \n public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<\n@@ -160,8 +163,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             return;\n         }\n         final boolean wasClosed = isClosed(sourceIndex);\n-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n-            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n+        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n+            .<FreezeResponse>andThen(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n             .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n             .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n@@ -171,6 +175,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n             .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n             .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n             .addListener(listener);\n     }\n@@ -222,9 +227,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         }\n     }\n \n-    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n-        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n-        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n+    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n+        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n+        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n             @Override\n             public void onResponse(AddIndexBlockResponse response) {\n                 if (response.isAcknowledged()) {\n@@ -420,8 +425,8 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n     }\n \n-    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n-        SearchRequest countRequest = new SearchRequest(index);\n+    private void getIndexDocCount(String indexName, TaskId parentTaskId, ActionListener<Long> listener) {\n+        SearchRequest countRequest = new SearchRequest(indexName);\n         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n         countRequest.allowPartialSearchResults(false);\n         countRequest.source(searchSourceBuilder);\n@@ -463,4 +468,22 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             listener.onResponse(null);\n         }\n     }\n+\n+    /**\n+     * All metadata blocks need to be removed at the start for the following reasons:\n+     * 1) If the source index has a metadata only block, the read-only block can't be added.\n+     * 2) If the source index is read-only and closed, it can't be opened.\n+     */\n+    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n+        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n+        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n+    }\n+\n+    private void removeAPIBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener, IndexMetadata.APIBlock... blocks) {\n+        Settings.Builder settings = Settings.builder();\n+        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n+        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n+        updateSettingsRequest.setParentTask(parentTaskId);\n+        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n+    }\n }",
-      "edit_type": "replace",
-      "verified": true,
-      "verification_result": "ReAct agent applied",
-      "applied": true,
-      "apply_result": "SUCCESS"
-    }
-  ],
+  "adapted_file_edits": [],
   "all_adapted_file_edits": [
     [
       {
         "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
         "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
         "old_string": "<line-based ReAct agent diff>",
-        "new_string": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 93c005532e0..8480f2f57a5 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;\n import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\n+import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\n import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\n import org.elasticsearch.action.bulk.BulkItemResponse;\n import org.elasticsearch.action.search.SearchRequest;\n@@ -63,6 +64,8 @@ import java.util.Locale;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\n import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;\n \n public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<\n@@ -160,9 +163,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             return;\n         }\n         final boolean wasClosed = isClosed(sourceIndex);\n-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n-            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n+        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n             .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n             .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n@@ -171,6 +174,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n             .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n             .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n             .addListener(listener);\n     }\n@@ -222,9 +226,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         }\n     }\n \n-    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n-        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n-        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n+    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n+        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n+        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n             @Override\n             public void onResponse(AddIndexBlockResponse response) {\n                 if (response.isAcknowledged()) {\n@@ -420,6 +424,29 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n     }\n \n+    /**\n+     * All metadata blocks need to be removed at the start for the following reasons:\n+     * 1) If the source index has a metadata only block, the read-only block can't be added.\n+     * 2) If the source index is read-only and closed, it can't be opened.\n+     */\n+    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n+        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n+        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n+    }\n+\n+    private void removeAPIBlocks(\n+        String indexName,\n+        TaskId parentTaskId,\n+        ActionListener<AcknowledgedResponse> listener,\n+        IndexMetadata.APIBlock... blocks\n+    ) {\n+        Settings.Builder settings = Settings.builder();\n+        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n+        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n+        updateSettingsRequest.setParentTask(parentTaskId);\n+        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n+    }\n+\n     private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n         SearchRequest countRequest = new SearchRequest(index);\n         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);",
+        "new_string": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 93c005532e0..4e91209f4b5 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;\n import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\n+import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\n import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\n import org.elasticsearch.action.bulk.BulkItemResponse;\n import org.elasticsearch.action.search.SearchRequest;\n@@ -63,6 +64,8 @@ import java.util.Locale;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\n import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;\n \n public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<\n@@ -149,20 +152,10 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             );\n         }\n \n-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {\n-            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);\n-            listener.onFailure(new ElasticsearchException(errorMessage));\n-            return;\n-        }\n-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {\n-            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a metadata block.\", destIndexName);\n-            listener.onFailure(new ElasticsearchException(errorMessage));\n-            return;\n-        }\n         final boolean wasClosed = isClosed(sourceIndex);\n-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n-            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n+        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n             .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n             .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n@@ -171,6 +164,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n             .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n             .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n             .addListener(listener);\n     }\n@@ -222,9 +216,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         }\n     }\n \n-    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n-        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n-        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n+    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n+        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n+        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n             @Override\n             public void onResponse(AddIndexBlockResponse response) {\n                 if (response.isAcknowledged()) {\n@@ -420,6 +414,35 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n     }\n \n+    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n+        SearchRequest countRequest = new SearchRequest(index);\n+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n+\n+    }\n+\n+    /**\n+     * All metadata blocks need to be removed at the start for the following reasons:\n+     * 1) If the source index has a metadata only block, the read-only block can't be added.\n+     * 2) If the source index is read-only and closed, it can't be opened.\n+     */\n+    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n+        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n+        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n+    }\n+\n+    private void removeAPIBlocks(\n+        String indexName,\n+        TaskId parentTaskId,\n+        ActionListener<AcknowledgedResponse> listener,\n+        IndexMetadata.APIBlock... blocks\n+    ) {\n+        Settings.Builder settings = Settings.builder();\n+        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n+        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n+        updateSettingsRequest.setParentTask(parentTaskId);\n+        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n+    }\n+\n     private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n         SearchRequest countRequest = new SearchRequest(index);\n         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);",
         "edit_type": "replace",
         "verified": true,
         "verification_result": "ReAct agent applied",
@@ -26,32 +14,7 @@
         "apply_result": "SUCCESS"
       }
     ],
-    [
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "old_string": "<line-based ReAct agent diff>",
-        "new_string": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 93c005532e0..7e8233de483 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;\n import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\n+import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\n import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\n import org.elasticsearch.action.bulk.BulkItemResponse;\n import org.elasticsearch.action.search.SearchRequest;\n@@ -63,6 +64,8 @@ import java.util.Locale;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\n import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;\n \n public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<\n@@ -149,20 +152,10 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             );\n         }\n \n-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {\n-            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);\n-            listener.onFailure(new ElasticsearchException(errorMessage));\n-            return;\n-        }\n-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {\n-            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a metadata block.\", destIndexName);\n-            listener.onFailure(new ElasticsearchException(errorMessage));\n-            return;\n-        }\n         final boolean wasClosed = isClosed(sourceIndex);\n-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n-            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n+        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n             .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n             .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n@@ -171,6 +164,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n             .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n             .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n             .addListener(listener);\n     }\n@@ -222,9 +216,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         }\n     }\n \n-    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n-        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n-        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n+    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n+        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n+        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n             @Override\n             public void onResponse(AddIndexBlockResponse response) {\n                 if (response.isAcknowledged()) {\n@@ -420,6 +414,29 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n     }\n \n+    /**\n+     * All metadata blocks need to be removed at the start for the following reasons:\n+     * 1) If the source index has a metadata only block, the read-only block can't be added.\n+     * 2) If the source index is read-only and closed, it can't be opened.\n+     */\n+    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n+        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n+        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n+    }\n+\n+    private void removeAPIBlocks(\n+        String indexName,\n+        TaskId parentTaskId,\n+        ActionListener<AcknowledgedResponse> listener,\n+        IndexMetadata.APIBlock... blocks\n+    ) {\n+        Settings.Builder settings = Settings.builder();\n+        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n+        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n+        updateSettingsRequest.setParentTask(parentTaskId);\n+        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n+    }\n+\n     private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n         SearchRequest countRequest = new SearchRequest(index);\n         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);",
-        "edit_type": "replace",
-        "verified": true,
-        "verification_result": "ReAct agent applied",
-        "applied": true,
-        "apply_result": "SUCCESS"
-      }
-    ],
-    [
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "old_string": "<line-based ReAct agent diff>",
-        "new_string": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 93c005532e0..8d571f039ed 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;\n import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\n+import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\n import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\n import org.elasticsearch.action.bulk.BulkItemResponse;\n import org.elasticsearch.action.search.SearchRequest;\n@@ -63,6 +64,8 @@ import java.util.Locale;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\n import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;\n \n public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<\n@@ -160,8 +163,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             return;\n         }\n         final boolean wasClosed = isClosed(sourceIndex);\n-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n-            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n+        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n+            .<FreezeResponse>andThen(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n             .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n             .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n@@ -171,6 +175,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n             .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n             .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n             .addListener(listener);\n     }\n@@ -222,9 +227,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         }\n     }\n \n-    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n-        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n-        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n+    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n+        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n+        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n             @Override\n             public void onResponse(AddIndexBlockResponse response) {\n                 if (response.isAcknowledged()) {\n@@ -420,8 +425,8 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n     }\n \n-    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n-        SearchRequest countRequest = new SearchRequest(index);\n+    private void getIndexDocCount(String indexName, TaskId parentTaskId, ActionListener<Long> listener) {\n+        SearchRequest countRequest = new SearchRequest(indexName);\n         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n         countRequest.allowPartialSearchResults(false);\n         countRequest.source(searchSourceBuilder);\n@@ -463,4 +468,22 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             listener.onResponse(null);\n         }\n     }\n+\n+    /**\n+     * All metadata blocks need to be removed at the start for the following reasons:\n+     * 1) If the source index has a metadata only block, the read-only block can't be added.\n+     * 2) If the source index is read-only and closed, it can't be opened.\n+     */\n+    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n+        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n+        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n+    }\n+\n+    private void removeAPIBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener, IndexMetadata.APIBlock... blocks) {\n+        Settings.Builder settings = Settings.builder();\n+        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n+        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n+        updateSettingsRequest.setParentTask(parentTaskId);\n+        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n+    }\n }",
-        "edit_type": "replace",
-        "verified": true,
-        "verification_result": "ReAct agent applied",
-        "applied": true,
-        "apply_result": "SUCCESS"
-      }
-    ]
+    []
   ],
   "agent_trajectory_edits": [
     [
@@ -155,15 +118,6 @@
       },
       {
         "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 390,
-          "radius": 40
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
         "tool": "find_method_definitions",
         "args": {
           "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
@@ -176,256 +130,6 @@
         "args": {
           "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
           "center_line": 225,
-          "radius": 20
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 260,
-          "radius": 20
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "find_method_definitions",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "symbol": "setReadOnly"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "find_method_definitions",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "symbol": "removeMetadataBlocks"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "find_method_definitions",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "symbol": "removeAPIBlocks"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "READ_ONLY"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "WRITE"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "setReadOnly"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "setBlockWrites"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "removeMetadataBlocks"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "removeAPIBlocks"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "TransportUpdateSettingsAction"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "TransportAddIndexBlockAction"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "TransportUpdateSettingsAction"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "setReadOnly"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "setBlockWrites"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 160,
-          "radius": 20
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 170,
-          "radius": 20
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 170,
-          "radius": 40
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 160,
-          "radius": 40
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a metadata block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n            .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n            .addListener(listener);\n    }",
-          "new_string": "        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a metadata block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n            .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n            .addListener(listener);\n    }"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }",
-          "new_string": "    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "insert_import",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "import_statement": "import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\nimport org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\nimport org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\nimport org.elasticsearch.action.bulk.BulkItemResponse;",
-          "new_string": "import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\nimport org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\nimport org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\nimport org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\nimport org.elasticsearch.action.bulk.BulkItemResponse;"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;",
-          "new_string": "import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\nimport static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\nimport static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "    private void addBlockToIndex(\n        IndexMetadata.APIBlock block,\n        String index,\n        ActionListener<AddIndexBlockResponse> listener,\n        TaskId parentTaskId\n    ) {\n        AddIndexBlockRequest addIndexBlockRequest = new AddIndexBlockRequest(block, index);\n        addIndexBlockRequest.markVerified(false);\n        addIndexBlockRequest.setParentTask(parentTaskId);\n        client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n    }",
-          "new_string": "    private void addBlockToIndex(\n        IndexMetadata.APIBlock block,\n        String index,\n        ActionListener<AddIndexBlockResponse> listener,\n        TaskId parentTaskId\n    ) {\n        AddIndexBlockRequest addIndexBlockRequest = new AddIndexBlockRequest(block, index);\n        addIndexBlockRequest.markVerified(false);\n        addIndexBlockRequest.setParentTask(parentTaskId);\n        client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n    }\n\n    /**\n     * All metadata blocks need to be removed at the start for the following reasons:\n     * 1) If the source index has a metadata only block, the read-only block can't be added.\n     * 2) If the source index is read-only and closed, it can't be opened.\n     */\n    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n    }\n\n    private void removeAPIBlocks(\n        String indexName,\n        TaskId parentTaskId,\n        ActionListener<AcknowledgedResponse> listener,\n        IndexMetadata.APIBlock... blocks\n    ) {\n        Settings.Builder settings = Settings.builder();\n        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n        updateSettingsRequest.setParentTask(parentTaskId);\n        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n    }"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "check_java_syntax",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "git_diff_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "verify_guidelines",
-        "args": {
-          "diff_text": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 93c005532e0..8480f2f57a5 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;\n import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\n+import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\n import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\n import org.elasticsearch.action.bulk.BulkItemResponse;\n import org.elasticsearch.action.search.SearchRequest;\n@@ -63,6 +64,8 @@ import java.util.Locale;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\n import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;\n \n public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<\n@@ -160,9 +163,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             return;\n         }\n         final boolean wasClosed = isClosed(sourceIndex);\n-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n-            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n+        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n             .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n             .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n             .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n             .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n             .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n             .addListener(listener);\n     }\n@@ -222,9 +226,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         }\n     }\n \n-    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n-        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n-        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n+    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n+        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n+        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n             @Override\n             public void onResponse(AddIndexBlockResponse response) {\n                 if (response.isAcknowledged()) {\n                     listener.onResponse(null);\n                 } else {\n                     var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                     listener.onFailure(new ElasticsearchException(errorMessage));\n                 }\n             }\n \n             @Override\n             public void onFailure(Exception e) {\n                 if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                     // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                     // In this case, we can proceed\n                     listener.onResponse(null);\n                 } else {\n                     listener.onFailure(e);\n                 }\n             }\n         }, parentTaskId);\n     }\n@@ -420,6 +424,29 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n     }\n \n+    /**\n+     * All metadata blocks need to be removed at the start for the following reasons:\n+     * 1) If the source index has a metadata only block, the read-only block can't be added.\n+     * 2) If the source index is read-only and closed, it can't be opened.\n+     */\n+    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n+        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n+        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n+    }\n+\n+    private void removeAPIBlocks(\n+        String indexName,\n+        TaskId parentTaskId,\n+        ActionListener<AcknowledgedResponse> listener,\n+        IndexMetadata.APIBlock... blocks\n+    ) {\n+        Settings.Builder settings = Settings.builder();\n+        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n+        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n+        updateSettingsRequest.setParentTask(parentTaskId);\n+        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n+    }\n+\n     private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n         SearchRequest countRequest = new SearchRequest(index);\n         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n"
-        }
-      }
-    ],
-    [
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "manage_todo",
-        "args": {
-          "action": "add",
-          "task": "Read file imports and class declaration to check for import additions and context for new methods."
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 30,
           "radius": 15
         }
       },
@@ -434,61 +138,8 @@
         "tool": "read_file_window",
         "args": {
           "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 60,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 150,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 160,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 200,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 400,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 390,
-          "radius": 30
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "find_method_definitions",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "symbol": "setBlockWrites"
+          "start_line": 225,
+          "end_line": 245
         }
       },
       {
@@ -497,7 +148,7 @@
         "args": {
           "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
           "start_line": 225,
-          "end_line": 237
+          "end_line": 245
         }
       },
       {
@@ -505,26 +156,16 @@
         "tool": "get_exact_lines",
         "args": {
           "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "start_line": 238,
-          "end_line": 239
+          "start_line": 246,
+          "end_line": 255
         }
       },
       {
         "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "get_exact_lines",
+        "tool": "find_method_definitions",
         "args": {
           "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "start_line": 240,
-          "end_line": 244
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "get_exact_lines",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "start_line": 245,
-          "end_line": 249
+          "symbol": "setReadOnly"
         }
       },
       {
@@ -541,70 +182,6 @@
         "args": {
           "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
           "symbol": "removeAPIBlocks"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "find_method_definitions",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "symbol": "setReadOnly"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "find_method_definitions",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "symbol": "removeAPIBlocks"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "setBlockWrites"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "setReadOnly"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "removeMetadataBlocks"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "removeAPIBlocks"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "READ_ONLY"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "WRITE"
         }
       },
       {
@@ -637,12 +214,20 @@
       },
       {
         "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "tool": "replace_method_body",
+        "args": {
+          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+          "method_signature": "doExecute(Task, ReindexDataStreamIndexAction.Request, ActionListener<ReindexDataStreamIndexAction.Response>)",
+          "new_body": "        var sourceIndexName = request.getSourceIndex();\n        var destIndexName = generateDestIndexName(sourceIndexName);\n        TaskId taskId = new TaskId(clusterService.localNode().getId(), task.getId());\n        IndexMetadata sourceIndex = clusterService.state().getMetadata().index(sourceIndexName);\n        if (sourceIndex == null) {\n            listener.onFailure(new ResourceNotFoundException(\"source index [{}] does not exist\", sourceIndexName));\n            return;\n        }\n\n        Settings settingsBefore = sourceIndex.getSettings();\n\n        var hasOldVersion = DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterService.state().metadata(), false);\n        if (hasOldVersion.test(sourceIndex.getIndex()) == false) {\n            logger.warn(\n                \"Migrating index [{}] with version [{}] is unnecessary as its version is not before [{}]\",\n                sourceIndexName,\n                sourceIndex.getCreationVersion(),\n                DeprecatedIndexPredicate.MINIMUM_WRITEABLE_VERSION_AFTER_UPGRADE\n            );\n        }\n\n        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n            .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n            .addListener(listener);\n    }"
+        }
+      },
+      {
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
         "tool": "edit_file",
         "args": {
           "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
           "old_string": "        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a metadata block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n            .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n            .addListener(listener);",
-          "new_string": "        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n            .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n            .addListener(listener);",
-          "replace_all": false
+          "new_string": "        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n            .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n            .addListener(listener);"
         }
       },
       {
@@ -650,17 +235,8 @@
         "tool": "edit_file",
         "args": {
           "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }",
-          "new_string": "    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "replace_method_body",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "method_signature": "setBlockWrites(String, ActionListener<AcknowledgedResponse>, TaskId)",
-          "new_body": "{\n        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }"
+          "old_string": "private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }",
+          "new_string": "private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }"
         }
       },
       {
@@ -668,44 +244,8 @@
         "tool": "edit_file",
         "args": {
           "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }",
-          "new_string": "    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 220,
-          "radius": 20
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "get_exact_lines",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "start_line": 219,
-          "end_line": 249
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }",
-          "new_string": "    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "    private void addBlockToIndex(\n        IndexMetadata.APIBlock block,\n        String index,\n        ActionListener<AddIndexBlockResponse> listener,\n        TaskId parentTaskId\n    ) {\n        AddIndexBlockRequest addIndexBlockRequest = new AddIndexBlockRequest(block, index);\n        addIndexBlockRequest.markVerified(false);\n        addIndexBlockRequest.setParentTask(parentTaskId);\n        client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n    }",
-          "new_string": "    private void addBlockToIndex(\n        IndexMetadata.APIBlock block,\n        String index,\n        ActionListener<AddIndexBlockResponse> listener,\n        TaskId parentTaskId\n    ) {\n        AddIndexBlockRequest addIndexBlockRequest = new AddIndexBlockRequest(block, index);\n        addIndexBlockRequest.markVerified(false);\n        addIndexBlockRequest.setParentTask(parentTaskId);\n        client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n    }\n\n    /**\n     * All metadata blocks need to be removed at the start for the following reasons:\n     * 1) If the source index has a metadata only block, the read-only block can't be added.\n     * 2) If the source index is read-only and closed, it can't be opened.\n     */\n    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n    }\n\n    private void removeAPIBlocks(\n        String indexName,\n        TaskId parentTaskId,\n        ActionListener<AcknowledgedResponse> listener,\n        IndexMetadata.APIBlock... blocks\n    ) {\n        Settings.Builder settings = Settings.builder();\n        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n        updateSettingsRequest.setParentTask(parentTaskId);\n        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n    }"
+          "old_string": "    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n        SearchRequest countRequest = new SearchRequest(index);\n        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);",
+          "new_string": "    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n        SearchRequest countRequest = new SearchRequest(index);\n        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n\n    }\n\n    /**\n     * All metadata blocks need to be removed at the start for the following reasons:\n     * 1) If the source index has a metadata only block, the read-only block can't be added.\n     * 2) If the source index is read-only and closed, it can't be opened.\n     */\n    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n    }\n\n    private void removeAPIBlocks(\n        String indexName,\n        TaskId parentTaskId,\n        ActionListener<AcknowledgedResponse> listener,\n        IndexMetadata.APIBlock... blocks\n    ) {\n        Settings.Builder settings = Settings.builder();\n        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n        updateSettingsRequest.setParentTask(parentTaskId);\n        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n    }\n\n    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n        SearchRequest countRequest = new SearchRequest(index);\n        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);"
         }
       },
       {
@@ -726,341 +266,47 @@
         "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
         "tool": "verify_guidelines",
         "args": {
-          "diff_text": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 93c005532e0..7e8233de483 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;\n import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\n+import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\n import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\n import org.elasticsearch.action.bulk.BulkItemResponse;\n import org.elasticsearch.action.search.SearchRequest;\n@@ -63,6 +64,8 @@ import java.util.Locale;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\n import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;\n \n public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<\n@@ -149,20 +152,10 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             );\n         }\n \n-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {\n-            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);\n-            listener.onFailure(new ElasticsearchException(errorMessage));\n-            return;\n-        }\n-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {\n-            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a metadata block.\", destIndexName);\n-            listener.onFailure(new ElasticsearchException(errorMessage));\n-            return;\n-        }\n         final boolean wasClosed = isClosed(sourceIndex);\n-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n-            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n+        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n             .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n             .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n@@ -171,6 +164,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n             .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n             .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n             .addListener(listener);\n     }\n@@ -222,9 +216,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         }\n     }\n \n-    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n-        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n-        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n+    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n+        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n+        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n             @Override\n             public void onResponse(AddIndexBlockResponse response) {\n                 if (response.isAcknowledged()) {\n                     listener.onResponse(null);\n                 } else {\n                     var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                     listener.onFailure(new ElasticsearchException(errorMessage));\n                 }\n             }\n             @Override\n             public void onFailure(Exception e) {\n                 if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                     // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                     // In this case, we can proceed\n                     listener.onResponse(null);\n                 } else {\n                     listener.onFailure(e);\n                 }\n             }\n         }, parentTaskId);\n     }\n@@ -420,6 +414,29 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n     }\n \n+    /**\n+     * All metadata blocks need to be removed at the start for the following reasons:\n+     * 1) If the source index has a metadata only block, the read-only block can't be added.\n+     * 2) If the source index is read-only and closed, it can't be opened.\n+     */\n+    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n+        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n+        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n+    }\n+\n+    private void removeAPIBlocks(\n+        String indexName,\n+        TaskId parentTaskId,\n+        ActionListener<AcknowledgedResponse> listener,\n+        IndexMetadata.APIBlock... blocks\n+    ) {\n+        Settings.Builder settings = Settings.builder();\n+        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n+        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n+        updateSettingsRequest.setParentTask(parentTaskId);\n+        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n+    }\n+"
+          "diff_text": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 93c005532e0..4e91209f4b5 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;\n import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\n+import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\n import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\n import org.elasticsearch.action.bulk.BulkItemResponse;\n import org.elasticsearch.action.search.SearchRequest;\n@@ -63,6 +64,8 @@ import java.util.Locale;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\n import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;\n \n public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<\n@@ -149,20 +152,10 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             );\n         }\n \n-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {\n-            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);\n-            listener.onFailure(new ElasticsearchException(errorMessage));\n-            return;\n-        }\n-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {\n-            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a metadata block.\", destIndexName);\n-            listener.onFailure(new ElasticsearchException(errorMessage));\n-            return;\n-        }\n         final boolean wasClosed = isClosed(sourceIndex);\n-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n-            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n+        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n             .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n             .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n@@ -171,6 +164,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n             .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n             .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n             .addListener(listener);\n     }\n@@ -222,9 +216,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         }\n     }\n \n-    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n-        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n-        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n+    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n+        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n+        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n             @Override\n             public void onResponse(AddIndexBlockResponse response) {\n                 if (response.isAcknowledged()) {\n                     listener.onResponse(null);\n                 } else {\n                     var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                     listener.onFailure(new ElasticsearchException(errorMessage));\n                 }\n             }\n \n             @Override\n             public void onFailure(Exception e) {\n                 if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                     // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                     // In this case, we can proceed\n                     listener.onResponse(null);\n                 } else {\n                     listener.onFailure(e);\n                 }\n             }\n         }, parentTaskId);\n     }\n+\n+    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n+        SearchRequest countRequest = new SearchRequest(index);\n+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n+\n+    }\n+\n+    /**\n+     * All metadata blocks need to be removed at the start for the following reasons:\n+     * 1) If the source index has a metadata only block, the read-only block can't be added.\n+     * 2) If the source index is read-only and closed, it can't be opened.\n+     */\n+    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n+        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n+        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n+    }\n+\n+    private void removeAPIBlocks(\n+        String indexName,\n+        TaskId parentTaskId,\n+        ActionListener<AcknowledgedResponse> listener,\n+        IndexMetadata.APIBlock... blocks\n+    ) {\n+        Settings.Builder settings = Settings.builder();\n+        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n+        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n+        updateSettingsRequest.setParentTask(parentTaskId);\n+        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n+    }\n"
         }
       }
     ],
-    [
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "manage_todo",
-        "args": {
-          "action": "add",
-          "task": "Read file imports and class declaration to check for import additions and static imports."
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 30,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 50,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "TransportUpdateSettingsAction"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "removeMetadataBlocks"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "setReadOnly"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "search_text": "setBlockWrites"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "get_exact_lines",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "start_line": 220,
-          "end_line": 235
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "get_exact_lines",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "start_line": 236,
-          "end_line": 240
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "get_exact_lines",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "start_line": 150,
-          "end_line": 180
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 160,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "get_exact_lines",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "start_line": 220,
-          "end_line": 260
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "get_exact_lines",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "start_line": 390,
-          "end_line": 430
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "get_exact_lines",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "start_line": 430,
-          "end_line": 460
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "get_exact_lines",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "start_line": 460,
-          "end_line": 470
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\nimport org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\nimport org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\nimport org.elasticsearch.action.bulk.BulkItemResponse;\nimport org.elasticsearch.action.search.SearchRequest;",
-          "new_string": "import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\nimport org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\nimport org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\nimport org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\nimport org.elasticsearch.action.bulk.BulkItemResponse;\nimport org.elasticsearch.action.search.SearchRequest;"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;",
-          "new_string": "import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\nimport static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\nimport static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a metadata block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n        \t.<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n        \t.<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n        \t.<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n        \t.<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n        \t.<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n        \t.<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n        \t.<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n        \t.<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n        \t.<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n        \t.<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n        \t.andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n        \t.addListener(listener);",
-          "new_string": "        // Remove metadata blocks before proceeding\n        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n            .<FreezeResponse>andThen(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n            .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n            .addListener(listener);"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 150,
-          "radius": 20
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "get_exact_lines",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "start_line": 165,
-          "end_line": 180
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n            .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n            .addListener(listener);",
-          "new_string": "        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n            .<FreezeResponse>andThen(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))\n            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n            .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n            .addListener(listener);"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }",
-          "new_string": "    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n            @Override\n            public void onResponse(AddIndexBlockResponse response) {\n                if (response.isAcknowledged()) {\n                    listener.onResponse(null);\n                } else {\n                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                    listener.onFailure(new ElasticsearchException(errorMessage));\n                }\n            }\n\n            @Override\n            public void onFailure(Exception e) {\n                if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                    // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                    // In this case, we can proceed\n                    listener.onResponse(null);\n                } else {\n                    listener.onFailure(e);\n                }\n            }\n        }, parentTaskId);\n    }"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n        SearchRequest countRequest = new SearchRequest(index);\n        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n        countRequest.allowPartialSearchResults(false);\n        countRequest.source(searchSourceBuilder);\n        countRequest.setParentTask(parentTaskId);\n        client.search(countRequest, listener.delegateFailure((delegate, response) -> {\n            var totalHits = response.getHits().getTotalHits();\n            assert totalHits.relation == TotalHits.Relation.EQUAL_TO;\n            delegate.onResponse(totalHits.value);\n        }));\n    }",
-          "new_string": "    private void getIndexDocCount(String indexName, TaskId parentTaskId, ActionListener<Long> listener) {\n        SearchRequest countRequest = new SearchRequest(indexName);\n        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n        countRequest.allowPartialSearchResults(false);\n        countRequest.source(searchSourceBuilder);\n        countRequest.setParentTask(parentTaskId);\n        client.search(countRequest, listener.delegateFailure((delegate, response) -> {\n            var totalHits = response.getHits().getTotalHits();\n            assert totalHits.relation == TotalHits.Relation.EQUAL_TO;\n            delegate.onResponse(totalHits.value);\n        }));\n    }"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "replace_method_body",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "method_signature": "private void removeAPIBlocks(String, TaskId, ActionListener<AcknowledgedResponse>, IndexMetadata.APIBlock...)",
-          "new_body": "{\n    Settings.Builder settings = Settings.builder();\n    Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n    var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n    updateSettingsRequest.setParentTask(parentTaskId);\n    client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n}"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n        SearchRequest countRequest = new SearchRequest(index);\n        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n        countRequest.allowPartialSearchResults(false);\n        countRequest.source(searchSourceBuilder);\n        countRequest.setParentTask(parentTaskId);\n        client.search(countRequest, listener.delegateFailure((delegate, response) -> {\n            var totalHits = response.getHits().getTotalHits();\n            assert totalHits.relation == TotalHits.Relation.EQUAL_TO;\n            delegate.onResponse(totalHits.value);\n        }));\n    }",
-          "new_string": "    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n        SearchRequest countRequest = new SearchRequest(index);\n        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n        countRequest.allowPartialSearchResults(false);\n        countRequest.source(searchSourceBuilder);\n        countRequest.setParentTask(parentTaskId);\n        client.search(countRequest, listener.delegateFailure((delegate, response) -> {\n            var totalHits = response.getHits().getTotalHits();\n            assert totalHits.relation == TotalHits.Relation.EQUAL_TO;\n            delegate.onResponse(totalHits.value);\n        }));\n    }\n\n    /**\n     * All metadata blocks need to be removed at the start for the following reasons:\n     * 1) If the source index has a metadata only block, the read-only block can't be added.\n     * 2) If the source index is read-only and closed, it can't be opened.\n     */\n    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n    }\n\n    private void removeAPIBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener, IndexMetadata.APIBlock... blocks) {\n        Settings.Builder settings = Settings.builder();\n        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n        updateSettingsRequest.setParentTask(parentTaskId);\n        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n    }"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 420,
-          "radius": 20
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n        SearchRequest countRequest = new SearchRequest(index);\n        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n        countRequest.allowPartialSearchResults(false);\n        countRequest.source(searchSourceBuilder);\n        countRequest.setParentTask(parentTaskId);\n        client.search(countRequest, listener.delegateFailure((delegate, response) -> {\n            var totalHits = response.getHits().getTotalHits();\n            assert totalHits.relation == TotalHits.Relation.EQUAL_TO;\n            delegate.onResponse(totalHits.value);\n        }));\n    }",
-          "new_string": "    private void getIndexDocCount(String indexName, TaskId parentTaskId, ActionListener<Long> listener) {\n        SearchRequest countRequest = new SearchRequest(indexName);\n        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n        countRequest.allowPartialSearchResults(false);\n        countRequest.source(searchSourceBuilder);\n        countRequest.setParentTask(parentTaskId);\n        client.search(countRequest, listener.delegateFailure((delegate, response) -> {\n            var totalHits = response.getHits().getTotalHits();\n            assert totalHits.relation == TotalHits.Relation.EQUAL_TO;\n            delegate.onResponse(totalHits.value);\n        }));\n    }\n\n    /**\n     * All metadata blocks need to be removed at the start for the following reasons:\n     * 1) If the source index has a metadata only block, the read-only block can't be added.\n     * 2) If the source index is read-only and closed, it can't be opened.\n     */\n    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n    }\n\n    private void removeAPIBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener, IndexMetadata.APIBlock... blocks) {\n        Settings.Builder settings = Settings.builder();\n        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n        updateSettingsRequest.setParentTask(parentTaskId);\n        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n    }"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "center_line": 420,
-          "radius": 40
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-          "old_string": "    private void sanityCheck(\n        String sourceIndexName,\n        String destIndexName,\n        ActionListener<AcknowledgedResponse> listener,\n        TaskId parentTaskId\n    ) {\n        if (Assertions.ENABLED) {\n            logger.debug(\"Comparing source [{}] and dest [{}] doc counts\", sourceIndexName, destIndexName);\n            RefreshRequest refreshRequest = new RefreshRequest(destIndexName);\n            refreshRequest.setParentTask(parentTaskId);\n            client.execute(RefreshAction.INSTANCE, refreshRequest, listener.delegateFailureAndWrap((delegate, ignored) -> {\n                getIndexDocCount(sourceIndexName, parentTaskId, delegate.delegateFailureAndWrap((delegate1, sourceCount) -> {\n                    getIndexDocCount(destIndexName, parentTaskId, delegate1.delegateFailureAndWrap((delegate2, destCount) -> {\n                        assert Objects.equals(sourceCount, destCount)\n                            : String.format(\n                                Locale.ROOT,\n                                \"source index [%s] has %d docs and dest [%s] has %d docs\",\n                                sourceIndexName,\n                                sourceCount,\n                                destIndexName,\n                                destCount\n                            );\n                        delegate2.onResponse(null);\n                    }));\n                }));\n            }));\n        } else {\n            listener.onResponse(null);\n        }\n    }",
-          "new_string": "    private void sanityCheck(\n        String sourceIndexName,\n        String destIndexName,\n        ActionListener<AcknowledgedResponse> listener,\n        TaskId parentTaskId\n    ) {\n        if (Assertions.ENABLED) {\n            logger.debug(\"Comparing source [{}] and dest [{}] doc counts\", sourceIndexName, destIndexName);\n            RefreshRequest refreshRequest = new RefreshRequest(destIndexName);\n            refreshRequest.setParentTask(parentTaskId);\n            client.execute(RefreshAction.INSTANCE, refreshRequest, listener.delegateFailureAndWrap((delegate, ignored) -> {\n                getIndexDocCount(sourceIndexName, parentTaskId, delegate.delegateFailureAndWrap((delegate1, sourceCount) -> {\n                    getIndexDocCount(destIndexName, parentTaskId, delegate1.delegateFailureAndWrap((delegate2, destCount) -> {\n                        assert Objects.equals(sourceCount, destCount)\n                            : String.format(\n                                Locale.ROOT,\n                                \"source index [%s] has %d docs and dest [%s] has %d docs\",\n                                sourceIndexName,\n                                sourceCount,\n                                destIndexName,\n                                destCount\n                            );\n                        delegate2.onResponse(null);\n                    }));\n                }));\n            }));\n        } else {\n            listener.onResponse(null);\n        }\n    }\n\n    /**\n     * All metadata blocks need to be removed at the start for the following reasons:\n     * 1) If the source index has a metadata only block, the read-only block can't be added.\n     * 2) If the source index is read-only and closed, it can't be opened.\n     */\n    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n    }\n\n    private void removeAPIBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener, IndexMetadata.APIBlock... blocks) {\n        Settings.Builder settings = Settings.builder();\n        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n        updateSettingsRequest.setParentTask(parentTaskId);\n        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n    }"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "check_java_syntax",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "git_diff_file",
-        "args": {
-          "file_path": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java"
-        }
-      },
-      {
-        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-        "tool": "verify_guidelines",
-        "args": {
-          "diff_text": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 93c005532e0..8d571f039ed 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;\n import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\n+import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\n import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\n import org.elasticsearch.action.bulk.BulkItemResponse;\n import org.elasticsearch.action.search.SearchRequest;\n@@ -63,6 +64,8 @@ import java.util.Locale;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\n import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;\n \n public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<\n@@ -160,8 +163,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             return;\n         }\n         final boolean wasClosed = isClosed(sourceIndex);\n-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n-            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n+        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n+            .<FreezeResponse>andThen(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n             .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n             .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n@@ -171,6 +175,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n             .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n             .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n             .addListener(listener);\n     }\n@@ -222,9 +227,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         }\n     }\n \n-    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n-        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n-        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n+    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n+        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n+        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n             @Override\n             public void onResponse(AddIndexBlockResponse response) {\n                 if (response.isAcknowledged()) {\n                     listener.onResponse(null);\n                 } else {\n-                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n+                    var errorMessage = String.format(Locale.ROOT, \"Could not set read-only on source index [%s]\", sourceIndexName);\n                     listener.onFailure(new ElasticsearchException(errorMessage));\n                 }\n             }\n \n             @Override\n             public void onFailure(Exception e) {\n                 if (e instanceof ClusterBlockException || e.getCause() instanceof ClusterBlockException) {\n                     // Could fail with a cluster block exception if read-only or read-only-allow-delete is already set\n                     // In this case, we can proceed\n                     listener.onResponse(null);\n                 } else {\n                     listener.onFailure(e);\n                 }\n             }\n         }, parentTaskId);\n     }\n@@ -420,8 +425,8 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n     }\n \n-    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n-        SearchRequest countRequest = new SearchRequest(index);\n+    private void getIndexDocCount(String indexName, TaskId parentTaskId, ActionListener<Long> listener) {\n+        SearchRequest countRequest = new SearchRequest(indexName);\n         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n         countRequest.allowPartialSearchResults(false);\n         countRequest.source(searchSourceBuilder);\n         countRequest.setParentTask(parentTaskId);\n         client.search(countRequest, listener.delegateFailure((delegate, response) -> {\n             var totalHits = response.getHits().getTotalHits();\n             assert totalHits.relation == TotalHits.Relation.EQUAL_TO;\n             delegate.onResponse(totalHits.value);\n         }));\n     }\n\n-    private void sanityCheck(\n-        String sourceIndexName,\n-        String destIndexName,\n-        ActionListener<AcknowledgedResponse> listener,\n-        TaskId parentTaskId\n-    ) {\n-        if (Assertions.ENABLED) {\n-            logger.debug(\"Comparing source [{}] and dest [{}] doc counts\", sourceIndexName, destIndexName);\n-            RefreshRequest refreshRequest = new RefreshRequest(destIndexName);\n-            refreshRequest.setParentTask(parentTaskId);\n-            client.execute(RefreshAction.INSTANCE, refreshRequest, listener.delegateFailureAndWrap((delegate, ignored) -> {\n-                getIndexDocCount(sourceIndexName, parentTaskId, delegate.delegateFailureAndWrap((delegate1, sourceCount) -> {\n-                    getIndexDocCount(destIndexName, parentTaskId, delegate1.delegateFailureAndWrap((delegate2, destCount) -> {\n-                        assert Objects.equals(sourceCount, destCount)\n-                            : String.format(\n-                                Locale.ROOT,\n-                                \"source index [%s] has %d docs and dest [%s] has %d docs\",\n-                                sourceIndexName,\n-                                sourceCount,\n-                                destIndexName,\n-                                destCount\n-                            );\n-                        delegate2.onResponse(null);\n-                    }));\n-                }));\n-            }));\n-        } else {\n-            listener.onResponse(null);\n-        }\n-    }\n+    private void sanityCheck(\n+        String sourceIndexName,\n+        String destIndexName,\n+        ActionListener<AcknowledgedResponse> listener,\n+        TaskId parentTaskId\n+    ) {\n+        if (Assertions.ENABLED) {\n+            logger.debug(\"Comparing source [{}] and dest [{}] doc counts\", sourceIndexName, destIndexName);\n+            RefreshRequest refreshRequest = new RefreshRequest(destIndexName);\n+            refreshRequest.setParentTask(parentTaskId);\n+            client.execute(RefreshAction.INSTANCE, refreshRequest, listener.delegateFailureAndWrap((delegate, ignored) -> {\n+                getIndexDocCount(sourceIndexName, parentTaskId, delegate.delegateFailureAndWrap((delegate1, sourceCount) -> {\n+                    getIndexDocCount(destIndexName, parentTaskId, delegate1.delegateFailureAndWrap((delegate2, destCount) -> {\n+                        assert Objects.equals(sourceCount, destCount)\n+                            : String.format(\n+                                Locale.ROOT,\n+                                \"source index [%s] has %d docs and dest [%s] has %d docs\",\n+                                sourceIndexName,\n+                                sourceCount,\n+                                destIndexName,\n+                                destCount\n+                            );\n+                        delegate2.onResponse(null);\n+                    }));\n+                }));\n+            }));\n+        } else {\n+            listener.onResponse(null);\n+        }\n+    }\n+\n+    /**\n+     * All metadata blocks need to be removed at the start for the following reasons:\n+     * 1) If the source index has a metadata only block, the read-only block can't be added.\n+     * 2) If the source index is read-only and closed, it can't be opened.\n+     */\n+    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n+        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n+        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n+    }\n+\n+    private void removeAPIBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener, IndexMetadata.APIBlock... blocks) {\n+        Settings.Builder settings = Settings.builder();\n+        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n+        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n+        updateSettingsRequest.setParentTask(parentTaskId);\n+        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n+    }\n"
-        }
-      }
-    ]
+    []
   ],
-  "adapted_code_hunks": [
-    {
-      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
-      "hunk_text": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 93c005532e0..8d571f039ed 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;\n import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshAction;\n import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;\n+import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\n import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;\n import org.elasticsearch.action.bulk.BulkItemResponse;\n import org.elasticsearch.action.search.SearchRequest;\n@@ -63,6 +64,8 @@ import java.util.Locale;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\n+import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\n import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;\n \n public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<\n@@ -160,8 +163,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             return;\n         }\n         final boolean wasClosed = isClosed(sourceIndex);\n-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n-            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))\n+        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n+            .<FreezeResponse>andThen(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n             .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))\n             .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))\n@@ -171,6 +175,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))\n             .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))\n             .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))\n+            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n             .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))\n             .addListener(listener);\n     }\n@@ -222,9 +227,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         }\n     }\n \n-    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n-        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n-        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n+    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n+        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n+        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n             @Override\n             public void onResponse(AddIndexBlockResponse response) {\n                 if (response.isAcknowledged()) {\n@@ -420,8 +425,8 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);\n     }\n \n-    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {\n-        SearchRequest countRequest = new SearchRequest(index);\n+    private void getIndexDocCount(String indexName, TaskId parentTaskId, ActionListener<Long> listener) {\n+        SearchRequest countRequest = new SearchRequest(indexName);\n         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);\n         countRequest.allowPartialSearchResults(false);\n         countRequest.source(searchSourceBuilder);\n@@ -463,4 +468,22 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n             listener.onResponse(null);\n         }\n     }\n+\n+    /**\n+     * All metadata blocks need to be removed at the start for the following reasons:\n+     * 1) If the source index has a metadata only block, the read-only block can't be added.\n+     * 2) If the source index is read-only and closed, it can't be opened.\n+     */\n+    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n+        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n+        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n+    }\n+\n+    private void removeAPIBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener, IndexMetadata.APIBlock... blocks) {\n+        Settings.Builder settings = Settings.builder();\n+        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n+        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n+        updateSettingsRequest.setParentTask(parentTaskId);\n+        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n+    }\n }\n",
-      "insertion_line": 24,
-      "intent_verified": false,
-      "file_operation": "MODIFIED",
-      "old_target_file": null,
-      "file_operation_required": true,
-      "path_resolution_reason": "modified_target_mapped"
-    }
-  ],
+  "adapted_code_hunks": [],
   "adapted_test_hunks": [],
   "generation_checklist": [
     {
       "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
       "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
       "hunk_index": 0,
-      "adaptation_type": "TYPE_V",
+      "status": "failed",
+      "reason": "generation_contract_failed",
+      "todo_steps": [
+        "replan"
+      ],
+      "completed_steps": [],
+      "error": "type_v_unverified_plan_entries: [{'hunk_index': 2, 'operation_index': 1, 'verification_result': 'sanitize_old_not_found:not_found_single'}]",
       "execution_types": [
         "TYPE_V"
-      ],
-      "status": "success",
-      "reason": "generated_with_intent_warning",
-      "todo_steps": [
-        "reset_file",
-        "apply_edits",
-        "capture_diff",
-        "intent_check",
-        "restore_file"
-      ],
-      "completed_steps": [
-        "reset_file",
-        "apply_edits",
-        "capture_diff",
-        "intent_check",
-        "restore_file"
       ]
     }
   ],
-  "generated_patch_hash": "07187d1eac4235d126670fc710663576d1e9f3b9708be9c90b2a845a01df038a",
+  "validation_failed_stage": "generation_contract_failed",
+  "validation_failure_category": "context_mismatch",
+  "validation_retry_files": [
+    "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+    "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java"
+  ],
+  "validation_retry_hunks": [],
+  "validation_attempts": 2,
   "force_type_v_until_success": true,
-  "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
+  "force_type_v_reason": "type_v_unverified_plan_entries",
+  "generated_patch_hash": "",
   "token_usage": {
-    "input_tokens": 573,
-    "output_tokens": 13,
-    "total_tokens": 586,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
     "estimated": false,
-    "sources": [
-      "file_editor.intent.provider_usage"
-    ]
+    "sources": []
   }
 }
