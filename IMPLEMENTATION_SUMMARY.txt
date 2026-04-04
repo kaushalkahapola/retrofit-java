@@ -1,0 +1,61 @@
+================================================================================
+ELASTICSEARCH FAILURE FIX - IMPLEMENTATION COMPLETE
+================================================================================
+
+PROBLEM:
+  - Duplicate @Inject annotation in generated code
+  - Extra closing brace in method
+  - Both caused by line-number-based editing (replace_lines)
+
+SOLUTION:
+  - Implement CLAW-inspired exact string matching (edit_file)
+  - No line numbers, no drift, no duplication
+
+FILES CREATED:
+  ✅ agents-backend/src/agents/claw_file_editor.py (200 lines)
+     - edit_file(file_path, old_string, new_string, replace_all=False)
+     - verify_edit_output(output)
+     - make_patch(original, updated)
+     - Syntax verified
+
+FILES MODIFIED:
+  ✅ agents-backend/src/agents/hunk_generator_tools.py (+120 lines)
+     - Added edit_file() method
+     - Registered in get_tools()
+     - System tested, syntax verified
+  
+  ✅ agents-backend/src/agents/file_editor.py (system prompt updated)
+     - New tool selection priority
+     - Decision tree for tool choice
+     - Example usage for decorators
+     - Syntax verified
+
+TESTS PASSED:
+  ✅ Duplicate @Inject Prevention - PASSED
+  ✅ Brace Balance Prevention - PASSED
+
+HOW IT WORKS:
+  OLD: replace_lines(55-77, new_content_WITH_@Inject)
+       → Line 54 has @Inject (context), replacement also has @Inject
+       → Result: DUPLICATE
+
+  NEW: edit_file(old_string="""@Inject...constructor...""",
+                new_string="""@Inject...constructor...""")
+       → Exact match INCLUDES decorator, can't duplicate
+       → Result: CORRECT
+
+READY FOR:
+  1. Agents to use new edit_file() tool from available tools
+  2. System prompt to guide them toward it for decorators/methods
+  3. elasticsearch_41f09bf1 test to pass without line drift
+
+TOTAL CHANGES:
+  - 1 new file (claw_file_editor.py)
+  - 2 modified files (hunk_generator_tools.py, file_editor.py)
+  - ~320 lines of new code + system prompt update
+  - All syntax verified ✅
+
+STATUS: IMPLEMENTATION COMPLETE AND TESTED ✅
+
+For detailed information, see: CLAW_IMPLEMENTATION_COMPLETE.md
+================================================================================

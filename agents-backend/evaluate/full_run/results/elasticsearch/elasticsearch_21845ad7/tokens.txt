@@ -1,0 +1,59 @@
+{
+  "input_tokens": 89,
+  "output_tokens": 0,
+  "total_tokens": 89,
+  "messages_with_usage": 0,
+  "estimated_messages": 8,
+  "tokenizer": {
+    "model": "apim-4o-mini",
+    "library": "tiktoken",
+    "available": true
+  },
+  "by_node": {
+    "context_analyzer": {
+      "input_tokens": 9,
+      "output_tokens": 0,
+      "total_tokens": 9,
+      "estimated_events": 1,
+      "exact_events": 0,
+      "sources": [
+        "estimated_from_message_chars"
+      ]
+    },
+    "structural_locator": {
+      "input_tokens": 17,
+      "output_tokens": 0,
+      "total_tokens": 17,
+      "estimated_events": 1,
+      "exact_events": 0,
+      "sources": [
+        "estimated_from_message_chars"
+      ]
+    },
+    "planning_agent": {
+      "input_tokens": 30,
+      "output_tokens": 0,
+      "total_tokens": 30,
+      "estimated_events": 3,
+      "exact_events": 0,
+      "sources": [
+        "estimated_from_message_chars",
+        "estimated_from_message_chars",
+        "estimated_from_message_chars"
+      ]
+    },
+    "hunk_generator": {
+      "input_tokens": 33,
+      "output_tokens": 0,
+      "total_tokens": 33,
+      "estimated_events": 3,
+      "exact_events": 0,
+      "sources": [
+        "estimated_from_message_chars",
+        "estimated_from_message_chars",
+        "estimated_from_message_chars"
+      ]
+    }
+  },
+  "finished_at": "2026-04-03T15:33:47.214082"
+}

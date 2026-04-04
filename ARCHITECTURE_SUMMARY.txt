@@ -1,0 +1,400 @@
+================================================================================
+                JAVA BACKPORT SYSTEM - AGENT ARCHITECTURE SUMMARY
+================================================================================
+
+SYSTEM NAME: H-MABS (Hybrid Multi-Agent Backport System)
+PURPOSE: Backport Java security patches from mainline (newer) to target (older)
+                                     repositories
+
+================================================================================
+                              AGENT PIPELINE
+================================================================================
+
+1. PHASE 0: OPTIMISTIC FAST-PATH (No LLM)
+   ├─ Attempts: git apply --check <patch>
+   ├─ Success → END (fast-path exit)
+   └─ Failure → Proceed to full 4-agent pipeline
+
+2. AGENT 1: CONTEXT ANALYZER (Deterministic, No LLM)
+   ├─ Input: patch_diff, with_test_changes flag
+   ├─ Output: semantic_blueprint
+   │  ├─ root_cause_hypothesis
+   │  ├─ fix_logic
+   │  ├─ dependent_apis
+   │  └─ hunk_chain (ordered causal chain)
+   └─ Logic: Infer roles, extract hunks, filter test files
+
+3. AGENT 2: STRUCTURAL LOCATOR (Two-Phase, LLM Fallback)
+   ├─ Phase A: Deterministic (PHASE2_DETERMINISTIC_FIRST=True)
+   │  ├─ Uses raw diff anchors to ground line numbers
+   │  ├─ _realign_mapping_to_target() → location verification
+   │  └─ No LLM calls
+   │
+   ├─ Phase B: LLM ReAct (if deterministic fails)
+   │  ├─ Tools: search_candidates, match_structure, get_class_context,
+   │  │         git_pickaxe, grep_repo, find_symbol_locations, git_log_follow
+   │  ├─ Recursion limit: 18
+   │  └─ Fallback: Direct LLM (no-tool JSON-only)
+   │
+   └─ Output: consistency_map + mapped_target_context
+      ├─ consistency_map: {mainline_symbol → target_symbol}
+      └─ mapped_target_context: {file → [hunk_mappings]}
+         ├─ start_line, end_line (verified line numbers)
+         ├─ anchor_confidence (high/medium/low)
+         └─ code_snippet (surrounding context)
+
+4. PLANNING AGENT (Phase 2.5, LLM ReAct with Tools)
+   ├─ Input: patch_diff + mapped_target_context
+   ├─ Decompose hunks → split mixed operations
+   ├─ Verify anchors → find exact old_string in target file
+   │  ├─ Strategies: exact → line_trimmed → multiline_trimmed → anchor_reconstructed
+   │  └─ Semantic adaptation (if verification fails, confidence ≥ 0.6)
+   ├─ Sanitize → normalize against real file
+   └─ Output: hunk_generation_plan
+      ├─ edit_type: "replace" | "insert_after" | "insert_before" | "delete"
+      ├─ old_string: exact verified text from target file
+      ├─ new_string: replacement text (with symbol renames)
+      └─ verified: bool (EXACT_MATCH, TRIMMED_MATCH, etc.)
+
+5. SEMANTIC HUNK ADAPTER (Phase 3+ Recovery, Called from Planning Agent)
+   ├─ Trigger: old_string verification fails + confidence > 60%
+   ├─ Only accepts adaptations with confidence ≥ 0.6
+   │
+   ├─ Workflow:
+   │  1. Extract intent (operation type + target entity)
+   │  2. Find equivalent location (3 strategies: diagnosis, identifier, fuzzy)
+   │  3. Recompose hunk (adapt to target API)
+   │  4. Validate (bracket balance, keyword preservation)
+   │  5. Score confidence (multiplicative: base × penalty)
+   │
+   └─ Covers: IMPORT_ADDITION, METHOD_CALL, METHOD_DEFINITION,
+              FIELD_DECLARATION, OBJECT_INITIALIZATION, UNKNOWN
+                     ↓
+              ADAPTATION STRATEGIES: EXACT_MATCH, METHOD_RENAME,
+                                     SIGNATURE_ADAPT, API_TRANSFORM,
+                                     CONTEXT_ADJUST, PATTERN_MATCH
+
+6. AGENT 3: FILE EDITOR / HUNK GENERATOR (Phase 3, LLM ReAct)
+   ├─ Input: semantic_blueprint + consistency_map + mapped_target_context
+   │
+   ├─ Two Paths:
+   │  A. Without Tools (faster): Direct LLM hunk synthesis
+   │  B. With Tools (recommended): Mandatory workflow
+   │     1. PLAN: Add todos for context gathering
+   │     2. GATHER: Read target file, verify context lines
+   │     3. GENERATE: Emit final unified diff
+   │
+   ├─ Tools: read_file_window, grep_in_file, get_exact_lines,
+   │         verify_context_at_line, manage_todo, build_unified_hunk
+   │
+   ├─ Recursion limit: 100
+   │
+   └─ Output: adapted_code_hunks + adapted_test_hunks
+      ├─ target_file: repo-relative path
+      ├─ hunk_text: unified diff (@@-header + +/- lines)
+      ├─ insertion_line: anchor line number in target
+      └─ intent_verified: bool (LLM validation)
+
+7. AGENT 4: VALIDATION AGENT (Phase 4, "Prove Red, Make Green" Loop)
+   ├─ 6-Phase Validation:
+   │  Phase 1: Proof of Vulnerability
+   │  │  └─ Apply test hunks only → tests executable
+   │  │
+   │  Phase 2: Failure Confirmation
+   │  │  └─ Run tests → MUST FAIL (proves vulnerability exists)
+   │  │
+   │  Phase 3: Patch Application
+   │  │  └─ Apply code hunks + tests → no merge conflicts
+   │  │
+   │  Phase 4: Targeted Verification
+   │  │  └─ Run tests → MUST PASS (proves fix works)
+   │  │
+   │  Phase 5: Full Compilation
+   │  │  └─ Compile all files → no syntax errors
+   │  │
+   │  Phase 6: Static Analysis
+   │  │  └─ Run SpotBugs → no high-severity bugs
+   │
+   ├─ Alternative Modes:
+   │  • compile_only: Apply → compile (no tests)
+   │  • apply_only: Apply only (no build/tests)
+   │  • evaluation_full_workflow: Apply → build → tests
+   │
+   ├─ Failure Classification:
+   │  • _classify_apply_failure() → retry_files + diagnostics
+   │  • _classify_build_failure() → error_category + suggestions
+   │
+   ├─ LLM Usage:
+   │  • _analyze_failure() → 3-sentence diagnosis
+   │
+   └─ Output: validation_results
+      ├─ validation_passed: bool
+      ├─ validation_failure_category: str (for routing)
+      ├─ validation_retry_files: list[str]
+      ├─ validation_retry_hunks: list[int]
+      └─ validation_error_context: str (for feedback)
+
+================================================================================
+                          RETRY ROUTING LOGIC
+================================================================================
+
+If validation_passed → END
+
+Else if attempts < 3:
+  │
+  ├─ path_or_file_operation failure → structural_locator (remap)
+  ├─ context_mismatch failure → planning_agent (replan)
+  ├─ generation_contract_failed → planning_agent (structural fix)
+  ├─ api_mismatch or syntax_error in build → planning_agent
+  ├─ generation_incomplete → planning_agent
+  │
+  └─ else → hunk_generator (retry with error context)
+
+Else (attempts >= 3) → END (give up)
+
+Identical Patch Guard:
+  ├─ plan_signature = SHA256(plan JSON)
+  ├─ generated_patch_hash = hash of generated patch
+  └─ If identical to previous attempt → force replanning instead
+
+================================================================================
+                           KEY DATA STRUCTURES
+================================================================================
+
+SemanticBlueprint:
+  {
+    "root_cause_hypothesis": str,
+    "fix_logic": str,
+    "dependent_apis": [str, ...],
+    "patch_intent_summary": str,
+    "hunk_chain": [HunkRole, ...]
+  }
+
+HunkRole:
+  {
+    "hunk_index": int,
+    "file": str,
+    "summary": str,
+    "role": "declaration" | "guard" | "core_fix" | "propagation" | ...,
+    "connects_to_next": str
+  }
+
+ConsistencyMap:
+  {
+    "mainline_symbol": "target_symbol",
+    ...
+  }
+
+MappedTargetContext:
+  {
+    "src/File.java": [
+      {
+        "hunk_index": int,
+        "mainline_method": str,
+        "target_file": str,
+        "target_method": str,
+        "start_line": int,
+        "end_line": int,
+        "code_snippet": str,
+        "anchor_confidence": "high" | "medium" | "low",
+        "anchor_reason": str,
+        "anchor_strategy": str
+      },
+      ...
+    ]
+  }
+
+HunkGenerationPlan:
+  {
+    "src/File.java": [
+      {
+        "hunk_index": int,
+        "target_file": str,
+        "edit_type": "replace" | "insert_after" | "insert_before" | "delete",
+        "old_string": str,  # VERIFIED
+        "new_string": str,
+        "verified": bool,
+        "verification_result": str,
+        "notes": str
+      },
+      ...
+    ]
+  }
+
+AdaptedHunk:
+  {
+    "target_file": str,
+    "mainline_file": str,
+    "hunk_text": str,  # unified diff
+    "insertion_line": int,
+    "intent_verified": bool,
+    "file_operation": str  # "MODIFIED" | "ADDED" | "DELETED"
+  }
+
+================================================================================
+                          LLM INTEGRATION POINTS
+================================================================================
+
+┌─────────────┬──────────────┬──────────────┬────────────┬──────────────┐
+│ Agent       │ Phase        │ LLM Type     │ Tools      │ Recursion    │
+├─────────────┼──────────────┼──────────────┼────────────┼──────────────┤
+│ Agent 1     │ -            │ NONE         │ N/A        │ N/A          │
+│ Agent 2     │ Phase 2      │ ReAct        │ Yes (7)    │ 18           │
+│ Agent 2     │ Phase 2      │ Direct LLM   │ No         │ N/A          │
+│ Planning    │ Phase 2.5    │ ReAct        │ Yes (5)    │ 100          │
+│ Agent 3     │ Phase 3      │ ReAct/Direct │ Yes (6)    │ 100          │
+│ Agent 4     │ Phase 4      │ Direct LLM   │ No         │ N/A          │
+└─────────────┴──────────────┴──────────────┴────────────┴──────────────┘
+
+Tools by Agent:
+
+Agent 2:
+  • search_candidates(file_path)
+  • match_structure(mainline_file, candidates)
+  • get_class_context(file_path, method_name)
+  • get_dependency_graph(file_paths)
+  • grep_repo(search_text, is_regex)
+  • find_symbol_locations(symbol_name)
+  • git_pickaxe(file_path, snippet)
+  • git_log_follow(file_path)
+
+Planning Agent:
+  • find_method_definitions(file_path)
+  • ripgrep_in_file(file_path, pattern, offset, limit)
+  • find_symbol_references(symbol, offset, limit)
+  • read_file_window(file_path, center_line, radius)
+  • verify_context_at_line(file_path, line_num, expected_text)
+
+Agent 3:
+  • read_file_window(file_path, center_line, radius)
+  • grep_in_file(file_path, pattern)
+  • get_exact_lines(file_path, start_line, end_line)
+  • verify_context_at_line(file_path, line_num, expected_text)
+  • manage_todo(action, description)  # Track todos
+  • build_unified_hunk(...)  # Construct diff safely
+
+LLM Configuration:
+  • Provider: Gemini 2.0 Flash (default, configurable)
+  • Temperature: 0 (deterministic)
+  • Token counting: tiktoken + API response extraction
+
+================================================================================
+                        SEMANTIC HUNK ADAPTER
+================================================================================
+
+Purpose: Recover from anchor resolution failures by intelligently adapting
+         hunks to target's API/structure.
+
+Trigger: Entry verification fails + semantic_diagnosis confidence > 60%
+Accept: Only adaptations with confidence ≥ 0.6
+
+Operation Types (Confidence):
+  • IMPORT_ADDITION (0.95)
+  • METHOD_CALL (0.8)
+  • METHOD_DEFINITION (0.85)
+  • FIELD_DECLARATION (0.8)
+  • OBJECT_INITIALIZATION (0.75)
+  • UNKNOWN (0.4)
+
+Adaptation Strategies:
+  • EXACT_MATCH: No adaptation needed
+  • METHOD_RENAME: Method was renamed
+  • SIGNATURE_ADAPT: Method signature changed
+  • API_TRANSFORM: API completely refactored
+  • CONTEXT_ADJUST: Surrounding code changed
+  • PATTERN_MATCH: Semantic pattern matching
+  • NONE: Could not adapt
+
+Workflow:
+  1. Extract Intent ← analyze old_string/new_string
+  2. Find Equivalent Location ← 3 strategies (diagnosis, identifier, fuzzy)
+  3. Recompose Hunk ← adapt to target API
+  4. Validate ← bracket balance, keyword preservation
+  5. Score Confidence ← multiplicative formula
+
+Confidence Formula:
+  base_score = intent_conf × location_conf × recomposition_conf
+  error_penalty = 1.0 - (validation_errors × 0.1)
+  final = base_score × error_penalty  [clamped to 0.0-1.0]
+
+APISignatureMapper:
+  • extract_method_signature(text)
+  • extract_method_call(text)
+  • transform_method_call(old_call, new_method_name, new_object, parameter_mapping)
+
+================================================================================
+                         CURRENT LIMITATIONS
+================================================================================
+
+Major:
+  1. Deterministic path only works if target file at same path + basic struct
+  2. SemanticAdapter limited to common API patterns
+  3. MethodFingerprinter may fail on obfuscated/minified code
+  4. Test synthesis may not trigger actual vulnerability
+  5. Line numbers may drift if file changes between phases
+  6. Recursion limits (18 for locator, 100 for others) can truncate
+  7. Assumes monolithic patch (not multi-commit)
+  8. Java-specific (hardcoded regex, Maven assumptions)
+
+Known Failure Modes:
+  1. File moved/renamed → SemanticAdapter or EnsembleRetriever
+  2. Method signature changed → SemanticAdapter (may hallucinate params)
+  3. Circular dependencies in patch → No solution
+  4. Test doesn't fail pre-fix → Manual test synthesis
+  5. Symbol rename not in map → Consistency extraction incomplete
+
+================================================================================
+                           EXAMPLE DATA FLOW
+================================================================================
+
+Input Hunk:
+  @@ -42,3 +42,5 @@
+   public void processBuffer(byte[] data) {
+  +    if (data.length > MAX_SIZE) return;
+       validateHeader(data);
+
+Agent 1:
+  root_cause_hypothesis: "Missing bounds check before buffer processing"
+  fix_logic: "Add length check (data.length > MAX_SIZE) before processing"
+  dependent_apis: ["validateHeader", "MAX_SIZE"]
+
+Agent 2:
+  consistency_map: {}
+  mapped_target_context:
+    "src/Buffer.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "src/Buffer.java",
+        "target_method": "processBuffer",
+        "start_line": 42
+      }
+    ]
+
+Planning Agent:
+  hunk_generation_plan:
+    "src/Buffer.java": [
+      {
+        "hunk_index": 0,
+        "edit_type": "insert_after",
+        "old_string": "public void processBuffer(byte[] data) {",
+        "new_string": "public void processBuffer(byte[] data) {\n    if (data.length > MAX_SIZE) return;",
+        "verified": true
+      }
+    ]
+
+Agent 3:
+  adapted_code_hunks: [
+    {
+      "target_file": "src/Buffer.java",
+      "hunk_text": "@@ -42,2 +42,4 @@\n public void processBuffer(byte[] data) {\n+    if (data.length > MAX_SIZE) return;\n     validateHeader(data);",
+      "insertion_line": 42
+    }
+  ]
+
+Agent 4:
+  Phase 1-2: Apply test, run → FAILS (vulnerability confirmed)
+  Phase 3-4: Apply code, run → PASSES (fix verified)
+  Phase 5-6: Compile, SpotBugs → OK
+  Result: validation_passed = true
+
+================================================================================

@@ -7,6 +7,12 @@ echo "--- Building code for ${COMMIT_SHA:0:7} ---"
 BUILD_DIR="${BUILD_DIR:-/tmp/crate-build-${COMMIT_SHA:0:7}}"
 mkdir -p "${BUILD_DIR}"
 
+MAX_CPU="${MAX_CPU:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 1)}"
+MAVEN_THREADS="${MAVEN_THREADS:-${MAX_CPU}}"
+
+echo "CPU detected: ${MAX_CPU}"
+echo "Maven threads: ${MAVEN_THREADS}"
+
 echo "--- Changing directory to ${PROJECT_DIR} ---"
 cd "${PROJECT_DIR}"
 
@@ -54,9 +60,10 @@ if ${DOCKER_CMD} run --rm \
     -w /repo \
     ${IMAGE_TAG} \
     bash -c "git config --global --add safe.directory /repo && \
+    export MAVEN_OPTS=\"\${MAVEN_OPTS:-} -XX:ActiveProcessorCount=${MAX_CPU}\" && \
     mkdir -p /root/.m2 && \
     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /root/.m2/toolchains.xml && \
-    mvn clean install -DskipTests -T 1C --global-toolchains /root/.m2/toolchains.xml"; then
+    mvn clean install -DskipTests -T ${MAVEN_THREADS} --global-toolchains /root/.m2/toolchains.xml"; then
     echo "✅ Build Succeeded"
     exit 0
 else

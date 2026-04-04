@@ -24,6 +24,7 @@ import subprocess
 from typing import Any, Optional
 
 from langchain_core.tools import StructuredTool
+from agents.claw_file_editor import edit_file as claw_edit_file, verify_edit_output
 
 
 class HunkGeneratorToolkit:
@@ -631,6 +632,281 @@ class HunkGeneratorToolkit:
 
         return "\n".join(out_parts)
 
+    def verify_guidelines(self, diff_text: str) -> str:
+        """
+        Verify the generated git diff adheres to strict Java syntactic and structural guidelines.
+        This runs the exact same checks as the backend engine. Returns "ALL_GOOD" or an error string.
+        Call this tool right before finishing your work to double check your edit.
+        """
+        issues = []
+
+        # 1. Truncated structs
+        added = [
+            line[1:]
+            for line in (diff_text or "").splitlines()
+            if line.startswith("+") and not line.startswith("+++")
+        ]
+        for line in added:
+            s = line.strip()
+            if s == "private static final":
+                issues.append(
+                    "syntax_guard_failed: truncated declaration 'private static final'"
+                )
+            elif re.match(r"^(private|public|protected)\s+(static\s+)?(final\s+)?$", s):
+                issues.append(f"syntax_guard_failed: truncated declaration '{s}'")
+            elif s.endswith("=") and not s.endswith("=="):
+                issues.append(
+                    f"syntax_guard_failed: dangling assignment in added line '{s}'"
+                )
+
+        # 2. Static fields inside method body
+        lines = (diff_text or "").splitlines()
+        context_before = []
+        for line in lines:
+            if line.startswith("@@"):
+                context_before = []
+                continue
+            if line.startswith(" ") or line.startswith("-"):
+                context_before.append(line[1:])
+            if line.startswith("+") and not line.startswith("+++"):
+                l = line[1:].strip()
+                if re.match(r"^(private|public|protected)\s+static\s+final\s+", l):
+                    combined = "\n".join(context_before[-20:])
+                    open_braces = combined.count("{")
+                    close_braces = combined.count("}")
+                    depth = open_braces - close_braces
+                    if depth > 1:
+                        issues.append(
+                            f"semantic_guard_failed: static field inserted inside method body (brace depth={depth})"
+                        )
+
+        if issues:
+            return (
+                "GUIDELINE_FAILURES:\n- "
+                + "\n- ".join(issues)
+                + "\n\nFix these issues using `replace_lines` again."
+            )
+
+        return "ALL_GOOD"
+
+    # ------------------------------------------------------------------
+    # Tool 10a: replace_lines
+    # ------------------------------------------------------------------
+
+    def replace_lines(
+        self,
+        file_path: str,
+        start_line: int,
+        end_line: int,
+        new_content: str,
+    ) -> str:
+        """
+        Replace lines `start_line` to `end_line` (inclusive, 1-indexed) in the target file
+        with `new_content`.
+
+        To insert new lines without replacing any existing lines, set `start_line` to N and
+        `end_line` to N-1 (e.g. start_line=27, end_line=26 will insert before line 27).
+
+        Args:
+            file_path: Repo-relative path to the file.
+            start_line: 1-indexed start line to replace (or N for insertion).
+            end_line: 1-indexed end line to replace (or N-1 for insertion).
+            new_content: The new complete code block to insert/replace.
+
+        Returns:
+            SUCCESS message (including line delta for tracking subsequent edits) or ERROR message.
+        """
+        full_path = self._full_path(file_path)
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                original = f.read()
+        except Exception as exc:
+            return f"ERROR: Cannot read file '{file_path}': {exc}"
+
+        lines = original.splitlines(keepends=True)
+        total = len(lines)
+        if start_line < 1 or end_line > total or start_line > end_line + 1:
+            return (
+                f"ERROR: Invalid range {start_line}-{end_line}. File has {total} lines."
+            )
+
+        # Support inserting lines by letting start_line == end_line + 1
+        s_idx = start_line - 1
+        e_idx = end_line  # Exclusive
+
+        if (
+            new_content
+            and not new_content.endswith("\n")
+            and s_idx < total
+            and lines[s_idx].endswith("\n")
+        ):
+            # Ensure proper newline behavior
+            new_content += "\n"
+
+        lines_before = lines[:s_idx]
+        lines_after = lines[e_idx:]
+
+        # Calculate line delta: how many lines the file grows or shrinks
+        old_line_count = max(1, end_line - start_line + 1)
+        new_line_count = new_content.count("\n")
+        if new_content and not new_content.endswith("\n"):
+            new_line_count += 1
+        delta = new_line_count - old_line_count
+
+        new_resolved = lines_before + [new_content] + lines_after
+
+        try:
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write("".join(new_resolved))
+            # Return success with delta information for tracking line number shifts
+            sign = "+" if delta >= 0 else ""
+            return f"SUCCESS: lines {start_line} to {end_line} replaced. Line delta: {sign}{delta} (subsequent edits below line {end_line} must shift by {sign}{delta})."
+        except Exception as exc:
+            return f"ERROR: Cannot write file '{file_path}': {exc}"
+
+    def check_java_syntax(self, file_path: str) -> dict[str, Any]:
+        """
+        Run a fast syntax-only check using javac.
+        Ignores 'cannot find symbol' and other classpath-related errors.
+        Focuses on structural syntax errors (unclosed braces, missing semicolons, etc).
+        
+        Args:
+            file_path: Repo-relative path to the file.
+        """
+        full_path = self._full_path(file_path)
+        if not os.path.isfile(full_path):
+            return {"success": False, "output": f"ERROR: File not found: {file_path}"}
+
+        # -proc:none skips annotation processing
+        # -Xlint:none disables all warnings
+        # -nowarn suppresses warnings
+        # -d /tmp/ ensures we don't pollute the local directory
+        cmd = ["javac", "-proc:none", "-Xlint:none", "-nowarn", "-d", "/tmp/", full_path]
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=self.target_repo_path
+            )
+            output = (result.stdout or "") + "\n" + (result.stderr or "")
+        except Exception as e:
+            return {"success": False, "output": f"ERROR executing javac: {e}"}
+
+        # Filter output for actual syntax errors
+        lines = output.strip().splitlines()
+        syntax_errors = []
+        ignore_patterns = [
+            r"cannot find symbol",
+            r"package .* does not exist",
+            r"should be declared in a file named",
+            r"symbol:\s+class",
+            r"symbol:\s+variable",
+            r"location:\s+class",
+            r"location:\s+interface",
+            r"import\s+.*",
+        ]
+        
+        current_error = []
+        is_syntax_error = False
+        
+        for line in lines:
+            if ": error:" in line:
+                if current_error and is_syntax_error:
+                    syntax_errors.append("\n".join(current_error))
+                
+                current_error = [line]
+                # Check if this new error is something we should ignore
+                is_syntax_error = not any(re.search(pat, line) for pat in ignore_patterns)
+            elif line.strip() == "^" or line.startswith("  symbol:") or line.startswith("  location:"):
+                current_error.append(line)
+            elif current_error:
+                current_error.append(line)
+        
+        if current_error and is_syntax_error:
+            syntax_errors.append("\n".join(current_error))
+
+        if not syntax_errors:
+            return {
+                "success": True,
+                "syntax_valid": True,
+                "output": "PASSED: No significant syntax errors found (classpath/symbol errors ignored)."
+            }
+        
+        return {
+            "success": False,
+            "syntax_valid": False,
+            "output": (
+                "CRITICAL: PROBABLE SYNTAX ERROR(S) FOUND.\n"
+                "These are structural errors (like extra braces or missing semicolons) that MUST be fixed "
+                "before submitting. Do NOT ignore these as 'unrelated' – they are almost certainly "
+                "caused by the edit you just applied.\n\n"
+                "ERRORS:\n\n" + "\n\n".join(syntax_errors)
+            )
+        }
+
+    # ------------------------------------------------------------------
+    # Tool 10b: edit_file (CLAW-inspired: exact string matching, no line drift)
+    # ------------------------------------------------------------------
+
+    def edit_file(
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+    ) -> str:
+        """
+            Edit a file using exact string matching (CLAW module).
+
+            This approach COMPLETELY AVOIDS line number drift by:
+            1. Matching exact old_string in file
+            2. Replacing with exact new_string
+            3. Verification of file state after edit
+
+            Args:
+                file_path: Repo-relative path to file
+                old_string: EXACT string to find
+                new_string: EXACT string to replace it with
+                replace_all: Replace all occurrences if True
+
+            Returns:
+                SUCCESS or ERROR message.
+        """
+        full_path = self._full_path(file_path)
+
+        try:
+            # Delegate to the standalone claw_file_editor module
+            result = claw_edit_file(
+                file_path=full_path,
+                old_string=old_string,
+                new_string=new_string,
+                replace_all=replace_all
+            )
+
+            # Perform extra verification
+            verification = verify_edit_output(result)
+            if verification != "ALL_GOOD":
+                return verification
+
+            # Calculate statistics for response
+            old_lines = len(old_string.splitlines())
+            new_lines = len(new_string.splitlines())
+            line_delta = old_lines - new_lines
+            sign = "+" if line_delta > 0 else ""
+
+            return (
+                f"SUCCESS: edit_file replaced {old_lines} lines with {new_lines} lines in '{file_path}'. "
+                f"Line delta: {sign}{line_delta}. "
+                f"Verified on disk using claw_file_editor logic."
+            )
+
+        except ValueError as e:
+            return f"ERROR: {str(e)}"
+        except Exception as e:
+            return f"ERROR: Unexpected failure during edit: {str(e)}"
+
     # ------------------------------------------------------------------
     # Tool 11: git_diff_file  (mechanically correct diff after edits)
     # ------------------------------------------------------------------
@@ -677,7 +953,7 @@ class HunkGeneratorToolkit:
             return f"ERROR: {exc}"
 
     # ------------------------------------------------------------------
-    # Tool 12: reset_file  (undo all edits for a file)
+    # Tool 13: reset_file  (undo all edits for a file)
     # ------------------------------------------------------------------
 
     def reset_file(self, file_path: str) -> str:
@@ -700,13 +976,227 @@ class HunkGeneratorToolkit:
                 text=True,
                 timeout=30,
             )
-            if result.returncode != 0:
+            if result.returncode == 0:
+                return f"SUCCESS: '{file_path}' reset to HEAD state."
+            else:
                 return f"ERROR: git checkout failed: {result.stderr.strip()}"
-            return f"SUCCESS: '{file_path}' reset to HEAD state."
         except subprocess.TimeoutExpired:
             return "ERROR: git checkout timed out."
         except Exception as exc:
             return f"ERROR: {exc}"
+
+    # ------------------------------------------------------------------
+    # Tool 14: replace_method_body (AST-based, immune to line drift)
+    # ------------------------------------------------------------------
+
+    def replace_method_body(
+        self,
+        file_path: str,
+        method_signature: str,
+        new_body: str,
+    ) -> str:
+        """
+        Replace the body of a method or constructor using AST-based approach.
+        This is structurally immune to line number drift - the tool locates the method
+        by its signature in the AST, not by line numbers.
+
+        This tool calls the Java MCP server's replace_method_body endpoint.
+
+        Args:
+            file_path: Repo-relative path to the Java file.
+            method_signature: Method/constructor signature (e.g., "doSomething(String arg1, int arg2)"
+                            or "ClassName(...)" for constructors with any params).
+            new_body: Complete method body code (without curly braces).
+
+        Returns:
+            "SUCCESS: ..." or "ERROR: ..." message with details.
+        """
+        try:
+            from mcp_client import McpClient
+
+            client = McpClient(self.target_repo_path)
+            arguments = {
+                "target_repo_path": self.target_repo_path,
+                "file_path": file_path,
+                "method_signature": method_signature,
+                "new_body": new_body,
+            }
+
+            result = client.call_tool("replace_method_body", arguments)
+
+            if result.get("success"):
+                return f"SUCCESS: {result.get('message', 'Method replaced')}"
+            else:
+                return f"ERROR: {result.get('error', 'Unknown error')}"
+
+        except Exception as exc:
+            return f"ERROR: Failed to call MCP server: {exc}"
+
+    # ------------------------------------------------------------------
+    # Tool 15: get_method_boundaries (AST-based line lookup)
+    # ------------------------------------------------------------------
+
+    def get_method_boundaries(
+        self,
+        file_path: str,
+        method_signature: str,
+    ) -> str:
+        """
+        Get the exact line number boundaries of a method or constructor.
+        Uses AST analysis to find precise boundaries without guessing.
+
+        This is useful for determining if a line-based edit will work safely
+        after multiple edits have shifted lines.
+
+        Args:
+            file_path: Repo-relative path to the Java file.
+            method_signature: Method/constructor signature to locate.
+
+        Returns:
+            Formatted string with start_line and end_line, or error message.
+        """
+        try:
+            from mcp_client import McpClient
+
+            client = McpClient(self.target_repo_path)
+            arguments = {
+                "target_repo_path": self.target_repo_path,
+                "file_path": file_path,
+                "method_signature": method_signature,
+            }
+
+            result = client.call_tool("get_method_boundaries", arguments)
+
+            if result.get("success"):
+                start = result.get("start_line")
+                end = result.get("end_line")
+                return f"Method boundaries found: lines {start}-{end}"
+            else:
+                return f"ERROR: {result.get('error', 'Unknown error')}"
+
+        except Exception as exc:
+            return f"ERROR: Failed to call MCP server: {exc}"
+
+    # ------------------------------------------------------------------
+    # Tool 16: replace_field (AST-based field replacement)
+    # ------------------------------------------------------------------
+
+    def replace_field(
+        self,
+        file_path: str,
+        field_name: str,
+        new_declaration: str,
+    ) -> str:
+        """
+        Replace a field declaration in a Java file using AST-based approach.
+
+        Args:
+            file_path: Repo-relative path to the Java file.
+            field_name: Name of the field to replace.
+            new_declaration: Complete field declaration (e.g., "private final String name;").
+
+        Returns:
+            "SUCCESS: ..." or "ERROR: ..." message.
+        """
+        try:
+            from mcp_client import McpClient
+
+            client = McpClient(self.target_repo_path)
+            arguments = {
+                "target_repo_path": self.target_repo_path,
+                "file_path": file_path,
+                "field_name": field_name,
+                "new_declaration": new_declaration,
+            }
+
+            result = client.call_tool("replace_field", arguments)
+
+            if result.get("success"):
+                return f"SUCCESS: {result.get('message', 'Field replaced')}"
+            else:
+                return f"ERROR: {result.get('error', 'Unknown error')}"
+
+        except Exception as exc:
+            return f"ERROR: Failed to call MCP server: {exc}"
+
+    # ------------------------------------------------------------------
+    # Tool 17: insert_import (AST-based import management)
+    # ------------------------------------------------------------------
+
+    def insert_import(
+        self,
+        file_path: str,
+        import_statement: str,
+    ) -> str:
+        """
+        Insert an import statement into a Java file using AST-based approach.
+        Automatically avoids duplicate imports.
+
+        Args:
+            file_path: Repo-relative path to the Java file.
+            import_statement: Import statement (e.g., "java.util.List" or "java.util.*").
+
+        Returns:
+            "SUCCESS: ..." or "ERROR: ..." message.
+        """
+        try:
+            from mcp_client import McpClient
+
+            client = McpClient(self.target_repo_path)
+            arguments = {
+                "target_repo_path": self.target_repo_path,
+                "file_path": file_path,
+                "import_statement": import_statement,
+            }
+
+            result = client.call_tool("insert_import", arguments)
+
+            if result.get("success"):
+                return f"SUCCESS: {result.get('message', 'Import inserted')}"
+            else:
+                return f"ERROR: {result.get('error', 'Unknown error')}"
+
+        except Exception as exc:
+            return f"ERROR: Failed to call MCP server: {exc}"
+
+    # ------------------------------------------------------------------
+    # Tool 18: remove_method (AST-based method deletion)
+    # ------------------------------------------------------------------
+
+    def remove_method(
+        self,
+        file_path: str,
+        method_signature: str,
+    ) -> str:
+        """
+        Remove a method from a Java file using AST-based approach.
+
+        Args:
+            file_path: Repo-relative path to the Java file.
+            method_signature: Method signature to remove (supports wildcards like "method(...)").
+
+        Returns:
+            "SUCCESS: ..." or "ERROR: ..." message.
+        """
+        try:
+            from mcp_client import McpClient
+
+            client = McpClient(self.target_repo_path)
+            arguments = {
+                "target_repo_path": self.target_repo_path,
+                "file_path": file_path,
+                "method_signature": method_signature,
+            }
+
+            result = client.call_tool("remove_method", arguments)
+
+            if result.get("success"):
+                return f"SUCCESS: {result.get('message', 'Method removed')}"
+            else:
+                return f"ERROR: {result.get('error', 'Unknown error')}"
+
+        except Exception as exc:
+            return f"ERROR: Failed to call MCP server: {exc}"
 
     # ------------------------------------------------------------------
     # Tool 13: ripgrep_in_file  (regex search with offset/limit)
@@ -992,13 +1482,19 @@ class HunkGeneratorToolkit:
             ),
             # --- File Editor tools (Agent 3 file-edit architecture) ---
             StructuredTool.from_function(
-                func=self.str_replace_in_file,
+                func=self.edit_file,
                 name="str_replace_in_file",
                 description=(
-                    "Replace the FIRST occurrence of old_string with new_string directly "
-                    "in the target file on disk. Returns SUCCESS, NOT_FOUND, AMBIGUOUS, "
-                    "or ERROR. This is the primary editing primitive - use it instead of "
-                    "generating unified diff hunks. Always verify old_string exists first."
+                    "DEPRECATED: Alias for edit_file. Use edit_file instead."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.check_java_syntax,
+                name="check_java_syntax",
+                description=(
+                    "Run a fast syntax-only check using javac. Ignores symbol/classpath "
+                    "errors. Use this as a lightweight pre-validation step after an edit "
+                    "to catch unclosed braces, missing semicolons, etc. before full testing."
                 ),
             ),
             StructuredTool.from_function(
@@ -1020,6 +1516,33 @@ class HunkGeneratorToolkit:
                 ),
             ),
             StructuredTool.from_function(
+                func=self.verify_guidelines,
+                name="verify_guidelines",
+                description=(
+                    "Verify the generated git diff adheres to strict Java syntactic guidelines. "
+                    "Call this tool to self-correct. It will return 'ALL_GOOD' or flag compilation issues."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.replace_lines,
+                name="replace_lines",
+                description=(
+                    "Replace a specific block of lines (start_line to end_line, inclusive, 1-indexed) "
+                    "with new_content. Use ONLY for pure insertions or when old text cannot be matched. "
+                    "WARNING: Prone to line drift! Prefer edit_file for structural changes like methods or decorators."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.edit_file,
+                name="edit_file",
+                description=(
+                    "Edit a file using exact string matching (CLAW-inspired). "
+                    "Find old_string (exact match including decorators) and replace with new_string. "
+                    "PREFERRED for method changes, decorators, structural edits - avoids line drift completely. "
+                    "Set replace_all=true to replace all occurrences, false for first only."
+                ),
+            ),
+            StructuredTool.from_function(
                 func=self.git_diff_file,
                 name="git_diff_file",
                 description=(
@@ -1034,6 +1557,49 @@ class HunkGeneratorToolkit:
                 description=(
                     "Reset a target file to its HEAD state, discarding all working-tree "
                     "edits. Use if edits went wrong and you need to start over for a file."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.replace_method_body,
+                name="replace_method_body",
+                description=(
+                    "Replace method body using AST-based approach via Java MCP server. "
+                    "Immune to line number drift. Locates method by signature not line numbers. "
+                    "Supports wildcards: 'method(...)' matches any params, 'method(String, *)' matches String and any type."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.get_method_boundaries,
+                name="get_method_boundaries",
+                description=(
+                    "Get exact line boundaries of a method using AST analysis. "
+                    "Returns start_line and end_line without drift. Useful for verifying "
+                    "line ranges after multiple edits."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.replace_field,
+                name="replace_field",
+                description=(
+                    "Replace a field declaration in a Java file using AST-based approach. "
+                    "Immune to line drift. Specify field name and new declaration."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.insert_import,
+                name="insert_import",
+                description=(
+                    "Insert an import statement into a Java file using AST-based approach. "
+                    "Automatically avoids duplicate imports. "
+                    "Examples: 'java.util.List' or 'java.util.*'"
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.remove_method,
+                name="remove_method",
+                description=(
+                    "Remove a method from a Java file using AST-based approach. "
+                    "Supports wildcard signatures like 'method(...)' to match any parameters."
                 ),
             ),
         ]

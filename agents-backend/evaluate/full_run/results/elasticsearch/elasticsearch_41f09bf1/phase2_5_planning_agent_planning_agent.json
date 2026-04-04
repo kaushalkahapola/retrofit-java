@@ -1,0 +1,330 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.action.ActionType;",
+        "new_string": "import org.elasticsearch.action.ActionRunnable;\nimport org.elasticsearch.action.ActionType;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import org.elasticsearch.action.ActionListener;",
+          "import org.elasticsearch.action.ActionRequestValidationException;",
+          "import org.elasticsearch.action.ActionResponse;"
+        ],
+        "surround_after_3": [
+          "import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;",
+          "import org.elasticsearch.action.support.ActionFilters;",
+          "import org.elasticsearch.action.support.master.MasterNodeReadRequest;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": []
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 1,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;",
+        "new_string": "import org.elasticsearch.action.SingleResultDeduplicator;\nimport org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import org.elasticsearch.action.ActionRequestValidationException;",
+          "import org.elasticsearch.action.ActionResponse;",
+          "import org.elasticsearch.action.ActionType;"
+        ],
+        "surround_after_3": [
+          "import org.elasticsearch.action.support.ActionFilters;",
+          "import org.elasticsearch.action.support.master.MasterNodeReadRequest;",
+          "import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": []
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 2,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.action.support.master.MasterNodeReadRequest;",
+        "new_string": "import org.elasticsearch.action.support.SubscribableListener;\nimport org.elasticsearch.action.support.master.MasterNodeReadRequest;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import org.elasticsearch.action.ActionType;",
+          "import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;",
+          "import org.elasticsearch.action.support.ActionFilters;"
+        ],
+        "surround_after_3": [
+          "import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;",
+          "import org.elasticsearch.cluster.ClusterState;",
+          "import org.elasticsearch.cluster.block.ClusterBlockException;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": []
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.core.Nullable;",
+        "new_string": "import org.elasticsearch.common.util.concurrent.EsExecutors;\nimport org.elasticsearch.core.Nullable;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import org.elasticsearch.cluster.service.ClusterService;",
+          "import org.elasticsearch.common.io.stream.StreamInput;",
+          "import org.elasticsearch.common.io.stream.StreamOutput;"
+        ],
+        "surround_after_3": [
+          "import org.elasticsearch.core.TimeValue;",
+          "import org.elasticsearch.features.FeatureService;",
+          "import org.elasticsearch.injection.guice.Inject;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": []
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "    private final AllocationStatsService allocationStatsService;",
+        "new_string": "    private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "",
+          "    public static final ActionType<TransportGetAllocationStatsAction.Response> TYPE = new ActionType<>(\"cluster:monitor/allocation/stats\");",
+          ""
+        ],
+        "surround_after_3": [
+          "    private final DiskThresholdSettings diskThresholdSettings;",
+          "    private final FeatureService featureService;",
+          ""
+        ],
+        "adaptation_type": "TYPE_II",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": []
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "            threadPool.executor(ThreadPool.Names.MANAGEMENT)",
+        "new_string": "            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return\n            // very cheaply.\n            EsExecutors.DIRECT_EXECUTOR_SERVICE\n        );\n        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);\n        this.allocationStatsSupplier = new SingleResultDeduplicator<>(\n            threadPool.getThreadContext(),\n            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "            TransportGetAllocationStatsAction.Request::new,",
+          "            indexNameExpressionResolver,",
+          "            TransportGetAllocationStatsAction.Response::new,"
+        ],
+        "surround_after_3": [
+          "        );",
+          "        this.allocationStatsService = allocationStatsService;",
+          "        this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());"
+        ],
+        "adaptation_type": "TYPE_II",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [
+          "Detected target location line (73) differs from mainline old start line (69)",
+          "Pre-patch surrounding context in target differs from mainline pre-patch context"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": []
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 1,
+        "edit_type": "delete",
+        "old_string": "        this.allocationStatsService = allocationStatsService;",
+        "new_string": "",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_delete",
+        "surround_before_3": [
+          "            TransportGetAllocationStatsAction.Response::new,",
+          "            threadPool.executor(ThreadPool.Names.MANAGEMENT)",
+          "        );"
+        ],
+        "surround_after_3": [
+          "        this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());",
+          "        this.featureService = featureService;",
+          "    }"
+        ],
+        "adaptation_type": "TYPE_II",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [
+          "Detected target location line (73) differs from mainline old start line (69)",
+          "Pre-patch surrounding context in target differs from mainline pre-patch context"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": []
+      },
+      {
+        "hunk_index": 4,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "        listener.onResponse(\n            new Response(\n                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),",
+        "new_string": "        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool\n\n        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)\n            ? SubscribableListener.newForked(allocationStatsSupplier::execute)\n            : SubscribableListener.newSucceeded(Map.of());\n\n        allocationStatsStep.andThenApply(\n            allocationStats -> new Response(\n                allocationStats,",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "",
+          "    @Override",
+          "    protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {"
+        ],
+        "surround_after_3": [
+          "                request.metrics().contains(Metric.FS)",
+          "                    && featureService.clusterHasFeature(clusterService.state(), AllocationStatsFeatures.INCLUDE_DISK_THRESHOLD_SETTINGS)",
+          "                        ? diskThresholdSettings"
+        ],
+        "adaptation_type": "TYPE_II",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": []
+      },
+      {
+        "hunk_index": 4,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "        );",
+        "new_string": "        ).addListener(listener);",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "            indexNameExpressionResolver,",
+          "            TransportGetAllocationStatsAction.Response::new,",
+          "            threadPool.executor(ThreadPool.Names.MANAGEMENT)"
+        ],
+        "surround_after_3": [
+          "        this.allocationStatsService = allocationStatsService;",
+          "        this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());",
+          "        this.featureService = featureService;"
+        ],
+        "adaptation_type": "TYPE_II",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": []
+      }
+    ],
+    "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import java.util.Map;",
+        "new_string": "import org.elasticsearch.transport.Transports;\nimport java.util.Map;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import org.elasticsearch.cluster.service.ClusterService;",
+          "import org.elasticsearch.common.util.Maps;",
+          ""
+        ],
+        "surround_after_3": [
+          "",
+          "public class AllocationStatsService {",
+          ""
+        ],
+        "adaptation_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": []
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "        var state = clusterService.state();",
+        "new_string": "        assert Transports.assertNotTransportThread(\"too expensive for a transport worker\");\n\n        var state = clusterService.state();",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "Inserted assertion before state retrieval as in mainline patch",
+        "surround_before_3": [
+          "    }",
+          "",
+          "    public Map<String, NodeAllocationStats> stats() {"
+        ],
+        "surround_after_3": [
+          "        var info = clusterInfoService.getClusterInfo();",
+          "        var desiredBalance = desiredBalanceShardsAllocator != null ? desiredBalanceShardsAllocator.getDesiredBalance() : null;",
+          ""
+        ],
+        "adaptation_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [
+          "Detected target surrounding context does not match mainline pre-patch context",
+          "Target context lines before insertion point differ significantly from mainline"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": []
+      }
+    ]
+  },
+  "last_plan_signature": "98e76f72dc67530a916120d14c3a7442e427d8cded322f82f438849811110720",
+  "token_usage": {
+    "input_tokens": 9088,
+    "output_tokens": 2540,
+    "total_tokens": 11628,
+    "estimated": false,
+    "sources": [
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage"
+    ]
+  }
+}

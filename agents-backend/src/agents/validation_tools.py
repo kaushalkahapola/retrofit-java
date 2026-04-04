@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import List, Dict, Optional, Any
 from utils.mcp_client import get_client
 from utils.validation_models import (
@@ -1825,64 +1826,64 @@ class ValidationToolkit:
                         "applied_files": [],
                     }
 
-            # Now apply hunks one by one!
+            # Build a combined patch for all hunks belonging to this file.
+            # Using a single git apply call per file allows git to handle hunk
+            # dependencies and line offsets internally.
+            combined_file_patch = ""
+            first_hunk_line = 0
+
             for h in hunks_by_file[target_file]:
                 hunk_text = h.get("hunk_text", "")
                 if not hunk_text or not hunk_text.strip():
                     continue
 
-                hunk_text = hunk_text if hunk_text.endswith("\n") else hunk_text + "\n"
-                try:
-                    # New architecture: file_editor emits full git diffs.
-                    # Apply them directly without wrapping.
-                    if _is_full_git_diff(hunk_text):
-                        result = self._apply_patch_with_fallbacks(
-                            hunk_text, [target_file]
-                        )
-                        if not result.get("success"):
-                            self.restore_repo_state()
-                            return {
-                                "success": False,
-                                "output": f"Patch application failed for {target_file} at line {h.get('insertion_line')}:\n{result.get('output')}",
-                                "applied_files": [],
-                            }
-                        if target_file not in applied_files:
-                            applied_files.append(target_file)
-                        continue
+                if not first_hunk_line:
+                    first_hunk_line = h.get("insertion_line", 0)
 
+                hunk_text = hunk_text if hunk_text.endswith("\n") else hunk_text + "\n"
+
+                if _is_full_git_diff(hunk_text):
+                    combined_file_patch += hunk_text
+                else:
                     # Treat subsequent hunks on the same file as MODIFIED
                     # so we don't regenerate "new file" diff headers for the same file.
                     current_file_op = (
                         "MODIFIED" if target_file in applied_files else file_operation
                     )
 
-                    patch_part = self._build_patch_file(
-                        target_file,
-                        hunk_text,
-                        file_operation=current_file_op,
-                        old_file_path=old_file_path
-                        if current_file_op == "RENAMED"
-                        else None,
-                    )
-
-                    result = self._apply_patch_with_fallbacks(patch_part, [target_file])
-                    if not result.get("success"):
+                    try:
+                        patch_part = self._build_patch_file(
+                            target_file,
+                            hunk_text,
+                            file_operation=current_file_op,
+                            old_file_path=old_file_path
+                            if current_file_op == "RENAMED"
+                            else None,
+                        )
+                        combined_file_patch += patch_part
+                        if target_file not in applied_files:
+                            applied_files.append(target_file)
+                    except ValueError as e:
                         self.restore_repo_state()
                         return {
                             "success": False,
-                            "output": f"Hunk application failed for {target_file} at line {h.get('insertion_line')}:\n{result.get('output')}",
+                            "output": f"Invalid hunk format for {target_file}: {e}",
                             "applied_files": [],
                         }
 
-                    if target_file not in applied_files:
-                        applied_files.append(target_file)
-                except ValueError as e:
+            if combined_file_patch:
+                result = self._apply_patch_with_fallbacks(
+                    combined_file_patch, [target_file]
+                )
+                if not result.get("success"):
                     self.restore_repo_state()
                     return {
                         "success": False,
-                        "output": f"Invalid hunk format for {target_file}: {e}",
+                        "output": f"Patch application failed for {target_file} at line {first_hunk_line}:\n{result.get('output')}",
                         "applied_files": [],
                     }
+                if target_file not in applied_files:
+                    applied_files.append(target_file)
 
         return {
             "success": True,

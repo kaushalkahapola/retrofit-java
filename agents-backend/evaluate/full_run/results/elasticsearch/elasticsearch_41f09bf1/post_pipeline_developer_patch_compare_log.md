@@ -1,0 +1,953 @@
+# Post-Pipeline Developer Patch Comparison
+
+**Exact Developer Patch (code-only)**: False
+
+**Comparison Method**: file_state
+
+## Commit Pair Consistency
+- Pair mismatch: False
+- Reason: scope_overlap_ok
+- Mainline Java files: ['server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java', 'server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java']
+- Developer Java files: ['server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java', 'server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java']
+- Overlap Java files: ['server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java', 'server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java']
+- Overlap ratio (mainline): 1.0
+- Compare files scope used: ['server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java', 'server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java']
+
+## File State Comparison
+- Compared files: ['server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java', 'server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java']
+- Mismatched files: ['server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java', 'server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java']
+- Error: None
+
+## Comparison Scope
+- Agent-only patch: code hunks produced by Agent 3
+- Final effective patch: agent code hunks + developer auxiliary hunks (still code-only for this report)
+
+## Agent-Only Hunk Comparison (code files)
+
+### server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
+
+- Developer hunks: 5
+- Generated hunks: 8
+
+#### Hunk 1
+
+Developer
+```diff
+@@ -13,9 +13,12 @@
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.ActionRequestValidationException;
+ import org.elasticsearch.action.ActionResponse;
++import org.elasticsearch.action.ActionRunnable;
+ import org.elasticsearch.action.ActionType;
++import org.elasticsearch.action.SingleResultDeduplicator;
+ import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;
+ import org.elasticsearch.action.support.ActionFilters;
++import org.elasticsearch.action.support.SubscribableListener;
+ import org.elasticsearch.action.support.master.MasterNodeReadRequest;
+ import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;
+ import org.elasticsearch.cluster.ClusterState;
+
+```
+
+Generated
+```diff
+@@ -13,9 +13,12 @@
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.ActionRequestValidationException;
+ import org.elasticsearch.action.ActionResponse;
++import org.elasticsearch.action.ActionRunnable;
+ import org.elasticsearch.action.ActionType;
++import org.elasticsearch.action.SingleResultDeduplicator;
+ import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;
+ import org.elasticsearch.action.support.ActionFilters;
++import org.elasticsearch.action.support.SubscribableListener;
+ import org.elasticsearch.action.support.master.MasterNodeReadRequest;
+ import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;
+ import org.elasticsearch.cluster.ClusterState;
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+(No textual difference)
+
+```
+
+#### Hunk 2
+
+Developer
+```diff
+@@ -28,6 +31,7 @@
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.StreamOutput;
++import org.elasticsearch.common.util.concurrent.EsExecutors;
+ import org.elasticsearch.core.Nullable;
+ import org.elasticsearch.core.TimeValue;
+ import org.elasticsearch.features.FeatureService;
+
+```
+
+Generated
+```diff
+@@ -28,6 +31,7 @@
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.StreamOutput;
++import org.elasticsearch.common.util.concurrent.EsExecutors;
+ import org.elasticsearch.core.Nullable;
+ import org.elasticsearch.core.TimeValue;
+ import org.elasticsearch.features.FeatureService;
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+(No textual difference)
+
+```
+
+#### Hunk 3
+
+Developer
+```diff
+@@ -47,7 +51,7 @@
+ 
+     public static final ActionType<TransportGetAllocationStatsAction.Response> TYPE = new ActionType<>("cluster:monitor/allocation/stats");
+ 
+-    private final AllocationStatsService allocationStatsService;
++    private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;
+     private final DiskThresholdSettings diskThresholdSettings;
+     private final FeatureService featureService;
+ 
+
+```
+
+Generated
+```diff
+@@ -47,7 +51,7 @@
+ 
+     public static final ActionType<TransportGetAllocationStatsAction.Response> TYPE = new ActionType<>("cluster:monitor/allocation/stats");
+ 
+-    private final AllocationStatsService allocationStatsService;
++    private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;
+     private final DiskThresholdSettings diskThresholdSettings;
+     private final FeatureService featureService;
+ 
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+(No textual difference)
+
+```
+
+#### Hunk 4
+
+Developer
+```diff
+@@ -70,9 +74,15 @@
+             TransportGetAllocationStatsAction.Request::new,
+             indexNameExpressionResolver,
+             TransportGetAllocationStatsAction.Response::new,
+-            threadPool.executor(ThreadPool.Names.MANAGEMENT)
++            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return
++            // very cheaply.
++            EsExecutors.DIRECT_EXECUTOR_SERVICE
++        );
++        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);
++        this.allocationStatsSupplier = new SingleResultDeduplicator<>(
++            threadPool.getThreadContext(),
++            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))
+         );
+-        this.allocationStatsService = allocationStatsService;
+         this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());
+         this.featureService = featureService;
+     }
+
+```
+
+Generated
+```diff
+@@ -70,14 +74,19 @@
+             TransportGetAllocationStatsAction.Request::new,
+             indexNameExpressionResolver,
+             TransportGetAllocationStatsAction.Response::new,
+-            threadPool.executor(ThreadPool.Names.MANAGEMENT)
++            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return
++            // very cheaply.
++            EsExecutors.DIRECT_EXECUTOR_SERVICE
++        );
++        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);
++        this.allocationStatsSupplier = new SingleResultDeduplicator<>(
++            threadPool.getThreadContext(),
++            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))
+         );
+-        this.allocationStatsService = allocationStatsService;
+         this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());
+         this.featureService = featureService;
+     }
+ 
+-    @Override
+     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
+         if (clusterService.state().getMinTransportVersion().before(TransportVersions.V_8_14_0)) {
+             // The action is not available before ALLOCATION_STATS
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+--- developer+++ generated@@ -1,4 +1,4 @@-@@ -70,9 +74,15 @@
++@@ -70,14 +74,19 @@
+              TransportGetAllocationStatsAction.Request::new,
+              indexNameExpressionResolver,
+              TransportGetAllocationStatsAction.Response::new,
+@@ -16,3 +16,8 @@          this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());
+          this.featureService = featureService;
+      }
++ 
++-    @Override
++     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
++         if (clusterService.state().getMinTransportVersion().before(TransportVersions.V_8_14_0)) {
++             // The action is not available before ALLOCATION_STATS
+
+```
+
+#### Hunk 5
+
+Developer
+```diff
+@@ -89,15 +99,21 @@
+ 
+     @Override
+     protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {
+-        listener.onResponse(
+-            new Response(
+-                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),
++        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool
++
++        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)
++            ? SubscribableListener.newForked(allocationStatsSupplier::execute)
++            : SubscribableListener.newSucceeded(Map.of());
++
++        allocationStatsStep.andThenApply(
++            allocationStats -> new Response(
++                allocationStats,
+                 request.metrics().contains(Metric.FS)
+                     && featureService.clusterHasFeature(clusterService.state(), AllocationStatsFeatures.INCLUDE_DISK_THRESHOLD_SETTINGS)
+                         ? diskThresholdSettings
+                         : null
+             )
+-        );
++        ).addListener(listener);
+     }
+ 
+     @Override
+
+```
+
+Generated
+```diff
+@@ -87,20 +96,24 @@
+         super.doExecute(task, request, listener);
+     }
+ 
+-    @Override
+     protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {
+-        listener.onResponse(
+-            new Response(
+-                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),
++        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool
++
++        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)
++            ? SubscribableListener.newForked(allocationStatsSupplier::execute)
++            : SubscribableListener.newSucceeded(Map.of());
++
++        allocationStatsStep.andThenApply(
++            allocationStats -> new Response(
++                allocationStats,
+                 request.metrics().contains(Metric.FS)
+                     && featureService.clusterHasFeature(clusterService.state(), AllocationStatsFeatures.INCLUDE_DISK_THRESHOLD_SETTINGS)
+                         ? diskThresholdSettings
+                         : null
+             )
+-        );
++        ).addListener(listener);
+     }
+ 
+-    @Override
+     protected ClusterBlockException checkBlock(Request request, ClusterState state) {
+         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
+     }
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+--- developer+++ generated@@ -1,6 +1,8 @@-@@ -89,15 +99,21 @@
++@@ -87,20 +96,24 @@
++         super.doExecute(task, request, listener);
++     }
+  
+-     @Override
++-    @Override
+      protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {
+ -        listener.onResponse(
+ -            new Response(
+@@ -23,4 +25,7 @@ +        ).addListener(listener);
+      }
+  
+-     @Override
++-    @Override
++     protected ClusterBlockException checkBlock(Request request, ClusterState state) {
++         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
++     }
+
+```
+
+#### Hunk 6
+
+Developer
+```diff
+*No hunk*
+```
+
+Generated
+```diff
+@@ -123,7 +136,6 @@
+                 : EnumSet.of(Metric.ALLOCATIONS, Metric.FS);
+         }
+ 
+-        @Override
+         public void writeTo(StreamOutput out) throws IOException {
+             assert out.getTransportVersion().onOrAfter(TransportVersions.V_8_14_0);
+             super.writeTo(out);
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+--- developer+++ generated@@ -1 +1,8 @@-*No hunk*+@@ -123,7 +136,6 @@
++                 : EnumSet.of(Metric.ALLOCATIONS, Metric.FS);
++         }
++ 
++-        @Override
++         public void writeTo(StreamOutput out) throws IOException {
++             assert out.getTransportVersion().onOrAfter(TransportVersions.V_8_14_0);
++             super.writeTo(out);
+
+```
+
+#### Hunk 7
+
+Developer
+```diff
+*No hunk*
+```
+
+Generated
+```diff
+@@ -136,7 +148,6 @@
+             return metrics;
+         }
+ 
+-        @Override
+         public ActionRequestValidationException validate() {
+             return null;
+         }
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+--- developer+++ generated@@ -1 +1,8 @@-*No hunk*+@@ -136,7 +148,6 @@
++             return metrics;
++         }
++ 
++-        @Override
++         public ActionRequestValidationException validate() {
++             return null;
++         }
+
+```
+
+#### Hunk 8
+
+Developer
+```diff
+*No hunk*
+```
+
+Generated
+```diff
+@@ -163,7 +174,6 @@
+             }
+         }
+ 
+-        @Override
+         public void writeTo(StreamOutput out) throws IOException {
+             out.writeMap(nodeAllocationStats, StreamOutput::writeString, StreamOutput::writeWriteable);
+             if (out.getTransportVersion().onOrAfter(TransportVersions.WATERMARK_THRESHOLDS_STATS)) {
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+--- developer+++ generated@@ -1 +1,8 @@-*No hunk*+@@ -163,7 +174,6 @@
++             }
++         }
++ 
++-        @Override
++         public void writeTo(StreamOutput out) throws IOException {
++             out.writeMap(nodeAllocationStats, StreamOutput::writeString, StreamOutput::writeWriteable);
++             if (out.getTransportVersion().onOrAfter(TransportVersions.WATERMARK_THRESHOLDS_STATS)) {
+
+```
+
+
+### server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
+
+- Developer hunks: 2
+- Generated hunks: 2
+
+#### Hunk 1
+
+Developer
+```diff
+@@ -18,6 +18,7 @@
+ import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.util.Maps;
++import org.elasticsearch.transport.Transports;
+ 
+ import java.util.Map;
+ 
+
+```
+
+Generated
+```diff
+@@ -19,6 +19,7 @@
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.util.Maps;
+ 
++import org.elasticsearch.transport.Transports;
+ import java.util.Map;
+ 
+ public class AllocationStatsService {
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+--- developer+++ generated@@ -1,8 +1,8 @@-@@ -18,6 +18,7 @@
+- import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
++@@ -19,6 +19,7 @@
+  import org.elasticsearch.cluster.service.ClusterService;
+  import org.elasticsearch.common.util.Maps;
++ 
+ +import org.elasticsearch.transport.Transports;
+- 
+  import java.util.Map;
+  
++ public class AllocationStatsService {
+
+```
+
+#### Hunk 2
+
+Developer
+```diff
+@@ -41,6 +42,8 @@
+     }
+ 
+     public Map<String, NodeAllocationStats> stats() {
++        assert Transports.assertNotTransportThread("too expensive for a transport worker");
++
+         var state = clusterService.state();
+         var info = clusterInfoService.getClusterInfo();
+         var desiredBalance = desiredBalanceShardsAllocator != null ? desiredBalanceShardsAllocator.getDesiredBalance() : null;
+
+```
+
+Generated
+```diff
+@@ -41,6 +42,8 @@
+     }
+ 
+     public Map<String, NodeAllocationStats> stats() {
++        assert Transports.assertNotTransportThread("too expensive for a transport worker");
++
+         var state = clusterService.state();
+         var info = clusterInfoService.getClusterInfo();
+         var desiredBalance = desiredBalanceShardsAllocator != null ? desiredBalanceShardsAllocator.getDesiredBalance() : null;
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+(No textual difference)
+
+```
+
+
+
+## Full Generated Patch (Agent-Only, code-only)
+```diff
+diff --git a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
+index 259a244bff9..1dd2d60d6cc 100644
+--- a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
++++ b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
+@@ -13,9 +13,12 @@ import org.elasticsearch.TransportVersions;
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.ActionRequestValidationException;
+ import org.elasticsearch.action.ActionResponse;
++import org.elasticsearch.action.ActionRunnable;
+ import org.elasticsearch.action.ActionType;
++import org.elasticsearch.action.SingleResultDeduplicator;
+ import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;
+ import org.elasticsearch.action.support.ActionFilters;
++import org.elasticsearch.action.support.SubscribableListener;
+ import org.elasticsearch.action.support.master.MasterNodeReadRequest;
+ import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;
+ import org.elasticsearch.cluster.ClusterState;
+@@ -28,6 +31,7 @@ import org.elasticsearch.cluster.routing.allocation.NodeAllocationStats;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.StreamOutput;
++import org.elasticsearch.common.util.concurrent.EsExecutors;
+ import org.elasticsearch.core.Nullable;
+ import org.elasticsearch.core.TimeValue;
+ import org.elasticsearch.features.FeatureService;
+@@ -47,7 +51,7 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+ 
+     public static final ActionType<TransportGetAllocationStatsAction.Response> TYPE = new ActionType<>("cluster:monitor/allocation/stats");
+ 
+-    private final AllocationStatsService allocationStatsService;
++    private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;
+     private final DiskThresholdSettings diskThresholdSettings;
+     private final FeatureService featureService;
+ 
+@@ -70,14 +74,19 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+             TransportGetAllocationStatsAction.Request::new,
+             indexNameExpressionResolver,
+             TransportGetAllocationStatsAction.Response::new,
+-            threadPool.executor(ThreadPool.Names.MANAGEMENT)
++            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return
++            // very cheaply.
++            EsExecutors.DIRECT_EXECUTOR_SERVICE
++        );
++        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);
++        this.allocationStatsSupplier = new SingleResultDeduplicator<>(
++            threadPool.getThreadContext(),
++            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))
+         );
+-        this.allocationStatsService = allocationStatsService;
+         this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());
+         this.featureService = featureService;
+     }
+ 
+-    @Override
+     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
+         if (clusterService.state().getMinTransportVersion().before(TransportVersions.V_8_14_0)) {
+             // The action is not available before ALLOCATION_STATS
+@@ -87,20 +96,24 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+         super.doExecute(task, request, listener);
+     }
+ 
+-    @Override
+     protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {
+-        listener.onResponse(
+-            new Response(
+-                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),
++        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool
++
++        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)
++            ? SubscribableListener.newForked(allocationStatsSupplier::execute)
++            : SubscribableListener.newSucceeded(Map.of());
++
++        allocationStatsStep.andThenApply(
++            allocationStats -> new Response(
++                allocationStats,
+                 request.metrics().contains(Metric.FS)
+                     && featureService.clusterHasFeature(clusterService.state(), AllocationStatsFeatures.INCLUDE_DISK_THRESHOLD_SETTINGS)
+                         ? diskThresholdSettings
+                         : null
+             )
+-        );
++        ).addListener(listener);
+     }
+ 
+-    @Override
+     protected ClusterBlockException checkBlock(Request request, ClusterState state) {
+         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
+     }
+@@ -123,7 +136,6 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+                 : EnumSet.of(Metric.ALLOCATIONS, Metric.FS);
+         }
+ 
+-        @Override
+         public void writeTo(StreamOutput out) throws IOException {
+             assert out.getTransportVersion().onOrAfter(TransportVersions.V_8_14_0);
+             super.writeTo(out);
+@@ -136,7 +148,6 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+             return metrics;
+         }
+ 
+-        @Override
+         public ActionRequestValidationException validate() {
+             return null;
+         }
+@@ -163,7 +174,6 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+             }
+         }
+ 
+-        @Override
+         public void writeTo(StreamOutput out) throws IOException {
+             out.writeMap(nodeAllocationStats, StreamOutput::writeString, StreamOutput::writeWriteable);
+             if (out.getTransportVersion().onOrAfter(TransportVersions.WATERMARK_THRESHOLDS_STATS)) {
+diff --git a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
+index 3651f560e6d..65cd6af379d 100644
+--- a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
++++ b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
+@@ -19,6 +19,7 @@ import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.util.Maps;
+ 
++import org.elasticsearch.transport.Transports;
+ import java.util.Map;
+ 
+ public class AllocationStatsService {
+@@ -41,6 +42,8 @@ public class AllocationStatsService {
+     }
+ 
+     public Map<String, NodeAllocationStats> stats() {
++        assert Transports.assertNotTransportThread("too expensive for a transport worker");
++
+         var state = clusterService.state();
+         var info = clusterInfoService.getClusterInfo();
+         var desiredBalance = desiredBalanceShardsAllocator != null ? desiredBalanceShardsAllocator.getDesiredBalance() : null;
+
+```
+
+## Full Generated Patch (Final Effective, code-only)
+```diff
+diff --git a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
+index 259a244bff9..1dd2d60d6cc 100644
+--- a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
++++ b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
+@@ -13,9 +13,12 @@ import org.elasticsearch.TransportVersions;
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.ActionRequestValidationException;
+ import org.elasticsearch.action.ActionResponse;
++import org.elasticsearch.action.ActionRunnable;
+ import org.elasticsearch.action.ActionType;
++import org.elasticsearch.action.SingleResultDeduplicator;
+ import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;
+ import org.elasticsearch.action.support.ActionFilters;
++import org.elasticsearch.action.support.SubscribableListener;
+ import org.elasticsearch.action.support.master.MasterNodeReadRequest;
+ import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;
+ import org.elasticsearch.cluster.ClusterState;
+@@ -28,6 +31,7 @@ import org.elasticsearch.cluster.routing.allocation.NodeAllocationStats;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.StreamOutput;
++import org.elasticsearch.common.util.concurrent.EsExecutors;
+ import org.elasticsearch.core.Nullable;
+ import org.elasticsearch.core.TimeValue;
+ import org.elasticsearch.features.FeatureService;
+@@ -47,7 +51,7 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+ 
+     public static final ActionType<TransportGetAllocationStatsAction.Response> TYPE = new ActionType<>("cluster:monitor/allocation/stats");
+ 
+-    private final AllocationStatsService allocationStatsService;
++    private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;
+     private final DiskThresholdSettings diskThresholdSettings;
+     private final FeatureService featureService;
+ 
+@@ -70,14 +74,19 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+             TransportGetAllocationStatsAction.Request::new,
+             indexNameExpressionResolver,
+             TransportGetAllocationStatsAction.Response::new,
+-            threadPool.executor(ThreadPool.Names.MANAGEMENT)
++            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return
++            // very cheaply.
++            EsExecutors.DIRECT_EXECUTOR_SERVICE
++        );
++        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);
++        this.allocationStatsSupplier = new SingleResultDeduplicator<>(
++            threadPool.getThreadContext(),
++            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))
+         );
+-        this.allocationStatsService = allocationStatsService;
+         this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());
+         this.featureService = featureService;
+     }
+ 
+-    @Override
+     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
+         if (clusterService.state().getMinTransportVersion().before(TransportVersions.V_8_14_0)) {
+             // The action is not available before ALLOCATION_STATS
+@@ -87,20 +96,24 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+         super.doExecute(task, request, listener);
+     }
+ 
+-    @Override
+     protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {
+-        listener.onResponse(
+-            new Response(
+-                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),
++        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool
++
++        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)
++            ? SubscribableListener.newForked(allocationStatsSupplier::execute)
++            : SubscribableListener.newSucceeded(Map.of());
++
++        allocationStatsStep.andThenApply(
++            allocationStats -> new Response(
++                allocationStats,
+                 request.metrics().contains(Metric.FS)
+                     && featureService.clusterHasFeature(clusterService.state(), AllocationStatsFeatures.INCLUDE_DISK_THRESHOLD_SETTINGS)
+                         ? diskThresholdSettings
+                         : null
+             )
+-        );
++        ).addListener(listener);
+     }
+ 
+-    @Override
+     protected ClusterBlockException checkBlock(Request request, ClusterState state) {
+         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
+     }
+@@ -123,7 +136,6 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+                 : EnumSet.of(Metric.ALLOCATIONS, Metric.FS);
+         }
+ 
+-        @Override
+         public void writeTo(StreamOutput out) throws IOException {
+             assert out.getTransportVersion().onOrAfter(TransportVersions.V_8_14_0);
+             super.writeTo(out);
+@@ -136,7 +148,6 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+             return metrics;
+         }
+ 
+-        @Override
+         public ActionRequestValidationException validate() {
+             return null;
+         }
+@@ -163,7 +174,6 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+             }
+         }
+ 
+-        @Override
+         public void writeTo(StreamOutput out) throws IOException {
+             out.writeMap(nodeAllocationStats, StreamOutput::writeString, StreamOutput::writeWriteable);
+             if (out.getTransportVersion().onOrAfter(TransportVersions.WATERMARK_THRESHOLDS_STATS)) {
+diff --git a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
+index 3651f560e6d..65cd6af379d 100644
+--- a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
++++ b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
+@@ -19,6 +19,7 @@ import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.util.Maps;
+ 
++import org.elasticsearch.transport.Transports;
+ import java.util.Map;
+ 
+ public class AllocationStatsService {
+@@ -41,6 +42,8 @@ public class AllocationStatsService {
+     }
+ 
+     public Map<String, NodeAllocationStats> stats() {
++        assert Transports.assertNotTransportThread("too expensive for a transport worker");
++
+         var state = clusterService.state();
+         var info = clusterInfoService.getClusterInfo();
+         var desiredBalance = desiredBalanceShardsAllocator != null ? desiredBalanceShardsAllocator.getDesiredBalance() : null;
+
+```
+## Full Developer Backport Patch (full commit diff)
+```diff
+diff --git a/docs/changelog/123246.yaml b/docs/changelog/123246.yaml
+new file mode 100644
+index 00000000000..3477cf70ac8
+--- /dev/null
++++ b/docs/changelog/123246.yaml
+@@ -0,0 +1,5 @@
++pr: 123246
++summary: Deduplicate allocation stats calls
++area: Allocation
++type: bug
++issues: []
+diff --git a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
+index 259a244bff9..a22173a4c5b 100644
+--- a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
++++ b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
+@@ -13,9 +13,12 @@ import org.elasticsearch.TransportVersions;
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.ActionRequestValidationException;
+ import org.elasticsearch.action.ActionResponse;
++import org.elasticsearch.action.ActionRunnable;
+ import org.elasticsearch.action.ActionType;
++import org.elasticsearch.action.SingleResultDeduplicator;
+ import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;
+ import org.elasticsearch.action.support.ActionFilters;
++import org.elasticsearch.action.support.SubscribableListener;
+ import org.elasticsearch.action.support.master.MasterNodeReadRequest;
+ import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;
+ import org.elasticsearch.cluster.ClusterState;
+@@ -28,6 +31,7 @@ import org.elasticsearch.cluster.routing.allocation.NodeAllocationStats;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.StreamOutput;
++import org.elasticsearch.common.util.concurrent.EsExecutors;
+ import org.elasticsearch.core.Nullable;
+ import org.elasticsearch.core.TimeValue;
+ import org.elasticsearch.features.FeatureService;
+@@ -47,7 +51,7 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+ 
+     public static final ActionType<TransportGetAllocationStatsAction.Response> TYPE = new ActionType<>("cluster:monitor/allocation/stats");
+ 
+-    private final AllocationStatsService allocationStatsService;
++    private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;
+     private final DiskThresholdSettings diskThresholdSettings;
+     private final FeatureService featureService;
+ 
+@@ -70,9 +74,15 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+             TransportGetAllocationStatsAction.Request::new,
+             indexNameExpressionResolver,
+             TransportGetAllocationStatsAction.Response::new,
+-            threadPool.executor(ThreadPool.Names.MANAGEMENT)
++            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return
++            // very cheaply.
++            EsExecutors.DIRECT_EXECUTOR_SERVICE
++        );
++        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);
++        this.allocationStatsSupplier = new SingleResultDeduplicator<>(
++            threadPool.getThreadContext(),
++            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))
+         );
+-        this.allocationStatsService = allocationStatsService;
+         this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());
+         this.featureService = featureService;
+     }
+@@ -89,15 +99,21 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+ 
+     @Override
+     protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {
+-        listener.onResponse(
+-            new Response(
+-                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),
++        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool
++
++        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)
++            ? SubscribableListener.newForked(allocationStatsSupplier::execute)
++            : SubscribableListener.newSucceeded(Map.of());
++
++        allocationStatsStep.andThenApply(
++            allocationStats -> new Response(
++                allocationStats,
+                 request.metrics().contains(Metric.FS)
+                     && featureService.clusterHasFeature(clusterService.state(), AllocationStatsFeatures.INCLUDE_DISK_THRESHOLD_SETTINGS)
+                         ? diskThresholdSettings
+                         : null
+             )
+-        );
++        ).addListener(listener);
+     }
+ 
+     @Override
+diff --git a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
+index 3651f560e6d..fa4d60c83e5 100644
+--- a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
++++ b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
+@@ -18,6 +18,7 @@ import org.elasticsearch.cluster.routing.allocation.allocator.DesiredBalanceShar
+ import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.util.Maps;
++import org.elasticsearch.transport.Transports;
+ 
+ import java.util.Map;
+ 
+@@ -41,6 +42,8 @@ public class AllocationStatsService {
+     }
+ 
+     public Map<String, NodeAllocationStats> stats() {
++        assert Transports.assertNotTransportThread("too expensive for a transport worker");
++
+         var state = clusterService.state();
+         var info = clusterInfoService.getClusterInfo();
+         var desiredBalance = desiredBalanceShardsAllocator != null ? desiredBalanceShardsAllocator.getDesiredBalance() : null;
+diff --git a/server/src/test/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsActionTests.java b/server/src/test/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsActionTests.java
+index f3d8f8860ba..4eed6cf0f62 100644
+--- a/server/src/test/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsActionTests.java
++++ b/server/src/test/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsActionTests.java
+@@ -32,8 +32,13 @@ import org.junit.Before;
+ import java.util.EnumSet;
+ import java.util.Map;
+ import java.util.Set;
++import java.util.concurrent.CyclicBarrier;
++import java.util.concurrent.atomic.AtomicBoolean;
++import java.util.concurrent.atomic.AtomicInteger;
+ 
+ import static org.hamcrest.Matchers.anEmptyMap;
++import static org.hamcrest.Matchers.containsString;
++import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+ import static org.hamcrest.Matchers.not;
+ import static org.mockito.ArgumentMatchers.any;
+ import static org.mockito.ArgumentMatchers.eq;
+@@ -120,4 +125,50 @@ public class TransportGetAllocationStatsActionTests extends ESTestCase {
+             assertNull(response.getDiskThresholdSettings());
+         }
+     }
++
++    public void testDeduplicatesStatsComputations() throws InterruptedException {
++        final var requestCounter = new AtomicInteger();
++        final var isExecuting = new AtomicBoolean();
++        when(allocationStatsService.stats()).thenAnswer(invocation -> {
++            try {
++                assertTrue(isExecuting.compareAndSet(false, true));
++                assertThat(Thread.currentThread().getName(), containsString("[management]"));
++                return Map.of(Integer.toString(requestCounter.incrementAndGet()), NodeAllocationStatsTests.randomNodeAllocationStats());
++            } finally {
++                Thread.yield();
++                assertTrue(isExecuting.compareAndSet(true, false));
++            }
++        });
++
++        final var threads = new Thread[between(1, 5)];
++        final var startBarrier = new CyclicBarrier(threads.length);
++        for (int i = 0; i < threads.length; i++) {
++            threads[i] = new Thread(() -> {
++                safeAwait(startBarrier);
++
++                final var minRequestIndex = requestCounter.get();
++
++                final TransportGetAllocationStatsAction.Response response = safeAwait(
++                    l -> action.masterOperation(
++                        mock(Task.class),
++                        new TransportGetAllocationStatsAction.Request(
++                            TEST_REQUEST_TIMEOUT,
++                            TaskId.EMPTY_TASK_ID,
++                            EnumSet.of(Metric.ALLOCATIONS)
++                        ),
++                        ClusterState.EMPTY_STATE,
++                        l
++                    )
++                );
++
++                final var requestIndex = Integer.valueOf(response.getNodeAllocationStats().keySet().iterator().next());
++                assertThat(requestIndex, greaterThanOrEqualTo(minRequestIndex)); // did not get a stale result
++            }, "thread-" + i);
++            threads[i].start();
++        }
++
++        for (final var thread : threads) {
++            thread.join();
++        }
++    }
+ }
+
+```

@@ -1,0 +1,27 @@
+patch_id=elasticsearch_4f6a0e68
+project=elasticsearch
+mainline_commit=4f6a0e6840042133f937b0ddfd160e97ac2b68a1
+backport_commit=f2d8f7d6d293bfdfdaeeedff3f82fbdfbaca67ff
+mode=full
+started_at=2026-04-03T22:43:17.278705
+----------------------------------------
+Running full workflow graph
+Completed node=phase_0_optimistic
+Workflow failed: cannot access local variable 'json' where it is not associated with a value
+
+[elasticsearch/elasticsearch_4f6a0e68] Setting up repositories for mode=full...
+[elasticsearch/elasticsearch_4f6a0e68] Running full workflow graph...
+Router: Running Phase 0.
+Phase 0 (Optimistic): Checking direct patch applicability...
+Phase 0: Experiment mode — checking out parent of f2d8f7d6d293bfdfdaeeedff3f82fbdfbaca67ff...
+Phase 0: Building baseline by applying developer backport test hunks only...
+  Validation: libs/entitlement/src/test/java/org/elasticsearch/entitlement/runtime/policy/FileAccessTreeTests.java - applying 3 hunk(s) one by one in bottom-to-top order: [216, 27, 10]
+    Agent 4: Executing elasticsearch helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_tests.sh
+Phase 0: git apply --check SUCCEEDED. Attempting actual patch application and test run.
+    Agent 4: Executing elasticsearch helper build script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_build.sh
+    Agent 4: Executing elasticsearch helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_tests.sh
+Phase 0: Transition summary -> reason=Valid: Observed fail-to-pass and/or newly passing relevant tests with no regressions.; fail->pass(1): ['org.elasticsearch.entitlement.runtime.policy.FileAccessTreeTests#testFollowLinks']; newly_passing(0): []; pass->fail(0): []
+Phase 0: Transition-based test validation passed. Fast-path success.
+Router: Phase 0 succeeded - taking fast-path exit.
+  Completed: phase_0_optimistic
+[elasticsearch/elasticsearch_4f6a0e68] Workflow failed: cannot access local variable 'json' where it is not associated with a value

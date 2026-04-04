@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 from typing import Any
+import os
 
 from langchain_core.messages import HumanMessage
 
 from state import AgentState, SemanticBlueprint
 from utils.patch_analyzer import PatchAnalyzer
+from agents.hunk_variant_detector import HunkVariantDetector
 
 
 def _infer_role(raw_hunk: str) -> str:
@@ -86,6 +88,7 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
     patch_diff = state.get("patch_diff", "")
     patch_analysis = state.get("patch_analysis", [])
     with_test_changes = state.get("with_test_changes", False)
+    mainline_repo_path = state.get("mainline_repo_path", "")
 
     if not patch_diff:
         msg = "Agent 1 Error: No patch_diff in state."
@@ -106,7 +109,14 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
         file_hunks[file_path].extend(hunks or [])
 
     hunk_chain: list[dict[str, Any]] = []
+    hunk_variants_map: dict[int, Any] = {}  # global_idx → variants
     global_idx = 1
+
+    # Initialize variant detector if mainline repo available
+    variant_detector = None
+    if mainline_repo_path and os.path.isdir(mainline_repo_path):
+        variant_detector = HunkVariantDetector(mainline_repo_path)
+
     for file_path in sorted(file_hunks.keys()):
         hunks = file_hunks[file_path]
         for idx, raw_hunk in enumerate(hunks, start=1):
@@ -116,16 +126,55 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
                 if idx < len(hunks)
                 else ""
             )
-            hunk_chain.append(
-                {
-                    "hunk_index": idx,
-                    "file": file_path,
-                    "summary": _hunk_summary(raw_hunk),
-                    "role": role,
-                    "connects_to_next": connects,
-                    "global_index": global_idx,
-                }
-            )
+            hunk_entry = {
+                "hunk_index": idx,
+                "file": file_path,
+                "summary": _hunk_summary(raw_hunk),
+                "role": role,
+                "connects_to_next": connects,
+                "global_index": global_idx,
+            }
+            hunk_chain.append(hunk_entry)
+
+            # Detect variants if available
+            if variant_detector:
+                try:
+                    removed_lines = [
+                        l[1:]
+                        for l in raw_hunk.splitlines()[1:]
+                        if l.startswith("-") and not l.startswith("---")
+                    ]
+                    added_lines = [
+                        l[1:]
+                        for l in raw_hunk.splitlines()[1:]
+                        if l.startswith("+") and not l.startswith("+++")
+                    ]
+                    variants = variant_detector.detect_variants_for_hunk(
+                        idx, file_path, raw_hunk, added_lines, removed_lines
+                    )
+                    if variants and variants.variants:
+                        hunk_variants_map[global_idx] = {
+                            "semantic_intent": variants.semantic_intent,
+                            "variants": [
+                                {
+                                    "variant_id": v.variant_id,
+                                    "pattern_type": v.pattern_type,
+                                    "description": v.description,
+                                    "old_string": v.old_string,
+                                    "new_string": v.new_string,
+                                    "found_in_mainline": v.found_in_mainline,
+                                    "line_in_mainline": v.line_in_mainline,
+                                    "confidence": v.confidence,
+                                }
+                                for v in variants.variants
+                            ],
+                        }
+                except Exception as e:
+                    # Silently skip variant detection on error
+                    import traceback
+
+                    print(f"Variant detection failed for hunk {global_idx}: {e}")
+
             global_idx += 1
 
     dependent_apis: list[str] = []
@@ -150,8 +199,10 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
     print(
         f"Agent 1: Complete. Files={len(file_hunks)} hunks={len(hunk_chain)} (deterministic)."
     )
+    if hunk_variants_map:
+        print(f"Agent 1: Detected {len(hunk_variants_map)} hunk(s) with variants.")
 
-    return {
+    result = {
         "messages": [
             HumanMessage(
                 content=(
@@ -170,3 +221,9 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
             "reason": "deterministic_no_llm",
         },
     }
+
+    # Add variants to state if any were detected
+    if hunk_variants_map:
+        result["hunk_variants"] = hunk_variants_map
+
+    return result
