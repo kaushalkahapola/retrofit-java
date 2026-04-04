@@ -654,7 +654,7 @@ before={json.dumps(target_before, ensure_ascii=False)}
 after={json.dumps(target_after, ensure_ascii=False)}
 
 Consistency map:
-{json.dumps(consistency_map or {{}}, indent=2, ensure_ascii=False)}
+{json.dumps(consistency_map or {}, indent=2, ensure_ascii=False)}
 
 Deterministic candidate operations:
 {json.dumps(deterministic_entries, indent=2, ensure_ascii=False)}
