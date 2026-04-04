@@ -1687,11 +1687,23 @@ class ValidationToolkit:
                         "→ correcting to MODIFIED"
                     )
                 else:
-                    corrected_op = None
-                    print(
-                        f"  Validation: {target_file} marked RENAMED but neither old nor new exists "
-                        "→ skipping"
-                    )
+                    # Heuristic rescue: some upstream patch parsers may misclassify
+                    # pure file additions as RENAMED when source path is /dev/null.
+                    # If we have hunk content, treat this as ADDED so test/code files
+                    # are actually created during validation.
+                    has_hunks_for_file = bool((hunk_text or "").strip())
+                    if has_hunks_for_file:
+                        corrected_op = "ADDED"
+                        print(
+                            f"  Validation: {target_file} marked RENAMED but neither old nor new exists "
+                            "with non-empty hunks → correcting to ADDED"
+                        )
+                    else:
+                        corrected_op = None
+                        print(
+                            f"  Validation: {target_file} marked RENAMED but neither old nor new exists "
+                            "→ skipping"
+                        )
 
             h["file_operation"] = corrected_op
             if corrected_op != original_op:
