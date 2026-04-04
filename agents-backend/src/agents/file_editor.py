@@ -1495,7 +1495,10 @@ async def _run_react_edit_pass(
 
         return True, "react_apply_success"
     except Exception as e:
-        return False, str(e)
+        err = str(e)
+        if "unsupported value" in err.lower() and "temperature" in err.lower():
+            return False, f"llm_temperature_unsupported:{err}"
+        return False, err
 
 
 async def _check_intent(
