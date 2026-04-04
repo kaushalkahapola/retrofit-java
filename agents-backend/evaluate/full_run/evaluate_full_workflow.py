@@ -83,6 +83,35 @@ def _phase_output_file(
     )
 
 
+def _save_generated_patch_artifacts(
+    project: str,
+    patch_id: str,
+    agent_only_patch_diff: str,
+    final_effective_patch_diff: str,
+) -> dict[str, str]:
+    """
+    Persist generated patch artifacts as standalone files for later inspection.
+    """
+    out_dir = _patch_results_dir(project, patch_id)
+    os.makedirs(out_dir, exist_ok=True)
+
+    agent_only_path = os.path.join(out_dir, "generated_patch_agent_only.patch")
+    final_effective_path = os.path.join(
+        out_dir, "generated_patch_final_effective.patch"
+    )
+
+    with open(agent_only_path, "w", encoding="utf-8") as f:
+        f.write((agent_only_patch_diff or "").strip() + "\n")
+
+    with open(final_effective_path, "w", encoding="utf-8") as f:
+        f.write((final_effective_patch_diff or "").strip() + "\n")
+
+    return {
+        "agent_only": agent_only_path,
+        "final_effective": final_effective_path,
+    }
+
+
 def is_phase_processed(
     project: str, patch_id: str, phase_name: str, agent_name: str
 ) -> bool:
@@ -1962,6 +1991,14 @@ async def run_full_pipeline(
             ]
         )
         final_generated_patch_diff = comparison.get("generated_patch_diff", "")
+
+        generated_patch_files = _save_generated_patch_artifacts(
+            project=project,
+            patch_id=patch_id,
+            agent_only_patch_diff=agent_only_generated_patch_diff,
+            final_effective_patch_diff=final_generated_patch_diff,
+        )
+        results["generated_patch_files"] = generated_patch_files
 
         agent_hunk_markdown = _build_hunk_comparison_markdown(
             developer_patch_diff=developer_patch_diff,
