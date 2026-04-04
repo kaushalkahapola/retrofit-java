@@ -1331,6 +1331,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         if (
             validation_attempts > 0
             and retry_files
+            and "<all>" not in retry_files
             and normalized_mainline not in retry_files
         ):
             continue

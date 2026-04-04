@@ -749,6 +749,15 @@ class ValidationToolkit:
                             "TEST_TARGETS": " ".join(sorted(set(test_targets)))
                             if test_targets
                             else "NONE",
+                            # Optional source file hints for helper scripts to pick
+                            # the correct Gradle test task (e.g., internalClusterTest).
+                            "TEST_TARGET_FILES": ",".join(
+                                str(p)
+                                for p in (
+                                    (info.get("raw") or {}).get("changed_files") or []
+                                )
+                                if str(p).strip()
+                            ),
                             # If explicit class targets are available, helpers should
                             # run those directly and not fall back to module mode.
                             "TEST_MODULES": ""
@@ -1566,6 +1575,8 @@ class ValidationToolkit:
             p = (path or "").strip().replace("\\", "/").lstrip("/")
             if p.startswith("a/") or p.startswith("b/"):
                 p = p[2:]
+            if p == "dev/null":
+                return ""
             return p
 
         def _is_full_file_creation_hunk(hunk_text: str) -> bool:
@@ -1687,11 +1698,23 @@ class ValidationToolkit:
                         "→ correcting to MODIFIED"
                     )
                 else:
-                    corrected_op = None
-                    print(
-                        f"  Validation: {target_file} marked RENAMED but neither old nor new exists "
-                        "→ skipping"
-                    )
+                    # Heuristic rescue: some upstream patch parsers may misclassify
+                    # pure file additions as RENAMED when source path is /dev/null.
+                    # If we have hunk content, treat this as ADDED so test/code files
+                    # are actually created during validation.
+                    has_hunks_for_file = bool((hunk_text or "").strip())
+                    if has_hunks_for_file:
+                        corrected_op = "ADDED"
+                        print(
+                            f"  Validation: {target_file} marked RENAMED but neither old nor new exists "
+                            "with non-empty hunks → correcting to ADDED"
+                        )
+                    else:
+                        corrected_op = None
+                        print(
+                            f"  Validation: {target_file} marked RENAMED but neither old nor new exists "
+                            "→ skipping"
+                        )
 
             h["file_operation"] = corrected_op
             if corrected_op != original_op:
@@ -1776,6 +1799,7 @@ class ValidationToolkit:
                 and not file_has_full_git_diff
             ):
                 try:
+                    mark_as_preapplied = True
                     if file_operation == "RENAMED":
                         if not old_file_path:
                             raise ValueError("old_file_path is required for RENAMED")
@@ -1815,8 +1839,12 @@ class ValidationToolkit:
                         if not has_hunks_for_file and not os.path.exists(dst):
                             with open(dst, "w", encoding="utf-8"):
                                 pass
+                        # Critical: for ADDED files with hunks, keep first patch header as ADDED
+                        # (do not downgrade to MODIFIED based on pre-applied bookkeeping).
+                        if has_hunks_for_file:
+                            mark_as_preapplied = False
 
-                    if target_file not in applied_files:
+                    if mark_as_preapplied and target_file not in applied_files:
                         applied_files.append(target_file)
                     print(f"  Validation: {file_operation} operation for {target_file}")
                 except ValueError as e:
