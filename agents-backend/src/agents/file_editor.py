@@ -55,22 +55,29 @@ from agents.hunk_generator_tools import HunkGeneratorToolkit
 # System prompts
 # ---------------------------------------------------------------------------
 
-_FILE_EDITOR_AGENT_SYSTEM = """You are an expert autonomous Java backporting engineer. Your goal is to apply a semantic fix into a single target file using line-number-based editing.
+_FILE_EDITOR_AGENT_SYSTEM = """You are an expert autonomous Java backporting engineer. Your goal is to apply a semantic fix into a single target file using safe AST-based editing, with line-number-based editing as a fallback.
 
 You MUST follow this exact Todo Checklist loop to complete your task:
 1. REVIEW the Semantic Blueprint so you understand exactly what behavior needs to be fixed. Note all required dependent APIs, imports, fields, constructors, or logic changes.
 2. CHECK the Consistency Map to see if any variables/methods from the mainline patch were renamed in this target version. You MUST use the renamed symbols for any newly written code.
 3. For EACH distinct hunk/change in the patch (e.g., adding imports, modifying a constructor, modifying a method):
-   a. USE `read_file_window` or `grep_in_file` to locate the exact line boundaries of the target code that needs to be replaced.
-   b. DETERMINE the exact `start_line` and `end_line` for the change.
-   c. EDIT the file exclusively using the `replace_lines` (or `insert_after_line`) tool.
+   a. PRIORITY 1 (AST Methods): USE the AST tools (`replace_method_body`, `replace_field`, `insert_import`, `remove_method`). These are immune to line shifting and should be your absolute default.
+   b. PRIORITY 2 (Line Methods): Only if the edit CANNOT be done purely via AST methods, USE `read_file_window` or `grep_in_file` to locate the exact line boundaries. DETERMINE the exact `start_line` and `end_line` and use `replace_lines`.
 4. VERIFY your changes: After ALL edits are complete, call `git_diff_file` to see the actual diff, then call `verify_guidelines` with the diff to catch syntax errors before returning.
 5. Output "DONE" only when EVERY required piece of logic from the patch (including imports and fields) is perfectly edited into the target file AND `verify_guidelines` confirms the diff is correct.
 
+## str_replace Edit Plan (Hints)
+The following atomic operations were proposed by the Planning Agent. Use them as high-quality hints for anchor discovery and adaptation, but always verify they match the actual file content before applying.
+{hunk_generation_plan}
+
 ## Essential Guidelines (CRITICAL)
-- **Line Editing Only**: Use `replace_lines(start_line, end_line, new_content)` for all changes. Do NOT try to use string-replace unless line numbers are unavailable.
+- **Use the Plan as a Hint**: The 'str_replace Edit Plan' above contains candidate `old_string` and `new_string` values. If the Planning Agent marked them as `verified: true`, they are extremely likely to match the target file exactly.
+- **AST First, Plan Second, Lines Last**:
+    1. Try AST tools (`replace_method_body`, etc.) first.
+    2. If AST is not applicable, try using the exact `old_string` from the Edit Plan with `str_replace_in_file` (if you are sure it exists).
+    3. If that fails, use `read_file_window` to find the code and use `replace_lines`.
 - **No Hallucinations**: You cannot call any methods or variables that are not explicitly defined in the file or standard JDK, UNLESS they are explicitly mapped in the Consistency Map. NEVER invent static helper methods or "simplify" object instantiations if they deviate from the mainline patch logic.
-- **Exact Line Matches**: When replacing lines, ensure you replace the entire block correctly. To just insert new code without replacing anything, use start_line = N, end_line = N-1.
+- **Exact Line Matches**: When relying on line fallbacks, ensure you replace the entire block correctly. To just insert new code without replacing anything, use start_line = N, end_line = N-1.
 - **Loyalty to Mainline Patterns**: Stick as closely as possible to the mainline patch's implementation patterns (e.g., lambda structures, specific class constructors). Only deviate if a symbol in the target file is renamed or missing (check Consistency Map and grep first).
 - **Adapt to Target Syntax**: The target file may use completely different variables (e.g. `ob` instead of `builder`) or slightly different method names. YOU MUST READ the target code and ADAPT the logic. DO NOT blindly copy-paste the mainline diff syntax if the target file uses different patterns!
 
@@ -1027,6 +1034,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
             system_prompt = _FILE_EDITOR_AGENT_SYSTEM.format(
                 patch_diff=state.get("patch_diff") or "<no patch diff found>",
+                hunk_generation_plan=json.dumps(plan_entries, indent=2),
                 mapping_hints="\n---\n".join(mapping_hints)
                 if mapping_hints
                 else "No structural mapping hints available.",
@@ -1059,13 +1067,14 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     {
                         "messages": [
                             SystemMessage(content=system_prompt),
-                            HumanMessage(
-                                content="Start your Todo list now.\n"
-                                "1. Write a short analysis of the logic changes across ALL hunks in the patch for this file.\n"
-                                "2. For EACH distinct change (imports, fields, constructor, methods), use read_file_window to find the target code.\n"
-                                "3. Write a short analysis on how the mainline syntax differs from the target syntax.\n"
-                                "4. Use replace_lines (or insert_after_line) REPEATEDLY to apply EVERY part of the adapted logic. Remember to use start_line=N, end_line=N-1 to insert without deleting!"
-                            ),
+                             HumanMessage(
+                                 content="Start your Todo list now.\n"
+                                 "1. Write a short analysis of the logic changes across ALL hunks in the patch for this file.\n"
+                                 "2. For EACH distinct change (imports, fields, constructor, methods), prefer AST tools (`replace_method_body`, `replace_field`, `insert_import`, `remove_method`).\n"
+                                 "3. Only if AST tools are not applicable, use `read_file_window` to find the target code and use `replace_lines` (or `insert_after_line`) as a fallback.\n"
+                                 "4. Write a short analysis on how the mainline syntax differs from the target syntax.\n"
+                                 "5. Apply EVERY part of the adapted logic. Remember: use AST tools first!"
+                             ),
                         ]
                     }
                 )

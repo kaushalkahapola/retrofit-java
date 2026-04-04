@@ -682,69 +682,69 @@ class HunkGeneratorToolkit:
     # Tool 10a: replace_lines
     # ------------------------------------------------------------------
 
-     def replace_lines(
-         self,
-         file_path: str,
-         start_line: int,
-         end_line: int,
-         new_content: str,
-     ) -> str:
-         """
-         Replace lines `start_line` to `end_line` (inclusive, 1-indexed) in the target file
-         with `new_content`.
-         
-         To insert new lines without replacing any existing lines, set `start_line` to N and
-         `end_line` to N-1 (e.g. start_line=27, end_line=26 will insert before line 27).
+    def replace_lines(
+        self,
+        file_path: str,
+        start_line: int,
+        end_line: int,
+        new_content: str,
+    ) -> str:
+        """
+        Replace lines `start_line` to `end_line` (inclusive, 1-indexed) in the target file
+        with `new_content`.
+        
+        To insert new lines without replacing any existing lines, set `start_line` to N and
+        `end_line` to N-1 (e.g. start_line=27, end_line=26 will insert before line 27).
 
-         Args:
-             file_path: Repo-relative path to the file.
-             start_line: 1-indexed start line to replace (or N for insertion).
-             end_line: 1-indexed end line to replace (or N-1 for insertion).
-             new_content: The new complete code block to insert/replace.
+        Args:
+            file_path: Repo-relative path to the file.
+            start_line: 1-indexed start line to replace (or N for insertion).
+            end_line: 1-indexed end line to replace (or N-1 for insertion).
+            new_content: The new complete code block to insert/replace.
 
-         Returns:
-             SUCCESS message (including line delta for tracking subsequent edits) or ERROR message.
-         """
-         full_path = self._full_path(file_path)
-         try:
-             with open(full_path, "r", encoding="utf-8", errors="replace") as f:
-                 original = f.read()
-         except Exception as exc:
-             return f"ERROR: Cannot read file '{file_path}': {exc}"
+        Returns:
+            SUCCESS message (including line delta for tracking subsequent edits) or ERROR message.
+        """
+        full_path = self._full_path(file_path)
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                original = f.read()
+        except Exception as exc:
+            return f"ERROR: Cannot read file '{file_path}': {exc}"
 
-         lines = original.splitlines(keepends=True)
-         total = len(lines)
-         if start_line < 1 or end_line > total or start_line > end_line + 1:
-             return f"ERROR: Invalid range {start_line}-{end_line}. File has {total} lines."
+        lines = original.splitlines(keepends=True)
+        total = len(lines)
+        if start_line < 1 or end_line > total or start_line > end_line + 1:
+            return f"ERROR: Invalid range {start_line}-{end_line}. File has {total} lines."
 
-         # Support inserting lines by letting start_line == end_line + 1
-         s_idx = start_line - 1
-         e_idx = end_line # Exclusive
+        # Support inserting lines by letting start_line == end_line + 1
+        s_idx = start_line - 1
+        e_idx = end_line # Exclusive
 
-         if new_content and not new_content.endswith("\n") and s_idx < total and lines[s_idx].endswith("\n"):
-             # Ensure proper newline behavior
-             new_content += "\n"
+        if new_content and not new_content.endswith("\n") and s_idx < total and lines[s_idx].endswith("\n"):
+            # Ensure proper newline behavior
+            new_content += "\n"
 
-         lines_before = lines[:s_idx]
-         lines_after = lines[e_idx:]
+        lines_before = lines[:s_idx]
+        lines_after = lines[e_idx:]
 
-         # Calculate line delta: how many lines the file grows or shrinks
-         old_line_count = max(1, end_line - start_line + 1)
-         new_line_count = new_content.count('\n')
-         if new_content and not new_content.endswith('\n'):
-             new_line_count += 1
-         delta = new_line_count - old_line_count
+        # Calculate line delta: how many lines the file grows or shrinks
+        old_line_count = max(1, end_line - start_line + 1)
+        new_line_count = new_content.count('\n')
+        if new_content and not new_content.endswith('\n'):
+            new_line_count += 1
+        delta = new_line_count - old_line_count
 
-         new_resolved = lines_before + [new_content] + lines_after
+        new_resolved = lines_before + [new_content] + lines_after
 
-         try:
-             with open(full_path, "w", encoding="utf-8") as f:
-                 f.write("".join(new_resolved))
-             # Return success with delta information for tracking line number shifts
-             sign = "+" if delta >= 0 else ""
-             return f"SUCCESS: lines {start_line} to {end_line} replaced. Line delta: {sign}{delta} (subsequent edits below line {end_line} must shift by {sign}{delta})."
-         except Exception as exc:
-             return f"ERROR: Cannot write file '{file_path}': {exc}"
+        try:
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write("".join(new_resolved))
+            # Return success with delta information for tracking line number shifts
+            sign = "+" if delta >= 0 else ""
+            return f"SUCCESS: lines {start_line} to {end_line} replaced. Line delta: {sign}{delta} (subsequent edits below line {end_line} must shift by {sign}{delta})."
+        except Exception as exc:
+            return f"ERROR: Cannot write file '{file_path}': {exc}"
 
     # ------------------------------------------------------------------
     # Tool 11: git_diff_file  (mechanically correct diff after edits)

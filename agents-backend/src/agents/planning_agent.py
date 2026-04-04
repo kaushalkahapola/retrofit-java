@@ -1084,19 +1084,37 @@ async def planning_agent_node(state: AgentState, config) -> dict:
 
             ctx = mapped[min(hidx, len(mapped) - 1)] if mapped else {}
             target_file = (ctx.get("target_file") or mainline_file).replace("\\", "/")
-            plan[mainline_file].append({
-                "hunk_index": hidx,
-                "target_file": target_file,
-                "edit_type": "replace",
-                "old_string": "DEPRECATED",
-                "new_string": "DEPRECATED",
-                "verified": False,
-                "verification_result": "Line-Based FileEditor Agent will handle this",
-                "notes": "Passed explicitly"
-            })
+            # Decompose mainline hunk into atomic text-replace operations
+            entries = _decompose_hunk_to_required_entries(
+                hunk_idx=hidx,
+                raw_hunk=raw_hunk,
+                target_file=target_file,
+                consistency_map=consistency_map,
+            )
+
+            # Try to sanitize and verify these operations against the on-disk target file
+            target_content = _read_target_file(target_repo_path, target_file)
+            if target_content:
+                entries = [
+                    _sanitize_entry_against_target(e, target_content) for e in entries
+                ]
+
+            plan[mainline_file].extend(entries)
+
+    # -----------------------------------------------------------------------
+    # Step 2: Use LLM to adapt any unverified entries (Option 2)
+    # -----------------------------------------------------------------------
+    plan = await _adapt_unverified_hunks_with_llm(
+        plan,
+        target_repo_path,
+        normalized_mainline,
+        token_usage,
+        raw_hunks,
+        consistency_map,
+    )
 
     total_entries = sum(len(v) for v in plan.values())
-    print(f"Planning Agent: Complete. Planned {total_entries} edit(s).")
+    print(f"Planning Agent: Complete. Planned {total_entries} adapted edit(s).")
 
     # Generate plan signature for retry loop dedup
     import hashlib

@@ -4,56 +4,129 @@
       {
         "hunk_index": 0,
         "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
-        "edit_type": "replace",
-        "old_string": "DEPRECATED",
-        "new_string": "DEPRECATED",
-        "verified": false,
-        "verification_result": "Line-Based FileEditor Agent will handle this",
-        "notes": "Passed explicitly"
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.action.ActionType;",
+        "new_string": "import org.elasticsearch.action.ActionRunnable;\nimport org.elasticsearch.action.ActionType;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:line_trimmed_unique",
+        "notes": "required_op_insert_before"
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 1,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;",
+        "new_string": "import org.elasticsearch.action.SingleResultDeduplicator;\nimport org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:line_trimmed_unique",
+        "notes": "required_op_insert_before"
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 2,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.action.support.master.MasterNodeReadRequest;",
+        "new_string": "import org.elasticsearch.action.support.SubscribableListener;\nimport org.elasticsearch.action.support.master.MasterNodeReadRequest;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:line_trimmed_unique",
+        "notes": "required_op_insert_before"
       },
       {
         "hunk_index": 1,
         "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
-        "edit_type": "replace",
-        "old_string": "DEPRECATED",
-        "new_string": "DEPRECATED",
-        "verified": false,
-        "verification_result": "Line-Based FileEditor Agent will handle this",
-        "notes": "Passed explicitly"
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.core.Nullable;",
+        "new_string": "import org.elasticsearch.common.util.concurrent.EsExecutors;\nimport org.elasticsearch.core.Nullable;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:line_trimmed_unique",
+        "notes": "required_op_insert_before"
       },
       {
         "hunk_index": 2,
         "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 0,
         "edit_type": "replace",
-        "old_string": "DEPRECATED",
-        "new_string": "DEPRECATED",
-        "verified": false,
-        "verification_result": "Line-Based FileEditor Agent will handle this",
-        "notes": "Passed explicitly"
+        "old_string": "    private final AllocationStatsService allocationStatsService;",
+        "new_string": "    private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace"
       },
       {
         "hunk_index": 3,
         "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 0,
         "edit_type": "replace",
-        "old_string": "DEPRECATED",
-        "new_string": "DEPRECATED",
-        "verified": false,
-        "verification_result": "Line-Based FileEditor Agent will handle this",
-        "notes": "Passed explicitly"
+        "old_string": "            threadPool.executor(ThreadPool.Names.MANAGEMENT)",
+        "new_string": "            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return\n            // very cheaply.\n            EsExecutors.DIRECT_EXECUTOR_SERVICE\n        );\n        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);\n        this.allocationStatsSupplier = new SingleResultDeduplicator<>(\n            threadPool.getThreadContext(),\n            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace"
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 1,
+        "edit_type": "delete",
+        "old_string": "        this.allocationStatsService = allocationStatsService;",
+        "new_string": "",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_delete"
       },
       {
         "hunk_index": 4,
         "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 0,
         "edit_type": "replace",
-        "old_string": "DEPRECATED",
-        "new_string": "DEPRECATED",
-        "verified": false,
-        "verification_result": "Line-Based FileEditor Agent will handle this",
-        "notes": "Passed explicitly"
+        "old_string": "        listener.onResponse(\n            new Response(\n                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),",
+        "new_string": "        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool\n\n        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)\n            ? SubscribableListener.newForked(allocationStatsSupplier::execute)\n            : SubscribableListener.newSucceeded(Map.of());\n\n        allocationStatsStep.andThenApply(\n            allocationStats -> new Response(\n                allocationStats,",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace"
+      },
+      {
+        "hunk_index": 4,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "        );",
+        "new_string": "        ).addListener(listener);",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace"
+      }
+    ],
+    "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import java.util.Map;",
+        "new_string": "import org.elasticsearch.transport.Transports;\nimport java.util.Map;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:line_trimmed_unique",
+        "notes": "required_op_insert_before"
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "        var state = clusterService.state();",
+        "new_string": "        assert Transports.assertNotTransportThread(\"too expensive for a transport worker\");\n\n        var state = clusterService.state();",
+        "verified": true,
+        "verification_result": "sanitize_resolved:line_trimmed_unique",
+        "notes": "required_op_insert_before"
       }
     ]
   },
-  "last_plan_signature": "4c4f63f7c8a144f1eff2b03902439a7c23861fb21751186ac8a0ececa2ec90d7",
+  "last_plan_signature": "4509001052bc11247ea4f77c5a4ab6c6bffed7c797174ea94cc8ec941d5c322e",
   "token_usage": {
     "input_tokens": 0,
     "output_tokens": 0,
