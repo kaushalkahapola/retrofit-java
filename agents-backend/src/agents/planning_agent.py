@@ -839,6 +839,107 @@ def _derive_required_invariants_from_hunk(
     return invariants
 
 
+def _extract_declared_methods(content: str) -> set[str]:
+    methods: set[str] = set()
+    for line in (content or "").splitlines():
+        s = line.strip()
+        if not s or s.startswith(("//", "*", "@")):
+            continue
+        m = re.search(
+            r"\b(?:public|protected|private)\s+(?:static\s+)?(?:final\s+)?[\w<>,\[\]\s?]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+            s,
+        )
+        if m:
+            methods.add(m.group(1))
+    return methods
+
+
+def _extract_lambda_target_calls(text: str) -> list[str]:
+    return re.findall(r"->\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(", text or "")
+
+
+def _derive_chain_constraints_from_hunk(
+    raw_hunk: str,
+    consistency_map: dict[str, str],
+) -> list[list[str]]:
+    """
+    Build ordered call constraints from added listener chain lines.
+    """
+    added_lines = [
+        ln[1:]
+        for ln in (raw_hunk or "").splitlines()[1:]
+        if ln.startswith("+") and not ln.startswith("+++")
+    ]
+    added_lines = [
+        _apply_consistency_map(ln, consistency_map) for ln in (added_lines or [])
+    ]
+
+    chain_calls: list[str] = []
+    for ln in added_lines:
+        s = ln.strip()
+        if "newForked" in s or ".andThen(" in s or "andThenApply(" in s:
+            targets = _extract_lambda_target_calls(s)
+            if targets:
+                chain_calls.append(targets[-1])
+
+    constraints: list[list[str]] = []
+    if len(chain_calls) >= 2:
+        # Deduplicate in-order to avoid repeated noise.
+        dedup: list[str] = []
+        for c in chain_calls:
+            if not dedup or dedup[-1] != c:
+                dedup.append(c)
+        if len(dedup) >= 2:
+            constraints.append(dedup)
+    return constraints
+
+
+def _derive_required_symbols_from_hunk(
+    raw_hunk: str,
+    consistency_map: dict[str, str],
+) -> list[str]:
+    added = _apply_consistency_map(_extract_added_text(raw_hunk), consistency_map)
+    symbols: list[str] = []
+    seen: set[str] = set()
+
+    # Method declarations introduced/renamed by hunk.
+    for method in sorted(_extract_declared_methods(added)):
+        if method not in seen:
+            seen.add(method)
+            symbols.append(method)
+
+    # Lambda target calls in listener chains.
+    for target in _extract_lambda_target_calls(added):
+        if target in {"if", "for", "while", "switch", "return", "new"}:
+            continue
+        if target not in seen:
+            seen.add(target)
+            symbols.append(target)
+
+    return symbols
+
+
+def _derive_api_inventory_signals(
+    *,
+    mainline_pre: str,
+    target_content: str,
+    required_symbols: list[str],
+) -> dict[str, Any]:
+    main_declared = _extract_declared_methods(mainline_pre)
+    target_declared = _extract_declared_methods(target_content)
+
+    required_set = {s for s in (required_symbols or []) if s}
+    matched_before = sorted(s for s in required_set if s in target_declared)
+    missing_before = sorted(s for s in required_set if s not in target_declared)
+
+    return {
+        "mainline_declared_methods_count": len(main_declared),
+        "target_declared_methods_count": len(target_declared),
+        "matched_symbols_before": matched_before,
+        "missing_symbols_before": missing_before,
+    }
+
+
 def _attach_entry_surround_context(
     entry: dict[str, Any], target_content: str
 ) -> dict[str, Any]:
@@ -1607,6 +1708,19 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 raw_hunk,
                 consistency_map,
             )
+            required_symbols = _derive_required_symbols_from_hunk(
+                raw_hunk,
+                consistency_map,
+            )
+            chain_constraints = _derive_chain_constraints_from_hunk(
+                raw_hunk,
+                consistency_map,
+            )
+            api_inventory = _derive_api_inventory_signals(
+                mainline_pre=mainline_pre,
+                target_content=target_content,
+                required_symbols=required_symbols,
+            )
 
             normalized_entries: list[dict[str, Any]] = []
             for entry in entries:
@@ -1625,6 +1739,10 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 entry["namespace_only_possible"] = namespace_only_possible
                 entry["namespace_changes"] = namespace_changes
                 entry["required_invariants"] = required_invariants
+                entry["required_symbols"] = required_symbols
+                entry["protected_symbols"] = required_symbols
+                entry["chain_constraints"] = chain_constraints
+                entry["api_inventory"] = api_inventory
                 if force_type_v:
                     entry["notes"] = (
                         str(entry.get("notes") or "")

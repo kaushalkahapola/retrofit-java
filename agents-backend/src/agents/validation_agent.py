@@ -159,13 +159,22 @@ def _classify_build_failure(raw_output: str) -> tuple[str, list[str], list[dict]
         or "method" in text_lower
         and "cannot be applied" in text_lower
     ):
+        # Capture a few concrete javac error lines to provide grounded retry context.
+        concrete_errors = []
+        for ln in text.splitlines():
+            ll = ln.strip()
+            if ": error:" in ll and len(concrete_errors) < 8:
+                concrete_errors.append(ll)
         diagnostics.append(
             {
                 "error_type": "api_or_signature_mismatch",
                 "suggested_action": "replan_and_regenerate_with_api_compatibility",
+                "compiler_errors": concrete_errors,
             }
         )
         reason = "API/signature mismatch in generated patch against target branch."
+        if concrete_errors:
+            reason += " Compiler errors: " + " | ".join(concrete_errors[:3])
         return "context_mismatch", sorted(retry_files), diagnostics, reason
 
     diagnostics.append(

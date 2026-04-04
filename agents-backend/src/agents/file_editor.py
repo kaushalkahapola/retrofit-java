@@ -1025,12 +1025,15 @@ def _find_near_miss_symbol(symbol: str, diff_text: str) -> str:
     for line in _extract_added_lines_from_unified_diff(diff_text):
         for token in re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", line):
             tokens.add(token)
+    if len(target) < 4:
+        return ""
+
     for token in sorted(tokens):
         tl = token.lower()
         if tl == target:
             continue
         # Same stem-ish prefix is usually dangerous drift for method names.
-        if target.startswith(tl[:4]) or tl.startswith(target[:4]):
+        if len(tl) >= 4 and (target.startswith(tl[:4]) or tl.startswith(target[:4])):
             return token
     return ""
 
@@ -1082,6 +1085,127 @@ def _collect_file_plan_invariants(plan_entries: list[dict[str, Any]]) -> list[st
             seen.add(key)
             out.append(s)
     return out
+
+
+def _collect_file_plan_required_symbols(
+    plan_entries: list[dict[str, Any]],
+) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for e in plan_entries or []:
+        for sym in (e or {}).get("required_symbols") or []:
+            s = str(sym or "").strip()
+            if not s or s in seen:
+                continue
+            seen.add(s)
+            out.append(s)
+    return out
+
+
+def _collect_file_plan_protected_symbols(
+    plan_entries: list[dict[str, Any]],
+) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for e in plan_entries or []:
+        for sym in (e or {}).get("protected_symbols") or []:
+            s = str(sym or "").strip()
+            if not s or s in seen:
+                continue
+            seen.add(s)
+            out.append(s)
+    return out
+
+
+def _collect_file_chain_constraints(
+    plan_entries: list[dict[str, Any]],
+) -> list[list[str]]:
+    out: list[list[str]] = []
+    seen: set[str] = set()
+    for e in plan_entries or []:
+        for chain in (e or {}).get("chain_constraints") or []:
+            if not isinstance(chain, list):
+                continue
+            chain_norm = [str(x).strip() for x in chain if str(x).strip()]
+            if len(chain_norm) < 2:
+                continue
+            key = "->".join(chain_norm)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(chain_norm)
+    return out
+
+
+def _collect_unverified_entries(
+    plan_entries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        e for e in (plan_entries or []) if not bool((e or {}).get("verified", False))
+    ]
+
+
+def _extract_method_body(text: str, method_name: str) -> str:
+    lines = (text or "").splitlines()
+    if not lines or not method_name:
+        return ""
+
+    sig_rx = re.compile(rf"\b{re.escape(method_name)}\s*\(")
+    start_idx = None
+    for i, line in enumerate(lines):
+        if sig_rx.search(line):
+            start_idx = i
+            break
+    if start_idx is None:
+        return ""
+
+    brace_depth = 0
+    began = False
+    collected: list[str] = []
+    for j in range(start_idx, len(lines)):
+        line = lines[j]
+        collected.append(line)
+        for ch in line:
+            if ch == "{":
+                brace_depth += 1
+                began = True
+            elif ch == "}":
+                brace_depth -= 1
+        if began and brace_depth <= 0:
+            break
+    return "\n".join(collected)
+
+
+def _chain_constraints_satisfied(
+    file_text: str, chains: list[list[str]]
+) -> tuple[bool, str]:
+    if not chains:
+        return True, "no_chain_constraints"
+    for chain in chains:
+        # anchor on first call if possible
+        anchor = chain[0]
+        body = _extract_method_body(file_text, anchor)
+        hay = body if body else file_text
+        pos = -1
+        for sym in chain:
+            nxt = hay.find(sym + "(", pos + 1)
+            if nxt < 0:
+                return False, f"missing_chain_symbol:{sym} in chain:{'->'.join(chain)}"
+            pos = nxt
+    return True, "chain_constraints_verified"
+
+
+def _protected_symbols_no_near_miss(
+    diff_text: str,
+    protected_symbols: list[str],
+) -> tuple[bool, str]:
+    for sym in protected_symbols or []:
+        if _diff_has_symbol(diff_text, sym):
+            continue
+        near = _find_near_miss_symbol(sym, diff_text)
+        if near:
+            return False, f"protected_symbol_missing:{sym};near_miss:{near}"
+    return True, "protected_symbols_verified"
 
 
 def _should_lock_coupled_retry(
@@ -1665,6 +1789,64 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
         # Step B: Apply edits via deterministic or ReAct path.
         used_react = False
+        if "TYPE_V" in execution_types:
+            unverified_entries = _collect_unverified_entries(plan_entries)
+            if unverified_entries:
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "generation_contract_failed"
+                task_entry["error"] = "type_v_unverified_plan_entries: " + str(
+                    [
+                        {
+                            "hunk_index": e.get("hunk_index"),
+                            "operation_index": e.get("operation_index"),
+                            "verification_result": e.get("verification_result"),
+                        }
+                        for e in unverified_entries[:5]
+                    ]
+                )
+                _git_reset_file(target_repo_path, target_file)
+                return {
+                    "messages": [
+                        HumanMessage(
+                            content=(
+                                "Agent 3 (File Editor): Type V plan has unverified entries; "
+                                "requesting sticky Type V replanning."
+                            )
+                        )
+                    ],
+                    "adapted_file_edits": adapted_file_edits,
+                    "all_adapted_file_edits": list(
+                        state.get("all_adapted_file_edits") or []
+                    )
+                    + [adapted_file_edits],
+                    "agent_trajectory_edits": agent_trajectory_edits
+                    + [current_attempt_trajectory],
+                    "adapted_code_hunks": adapted_code_hunks,
+                    "adapted_test_hunks": [],
+                    "generation_checklist": [
+                        {
+                            "mainline_file": mainline_file,
+                            "target_file": target_file,
+                            "hunk_index": 0,
+                            "status": "failed",
+                            "reason": "generation_contract_failed",
+                            "todo_steps": ["replan"],
+                            "completed_steps": [],
+                            "error": task_entry["error"],
+                            "execution_types": ["TYPE_V"],
+                        }
+                    ],
+                    "validation_failed_stage": "generation_contract_failed",
+                    "validation_failure_category": "context_mismatch",
+                    "validation_retry_files": [mainline_file, target_file],
+                    "validation_retry_hunks": [],
+                    "validation_attempts": validation_attempts + 1,
+                    "force_type_v_until_success": True,
+                    "force_type_v_reason": "type_v_unverified_plan_entries",
+                    "generated_patch_hash": "",
+                    "token_usage": token_usage,
+                }
+
         if deterministic_only:
             ok, apply_reason = _apply_plan_entries_deterministically(
                 toolkit=toolkit,
@@ -1793,6 +1975,169 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     "token_usage": token_usage,
                 }
 
+            required_symbols = _collect_file_plan_required_symbols(plan_entries)
+            for sym in required_symbols:
+                if not _diff_has_symbol(diff_text, sym):
+                    print(
+                        f"    Agent 3: Type V symbol gate failed for {target_file}: missing {sym}"
+                    )
+                    task_entry["status"] = "failed"
+                    task_entry["reason"] = "generation_contract_failed"
+                    task_entry["error"] = f"missing_required_symbol:{sym}"
+                    _git_reset_file(target_repo_path, target_file)
+                    return {
+                        "messages": [
+                            HumanMessage(
+                                content=(
+                                    "Agent 3 (File Editor): Type V required symbol missing; "
+                                    "requesting sticky Type V replanning."
+                                )
+                            )
+                        ],
+                        "adapted_file_edits": adapted_file_edits,
+                        "all_adapted_file_edits": list(
+                            state.get("all_adapted_file_edits") or []
+                        )
+                        + [adapted_file_edits],
+                        "agent_trajectory_edits": agent_trajectory_edits
+                        + [current_attempt_trajectory],
+                        "adapted_code_hunks": adapted_code_hunks,
+                        "adapted_test_hunks": [],
+                        "generation_checklist": [
+                            {
+                                "mainline_file": mainline_file,
+                                "target_file": target_file,
+                                "hunk_index": 0,
+                                "status": "failed",
+                                "reason": "generation_contract_failed",
+                                "todo_steps": ["replan"],
+                                "completed_steps": [],
+                                "error": f"missing_required_symbol:{sym}",
+                                "execution_types": ["TYPE_V"],
+                            }
+                        ],
+                        "validation_failed_stage": "generation_contract_failed",
+                        "validation_failure_category": "context_mismatch",
+                        "validation_retry_files": [mainline_file, target_file],
+                        "validation_retry_hunks": [],
+                        "validation_attempts": validation_attempts + 1,
+                        "force_type_v_until_success": True,
+                        "force_type_v_reason": f"missing_required_symbol:{sym}",
+                        "generated_patch_hash": "",
+                        "token_usage": token_usage,
+                    }
+
+            protected_symbols = _collect_file_plan_protected_symbols(plan_entries)
+            prot_ok, prot_reason = _protected_symbols_no_near_miss(
+                diff_text,
+                protected_symbols,
+            )
+            if not prot_ok:
+                print(
+                    f"    Agent 3: Type V protected symbol gate failed for {target_file}: {prot_reason}"
+                )
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "generation_contract_failed"
+                task_entry["error"] = prot_reason
+                _git_reset_file(target_repo_path, target_file)
+                return {
+                    "messages": [
+                        HumanMessage(
+                            content=(
+                                "Agent 3 (File Editor): Type V protected symbol gate failed; "
+                                "requesting sticky Type V replanning."
+                            )
+                        )
+                    ],
+                    "adapted_file_edits": adapted_file_edits,
+                    "all_adapted_file_edits": list(
+                        state.get("all_adapted_file_edits") or []
+                    )
+                    + [adapted_file_edits],
+                    "agent_trajectory_edits": agent_trajectory_edits
+                    + [current_attempt_trajectory],
+                    "adapted_code_hunks": adapted_code_hunks,
+                    "adapted_test_hunks": [],
+                    "generation_checklist": [
+                        {
+                            "mainline_file": mainline_file,
+                            "target_file": target_file,
+                            "hunk_index": 0,
+                            "status": "failed",
+                            "reason": "generation_contract_failed",
+                            "todo_steps": ["replan"],
+                            "completed_steps": [],
+                            "error": prot_reason,
+                            "execution_types": ["TYPE_V"],
+                        }
+                    ],
+                    "validation_failed_stage": "generation_contract_failed",
+                    "validation_failure_category": "context_mismatch",
+                    "validation_retry_files": [mainline_file, target_file],
+                    "validation_retry_hunks": [],
+                    "validation_attempts": validation_attempts + 1,
+                    "force_type_v_until_success": True,
+                    "force_type_v_reason": prot_reason,
+                    "generated_patch_hash": "",
+                    "token_usage": token_usage,
+                }
+
+            chain_constraints = _collect_file_chain_constraints(plan_entries)
+            target_after = _load_file_text(target_repo_path, target_file)
+            chain_ok, chain_reason = _chain_constraints_satisfied(
+                target_after,
+                chain_constraints,
+            )
+            if not chain_ok:
+                print(
+                    f"    Agent 3: Type V chain gate failed for {target_file}: {chain_reason}"
+                )
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "generation_contract_failed"
+                task_entry["error"] = chain_reason
+                _git_reset_file(target_repo_path, target_file)
+                return {
+                    "messages": [
+                        HumanMessage(
+                            content=(
+                                "Agent 3 (File Editor): Type V chain gate failed; "
+                                "requesting sticky Type V replanning."
+                            )
+                        )
+                    ],
+                    "adapted_file_edits": adapted_file_edits,
+                    "all_adapted_file_edits": list(
+                        state.get("all_adapted_file_edits") or []
+                    )
+                    + [adapted_file_edits],
+                    "agent_trajectory_edits": agent_trajectory_edits
+                    + [current_attempt_trajectory],
+                    "adapted_code_hunks": adapted_code_hunks,
+                    "adapted_test_hunks": [],
+                    "generation_checklist": [
+                        {
+                            "mainline_file": mainline_file,
+                            "target_file": target_file,
+                            "hunk_index": 0,
+                            "status": "failed",
+                            "reason": "generation_contract_failed",
+                            "todo_steps": ["replan"],
+                            "completed_steps": [],
+                            "error": chain_reason,
+                            "execution_types": ["TYPE_V"],
+                        }
+                    ],
+                    "validation_failed_stage": "generation_contract_failed",
+                    "validation_failure_category": "context_mismatch",
+                    "validation_retry_files": [mainline_file, target_file],
+                    "validation_retry_hunks": [],
+                    "validation_attempts": validation_attempts + 1,
+                    "force_type_v_until_success": True,
+                    "force_type_v_reason": chain_reason,
+                    "generated_patch_hash": "",
+                    "token_usage": token_usage,
+                }
+
         task_entry["completed_steps"].append("capture_diff")
         print(
             f"    Agent 3: Captured diff for {target_file} "
@@ -1850,6 +2195,52 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 print(
                     f"    Agent 3: Blueprint intent check FAILED for {target_file} - flagging."
                 )
+                if "TYPE_V" in execution_types:
+                    task_entry["status"] = "failed"
+                    task_entry["reason"] = "generation_contract_failed"
+                    task_entry["error"] = "type_v_intent_check_failed"
+                    _git_reset_file(target_repo_path, target_file)
+                    return {
+                        "messages": [
+                            HumanMessage(
+                                content=(
+                                    "Agent 3 (File Editor): Type V intent check failed; "
+                                    "requesting sticky Type V replanning."
+                                )
+                            )
+                        ],
+                        "adapted_file_edits": adapted_file_edits,
+                        "all_adapted_file_edits": list(
+                            state.get("all_adapted_file_edits") or []
+                        )
+                        + [adapted_file_edits],
+                        "agent_trajectory_edits": agent_trajectory_edits
+                        + [current_attempt_trajectory],
+                        "adapted_code_hunks": adapted_code_hunks,
+                        "adapted_test_hunks": [],
+                        "generation_checklist": [
+                            {
+                                "mainline_file": mainline_file,
+                                "target_file": target_file,
+                                "hunk_index": 0,
+                                "status": "failed",
+                                "reason": "generation_contract_failed",
+                                "todo_steps": ["replan"],
+                                "completed_steps": [],
+                                "error": "type_v_intent_check_failed",
+                                "execution_types": ["TYPE_V"],
+                            }
+                        ],
+                        "validation_failed_stage": "generation_contract_failed",
+                        "validation_failure_category": "context_mismatch",
+                        "validation_retry_files": [mainline_file, target_file],
+                        "validation_retry_hunks": [],
+                        "validation_attempts": validation_attempts + 1,
+                        "force_type_v_until_success": True,
+                        "force_type_v_reason": "type_v_intent_check_failed",
+                        "generated_patch_hash": "",
+                        "token_usage": token_usage,
+                    }
         task_entry["completed_steps"].append("intent_check")
 
         # Step F: Reset file to HEAD (leave repo clean for validation)
