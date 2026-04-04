@@ -151,7 +151,7 @@ public class McpClient {
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(mcpServerUrl + "/mcp/sync/call"))
                 .timeout(Duration.ofSeconds(5))
-                .HEAD()
+                .method("HEAD", HttpRequest.BodyPublishers.noBody())
                 .build();
             HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
             return response.statusCode() >= 200 && response.statusCode() < 300;

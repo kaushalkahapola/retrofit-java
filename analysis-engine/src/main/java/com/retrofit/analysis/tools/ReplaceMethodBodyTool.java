@@ -188,32 +188,22 @@ public class ReplaceMethodBodyTool {
             
             // Parse new field and insert at same position
             try {
-                CtField<?> newField = targetType.getFactory()
-                    .createCtNewInstance()
-                    .createFieldFromString(newDeclaration, targetType);
+                // Fallback for field parsing in Spoon 10.4.0
+                String fileContent = Files.readString(Paths.get(targetFile.getAbsolutePath()));
+                String oldFieldDecl = targetField.toString();
+                String newContent = fileContent.replace(oldFieldDecl, newDeclaration);
+                Files.write(Paths.get(targetFile.getAbsolutePath()), newContent.getBytes());
                 
-                List<CtField<?>> fields = new ArrayList<>(targetType.getFields());
-                if (fieldIndex >= 0 && fieldIndex < fields.size()) {
-                    fields.add(fieldIndex, newField);
-                } else {
-                    fields.add(newField);
-                }
-                
-                // Reconstruct field list - unfortunately Spoon doesn't have direct insertion
-                // So we remove all and re-add in correct order
-                targetType.getFields().clear();
-                for (CtField<?> field : fields) {
-                    targetType.addField(newField);
-                }
+                // Clear cache as we modified file manually
+                AST_CACHE.remove(targetFile.getAbsolutePath() + ":" + targetFile.lastModified());
             } catch (Exception e) {
-                // Fallback: just add at end
-                CtField<?> newField = targetType.getFactory()
-                    .createCtNewInstance()
-                    .createFieldFromString(newDeclaration, targetType);
-                targetType.addField(newField);
+                result.put("success", false);
+                result.put("error", "Failed to replace field via string manipulation: " + e.getMessage());
+                return result;
             }
             
-            writeModelToFile(targetFile, targetType);
+            // Re-parse to ensure consistency
+            getOrParseModel(targetFile);
             
             result.put("success", true);
             result.put("message", "Successfully replaced field " + fieldName);
@@ -285,7 +275,7 @@ public class ReplaceMethodBodyTool {
                 String importClass = normalizedImport.replace(".*;", "").replace(";", "").trim();
                 
                 // Check if package or class already imported
-                List<CtImport> imports = targetType.getFactory().CompilationUnit().getImports();
+                List<CtImport> imports = new ArrayList<>(targetType.getFactory().CompilationUnit().getOrCreate(targetType).getImports());
                 for (CtImport imp : imports) {
                     if (imp.toString().contains(importClass)) {
                         alreadyImported = true;
@@ -306,12 +296,13 @@ public class ReplaceMethodBodyTool {
             // Add import through the model
             try {
                 // Use Environment to add import
+                String importClass = importStatement.replace(";", "").replace("import ", "").trim();
+                CtImport ctImport = targetType.getFactory().Type().createImport(targetType.getFactory().Type().createReference(importClass));
                 targetType.getFactory()
-                    .Type()
-                    .get(targetType.getQualifiedName())
-                    .getFactory()
                     .CompilationUnit()
-                    .addImport(importStatement);
+                    .getOrCreate(targetType)
+                    .getImports()
+                    .add(ctImport);
             } catch (Exception e) {
                 // Fallback: manually add to source via string manipulation
                 String fileContent = Files.readString(Paths.get(targetFile.getAbsolutePath()));
@@ -463,7 +454,7 @@ public class ReplaceMethodBodyTool {
             CtExecutable<?> targetMethod = null;
 
             // Check constructors first
-            for (CtConstructor<?> ctor : targetType.getConstructors()) {
+            for (CtConstructor<?> ctor : targetType.getElements(new TypeFilter<>(CtConstructor.class))) {
                 if (matchesSignature(ctor, methodSignature)) {
                     targetMethod = ctor;
                     break;
@@ -547,14 +538,16 @@ public class ReplaceMethodBodyTool {
      * Supports wildcard parameters like "ClassName(...)" or "ClassName(*, String)".
      */
     private boolean replaceConstructorBody(CtType<?> type, String signature, String newBody) {
-        for (CtConstructor<?> constructor : type.getConstructors()) {
+        for (CtConstructor<?> constructor : type.getElements(new TypeFilter<>(CtConstructor.class))) {
             if (matchesSignature(constructor, signature)) {
                 try {
                     CtBlock<?> body = constructor.getBody();
                     if (body != null) {
                         body.delete();
                     }
-                    constructor.setBody(type.getFactory().createCtBlock(newBody));
+                    CtBlock<?> constructorBlock = type.getFactory().Core().createBlock();
+                    constructorBlock.addStatement(type.getFactory().Code().createCodeSnippetStatement(newBody));
+                    constructor.setBody(constructorBlock);
                     return true;
                 } catch (Exception e) {
                     // Continue to next constructor
@@ -575,7 +568,9 @@ public class ReplaceMethodBodyTool {
                     if (body != null) {
                         body.delete();
                     }
-                    method.setBody(type.getFactory().createCtBlock(newBody));
+                    CtBlock<?> methodBlock = type.getFactory().Core().createBlock();
+                    methodBlock.addStatement(type.getFactory().Code().createCodeSnippetStatement(newBody));
+                    method.setBody(methodBlock);
                     return true;
                 } catch (Exception e) {
                     // Continue to next method
@@ -595,7 +590,7 @@ public class ReplaceMethodBodyTool {
      */
     private boolean matchesSignature(CtExecutable<?> executable, String signature) {
         String execName = executable.getSimpleName();
-        List<CtParameter> params = executable.getParameters();
+        List<CtParameter<?>> params = executable.getParameters();
         
         // Extract method name and parameter part from signature
         int openParen = signature.indexOf('(');
@@ -608,7 +603,7 @@ public class ReplaceMethodBodyTool {
 
         // Handle constructor names that might include package
         if (executable instanceof CtConstructor) {
-            if (!signature.contains(executable.getDeclaringType().getSimpleName())) {
+            if (!signature.contains(executable.getParent(CtType.class).getSimpleName())) {
                 return false;
             }
         } else {
