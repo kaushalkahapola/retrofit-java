@@ -970,6 +970,73 @@ def _run_mandatory_file_checks(
     return True, "verified", diff_text
 
 
+def _extract_added_lines_from_unified_diff(diff_text: str) -> list[str]:
+    added: list[str] = []
+    for line in (diff_text or "").splitlines():
+        if line.startswith("+++"):
+            continue
+        if line.startswith("+"):
+            added.append(line[1:])
+    return added
+
+
+def _invariants_satisfied(diff_text: str, invariants: list[str]) -> tuple[bool, str]:
+    normalized_added = [
+        re.sub(r"\s+", " ", (l or "").strip())
+        for l in _extract_added_lines_from_unified_diff(diff_text)
+        if (l or "").strip()
+    ]
+    normalized_invariants = [
+        re.sub(r"\s+", " ", (i or "").strip())
+        for i in (invariants or [])
+        if (i or "").strip()
+    ]
+    if not normalized_invariants:
+        return True, "no_invariants"
+
+    missing = [inv for inv in normalized_invariants if inv not in normalized_added]
+    if missing:
+        return False, f"missing_required_invariants:{missing[:3]}"
+    return True, "invariants_verified"
+
+
+def _collect_file_plan_invariants(plan_entries: list[dict[str, Any]]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for e in plan_entries or []:
+        for inv in (e or {}).get("required_invariants") or []:
+            s = str(inv or "").strip()
+            if not s:
+                continue
+            key = re.sub(r"\s+", " ", s)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(s)
+    return out
+
+
+def _should_lock_coupled_retry(
+    *,
+    validation_attempts: int,
+    failure_category: str,
+    failed_stage: str,
+    error_context: str,
+) -> bool:
+    if validation_attempts <= 0:
+        return False
+    fc = (failure_category or "").strip().lower()
+    fs = (failed_stage or "").strip().lower()
+    err = (error_context or "").lower()
+    if fs == "generation_contract_failed":
+        return True
+    if fc == "context_mismatch":
+        return True
+    if "api/signature mismatch" in err or "transition check failed" in err:
+        return True
+    return False
+
+
 def _apply_plan_entries_deterministically(
     *,
     toolkit: HunkGeneratorToolkit,
@@ -1319,6 +1386,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
     original_commit: str = state.get("original_commit", "HEAD")
     validation_attempts: int = state.get("validation_attempts") or 0
     error_context: str = state.get("validation_error_context") or ""
+    validation_failure_category = str(state.get("validation_failure_category") or "")
+    validation_failed_stage = str(state.get("validation_failed_stage") or "")
     retry_files_raw = state.get("validation_retry_files") or []
     previous_patch_hash = str(state.get("generated_patch_hash") or "")
 
@@ -1326,6 +1395,12 @@ async def file_editor_node(state: AgentState, config) -> dict:
     current_attempt_trajectory = []
 
     retry_files = {_normalize_rel_path(p) for p in retry_files_raw if p}
+    coupled_retry_lock = _should_lock_coupled_retry(
+        validation_attempts=validation_attempts,
+        failure_category=validation_failure_category,
+        failed_stage=validation_failed_stage,
+        error_context=error_context,
+    )
 
     if not semantic_blueprint:
         msg = "Agent 3 Error: No semantic_blueprint in state."
@@ -1402,7 +1477,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
         target_file = _normalize_rel_path(op_plan.get("target_file") or mainline_file)
 
         # Skip files not in retry scope (on retries)
-        if retry_files:
+        if retry_files and not coupled_retry_lock:
             candidate_paths = {
                 _normalize_rel_path(mainline_file),
                 _normalize_rel_path(target_file),
@@ -1457,16 +1532,33 @@ async def file_editor_node(state: AgentState, config) -> dict:
             change_type=change_type,
         )
         deterministic_only = adaptation_type in {"TYPE_I", "TYPE_II", "TYPE_III"}
+        base_types = {
+            str((e or {}).get("base_adaptation_type") or "").strip().upper()
+            for e in plan_entries
+            if str((e or {}).get("base_adaptation_type") or "").strip()
+        }
+        execution_types = {
+            str((e or {}).get("execution_type") or "").strip().upper()
+            for e in plan_entries
+            if str((e or {}).get("execution_type") or "").strip()
+        }
+        if "TYPE_V" in execution_types:
+            deterministic_only = False
         print(
             f"    Agent 3: Classified {target_file} as {adaptation_type} "
             f"({'deterministic' if deterministic_only else 'reactive'} path)"
         )
+        if base_types or execution_types:
+            print(
+                f"    Agent 3: base_types={sorted(base_types)} execution_types={sorted(execution_types)}"
+            )
 
         task_entry = {
             "mainline_file": mainline_file,
             "target_file": target_file,
             "hunk_index": 0,
             "adaptation_type": adaptation_type,
+            "execution_types": sorted(execution_types),
             "status": "in_progress",
             "reason": "started",
             "todo_steps": [
@@ -1568,6 +1660,19 @@ async def file_editor_node(state: AgentState, config) -> dict:
             task_entry["error"] = checks_reason
             _git_reset_file(target_repo_path, target_file)
             continue
+
+        if "TYPE_V" in execution_types:
+            invariants = _collect_file_plan_invariants(plan_entries)
+            inv_ok, inv_reason = _invariants_satisfied(diff_text, invariants)
+            if not inv_ok:
+                print(
+                    f"    Agent 3: Type V invariant gate failed for {target_file}: {inv_reason}"
+                )
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "generation_contract_failed"
+                task_entry["error"] = inv_reason
+                _git_reset_file(target_repo_path, target_file)
+                continue
 
         task_entry["completed_steps"].append("capture_diff")
         print(

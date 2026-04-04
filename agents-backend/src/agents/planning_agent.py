@@ -761,6 +761,84 @@ def _infer_adaptation_type(
     return "TYPE_V"
 
 
+def _collect_build_issue_types_from_state(state: AgentState) -> set[str]:
+    build_diag = ((state.get("validation_results") or {}).get("build") or {}).get(
+        "diagnostics"
+    ) or {}
+    return {
+        str((issue or {}).get("error_type") or "").strip().lower()
+        for issue in (build_diag.get("issues") or [])
+        if isinstance(issue, dict)
+    }
+
+
+def _should_force_type_v_replanning(
+    *,
+    validation_attempts: int,
+    failure_category: str,
+    failed_stage: str,
+    error_context: str,
+    build_issue_types: set[str],
+) -> tuple[bool, str]:
+    if validation_attempts <= 0:
+        return False, ""
+
+    fc = (failure_category or "").strip().lower()
+    fs = (failed_stage or "").strip().lower()
+    err = (error_context or "").lower()
+
+    if fs == "generation_contract_failed":
+        return True, "failed_stage_generation_contract"
+
+    if fc == "context_mismatch" and (
+        "api_or_signature_mismatch" in build_issue_types
+        or "java_syntax_or_patch_artifact" in build_issue_types
+    ):
+        return True, "context_mismatch_with_build_api_or_syntax"
+
+    if "structural syntax error" in err or "illegal start of expression" in err:
+        return True, "structural_syntax_failure_context"
+
+    if "api/signature mismatch" in err:
+        return True, "api_signature_mismatch_context"
+
+    return False, ""
+
+
+def _derive_required_invariants_from_hunk(
+    raw_hunk: str,
+    consistency_map: dict[str, str],
+) -> list[str]:
+    """
+    Derive lightweight semantic invariants from added lines.
+    These are checked post-edit for Type V execution mode only.
+    """
+    added = _apply_consistency_map(_extract_added_text(raw_hunk), consistency_map)
+    invariants: list[str] = []
+    seen: set[str] = set()
+
+    for raw_line in (added or "").splitlines():
+        line = (raw_line or "").strip()
+        if not line:
+            continue
+        if line.startswith(("import ", "package ", "//", "/*", "*")):
+            continue
+        if line in {"{", "}", "(", ")", ");", "};"}:
+            continue
+        if len(line) < 18:
+            continue
+
+        key = re.sub(r"\s+", " ", line)
+        if key in seen:
+            continue
+        seen.add(key)
+        invariants.append(line)
+        if len(invariants) >= 8:
+            break
+
+    return invariants
+
+
 def _attach_entry_surround_context(
     entry: dict[str, Any], target_content: str
 ) -> dict[str, Any]:
@@ -1284,7 +1362,23 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     retry_files_raw = state.get("validation_retry_files") or []
     retry_hunks_raw = state.get("validation_retry_hunks") or []
     validation_error_context = str(state.get("validation_error_context") or "")
+    validation_failure_category = str(state.get("validation_failure_category") or "")
+    validation_failed_stage = str(state.get("validation_failed_stage") or "")
     consistency_map: dict[str, str] = state.get("consistency_map") or {}
+    build_issue_types = _collect_build_issue_types_from_state(state)
+
+    force_type_v, force_type_v_reason = _should_force_type_v_replanning(
+        validation_attempts=validation_attempts,
+        failure_category=validation_failure_category,
+        failed_stage=validation_failed_stage,
+        error_context=validation_error_context,
+        build_issue_types=build_issue_types,
+    )
+    if force_type_v:
+        print(
+            "Planning Agent: Promoting execution mode to TYPE_V due to "
+            f"{force_type_v_reason}."
+        )
 
     retry_files = {
         str(p).replace("\\", "/").strip().lstrip("/")
@@ -1292,6 +1386,10 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         if str(p).strip()
     }
     retry_hunks = {int(h) for h in retry_hunks_raw if isinstance(h, int)}
+    if validation_attempts > 0 and retry_hunks and "<all>" in retry_files:
+        # Global replan sentinel from Agent 3 should not be constrained by stale
+        # hunk indices from previous failure categories.
+        retry_hunks = set()
 
     if not patch_diff:
         msg = "Planning Agent Error: missing patch_diff"
@@ -1490,6 +1588,13 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             )
             if adaptation_type == "TYPE_I" and not loc_match:
                 adaptation_type = "TYPE_II"
+            base_adaptation_type = adaptation_type
+            execution_type = "TYPE_V" if force_type_v else base_adaptation_type
+
+            required_invariants = _derive_required_invariants_from_hunk(
+                raw_hunk,
+                consistency_map,
+            )
 
             normalized_entries: list[dict[str, Any]] = []
             for entry in entries:
@@ -1499,12 +1604,20 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                     else dict(entry)
                 )
                 entry = _attach_entry_surround_context(entry, target_content)
-                entry["adaptation_type"] = adaptation_type
+                entry["adaptation_type"] = execution_type
+                entry["base_adaptation_type"] = base_adaptation_type
+                entry["execution_type"] = execution_type
                 entry["location_match"] = loc_match
                 entry["surrounding_match"] = surr_match
                 entry["blockers"] = [str(x) for x in blockers]
                 entry["namespace_only_possible"] = namespace_only_possible
                 entry["namespace_changes"] = namespace_changes
+                entry["required_invariants"] = required_invariants
+                if force_type_v:
+                    entry["notes"] = (
+                        str(entry.get("notes") or "")
+                        + f"|forced_type_v:{force_type_v_reason}"
+                    ).strip("|")
                 normalized_entries.append(entry)
 
             plan[mainline_file].extend(normalized_entries)

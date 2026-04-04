@@ -197,6 +197,28 @@ def _format_transition_summary(transition_eval: dict) -> str:
     )
 
 
+def _detect_type_v_retry_scope(
+    generation_checklist: list[dict],
+) -> tuple[bool, list[str]]:
+    files: set[str] = set()
+    found = False
+    for item in generation_checklist or []:
+        exec_types = [
+            str(t).strip().upper()
+            for t in ((item or {}).get("execution_types") or [])
+            if str(t).strip()
+        ]
+        if "TYPE_V" in exec_types:
+            found = True
+            mainline_file = str((item or {}).get("mainline_file") or "").strip()
+            target_file = str((item or {}).get("target_file") or "").strip()
+            if mainline_file:
+                files.add(mainline_file)
+            if target_file:
+                files.add(target_file)
+    return found, sorted(files)
+
+
 async def _analyze_failure(step_name: str, error_output: str, state: AgentState) -> str:
     """Uses LLM to evaluate and explain a validation failure."""
     # Truncate long errors to save tokens
@@ -358,6 +380,7 @@ async def validation_agent(state: AgentState, config) -> dict:
     code_hunks = state.get("adapted_code_hunks", [])
     test_hunks = state.get("adapted_test_hunks", [])
     generation_checklist = state.get("generation_checklist", []) or []
+    type_v_present, type_v_files = _detect_type_v_retry_scope(generation_checklist)
     developer_aux_hunks = state.get("developer_auxiliary_hunks", [])
     attempts = state.get("validation_attempts", 0)
     blueprint = state.get("semantic_blueprint", {})
@@ -554,6 +577,8 @@ async def validation_agent(state: AgentState, config) -> dict:
             failure_category, retry_files, diagnostics, analysis = (
                 _classify_build_failure(build_res.get("output", ""))
             )
+            if type_v_present and type_v_files:
+                retry_files = sorted(set(retry_files) | set(type_v_files))
             validation_results["build"]["agent_evaluation"] = analysis
             validation_results["build"]["error_context"] = analysis
             validation_results["build"]["diagnostics"] = {
@@ -644,13 +669,19 @@ async def validation_agent(state: AgentState, config) -> dict:
             )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
             toolkit.restore_repo_state()
-            return {
+            retry_payload = {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
                 "validation_error_context": analysis,
                 "validation_results": validation_results,
                 "regeneration_hint": analysis,
             }
+            if type_v_present and type_v_files:
+                retry_payload["validation_failure_category"] = "context_mismatch"
+                retry_payload["validation_retry_files"] = type_v_files
+                retry_payload["validation_retry_hunks"] = []
+                retry_payload["validation_failed_stage"] = "generation_contract_failed"
+            return retry_payload
 
         validation_results["tests"]["agent_evaluation"] = (
             "Relevant-test transition check passed: no pass->fail regressions and "
