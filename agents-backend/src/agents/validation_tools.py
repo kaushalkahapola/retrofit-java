@@ -1566,6 +1566,8 @@ class ValidationToolkit:
             p = (path or "").strip().replace("\\", "/").lstrip("/")
             if p.startswith("a/") or p.startswith("b/"):
                 p = p[2:]
+            if p == "dev/null":
+                return ""
             return p
 
         def _is_full_file_creation_hunk(hunk_text: str) -> bool:
@@ -1788,6 +1790,7 @@ class ValidationToolkit:
                 and not file_has_full_git_diff
             ):
                 try:
+                    mark_as_preapplied = True
                     if file_operation == "RENAMED":
                         if not old_file_path:
                             raise ValueError("old_file_path is required for RENAMED")
@@ -1827,8 +1830,12 @@ class ValidationToolkit:
                         if not has_hunks_for_file and not os.path.exists(dst):
                             with open(dst, "w", encoding="utf-8"):
                                 pass
+                        # Critical: for ADDED files with hunks, keep first patch header as ADDED
+                        # (do not downgrade to MODIFIED based on pre-applied bookkeeping).
+                        if has_hunks_for_file:
+                            mark_as_preapplied = False
 
-                    if target_file not in applied_files:
+                    if mark_as_preapplied and target_file not in applied_files:
                         applied_files.append(target_file)
                     print(f"  Validation: {file_operation} operation for {target_file}")
                 except ValueError as e:
