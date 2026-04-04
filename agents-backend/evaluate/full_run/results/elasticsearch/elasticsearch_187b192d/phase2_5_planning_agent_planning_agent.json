@@ -1,0 +1,49 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import java.util.Map;",
+        "new_string": "import org.elasticsearch.transport.Transports;\nimport java.util.Map;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import org.elasticsearch.cluster.service.ClusterService;",
+          "import org.elasticsearch.common.util.Maps;",
+          ""
+        ],
+        "surround_after_3": [
+          "",
+          "public class AllocationStatsService {",
+          ""
+        ],
+        "adaptation_type": "TYPE_II",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [
+          {
+            "from": "import org.elasticsearch.transport.Transports;",
+            "to": "import org.elasticsearch.transport.Transports;",
+            "reason": "No namespace changes needed, just insertion of import statement"
+          }
+        ]
+      }
+    ]
+  },
+  "last_plan_signature": "4aee1a5208445cc451b0f90f1cd6c39920a6daddf126adac50b53f400611ac64",
+  "token_usage": {
+    "input_tokens": 1253,
+    "output_tokens": 256,
+    "total_tokens": 1509,
+    "estimated": false,
+    "sources": [
+      "planning_agent.provider_usage"
+    ]
+  }
+}

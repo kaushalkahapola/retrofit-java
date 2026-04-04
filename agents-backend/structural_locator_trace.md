@@ -4,24 +4,38 @@
 - **Root Cause**: Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.
 
 ## Hunk Segregation
-- Code files: 4
+- Code files: 2
 - Test files: 0
 
 ## Code File Mappings
 
-### `server/src/main/java/io/crate/planner/operators/Collect.java`
+### `server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java`
 
-**Hunks in this file**: 3
+**Hunks in this file**: 5
 
-**Git Resolution**: Found `server/src/main/java/io/crate/planner/operators/Collect.java`
+**Git Resolution**: Found `server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | guard | `withOutputs` | `withOutputs` | 123–123 |
-| 2 | guard | `hunk_2` | `None` | 348–348 |
-| 3 | guard | `hunk_3` | `None` | 385–385 |
+| 1 | declaration | `<import>` | `<import>` | 13–13 |
+| 2 | declaration | `<import>` | `<import>` | 28–28 |
+| 3 | declaration | `<class_declaration>` | `<class_declaration>` | 50–50 |
+| 4 | guard | `hunk_4` | `None` | 72–72 |
+| 5 | core_fix | `hunk_5` | `None` | 91–91 |
+### `server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java`
+
+**Hunks in this file**: 2
+
+**Git Resolution**: Found `server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java`
+
+**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
+
+| Hunk Idx | Role | Mainline Method | Target Method | Lines |
+|---|---|---|---|---|
+| 1 | declaration | `<import>` | `<import>` | 17–17 |
+| 2 | guard | `stats` | `stats` | 8–8 |
 ## Test File Mappings
 
 
