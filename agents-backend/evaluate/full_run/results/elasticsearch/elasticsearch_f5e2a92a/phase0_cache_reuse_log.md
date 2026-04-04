@@ -1,0 +1,5 @@
+# Phase 0 Cache Reuse
+
+- Cache file: /home/kaushal/retrofit-java/agents-backend/evaluate/full_run/phase0_cache/elasticsearch_2aa011d594ee_f5e2a92a3171.json
+- Reused targets: {'test_targets': ['server:org.elasticsearch.search.query.RescoreKnnVectorQueryIT', 'server:org.elasticsearch.search.vectors.RescoreKnnVectorQueryTests'], 'source_modules': ['server'], 'all_modules': ['server'], 'raw': {'source': 'changed_files', 'changed_files': ['server/src/internalClusterTest/java/org/elasticsearch/search/query/RescoreKnnVectorQueryIT.java', 'server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java', 'server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java', 'server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java', 'server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java', 'server/src/test/java/org/elasticsearch/search/vectors/RescoreKnnVectorQueryTests.java']}}
+- Reused baseline mode: elasticsearch-helper-script
