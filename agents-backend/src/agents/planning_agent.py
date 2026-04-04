@@ -23,12 +23,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 from collections import defaultdict
 from typing import Any, Optional
 
-from langchain_core.messages import HumanMessage
-from langgraph.prebuilt import create_react_agent
-
+from langchain_core.messages import HumanMessage, SystemMessage
 from state import AgentState
 from utils.llm_provider import get_llm
 from utils.patch_analyzer import PatchAnalyzer
@@ -49,47 +48,47 @@ from agents.semantic_hunk_adapter import SemanticHunkAdapter
 _PLANNER_SYSTEM = """\
 You are a Java backport planning agent.
 
-Your goal: for each mainline diff hunk, produce a precise `edit_file` (CLAW-inspired) plan
-that can be applied directly to the target file.
+You do NOT edit files. You only produce an execution plan for File Editor.
 
-MANDATORY WORKFLOW for each hunk:
+MANDATORY TODO WORKFLOW (do in order):
+1) Check whether mainline location and detected target location are the same.
+2) Compare PRE-PATCH surrounding context: mainline before-patch surroundings vs detected target surroundings.
+3) If surrounding context is effectively same, prefer same mainline edit logic.
+4) If blocked, identify blockers explicitly.
+5) Determine whether blockers can be solved with namespace-only changes (variable/method/api/signature renames) based on context.
+6) If namespace-only is insufficient, plan structural rewrite.
 
-STEP 1 - CLASSIFY the hunk type:
-  - "replace"        : hunk removes lines and adds replacement lines
-  - "insert_after"   : hunk only adds lines (pure insertion)
-  - "insert_before"  : hunk adds lines before an anchor
-  - "delete"         : hunk only removes lines
+Adaptation type definitions:
+- TYPE_I: same change, same location
+- TYPE_II: same change, different location
+- TYPE_III: same location + namespace changes needed
+- TYPE_IV: different location + namespace changes needed
+- TYPE_V: structural rewrite needed
 
-STEP 2 - GATHER the exact target text using tools:
-  Preferred tool order for anchor discovery:
-    1. find_method_definitions (locate method/class declaration lines)
-    2. ripgrep_in_file(pattern, offset, limit)
-    3. read_file_window / get_exact_lines for exact nearby text
-    4. verify_context_at_line for final confirmation
-
-  For REPLACE/DELETE hunks:
-    a. Extract the lines being REMOVED (-) from mainline as candidate `old_string`.
-    b. Verify if that exact text exists in the target file.
-    c. If NOT_FOUND: adjust `old_string` to match target exactly (renames, diverge).
-
-  For INSERT_AFTER/BEFORE hunks:
-    a. Find the anchor line in the target file.
-    b. Set `old_string` to that anchor line verbatim.
-    c. Set `new_string` to include the anchor line and the new content.
-
-STEP 3 - VERIFY:
-    Confirm `old_string` exists verbatim in the target file.
-
-STEP 4 - OUTPUT JSON:
+Output JSON only with this schema:
 {
-  "hunk_index":          int,
-  "target_file":         "path",
-  "edit_type":           "replace" | "insert_after" | "insert_before" | "delete",
-  "old_string":          "exact text from target file",
-  "new_string":          "replacement text",
-  "verified":            true,
-  "notes":               "short reason"
+  "hunk_index": int,
+  "target_file": "path",
+  "adaptation_type": "TYPE_I|TYPE_II|TYPE_III|TYPE_IV|TYPE_V",
+  "location_match": true|false,
+  "surrounding_match": true|false,
+  "blockers": ["..."],
+  "namespace_only_possible": true|false,
+  "namespace_changes": [{"from":"...","to":"...","reason":"..."}],
+  "edit_type": "replace|insert_after|insert_before|delete",
+  "old_string": "exact text from target file",
+  "new_string": "replacement text for target",
+  "verified": true|false,
+  "verification_result": "short status",
+  "notes": "short reason",
+  "surround_before_3": ["line1","line2","line3"],
+  "surround_after_3": ["line1","line2","line3"]
 }
+
+Rules:
+- Prefer deterministic, minimal changes.
+- old_string must be directly applicable on target.
+- No prose outside JSON.
 """
 
 
@@ -516,6 +515,279 @@ def _read_target_file(target_repo_path: str, rel_path: str) -> str:
         return ""
 
 
+def _read_mainline_prepatch_file(
+    mainline_repo_path: str,
+    original_commit: str,
+    rel_path: str,
+) -> str:
+    """Read mainline file content from pre-patch commit (original_commit^)."""
+    if not mainline_repo_path or not rel_path:
+        return ""
+
+    path = _normalize_path(rel_path)
+    commit = (original_commit or "HEAD").strip()
+    candidates = [f"{commit}^:{path}", f"{commit}:{path}", f"HEAD:{path}"]
+
+    for spec in candidates:
+        try:
+            result = subprocess.run(
+                ["git", "show", spec],
+                cwd=mainline_repo_path,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            if result.returncode == 0 and result.stdout:
+                return result.stdout
+        except Exception:
+            continue
+
+    return ""
+
+
+def _parse_hunk_header(hunk_text: str) -> tuple[int, int, int, int]:
+    lines = (hunk_text or "").splitlines()
+    if not lines:
+        return 1, 1, 1, 1
+    header = lines[0]
+    m = re.search(
+        r"@@\s*-([0-9]+)(?:,([0-9]+))?\s+\+([0-9]+)(?:,([0-9]+))?\s*@@", header
+    )
+    if not m:
+        return 1, 1, 1, 1
+    old_start = int(m.group(1))
+    old_count = int(m.group(2) or "1")
+    new_start = int(m.group(3))
+    new_count = int(m.group(4) or "1")
+    return old_start, old_count, new_start, new_count
+
+
+def _extract_surrounding_lines(
+    content: str,
+    start_line: int,
+    end_line: int,
+    window: int = 3,
+) -> tuple[list[str], list[str]]:
+    lines = (content or "").splitlines()
+    if not lines:
+        return [], []
+
+    s = max(1, int(start_line or 1))
+    e = max(s, int(end_line or s))
+    s_idx = s - 1
+    e_idx = min(len(lines) - 1, e - 1)
+
+    before_start = max(0, s_idx - window)
+    before = lines[before_start:s_idx]
+    after_end = min(len(lines), e_idx + 1 + window)
+    after = lines[e_idx + 1 : after_end]
+    return before, after
+
+
+def _normalize_line(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip())
+
+
+def _surrounding_match(
+    main_before: list[str],
+    main_after: list[str],
+    target_before: list[str],
+    target_after: list[str],
+) -> bool:
+    main_seq = [
+        _normalize_line(x) for x in (main_before + main_after) if _normalize_line(x)
+    ]
+    target_seq = [
+        _normalize_line(x) for x in (target_before + target_after) if _normalize_line(x)
+    ]
+    if not main_seq or not target_seq:
+        return False
+
+    overlap = sum(1 for x in main_seq if x in target_seq)
+    denom = max(1, min(len(main_seq), len(target_seq)))
+    return (overlap / denom) >= 0.5
+
+
+def _location_match(
+    mainline_file: str, target_file: str, mainline_start: int, target_start: int
+) -> bool:
+    if _normalize_path(mainline_file) != _normalize_path(target_file):
+        return False
+    return abs(int(mainline_start or 1) - int(target_start or 1)) <= 5
+
+
+def _build_hunk_planner_prompt(
+    *,
+    mainline_file: str,
+    target_file: str,
+    hunk_index: int,
+    raw_hunk: str,
+    mainline_old_start: int,
+    target_start_line: int,
+    mainline_pre_before: list[str],
+    mainline_pre_after: list[str],
+    target_before: list[str],
+    target_after: list[str],
+    consistency_map: dict[str, str],
+    deterministic_entries: list[dict[str, Any]],
+    retry_failure_context: str,
+) -> str:
+    return f"""Plan this backport hunk.
+
+Mainline file: {mainline_file}
+Target file: {target_file}
+Hunk index: {hunk_index}
+Mainline old-start line (pre-patch): {mainline_old_start}
+Detected target start line: {target_start_line}
+
+Mainline diff hunk:
+```diff
+{raw_hunk}
+```
+
+Mainline PRE-PATCH surrounding (3 before / 3 after):
+before={json.dumps(mainline_pre_before, ensure_ascii=False)}
+after={json.dumps(mainline_pre_after, ensure_ascii=False)}
+
+Detected target surrounding (3 before / 3 after):
+before={json.dumps(target_before, ensure_ascii=False)}
+after={json.dumps(target_after, ensure_ascii=False)}
+
+Consistency map:
+{json.dumps(consistency_map or {{}}, indent=2, ensure_ascii=False)}
+
+Deterministic candidate operations:
+{json.dumps(deterministic_entries, indent=2, ensure_ascii=False)}
+
+Retry/failure context:
+{retry_failure_context or "<none>"}
+
+Follow this exact TODO:
+1. Check if mainline location and detected target location are same.
+2. Compare PRE-PATCH surrounding context (mainline before patch) with detected target surroundings.
+3. If both surroundings are same, use same edit logic as mainline.
+4. If blocked, list blockers.
+5. Check whether blockers can be solved with namespace-only changes based on context (do not assume; justify).
+6. If namespace-only is insufficient, do structural rewrite.
+
+Return JSON ONLY in this shape:
+{{
+  "adaptation_type": "TYPE_I|TYPE_II|TYPE_III|TYPE_IV|TYPE_V",
+  "location_match": true,
+  "surrounding_match": true,
+  "blockers": [],
+  "namespace_only_possible": true,
+  "namespace_changes": [{{"from":"","to":"","reason":""}}],
+  "operations": [
+    {{
+      "operation_index": 0,
+      "edit_type": "replace|insert_before|insert_after|delete",
+      "old_string": "",
+      "new_string": "",
+      "verified": true,
+      "verification_result": "",
+      "notes": "",
+      "surround_before_3": ["","",""],
+      "surround_after_3": ["","",""]
+    }}
+  ]
+}}"""
+
+
+def _normalize_planner_response_entries(
+    payload: dict[str, Any],
+    fallback_entries: list[dict[str, Any]],
+    target_file: str,
+    hunk_index: int,
+) -> list[dict[str, Any]]:
+    operations = payload.get("operations") if isinstance(payload, dict) else None
+    if not isinstance(operations, list) or not operations:
+        return []
+
+    out: list[dict[str, Any]] = []
+    for idx, op in enumerate(operations):
+        if not isinstance(op, dict):
+            continue
+        fallback = fallback_entries[idx] if idx < len(fallback_entries) else {}
+        out.append(
+            {
+                "hunk_index": hunk_index,
+                "target_file": target_file,
+                "operation_index": op.get(
+                    "operation_index", fallback.get("operation_index", idx)
+                ),
+                "edit_type": str(
+                    op.get("edit_type") or fallback.get("edit_type") or "replace"
+                ),
+                "old_string": str(
+                    op.get("old_string") or fallback.get("old_string") or ""
+                ),
+                "new_string": str(
+                    op.get("new_string") or fallback.get("new_string") or ""
+                ),
+                "verified": bool(op.get("verified", fallback.get("verified", False))),
+                "verification_result": str(
+                    op.get("verification_result")
+                    or fallback.get("verification_result")
+                    or "llm_planned"
+                ),
+                "notes": str(op.get("notes") or fallback.get("notes") or "llm_planned"),
+                "surround_before_3": op.get("surround_before_3")
+                or fallback.get("surround_before_3")
+                or [],
+                "surround_after_3": op.get("surround_after_3")
+                or fallback.get("surround_after_3")
+                or [],
+            }
+        )
+    return out
+
+
+def _infer_adaptation_type(
+    *,
+    location_match: bool,
+    blockers: list[str],
+    namespace_only_possible: bool,
+    explicit: str = "",
+) -> str:
+    exp = str(explicit or "").strip().upper()
+    if exp in {"TYPE_I", "TYPE_II", "TYPE_III", "TYPE_IV", "TYPE_V"}:
+        return exp
+    has_blocker = bool(blockers)
+    if not has_blocker:
+        return "TYPE_I" if location_match else "TYPE_II"
+    if namespace_only_possible:
+        return "TYPE_III" if location_match else "TYPE_IV"
+    return "TYPE_V"
+
+
+def _attach_entry_surround_context(
+    entry: dict[str, Any], target_content: str
+) -> dict[str, Any]:
+    out = dict(entry)
+    old_s = str(out.get("old_string") or "")
+    if not old_s or not target_content:
+        out.setdefault("surround_before_3", [])
+        out.setdefault("surround_after_3", [])
+        return out
+
+    idx = target_content.find(old_s)
+    if idx < 0:
+        out.setdefault("surround_before_3", [])
+        out.setdefault("surround_after_3", [])
+        return out
+
+    start_line = target_content[:idx].count("\n") + 1
+    line_span = max(1, old_s.count("\n") + 1)
+    end_line = start_line + line_span - 1
+    before, after = _extract_surrounding_lines(
+        target_content, start_line, end_line, window=3
+    )
+    out["surround_before_3"] = before[-3:]
+    out["surround_after_3"] = after[:3]
+    return out
+
+
 def _resolve_old_in_content(content: str, old_string: str) -> tuple[str, str]:
     """Resolve old_string to exact on-disk text when possible."""
     if not content or not old_string:
@@ -921,7 +1193,12 @@ async def _adapt_unverified_hunks_with_llm(
 
                 # Build LLM prompt
                 prompt = _build_llm_adaptation_prompt(
-                    entry, file_path, target_content, mainline_file, raw_hunk, consistency_map
+                    entry,
+                    file_path,
+                    target_content,
+                    mainline_file,
+                    raw_hunk,
+                    consistency_map,
                 )
 
                 # Call LLM
@@ -1000,10 +1277,13 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     patch_diff = state.get("patch_diff") or ""
     mapped_target_context = state.get("mapped_target_context") or {}
     target_repo_path = state.get("target_repo_path") or ""
+    mainline_repo_path = state.get("mainline_repo_path") or ""
+    original_commit = state.get("original_commit") or "HEAD"
     with_test_changes = state.get("with_test_changes", False)
     validation_attempts = int(state.get("validation_attempts") or 0)
     retry_files_raw = state.get("validation_retry_files") or []
     retry_hunks_raw = state.get("validation_retry_hunks") or []
+    validation_error_context = str(state.get("validation_error_context") or "")
     consistency_map: dict[str, str] = state.get("consistency_map") or {}
 
     retry_files = {
@@ -1024,12 +1304,6 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     )
 
     llm = get_llm(temperature=0)
-    toolkit = HunkGeneratorToolkit(target_repo_path) if target_repo_path else None
-    react = (
-        create_react_agent(llm, tools=toolkit.get_tools(), prompt=_PLANNER_SYSTEM)
-        if toolkit
-        else None
-    )
 
     plan: dict[str, list[dict[str, Any]]] = defaultdict(list)
     token_usage = {
@@ -1040,6 +1314,15 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         "sources": [],
     }
     model_name = resolve_model_name()
+    mainline_pre_cache: dict[str, str] = {}
+
+    truncated_failure_context = validation_error_context
+    if len(truncated_failure_context) > 2000:
+        truncated_failure_context = (
+            truncated_failure_context[:1200]
+            + "\n... [TRUNCATED] ...\n"
+            + truncated_failure_context[-700:]
+        )
 
     for mainline_file, raw_hunks in (raw_hunks_by_file or {}).items():
         normalized_mainline = str(mainline_file).replace("\\", "/").strip().lstrip("/")
@@ -1059,34 +1342,171 @@ async def planning_agent_node(state: AgentState, config) -> dict:
 
             ctx = mapped[min(hidx, len(mapped) - 1)] if mapped else {}
             target_file = (ctx.get("target_file") or mainline_file).replace("\\", "/")
-            # Decompose mainline hunk into atomic text-replace operations
-            entries = _decompose_hunk_to_required_entries(
+
+            required_entries = _decompose_hunk_to_required_entries(
                 hunk_idx=hidx,
                 raw_hunk=raw_hunk,
                 target_file=target_file,
                 consistency_map=consistency_map,
             )
 
-            # Try to sanitize and verify these operations against the on-disk target file
             target_content = _read_target_file(target_repo_path, target_file)
+            sanitized_entries = list(required_entries)
             if target_content:
-                entries = [
-                    _sanitize_entry_against_target(e, target_content) for e in entries
+                sanitized_entries = [
+                    _sanitize_entry_against_target(e, target_content)
+                    for e in required_entries
                 ]
 
-            plan[mainline_file].extend(entries)
+            old_start, old_count, _new_start, _new_count = _parse_hunk_header(raw_hunk)
+            target_start = int(ctx.get("start_line") or old_start or 1)
 
-    # -----------------------------------------------------------------------
-    # Step 2: Use LLM to adapt any unverified entries (Option 2)
-    # -----------------------------------------------------------------------
-    plan = await _adapt_unverified_hunks_with_llm(
-        plan,
-        target_repo_path,
-        normalized_mainline,
-        token_usage,
-        raw_hunks,
-        consistency_map,
-    )
+            if mainline_file not in mainline_pre_cache:
+                mainline_pre_cache[mainline_file] = _read_mainline_prepatch_file(
+                    mainline_repo_path,
+                    original_commit,
+                    mainline_file,
+                )
+            mainline_pre = mainline_pre_cache.get(mainline_file) or ""
+
+            main_before, main_after = _extract_surrounding_lines(
+                mainline_pre,
+                old_start,
+                old_start + max(1, old_count) - 1,
+                window=3,
+            )
+            target_before, target_after = _extract_surrounding_lines(
+                target_content,
+                target_start,
+                target_start + max(1, old_count) - 1,
+                window=3,
+            )
+
+            loc_match = _location_match(
+                mainline_file,
+                target_file,
+                old_start,
+                target_start,
+            )
+            surr_match = _surrounding_match(
+                main_before,
+                main_after,
+                target_before,
+                target_after,
+            )
+
+            planner_prompt = _build_hunk_planner_prompt(
+                mainline_file=mainline_file,
+                target_file=target_file,
+                hunk_index=hidx,
+                raw_hunk=raw_hunk,
+                mainline_old_start=old_start,
+                target_start_line=target_start,
+                mainline_pre_before=main_before,
+                mainline_pre_after=main_after,
+                target_before=target_before,
+                target_after=target_after,
+                consistency_map=consistency_map,
+                deterministic_entries=sanitized_entries,
+                retry_failure_context=truncated_failure_context,
+            )
+
+            planner_messages = [
+                SystemMessage(content=_PLANNER_SYSTEM),
+                HumanMessage(content=planner_prompt),
+            ]
+
+            payload = None
+            try:
+                response = await llm.ainvoke(planner_messages)
+                usage = extract_usage_from_response(response)
+                if usage and (usage["input_tokens"] or usage["output_tokens"]):
+                    add_usage(
+                        token_usage,
+                        usage["input_tokens"],
+                        usage["output_tokens"],
+                        "planning_agent.provider_usage",
+                    )
+                else:
+                    approx_in = count_text_tokens(
+                        _PLANNER_SYSTEM + "\n" + planner_prompt,
+                        model_name,
+                    )
+                    response_text = (
+                        response.content
+                        if hasattr(response, "content")
+                        else str(response)
+                    )
+                    add_usage(
+                        token_usage,
+                        approx_in,
+                        count_text_tokens(str(response_text), model_name),
+                        "planning_agent.tiktoken",
+                    )
+                    token_usage["estimated"] = True
+
+                response_text = (
+                    response.content if hasattr(response, "content") else str(response)
+                )
+                payload = _extract_json_payload(str(response_text))
+            except Exception as e:
+                print(
+                    f"    Planning Agent: LLM planning failed for {target_file}[{hidx}]: {e}"
+                )
+
+            llm_entries = _normalize_planner_response_entries(
+                payload if isinstance(payload, dict) else {},
+                sanitized_entries,
+                target_file,
+                hidx,
+            )
+            if not llm_entries:
+                llm_entries = list(sanitized_entries)
+
+            entries = _ensure_required_coverage(llm_entries, required_entries)
+
+            blockers = []
+            namespace_only_possible = False
+            namespace_changes = []
+            explicit_type = ""
+            if isinstance(payload, dict):
+                blockers = payload.get("blockers") or []
+                if not isinstance(blockers, list):
+                    blockers = [str(blockers)]
+                namespace_only_possible = bool(
+                    payload.get("namespace_only_possible", False)
+                )
+                namespace_changes = payload.get("namespace_changes") or []
+                if not isinstance(namespace_changes, list):
+                    namespace_changes = []
+                explicit_type = str(payload.get("adaptation_type") or "")
+
+            adaptation_type = _infer_adaptation_type(
+                location_match=loc_match,
+                blockers=[str(x) for x in blockers],
+                namespace_only_possible=namespace_only_possible,
+                explicit=explicit_type,
+            )
+            if adaptation_type == "TYPE_I" and not loc_match:
+                adaptation_type = "TYPE_II"
+
+            normalized_entries: list[dict[str, Any]] = []
+            for entry in entries:
+                entry = (
+                    _sanitize_entry_against_target(entry, target_content)
+                    if target_content
+                    else dict(entry)
+                )
+                entry = _attach_entry_surround_context(entry, target_content)
+                entry["adaptation_type"] = adaptation_type
+                entry["location_match"] = loc_match
+                entry["surrounding_match"] = surr_match
+                entry["blockers"] = [str(x) for x in blockers]
+                entry["namespace_only_possible"] = namespace_only_possible
+                entry["namespace_changes"] = namespace_changes
+                normalized_entries.append(entry)
+
+            plan[mainline_file].extend(normalized_entries)
 
     total_entries = sum(len(v) for v in plan.values())
     print(f"Planning Agent: Complete. Planned {total_entries} adapted edit(s).")

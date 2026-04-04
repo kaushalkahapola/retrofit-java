@@ -837,6 +837,20 @@ def _classify_file_edit_type(
       - TYPE_IV: path differs and some anchors not exact, edits still local
       - TYPE_V: structural/large rewrite, or file op outside MODIFIED
     """
+    explicit_types = [
+        str((entry or {}).get("adaptation_type") or "").strip().upper()
+        for entry in (plan_entries or [])
+        if str((entry or {}).get("adaptation_type") or "").strip()
+    ]
+    if explicit_types:
+        order = {"TYPE_I": 1, "TYPE_II": 2, "TYPE_III": 3, "TYPE_IV": 4, "TYPE_V": 5}
+        ranked = sorted(
+            [t for t in explicit_types if t in order],
+            key=lambda t: order.get(t, 99),
+        )
+        if ranked:
+            return ranked[-1]
+
     op = (change_type or "MODIFIED").upper()
     if op not in {"MODIFIED"}:
         return "TYPE_V"
