@@ -10,7 +10,7 @@
         "new_string": "import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\nimport org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before",
+        "notes": "Insert additional import for TransportUpdateSettingsAction before existing UpdateSettingsRequest import.",
         "surround_before_3": [
           "import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;",
           "import org.elasticsearch.action.admin.indices.refresh.RefreshAction;",
@@ -28,13 +28,7 @@
         "surrounding_match": true,
         "blockers": [],
         "namespace_only_possible": true,
-        "namespace_changes": [
-          {
-            "from": "",
-            "to": "import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;",
-            "reason": "Add import for TransportUpdateSettingsAction used by the new mainline change."
-          }
-        ],
+        "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
         "protected_symbols": [],
@@ -73,26 +67,21 @@
         "location_match": false,
         "surrounding_match": false,
         "blockers": [
-          "Mainline hunk start line (55) differs from detected target start line (66)",
-          "Pre-patch surrounding context from mainline does not match detected target surrounding context",
-          "Mainline adds an import (java.util.Arrays) at a different location than target's current import ordering"
+          "Detected target start line (66) differs from mainline old-start (55); location shifted",
+          "PRE-PATCH surrounding context in target does not match mainline PRE-PATCH context (imports and nearby lines differ)",
+          "Mainline edit inserts an import (java.util.Arrays) at a location where the target's import ordering/nearby imports differ"
         ],
         "namespace_only_possible": true,
         "namespace_changes": [
           {
             "from": "org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE",
-            "to": "org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA",
-            "reason": "APIBlock enum constant WRITE was replaced/renamed in mainline; need to import METADATA instead"
+            "to": "org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA and org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY",
+            "reason": "Mainline replaced single WRITE APIBlock static import with METADATA and READ_ONLY static imports; this is an import-level/namespace change."
           },
           {
-            "from": null,
-            "to": "org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY",
-            "reason": "Mainline adds an additional static import for READ_ONLY alongside METADATA"
-          },
-          {
-            "from": null,
-            "to": "java.util.Arrays",
-            "reason": "Mainline adds Arrays import; this is a simple import addition (namespace-level)"
+            "from": "(no import) java.util.Arrays",
+            "to": "import java.util.Arrays",
+            "reason": "Mainline added java.util.Arrays import; adding an import is a namespace-level change to satisfy usage introduced by mainline."
           }
         ],
         "required_invariants": [],
@@ -133,26 +122,21 @@
         "location_match": false,
         "surrounding_match": false,
         "blockers": [
-          "Mainline hunk start line (55) differs from detected target start line (66)",
-          "Pre-patch surrounding context from mainline does not match detected target surrounding context",
-          "Mainline adds an import (java.util.Arrays) at a different location than target's current import ordering"
+          "Detected target start line (66) differs from mainline old-start (55); location shifted",
+          "PRE-PATCH surrounding context in target does not match mainline PRE-PATCH context (imports and nearby lines differ)",
+          "Mainline edit inserts an import (java.util.Arrays) at a location where the target's import ordering/nearby imports differ"
         ],
         "namespace_only_possible": true,
         "namespace_changes": [
           {
             "from": "org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE",
-            "to": "org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA",
-            "reason": "APIBlock enum constant WRITE was replaced/renamed in mainline; need to import METADATA instead"
+            "to": "org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA and org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY",
+            "reason": "Mainline replaced single WRITE APIBlock static import with METADATA and READ_ONLY static imports; this is an import-level/namespace change."
           },
           {
-            "from": null,
-            "to": "org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY",
-            "reason": "Mainline adds an additional static import for READ_ONLY alongside METADATA"
-          },
-          {
-            "from": null,
-            "to": "java.util.Arrays",
-            "reason": "Mainline adds Arrays import; this is a simple import addition (namespace-level)"
+            "from": "(no import) java.util.Arrays",
+            "to": "import java.util.Arrays",
+            "reason": "Mainline added java.util.Arrays import; adding an import is a namespace-level change to satisfy usage introduced by mainline."
           }
         ],
         "required_invariants": [],
@@ -187,16 +171,15 @@
           "        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))",
           "            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))"
         ],
-        "adaptation_type": "TYPE_II",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_V",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
         "blockers": [
-          "Detected target start line (152) differs from mainline old-start (145) -> location mismatch",
-          "Pre-patch surrounding context does not match mainline pre-patch context -> surrounding mismatch",
-          "Replacement of the newForked(...) call could not be verified against target (old_string not found) \u2014 likely API/signature/argument-order differences or different nearby code",
-          "Chained listener ordering differs between mainline and target which may require careful rebase of the chain rather than a simple line replace"
+          "Detected target pre-patch surrounding context does not match mainline pre-patch context, so the mainline edit location is different.",
+          "The listener chain invocation 'SubscribableListener.<AcknowledgedResponse>newForked(l -> setBlockWrites(...))' referenced in the mainline hunk was not found at the expected location in the target (replace operation unresolvable).",
+          "Target already contains different lifecycle steps (e.g. sanityCheck, closeIndexIfWasClosed) that indicate the control flow has diverged; applying the mainline chain edits in-place is unsafe without structural rework."
         ],
         "namespace_only_possible": false,
         "namespace_changes": [],
@@ -244,16 +227,15 @@
         "notes": "required_op_replace|sanitize_old_not_found:not_found_multiline|sanitize_old_not_found:not_found_multiline",
         "surround_before_3": [],
         "surround_after_3": [],
-        "adaptation_type": "TYPE_II",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_V",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
         "blockers": [
-          "Detected target start line (152) differs from mainline old-start (145) -> location mismatch",
-          "Pre-patch surrounding context does not match mainline pre-patch context -> surrounding mismatch",
-          "Replacement of the newForked(...) call could not be verified against target (old_string not found) \u2014 likely API/signature/argument-order differences or different nearby code",
-          "Chained listener ordering differs between mainline and target which may require careful rebase of the chain rather than a simple line replace"
+          "Detected target pre-patch surrounding context does not match mainline pre-patch context, so the mainline edit location is different.",
+          "The listener chain invocation 'SubscribableListener.<AcknowledgedResponse>newForked(l -> setBlockWrites(...))' referenced in the mainline hunk was not found at the expected location in the target (replace operation unresolvable).",
+          "Target already contains different lifecycle steps (e.g. sanityCheck, closeIndexIfWasClosed) that indicate the control flow has diverged; applying the mainline chain edits in-place is unsafe without structural rework."
         ],
         "namespace_only_possible": false,
         "namespace_changes": [],
@@ -309,16 +291,15 @@
           "            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))",
           "            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))"
         ],
-        "adaptation_type": "TYPE_II",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_V",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
         "blockers": [
-          "Detected target start line (152) differs from mainline old-start (145) -> location mismatch",
-          "Pre-patch surrounding context does not match mainline pre-patch context -> surrounding mismatch",
-          "Replacement of the newForked(...) call could not be verified against target (old_string not found) \u2014 likely API/signature/argument-order differences or different nearby code",
-          "Chained listener ordering differs between mainline and target which may require careful rebase of the chain rather than a simple line replace"
+          "Detected target pre-patch surrounding context does not match mainline pre-patch context, so the mainline edit location is different.",
+          "The listener chain invocation 'SubscribableListener.<AcknowledgedResponse>newForked(l -> setBlockWrites(...))' referenced in the mainline hunk was not found at the expected location in the target (replace operation unresolvable).",
+          "Target already contains different lifecycle steps (e.g. sanityCheck, closeIndexIfWasClosed) that indicate the control flow has diverged; applying the mainline chain edits in-place is unsafe without structural rework."
         ],
         "namespace_only_possible": false,
         "namespace_changes": [],
@@ -430,23 +411,11 @@
         "location_match": false,
         "surrounding_match": false,
         "blockers": [
-          "Mainline and target start line numbers differ (201 vs 225) - location mismatch",
-          "Pre-patch surrounding context does not match exactly between mainline and target - surrounding mismatch",
-          "Post-patch surrounding context shows different following lines (listener handling differs) which may indicate semantic differences"
+          "Mainline hunk start line (201) differs from detected target start line (225)",
+          "PRE-PATCH surrounding context does not match target surrounding context (code around the hunk has shifted/changed)"
         ],
-        "namespace_only_possible": true,
-        "namespace_changes": [
-          {
-            "from": "setBlockWrites",
-            "to": "setReadOnly",
-            "reason": "Method renamed in mainline change; this is a local identifier rename within the same file."
-          },
-          {
-            "from": "WRITE",
-            "to": "READ_ONLY",
-            "reason": "Block type constant changed from WRITE to READ_ONLY; this is a simple symbol rename/constant change."
-          }
-        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
         "required_invariants": [
           "private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {",
           "logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);",
@@ -478,7 +447,7 @@
         "new_string": "    /**\n     * All metadata blocks need to be removed at the start for the following reasons:\n     * 1) If the source index has a metadata only block, the read-only block can't be added.\n     * 2) If the source index is read-only and closed, it can't be opened.\n     */\n    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n    }\n\n    private void removeAPIBlocks(\n        String indexName,\n        TaskId parentTaskId,\n        ActionListener<AcknowledgedResponse> listener,\n        IndexMetadata.APIBlock... blocks\n    ) {\n        Settings.Builder settings = Settings.builder();\n        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n        updateSettingsRequest.setParentTask(parentTaskId);\n        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n    }\n\n    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Insert the new helper methods before getIndexDocCount as in mainline; surrounding context matches so same edit logic applies though line numbers differ.",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "        client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);",
           "    }",
@@ -529,13 +498,13 @@
       }
     ]
   },
-  "last_plan_signature": "b960d236a28ea020f07192f69cff5b2910fe1b7506cb7a071f8354c7e0c20d7d",
+  "last_plan_signature": "00c3b81d9bed4b576b2caaee92a069f27c93fbbf6c1249d9ecec83ecce6ef1bf",
   "force_type_v_until_success": false,
   "force_type_v_reason": "",
   "token_usage": {
     "input_tokens": 9184,
-    "output_tokens": 11222,
-    "total_tokens": 20406,
+    "output_tokens": 9928,
+    "total_tokens": 19112,
     "estimated": false,
     "sources": [
       "planning_agent.provider_usage",

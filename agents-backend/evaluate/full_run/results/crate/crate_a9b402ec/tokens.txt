@@ -1,25 +1,15 @@
 {
-  "input_tokens": 17696,
-  "output_tokens": 5106,
-  "total_tokens": 22802,
-  "messages_with_usage": 4,
-  "estimated_messages": 4,
+  "input_tokens": 8266,
+  "output_tokens": 7841,
+  "total_tokens": 16107,
+  "messages_with_usage": 1,
+  "estimated_messages": 2,
   "tokenizer": {
-    "model": "gpt-4.1-mini",
+    "model": "gpt-5-mini",
     "library": "tiktoken",
     "available": true
   },
   "by_node": {
-    "phase_0_optimistic": {
-      "input_tokens": 56,
-      "output_tokens": 0,
-      "total_tokens": 56,
-      "estimated_events": 1,
-      "exact_events": 0,
-      "sources": [
-        "estimated_from_message_chars"
-      ]
-    },
     "context_analyzer": {
       "input_tokens": 13,
       "output_tokens": 0,
@@ -41,28 +31,15 @@
       ]
     },
     "planning_agent": {
-      "input_tokens": 16454,
-      "output_tokens": 5058,
-      "total_tokens": 21512,
+      "input_tokens": 8234,
+      "output_tokens": 7841,
+      "total_tokens": 16075,
       "estimated_events": 0,
-      "exact_events": 2,
+      "exact_events": 1,
       "sources": [
-        "node.token_usage",
         "node.token_usage"
-      ]
-    },
-    "hunk_generator": {
-      "input_tokens": 1154,
-      "output_tokens": 48,
-      "total_tokens": 1202,
-      "estimated_events": 1,
-      "exact_events": 2,
-      "sources": [
-        "node.token_usage",
-        "node.token_usage",
-        "estimated_from_message_chars"
       ]
     }
   },
-  "finished_at": "2026-04-04T14:53:36.518029"
+  "finished_at": "2026-04-04T23:49:39.305741"
 }

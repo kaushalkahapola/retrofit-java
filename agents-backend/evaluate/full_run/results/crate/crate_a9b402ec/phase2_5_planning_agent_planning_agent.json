@@ -10,7 +10,7 @@
         "new_string": "import org.elasticsearch.cluster.SnapshotsInProgress;\nimport org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.inject.Inject;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "import org.apache.logging.log4j.LogManager;",
           "import org.apache.logging.log4j.Logger;",
@@ -21,17 +21,34 @@
           "import org.elasticsearch.repositories.RepositoriesService;",
           "import org.elasticsearch.repositories.Repository;"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
         "namespace_only_possible": true,
-        "namespace_changes": [],
+        "namespace_changes": [
+          {
+            "from": "",
+            "to": "org.elasticsearch.cluster.SnapshotsInProgress",
+            "reason": "New class referenced by mainline change; requires adding import."
+          },
+          {
+            "from": "",
+            "to": "org.elasticsearch.cluster.service.ClusterService",
+            "reason": "New class referenced by mainline change; requires adding import."
+          },
+          {
+            "from": "",
+            "to": "org.elasticsearch.repositories.IndexId",
+            "reason": "New class referenced by mainline change; requires adding import."
+          }
+        ],
         "required_invariants": [],
         "required_symbols": [],
         "protected_symbols": [],
+        "must_preserve_symbols": [],
         "chain_constraints": [],
         "api_inventory": {
           "mainline_declared_methods_count": 3,
@@ -49,7 +66,7 @@
         "new_string": "import org.elasticsearch.repositories.IndexId;\nimport org.elasticsearch.repositories.RepositoriesService;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "import org.elasticsearch.Version;",
           "import org.elasticsearch.common.inject.Inject;",
@@ -60,17 +77,34 @@
           "import org.elasticsearch.snapshots.SnapshotException;",
           "import org.elasticsearch.snapshots.SnapshotId;"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
         "namespace_only_possible": true,
-        "namespace_changes": [],
+        "namespace_changes": [
+          {
+            "from": "",
+            "to": "org.elasticsearch.cluster.SnapshotsInProgress",
+            "reason": "New class referenced by mainline change; requires adding import."
+          },
+          {
+            "from": "",
+            "to": "org.elasticsearch.cluster.service.ClusterService",
+            "reason": "New class referenced by mainline change; requires adding import."
+          },
+          {
+            "from": "",
+            "to": "org.elasticsearch.repositories.IndexId",
+            "reason": "New class referenced by mainline change; requires adding import."
+          }
+        ],
         "required_invariants": [],
         "required_symbols": [],
         "protected_symbols": [],
+        "must_preserve_symbols": [],
         "chain_constraints": [],
         "api_inventory": {
           "mainline_declared_methods_count": 3,
@@ -88,7 +122,7 @@
         "new_string": "import org.elasticsearch.snapshots.SnapshotsService;\nimport org.jetbrains.annotations.Nullable;\nimport org.jetbrains.annotations.VisibleForTesting;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "import org.elasticsearch.snapshots.SnapshotShardFailure;",
           "import org.elasticsearch.snapshots.SnapshotState;",
@@ -99,9 +133,9 @@
           "import io.crate.common.concurrent.CompletableFutures;",
           "import io.crate.common.exceptions.Exceptions;"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
@@ -110,6 +144,7 @@
         "required_invariants": [],
         "required_symbols": [],
         "protected_symbols": [],
+        "must_preserve_symbols": [],
         "chain_constraints": [],
         "api_inventory": {
           "mainline_declared_methods_count": 3,
@@ -127,7 +162,7 @@
         "new_string": "    private final ClusterService clusterService;\n    @Inject",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "Insert new field before existing @Inject annotation to match mainline constructor changes",
         "surround_before_3": [
           "    private static final Logger LOGGER = LogManager.getLogger(SysSnapshots.class);",
           "    private final Supplier<Collection<Repository>> getRepositories;",
@@ -138,14 +173,14 @@
           "        this(repositoriesService::getRepositoriesList);",
           "    }"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [
-          "Detected target start line (58) differs from mainline old start line (53)",
-          "Pre-patch surrounding context before and after lines differ between mainline and target"
+          "Mainline old-start line (53) differs from detected target start line (58) -> location offset",
+          "Pre-patch surrounding context differs: mainline context shows '@Singleton' and 'public class SysSnapshots {' while target context shows 'private final Supplier<Collection<Repository>> getRepositories;' and '@Inject' at the change site"
         ],
         "namespace_only_possible": false,
         "namespace_changes": [],
@@ -158,6 +193,7 @@
         ],
         "required_symbols": [],
         "protected_symbols": [],
+        "must_preserve_symbols": [],
         "chain_constraints": [],
         "api_inventory": {
           "mainline_declared_methods_count": 3,
@@ -171,29 +207,29 @@
         "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
         "operation_index": 1,
         "edit_type": "replace",
-        "old_string": "    public SysSnapshots(RepositoriesService repositoriesService) {\n        this(repositoriesService::getRepositoriesList);",
-        "new_string": "    public SysSnapshots(RepositoriesService repositoriesService, ClusterService clusterService) {\n        this(repositoriesService::getRepositoriesList, clusterService);",
+        "old_string": "\n    @Inject\n    public SysSnapshots(RepositoriesService repositoriesService) {\n        this(repositoriesService::getRepositoriesList);\n    }",
+        "new_string": "\n    @Inject\n    public SysSnapshots(RepositoriesService repositoriesService, ClusterService clusterService) {\n        this(repositoriesService::getRepositoriesList, clusterService);\n    }",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "Update constructor signature to accept ClusterService and delegate to the expanded visible-for-testing constructor",
         "surround_before_3": [
-          "    private final Supplier<Collection<Repository>> getRepositories;",
           "",
-          "    @Inject"
+          "    private static final Logger LOGGER = LogManager.getLogger(SysSnapshots.class);",
+          "    private final Supplier<Collection<Repository>> getRepositories;"
         ],
         "surround_after_3": [
-          "    }",
           "",
-          "    @VisibleForTesting"
+          "    @VisibleForTesting",
+          "    SysSnapshots(Supplier<Collection<Repository>> getRepositories) {"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [
-          "Detected target start line (58) differs from mainline old start line (53)",
-          "Pre-patch surrounding context before and after lines differ between mainline and target"
+          "Mainline old-start line (53) differs from detected target start line (58) -> location offset",
+          "Pre-patch surrounding context differs: mainline context shows '@Singleton' and 'public class SysSnapshots {' while target context shows 'private final Supplier<Collection<Repository>> getRepositories;' and '@Inject' at the change site"
         ],
         "namespace_only_possible": false,
         "namespace_changes": [],
@@ -206,6 +242,7 @@
         ],
         "required_symbols": [],
         "protected_symbols": [],
+        "must_preserve_symbols": [],
         "chain_constraints": [],
         "api_inventory": {
           "mainline_declared_methods_count": 3,
@@ -219,29 +256,29 @@
         "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
         "operation_index": 2,
         "edit_type": "replace",
-        "old_string": "    SysSnapshots(Supplier<Collection<Repository>> getRepositories) {",
-        "new_string": "    SysSnapshots(Supplier<Collection<Repository>> getRepositories, ClusterService clusterService) {",
+        "old_string": "\n    @VisibleForTesting\n    SysSnapshots(Supplier<Collection<Repository>> getRepositories) {\n        this.getRepositories = getRepositories;",
+        "new_string": "\n    @VisibleForTesting\n    SysSnapshots(Supplier<Collection<Repository>> getRepositories, ClusterService clusterService) {\n        this.getRepositories = getRepositories;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "Extend the package-visible constructor to accept ClusterService for assignment",
         "surround_before_3": [
-          "    }",
-          "",
-          "    @VisibleForTesting"
+          "    public SysSnapshots(RepositoriesService repositoriesService) {",
+          "        this(repositoriesService::getRepositoriesList);",
+          "    }"
         ],
         "surround_after_3": [
-          "        this.getRepositories = getRepositories;",
           "    }",
-          ""
+          "",
+          "    public CompletableFuture<Iterable<SysSnapshot>> currentSnapshots() {"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [
-          "Detected target start line (58) differs from mainline old start line (53)",
-          "Pre-patch surrounding context before and after lines differ between mainline and target"
+          "Mainline old-start line (53) differs from detected target start line (58) -> location offset",
+          "Pre-patch surrounding context differs: mainline context shows '@Singleton' and 'public class SysSnapshots {' while target context shows 'private final Supplier<Collection<Repository>> getRepositories;' and '@Inject' at the change site"
         ],
         "namespace_only_possible": false,
         "namespace_changes": [],
@@ -254,6 +291,7 @@
         ],
         "required_symbols": [],
         "protected_symbols": [],
+        "must_preserve_symbols": [],
         "chain_constraints": [],
         "api_inventory": {
           "mainline_declared_methods_count": 3,
@@ -271,7 +309,7 @@
         "new_string": "        this.clusterService = clusterService;\n     }",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "Assign injected ClusterService to the new field in the package-visible constructor",
         "surround_before_3": [
           "                    ArrayList<CompletableFuture<SysSnapshot>> snapshots = new ArrayList<>(snapshotIds.size());",
           "                    for (SnapshotId snapshotId : snapshotIds) {",
@@ -282,14 +320,14 @@
           "                });",
           "            sysSnapshots.add(futureSnapshots);"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [
-          "Detected target start line (58) differs from mainline old start line (53)",
-          "Pre-patch surrounding context before and after lines differ between mainline and target"
+          "Mainline old-start line (53) differs from detected target start line (58) -> location offset",
+          "Pre-patch surrounding context differs: mainline context shows '@Singleton' and 'public class SysSnapshots {' while target context shows 'private final Supplier<Collection<Repository>> getRepositories;' and '@Inject' at the change site"
         ],
         "namespace_only_possible": false,
         "namespace_changes": [],
@@ -302,6 +340,7 @@
         ],
         "required_symbols": [],
         "protected_symbols": [],
+        "must_preserve_symbols": [],
         "chain_constraints": [],
         "api_inventory": {
           "mainline_declared_methods_count": 3,
@@ -319,7 +358,7 @@
         "new_string": "\n            // Add snapshots in progress in this repository.\n            final SnapshotsInProgress snapshotsInProgress = clusterService.state().custom(SnapshotsInProgress.TYPE);\n            List<SysSnapshot> inProgressSnapshots = snapshotsInProgress(snapshotsInProgress, repository.getMetadata().name());\n            sysSnapshots.add(CompletableFuture.completedFuture(inProgressSnapshots));\n         }",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "                    ArrayList<CompletableFuture<SysSnapshot>> snapshots = new ArrayList<>(snapshotIds.size());",
           "                    for (SnapshotId snapshotId : snapshotIds) {",
@@ -330,9 +369,9 @@
           "                });",
           "            sysSnapshots.add(futureSnapshots);"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
@@ -345,6 +384,7 @@
         ],
         "required_symbols": [],
         "protected_symbols": [],
+        "must_preserve_symbols": [],
         "chain_constraints": [],
         "api_inventory": {
           "mainline_declared_methods_count": 3,
@@ -362,7 +402,7 @@
         "new_string": "    private static SysSnapshot toSysSnapshot(String repositoryName,\n                                             SnapshotsInProgress.Entry entry,\n                                             List<String> partedTables) {\n        return new SysSnapshot(\n            entry.snapshot().getSnapshotId().getName(),\n            repositoryName,\n            entry.indices().stream().map(IndexId::getName).toList(),\n            partedTables,\n            entry.startTime(),\n            0L,\n            Version.CURRENT.toString(),\n            SnapshotState.IN_PROGRESS.name(),\n            Collections.emptyList()\n        );\n    }\n\n    private static CompletableFuture<SysSnapshot> createSysSnapshot(Repository repository, SnapshotId snapshotId) {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "        );",
           "    }",
@@ -373,9 +413,9 @@
           "            repository.getSnapshotInfo(snapshotId),",
           "            (metadata, snapshotInfo) -> {"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
@@ -397,6 +437,7 @@
         "protected_symbols": [
           "toSysSnapshot"
         ],
+        "must_preserve_symbols": [],
         "chain_constraints": [],
         "api_inventory": {
           "mainline_declared_methods_count": 3,
@@ -416,7 +457,7 @@
         "new_string": "\n    /**\n     * Returns a list of currently running snapshots from repository sorted by snapshot creation date\n     *\n     * @param snapshotsInProgress snapshots in progress in the cluster state\n     * @param repositoryName repository to check running snapshots\n     * @return list of snapshots\n     */\n    public static List<SysSnapshot> snapshotsInProgress(@Nullable SnapshotsInProgress snapshotsInProgress,\n                                                        String repositoryName) {\n        List<SysSnapshot> sysSnapshots = new ArrayList<>();\n        List<SnapshotsInProgress.Entry> entries =\n            SnapshotsService.currentSnapshots(snapshotsInProgress, repositoryName, Collections.emptyList());\n        for (SnapshotsInProgress.Entry entry : entries) {\n            List<String> partedTables = new ArrayList<>();\n            for (var template : entry.templates()) {\n                partedTables.add(RelationName.fqnFromIndexName(template));\n            }\n            sysSnapshots.add(SysSnapshots.toSysSnapshot(repositoryName, entry, partedTables));\n        }\n        return sysSnapshots;\n    }\n }",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "    @Inject",
           "    public SysSnapshots(RepositoriesService repositoriesService) {",
@@ -427,9 +468,9 @@
           "    @VisibleForTesting",
           "    SysSnapshots(Supplier<Collection<Repository>> getRepositories) {"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
@@ -451,6 +492,7 @@
         "protected_symbols": [
           "snapshotsInProgress"
         ],
+        "must_preserve_symbols": [],
         "chain_constraints": [],
         "api_inventory": {
           "mainline_declared_methods_count": 3,
@@ -463,13 +505,13 @@
       }
     ]
   },
-  "last_plan_signature": "e93ebde70f1d4e0b08927b8defd28c245ab9ee2bbd91a2812db6d3a4325ca819",
-  "force_type_v_until_success": true,
-  "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
+  "last_plan_signature": "25c8921a7441dc3347435bd4b41cd42406a8dedaf9c6e17e1631226ef33ef9f3",
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
   "token_usage": {
-    "input_tokens": 8260,
-    "output_tokens": 2574,
-    "total_tokens": 10834,
+    "input_tokens": 8234,
+    "output_tokens": 7841,
+    "total_tokens": 16075,
     "estimated": false,
     "sources": [
       "planning_agent.provider_usage",
