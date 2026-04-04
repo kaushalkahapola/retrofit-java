@@ -830,12 +830,20 @@ class HunkGeneratorToolkit:
         if not syntax_errors:
             return {
                 "success": True,
-                "output": "No significant syntax errors found (classpath/symbol errors ignored)."
+                "syntax_valid": True,
+                "output": "PASSED: No significant syntax errors found (classpath/symbol errors ignored)."
             }
         
         return {
             "success": False,
-            "output": "SYNTAX_ERRORS_FOUND:\n\n" + "\n\n".join(syntax_errors)
+            "syntax_valid": False,
+            "output": (
+                "CRITICAL: PROBABLE SYNTAX ERROR(S) FOUND.\n"
+                "These are structural errors (like extra braces or missing semicolons) that MUST be fixed "
+                "before submitting. Do NOT ignore these as 'unrelated' – they are almost certainly "
+                "caused by the edit you just applied.\n\n"
+                "ERRORS:\n\n" + "\n\n".join(syntax_errors)
+            )
         }
 
     # ------------------------------------------------------------------
@@ -1474,13 +1482,10 @@ class HunkGeneratorToolkit:
             ),
             # --- File Editor tools (Agent 3 file-edit architecture) ---
             StructuredTool.from_function(
-                func=self.str_replace_in_file,
+                func=self.edit_file,
                 name="str_replace_in_file",
                 description=(
-                    "Replace the FIRST occurrence of old_string with new_string directly "
-                    "in the target file on disk. Returns SUCCESS, NOT_FOUND, AMBIGUOUS, "
-                    "or ERROR. This is the primary editing primitive - use it instead of "
-                    "generating unified diff hunks. Always verify old_string exists first."
+                    "DEPRECATED: Alias for edit_file. Use edit_file instead."
                 ),
             ),
             StructuredTool.from_function(
@@ -1523,8 +1528,8 @@ class HunkGeneratorToolkit:
                 name="replace_lines",
                 description=(
                     "Replace a specific block of lines (start_line to end_line, inclusive, 1-indexed) "
-                    "with new_content. This is extremely robust as it does not rely on old_string text matching. "
-                    "To insert new lines without replacing any, use start_line = N, end_line = N-1."
+                    "with new_content. Use ONLY for pure insertions or when old text cannot be matched. "
+                    "WARNING: Prone to line drift! Prefer edit_file for structural changes like methods or decorators."
                 ),
             ),
             StructuredTool.from_function(

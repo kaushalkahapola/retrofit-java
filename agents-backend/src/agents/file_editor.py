@@ -63,41 +63,21 @@ _FILE_EDITOR_AGENT_SYSTEM = """You are an expert autonomous Java backporting eng
 You MUST follow this exact Todo Checklist loop to complete your task:
 1. REVIEW the Semantic Blueprint so you understand exactly what behavior needs to be fixed. Note all required dependent APIs, imports, fields, constructors, or logic changes.
 2. CHECK the Consistency Map to see if any variables/methods from the mainline patch were renamed in this target version. You MUST use the renamed symbols for any newly written code.
-3. For EACH distinct hunk/change in the patch (e.g., adding imports, modifying a constructor, modifying a method):
-   a. PRIORITY 1 (AST Methods): USE the AST tools (`replace_method_body`, `replace_field`, `insert_import`, `remove_method`). These are immune to line shifting and should be your absolute default.
-   b. PRIORITY 2 (Line Methods): Only if the edit CANNOT be done purely via AST methods, USE `read_file_window` or `grep_in_file` to locate the exact line boundaries. DETERMINE the exact `start_line` and `end_line` and use `replace_lines`.
-   c. VERIFY IMMEDIATELY: After applying a change, call `read_file_window` around the modified area. Check for:
-      - Did the edit apply correctly?
-      - Are there any duplicates (e.g., did you add an @Inject that already existed above the matched block)?
-      - Is the indentation consistent with surrounding code?
-      - Are there any obvious syntax errors? Use `check_java_syntax` for a fast compilation sanity check.
-4. VERIFY all changes: After ALL edits are complete:
-   - Call `check_java_syntax` one last time on the whole file.
-   - Call `git_diff_file` to see the actual diff.
-   - Call `verify_guidelines` with the diff to catch structured issues.
-5. Output "DONE" only when EVERY required piece of logic from the patch (including imports and fields) is perfectly edited into the target file AND all verification tools pass.
+4. VERIFY all changes: After ALL edits are complete, call `check_java_syntax` one last time. If it reports structural errors, you MUST fix them. Finally, call `git_diff_file` and `verify_guidelines`.
+5. Output "DONE" only when logic is perfectly edited AND all verification tools pass.
 
-## str_replace Edit Plan (Hints)
-The following atomic operations were proposed by the Planning Agent. Use them as high-quality hints for anchor discovery and adaptation, but always verify they match the actual file content before applying.
-{hunk_generation_plan}
+## Tool Selection Priority (CRITICAL)
+1. **HIGHEST PRIORITY: AST tools (`replace_method_body`, `replace_field`, `insert_import`, `remove_method`)**
+   - Use these first! They are immune to line drift.
 
-## Essential Guidelines (CRITICAL)
+2. **SECOND PRIORITY: edit_file (The CLAW-inspired exact string match tool)**
+   - Use for all non-AST structural changes (methods, decorators, constructors).
+   - Why: Immune to line drift, prevents duplicate decorators, ensures balanced braces.
+   - Syntax: Provide the EXACT `old_string` from the file and the EXACT `new_string`.
 
-### Tool Selection Priority (CLAW-Inspired String Matching First)
-**NEW APPROACH**: Use exact string matching (`edit_file`) for structural changes - it avoids all line drift issues!
-
-1. **HIGHEST PRIORITY: edit_file (CLAW-inspired, exact string matching)**
-   - Use for: Method changes, decorators (@Inject, @Override), constructors, class structure
-   - Why: No line number calculations, exact match prevents decorator duplication, braces must balance
-   - Syntax: Provide complete `old_string` (with decorators, all lines, exact spacing) and `new_string`
-   - Example: To change a @Inject constructor, copy ENTIRE constructor (including @Inject line) as old_string
-
-2. **SECOND PRIORITY: AST tools (replace_method_body, replace_field, insert_import, remove_method)**
-   - Use for: When edit_file is too complex or AST is specifically needed
-   - Immune to line drift, locates by method signature not line numbers
-
-3. **LAST RESORT: replace_lines (line-based, fallback only)**
-   - Use for: Simple single-line changes that don't involve decorators
+3. **LAST RESORT: replace_lines (Line-based fallback)**
+   - Use ONLY for pure insertions or simple single-line changes where `edit_file` is difficult.
+   - WARNING: Prone to line drift in multi-edit files.
    - Requires careful line number tracking and delta management
 
 ### Verification Tools (Mandatory)
@@ -1072,6 +1052,15 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     hint = f"Hunk suggests mapping around line {m.get('start_line', 'unknown')} with context:\n```java\n{m.get('code_snippet', '')[:300]}\n```"
                     mapping_hints.append(hint)
 
+            # Truncate build logs if they are massive (they often repeat)
+            truncated_error_context = error_context
+            if len(error_context) > 8000:
+                truncated_error_context = (
+                    error_context[:4000] 
+                    + "\n\n... [TRUNCATED DUE TO LENGTH] ...\n\n" 
+                    + error_context[-4000:]
+                )
+
             system_prompt = _FILE_EDITOR_AGENT_SYSTEM.format(
                 patch_diff=state.get("patch_diff") or "<no patch diff found>",
                 hunk_generation_plan=json.dumps(plan_entries, indent=2),
@@ -1084,19 +1073,18 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 consistency_map=json.dumps(state.get("consistency_map", {}), indent=2),
                 mainline_file=mainline_file,
                 target_file=target_file,
-                retry_context=f"RETRY LOGS:\n{error_context}"
+                retry_context=f"RETRY LOGS:\n{truncated_error_context}"
                 if validation_attempts > 0
                 else "",
             )
 
-            # Add heuristic for multi-edit files: prefer str_replace_in_file over line numbers
+            # Heuristic for multi-edit files: prioritize edit_file
             if len(plan_entries) >= 3:
                 system_prompt += (
                     "\n\n## IMPORTANT: Multi-Edit File Detection\n"
-                    "This file has 3+ distinct edits. Consider using str_replace_in_file "
-                    "(exact string matching) instead of line numbers to avoid line drift.\n"
-                    "Line numbers are inherently fragile across multiple sequential edits.\n"
-                    "Use replace_lines only for pure insertions with no overlapping content."
+                    "This file has 3+ distinct edits. You MUST use 'edit_file' (exact string matching) "
+                    "or AST tools instead of line numbers to avoid line drift.\n"
+                    "Do NOT use replace_lines unless absolutely necessary."
                 )
 
             editor_agent = create_react_agent(llm, toolkit.get_tools())
@@ -1109,11 +1097,10 @@ async def file_editor_node(state: AgentState, config) -> dict:
                             SystemMessage(content=system_prompt),
                              HumanMessage(
                                  content="Start your Todo list now.\n"
-                                 "1. Write a short analysis of the logic changes across ALL hunks in the patch for this file.\n"
-                                 "2. For EACH distinct change (imports, fields, constructor, methods), prefer AST tools (`replace_method_body`, `replace_field`, `insert_import`, `remove_method`).\n"
-                                 "3. Only if AST tools are not applicable, use `read_file_window` to find the target code and use `replace_lines` (or `insert_after_line`) as a fallback.\n"
-                                 "4. Write a short analysis on how the mainline syntax differs from the target syntax.\n"
-                                 "5. Apply EVERY part of the adapted logic. Remember: use AST tools first!"
+                                 "1. Analyze logic changes and structural differences.\n"
+                                 "2. Apply changes using AST tools (Priority 1) or `edit_file` (Priority 2).\n"
+                                 "3. Use `check_java_syntax` after edits to catch errors immediately.\n"
+                                 "4. Use `read_file_window` to verify context and avoid duplication."
                              ),
                         ]
                     }
