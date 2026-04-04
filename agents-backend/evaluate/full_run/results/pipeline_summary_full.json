@@ -110,6 +110,7 @@
                   "file": "server/src/main/java/io/crate/planner/operators/Collect.java",
                   "summary": "Adds logic (+8 lines).",
                   "role": "guard",
+
                   "connects_to_next": "Prepares next hunk in same file with related context.",
                   "global_index": 1
                 },
@@ -183,6 +184,58 @@
                   "code_snippet": "                replacedOutputs.put(output, output);\n            } else if (!output.any(Symbol.IS_COLUMN)) {\n                newOutputs.add(output);\n                replacedOutputs.put(output, output);\n            } else if (Symbols.any(usedColumns, (Predicate<? super Symbol>) output::equals)) {\n                newOutputs.add(output);\n                replacedOutputs.put(output, output);\n            } else {\n                Symbol outputWithFetchStub = RefReplacer.replaceRefs(output, ref -> {\n                    Reference sourceLookup = DocReferences.toDocLookup(ref);\n                    refsToFetch.add(sourceLookup);\n                    return new FetchStub(fetchMarker, sourceLookup);\n                });\n                replacedOutputs.put(output, outputWithFetchStub);\n            }\n        }\n        if (newOutputs.size() == outputs.size()) {\n            return null;\n        }\n        newOutputs.add(0, fetchMarker);\n        return new FetchRewrite(\n            replacedOutputs,\n            new Collect(\n                relation,\n                newOutputs,\n                immutableWhere\n            )\n        );\n    }\n\n    @Override\n    public Map<LogicalPlan, SelectSymbol> dependencies() {\n        return Map.of();\n    }\n\n    @Override\n    public String toString() {\n        return \"Collect{\" +\n               tableInfo.ident() +\n               \", [\" + Lists.joinOn(\", \", outputs, Symbol::toString) +\n               \"], \" + immutableWhere +",
                   "anchor_confidence": "medium",
                   "anchor_reason": "line_resolved_method_unresolved",
+                  "anchor_strategy": "deterministic_realign"
+                },
+                {
+                  "hunk_index": 4,
+                  "mainline_method": "hunk_4",
+                  "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java",
+                  "target_method": null,
+                  "start_line": 52,
+                  "end_line": 52,
+                  "code_snippet": " *\n * Note: this query was adapted from Lucene's DocAndScoreQuery from the class\n * {@link org.apache.lucene.search.KnnFloatVectorQuery}, which is package-private.\n * There are no changes to the behavior, just some renames.\n */\npublic class KnnScoreDocQuery extends Query {\n    private final int[] docs;\n    private final float[] scores;\n\n    // the indexes in docs and scores corresponding to the first matching document in each segment.\n    // If a segment has no matching documents, it should be assigned the index of the next segment that does.\n    // There should be a final entry that is always docs.length-1.\n    private final int[] segmentStarts;\n\n    // an object identifying the reader context that was used to build this query\n    private final Object contextIdentity;\n\n    /**\n     * Creates a query.\n     *\n     * @param docs the global doc IDs of documents that match, in ascending order\n     * @param scores the scores of the matching documents\n     * @param reader IndexReader\n     */\n    KnnScoreDocQuery(int[] docs, float[] scores, IndexReader reader) {\n        this.docs = docs;\n        this.scores = scores;\n        this.segmentStarts = findSegmentStarts(reader, docs);\n        this.contextIdentity = reader.getContext().id();\n    }\n\n    private static int[] findSegmentStarts(IndexReader reader, int[] docs) {\n        int[] starts = new int[reader.leaves().size() + 1];\n        starts[starts.length - 1] = docs.length;\n        if (starts.length == 2) {\n            return starts;\n        }\n        int resultIndex = 0;\n        for (int i = 1; i < starts.length - 1; i++) {\n            int upper = reader.leaves().get(i).docBase;\n            resultIndex = Arrays.binarySearch(docs, resultIndex, docs.length, upper);",
+                  "anchor_confidence": "medium",
+                  "anchor_reason": "line_resolved_method_unresolved",
+                  "anchor_strategy": "deterministic_realign"
+                }
+              ],
+              "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java": [
+                {
+                  "hunk_index": 1,
+                  "mainline_method": "hunk_1",
+                  "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java",
+                  "target_method": null,
+                  "start_line": 144,
+                  "end_line": 144,
+                  "code_snippet": "        builder.startArray(\"values\");\n        for (ScoreDoc scoreDoc : scoreDocs) {\n            builder.startObject().field(\"doc\", scoreDoc.doc).field(\"score\", scoreDoc.score).endObject();\n        }\n        builder.endArray();\n        if (fieldName != null) {\n            builder.field(\"field\", fieldName);\n        }\n        if (queryVector != null) {\n            builder.field(\"query\", queryVector);\n        }\n        if (vectorSimilarity != null) {\n            builder.field(\"similarity\", vectorSimilarity);\n        }\n        boostAndQueryNameToXContent(builder);\n        builder.endObject();\n    }\n\n    @Override\n    protected Query doToQuery(SearchExecutionContext context) throws IOException {\n        int numDocs = scoreDocs.length;\n        int[] docs = new int[numDocs];\n        float[] scores = new float[numDocs];\n        for (int i = 0; i < numDocs; i++) {\n            docs[i] = scoreDocs[i].doc;\n            scores[i] = scoreDocs[i].score;\n        }\n\n        return new KnnScoreDocQuery(docs, scores, context.getIndexReader());\n    }\n\n    @Override\n    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {\n        if (scoreDocs.length == 0) {\n            return new MatchNoneQueryBuilder(\"The \\\"\" + getName() + \"\\\" query was rewritten to a \\\"match_none\\\" query.\");\n        }\n        if (queryRewriteContext.convertToInnerHitsRewriteContext() != null && queryVector != null && fieldName != null) {\n            return new ExactKnnQueryBuilder(queryVector, fieldName, vectorSimilarity);\n        }\n        return super.doRewrite(queryRewriteContext);\n    }",
+                  "anchor_confidence": "medium",
+                  "anchor_reason": "line_resolved_method_unresolved",
+                  "anchor_strategy": "deterministic_realign"
+                }
+              ],
+              "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java": [
+                {
+                  "hunk_index": 1,
+                  "mainline_method": "hunk_1",
+                  "target_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+                  "target_method": null,
+                  "start_line": 19,
+                  "end_line": 19,
+                  "code_snippet": "/*\n * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one\n * or more contributor license agreements. Licensed under the \"Elastic License\n * 2.0\", the \"GNU Affero General Public License v3.0 only\", and the \"Server Side\n * Public License v 1\"; you may not use this file except in compliance with, at\n * your election, the \"Elastic License 2.0\", the \"GNU Affero General Public\n * License v3.0 only\", or the \"Server Side Public License, v 1\".\n */\n\npackage org.elasticsearch.search.vectors;\n\nimport org.apache.lucene.index.VectorSimilarityFunction;\nimport org.apache.lucene.queries.function.FunctionScoreQuery;\nimport org.apache.lucene.search.BooleanClause;\nimport org.apache.lucene.search.DoubleValuesSource;\nimport org.apache.lucene.search.IndexSearcher;\nimport org.apache.lucene.search.Query;\nimport org.apache.lucene.search.QueryVisitor;\nimport org.apache.lucene.search.ScoreDoc;\nimport org.apache.lucene.search.TopDocs;\nimport org.elasticsearch.index.mapper.vectors.VectorSimilarityFloatValueSource;\nimport org.elasticsearch.search.profile.query.QueryProfiler;\n\nimport java.io.IOException;\nimport java.util.Arrays;\nimport java.util.Comparator;\nimport java.util.Objects;\n\n/**\n * Wraps an internal query to rescore the results using a similarity function over the original, non-quantized vectors of a vector field\n */\npublic class RescoreKnnVectorQuery extends Query implements QueryProfilerProvider {\n    private final String fieldName;\n    private final float[] floatTarget;\n    private final VectorSimilarityFunction vectorSimilarityFunction;\n    private final int k;\n    private final Query innerQuery;\n    private long vectorOperations = 0;\n",
+                  "anchor_confidence": "medium",
+                  "anchor_reason": "line_resolved_method_unresolved",
+                  "anchor_strategy": "deterministic_realign"
+                },
+                {
+                  "hunk_index": 2,
+                  "mainline_method": "innerQuery",
+                  "target_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+                  "target_method": "innerQuery",
+                  "start_line": 63,
+                  "end_line": 63,
+                  "code_snippet": "        VectorSimilarityFunction vectorSimilarityFunction,\n        int k,\n        Query innerQuery\n    ) {\n        this.fieldName = fieldName;\n        this.floatTarget = floatTarget;\n        this.vectorSimilarityFunction = vectorSimilarityFunction;\n        this.k = k;\n        this.innerQuery = innerQuery;\n    }\n\n    @Override\n    public Query rewrite(IndexSearcher searcher) throws IOException {\n        DoubleValuesSource valueSource = new VectorSimilarityFloatValueSource(fieldName, floatTarget, vectorSimilarityFunction);\n        FunctionScoreQuery functionScoreQuery = new FunctionScoreQuery(innerQuery, valueSource);\n        Query query = searcher.rewrite(functionScoreQuery);\n\n        // Retrieve top k documents from the rescored query\n        TopDocs topDocs = searcher.search(query, k);\n        vectorOperations = topDocs.totalHits.value;\n        ScoreDoc[] scoreDocs = topDocs.scoreDocs;\n        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));\n        int[] docIds = new int[scoreDocs.length];\n        float[] scores = new float[scoreDocs.length];\n        for (int i = 0; i < scoreDocs.length; i++) {\n            docIds[i] = scoreDocs[i].doc;\n            scores[i] = scoreDocs[i].score;\n        }\n\n        return new KnnScoreDocQuery(docIds, scores, searcher.getIndexReader());\n    }\n\n    public Query innerQuery() {\n        return innerQuery;\n    }\n\n    public int k() {\n        return k;\n    }\n\n    @Override",
+                  "anchor_confidence": "high",
+                  "anchor_reason": "line_and_method_resolved",
                   "anchor_strategy": "deterministic_realign"
                 }
               ]
@@ -284,6 +337,89 @@
                   "namespace_only_possible": true,
                   "namespace_changes": []
                 }
+              ],
+              "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java": [
+                {
+                  "hunk_index": 0,
+                  "target_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+                  "operation_index": 0,
+                  "edit_type": "delete",
+                  "old_string": "import org.apache.lucene.search.ScoreDoc;",
+                  "new_string": "",
+                  "verified": true,
+                  "verification_result": "sanitize_resolved:exact",
+                  "notes": "required_op_delete",
+                  "surround_before_3": [
+                    "import org.apache.lucene.search.IndexSearcher;",
+                    "import org.apache.lucene.search.Query;",
+                    "import org.apache.lucene.search.QueryVisitor;"
+                  ],
+                  "surround_after_3": [
+                    "import org.apache.lucene.search.TopDocs;",
+                    "import org.elasticsearch.index.mapper.vectors.VectorSimilarityFloatValueSource;",
+                    "import org.elasticsearch.search.profile.query.QueryProfiler;"
+                  ],
+                  "adaptation_type": "TYPE_II",
+                  "location_match": true,
+                  "surrounding_match": false,
+                  "blockers": [],
+                  "namespace_only_possible": true,
+                  "namespace_changes": []
+                },
+                {
+                  "hunk_index": 0,
+                  "target_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+                  "operation_index": 1,
+                  "edit_type": "delete",
+                  "old_string": "import java.util.Comparator;",
+                  "new_string": "",
+                  "verified": true,
+                  "verification_result": "sanitize_resolved:exact",
+                  "notes": "required_op_delete",
+                  "surround_before_3": [
+                    "",
+                    "import java.io.IOException;",
+                    "import java.util.Arrays;"
+                  ],
+                  "surround_after_3": [
+                    "import java.util.Objects;",
+                    "",
+                    "/**"
+                  ],
+                  "adaptation_type": "TYPE_II",
+                  "location_match": true,
+                  "surrounding_match": false,
+                  "blockers": [],
+                  "namespace_only_possible": true,
+                  "namespace_changes": []
+                },
+                {
+                  "hunk_index": 1,
+                  "target_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+                  "operation_index": 0,
+                  "edit_type": "replace",
+                  "old_string": "        ScoreDoc[] scoreDocs = topDocs.scoreDocs;\n        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));\n        int[] docIds = new int[scoreDocs.length];\n        float[] scores = new float[scoreDocs.length];\n        for (int i = 0; i < scoreDocs.length; i++) {\n            docIds[i] = scoreDocs[i].doc;\n            scores[i] = scoreDocs[i].score;\n        }\n\n        return new KnnScoreDocQuery(docIds, scores, searcher.getIndexReader());",
+                  "new_string": "        return new KnnScoreDocQuery(topDocs.scoreDocs, searcher.getIndexReader());",
+                  "verified": true,
+                  "verification_result": "sanitize_resolved:exact",
+                  "notes": "required_op_replace",
+                  "surround_before_3": [
+                    "        // Retrieve top k documents from the rescored query",
+                    "        TopDocs topDocs = searcher.search(query, k);",
+                    "        vectorOperations = topDocs.totalHits.value;"
+                  ],
+                  "surround_after_3": [
+                    "    }",
+                    "",
+                    "    public Query innerQuery() {"
+                  ],
+                  "adaptation_type": "TYPE_II",
+                  "location_match": true,
+                  "surrounding_match": false,
+                  "blockers": [],
+                  "namespace_only_possible": true,
+                  "namespace_changes": []
+                }
               ]
             },
             "last_plan_signature": "086691363d568ad41e6a06ba31e6e98e25f4d7e49ddc6bbd15339a8b20057bf5",
@@ -313,7 +449,40 @@
                 "new_string": "diff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java\nindex 42786e0c19..0406a9d773 100644\n--- a/server/src/main/java/io/crate/planner/operators/Collect.java\n+++ b/server/src/main/java/io/crate/planner/operators/Collect.java\n@@ -109,6 +109,14 @@ public class Collect implements LogicalPlan {\n         this.detailedQuery = detailedQuery;\n     }\n \n+    /// @return a new Collect operator with changed outputs\n+    public Collect withOutputs(List<Symbol> newOutputs) {\n+        Collect collect = new Collect(relation, newOutputs, immutableWhere);\n+        collect.mutableBoundWhere = mutableBoundWhere;\n+        collect.detailedQuery = detailedQuery;\n+        return collect;\n+    }\n+\n     public Collect(AbstractTableRelation<?> relation,\n                    List<Symbol> outputs,\n                    WhereClause where) {\n@@ -345,7 +353,7 @@ public class Collect implements LogicalPlan {\n         if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {\n             return this;\n         }\n-        return new Collect(relation, List.copyOf(newOutputs), immutableWhere);\n+        return withOutputs(List.copyOf(newOutputs));\n     }\n \n     @Nullable\n@@ -384,11 +392,7 @@ public class Collect implements LogicalPlan {\n         newOutputs.add(0, fetchMarker);\n         return new FetchRewrite(\n             replacedOutputs,\n-            new Collect(\n-                relation,\n-                newOutputs,\n-                immutableWhere\n-            )\n+            withOutputs(newOutputs)\n         );\n     }",
                 "edit_type": "replace",
                 "verified": true,
-                "verification_result": "ReAct agent applied",
+                "verification_result": "Deterministic file editor applied",
+                "applied": true,
+                "apply_result": "SUCCESS"
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java",
+                "old_string": "<deterministic file-editor diff>",
+                "new_string": "diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java\nindex 2855fe8bcf0..37708be09e1 100644\n--- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java\n+++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java\n@@ -17,12 +17,14 @@ import org.apache.lucene.search.IndexSearcher;\n import org.apache.lucene.search.MatchNoDocsQuery;\n import org.apache.lucene.search.Query;\n import org.apache.lucene.search.QueryVisitor;\n+import org.apache.lucene.search.ScoreDoc;\n import org.apache.lucene.search.ScoreMode;\n import org.apache.lucene.search.Scorer;\n import org.apache.lucene.search.Weight;\n \n import java.io.IOException;\n import java.util.Arrays;\n+import java.util.Comparator;\n import java.util.Objects;\n \n import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;\n@@ -30,9 +32,9 @@ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;\n /**\n  * A query that matches the provided docs with their scores.\n  *\n- * Note: this query was adapted from Lucene's DocAndScoreQuery from the class\n+ * Note: this query was originally adapted from Lucene's DocAndScoreQuery from the class\n  * {@link org.apache.lucene.search.KnnFloatVectorQuery}, which is package-private.\n- * There are no changes to the behavior, just some renames.\n+\n  */\n public class KnnScoreDocQuery extends Query {\n     private final int[] docs;\n@@ -49,13 +51,18 @@ public class KnnScoreDocQuery extends Query {\n     /**\n      * Creates a query.\n      *\n-     * @param docs the global doc IDs of documents that match, in ascending order\n-     * @param scores the scores of the matching documents\n+     * @param scoreDocs an array of ScoreDocs to use for the query\n      * @param reader IndexReader\n      */\n-    KnnScoreDocQuery(int[] docs, float[] scores, IndexReader reader) {\n-        this.docs = docs;\n-        this.scores = scores;\n+    KnnScoreDocQuery(ScoreDoc[] scoreDocs, IndexReader reader) {\n+        // Ensure that the docs are sorted by docId, as they are later searched using binary search\n+        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));\n+        this.docs = new int[scoreDocs.length];\n+        this.scores = new float[scoreDocs.length];\n+        for (int i = 0; i < scoreDocs.length; i++) {\n+            docs[i] = scoreDocs[i].doc;\n+            scores[i] = scoreDocs[i].score;\n+        }\n         this.segmentStarts = findSegmentStarts(reader, docs);\n         this.contextIdentity = reader.getContext().id();\n     }",
+                "edit_type": "replace",
+                "verified": true,
+                "verification_result": "Deterministic file editor applied",
+                "applied": true,
+                "apply_result": "SUCCESS"
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java",
+                "old_string": "<deterministic file-editor diff>",
+                "new_string": "diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java\nindex 6fa83ccfb6a..1a81f4b984e 100644\n--- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java\n+++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java\n@@ -141,15 +141,7 @@ public class KnnScoreDocQueryBuilder extends AbstractQueryBuilder<KnnScoreDocQue\n \n     @Override\n     protected Query doToQuery(SearchExecutionContext context) throws IOException {\n-        int numDocs = scoreDocs.length;\n-        int[] docs = new int[numDocs];\n-        float[] scores = new float[numDocs];\n-        for (int i = 0; i < numDocs; i++) {\n-            docs[i] = scoreDocs[i].doc;\n-            scores[i] = scoreDocs[i].score;\n-        }\n-\n-        return new KnnScoreDocQuery(docs, scores, context.getIndexReader());\n+        return new KnnScoreDocQuery(scoreDocs, context.getIndexReader());\n     }\n \n     @Override",
+                "edit_type": "replace",
+                "verified": true,
+                "verification_result": "Deterministic file editor applied",
+                "applied": true,
+                "apply_result": "SUCCESS"
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+                "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+                "old_string": "<deterministic file-editor diff>",
+                "new_string": "diff --git a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java\nindex 967f310f935..c08b531a3b0 100644\n--- a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java\n+++ b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java\n@@ -16,14 +16,14 @@ import org.apache.lucene.search.DoubleValuesSource;\n import org.apache.lucene.search.IndexSearcher;\n import org.apache.lucene.search.Query;\n import org.apache.lucene.search.QueryVisitor;\n-import org.apache.lucene.search.ScoreDoc;\n+\n import org.apache.lucene.search.TopDocs;\n import org.elasticsearch.index.mapper.vectors.VectorSimilarityFloatValueSource;\n import org.elasticsearch.search.profile.query.QueryProfiler;\n \n import java.io.IOException;\n import java.util.Arrays;\n-import java.util.Comparator;\n+\n import java.util.Objects;\n \n /**\n@@ -60,16 +60,7 @@ public class RescoreKnnVectorQuery extends Query implements QueryProfilerProvide\n         // Retrieve top k documents from the rescored query\n         TopDocs topDocs = searcher.search(query, k);\n         vectorOperations = topDocs.totalHits.value;\n-        ScoreDoc[] scoreDocs = topDocs.scoreDocs;\n-        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));\n-        int[] docIds = new int[scoreDocs.length];\n-        float[] scores = new float[scoreDocs.length];\n-        for (int i = 0; i < scoreDocs.length; i++) {\n-            docIds[i] = scoreDocs[i].doc;\n-            scores[i] = scoreDocs[i].score;\n-        }\n-\n-        return new KnnScoreDocQuery(docIds, scores, searcher.getIndexReader());\n+        return new KnnScoreDocQuery(topDocs.scoreDocs, searcher.getIndexReader());\n     }\n \n     public Query innerQuery() {",
+                "edit_type": "replace",
+                "verified": true,
+                "verification_result": "Deterministic file editor applied",
                 "applied": true,
                 "apply_result": "SUCCESS"
               }
@@ -327,7 +496,40 @@
                   "new_string": "diff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java\nindex 42786e0c19..0406a9d773 100644\n--- a/server/src/main/java/io/crate/planner/operators/Collect.java\n+++ b/server/src/main/java/io/crate/planner/operators/Collect.java\n@@ -109,6 +109,14 @@ public class Collect implements LogicalPlan {\n         this.detailedQuery = detailedQuery;\n     }\n \n+    /// @return a new Collect operator with changed outputs\n+    public Collect withOutputs(List<Symbol> newOutputs) {\n+        Collect collect = new Collect(relation, newOutputs, immutableWhere);\n+        collect.mutableBoundWhere = mutableBoundWhere;\n+        collect.detailedQuery = detailedQuery;\n+        return collect;\n+    }\n+\n     public Collect(AbstractTableRelation<?> relation,\n                    List<Symbol> outputs,\n                    WhereClause where) {\n@@ -345,7 +353,7 @@ public class Collect implements LogicalPlan {\n         if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {\n             return this;\n         }\n-        return new Collect(relation, List.copyOf(newOutputs), immutableWhere);\n+        return withOutputs(List.copyOf(newOutputs));\n     }\n \n     @Nullable\n@@ -384,11 +392,7 @@ public class Collect implements LogicalPlan {\n         newOutputs.add(0, fetchMarker);\n         return new FetchRewrite(\n             replacedOutputs,\n-            new Collect(\n-                relation,\n-                newOutputs,\n-                immutableWhere\n-            )\n+            withOutputs(newOutputs)\n         );\n     }",
                   "edit_type": "replace",
                   "verified": true,
-                  "verification_result": "ReAct agent applied",
+                  "verification_result": "Deterministic file editor applied",
+                  "applied": true,
+                  "apply_result": "SUCCESS"
+                },
+                {
+                  "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java",
+                  "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java",
+                  "old_string": "<deterministic file-editor diff>",
+                  "new_string": "diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java\nindex 2855fe8bcf0..37708be09e1 100644\n--- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java\n+++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java\n@@ -17,12 +17,14 @@ import org.apache.lucene.search.IndexSearcher;\n import org.apache.lucene.search.MatchNoDocsQuery;\n import org.apache.lucene.search.Query;\n import org.apache.lucene.search.QueryVisitor;\n+import org.apache.lucene.search.ScoreDoc;\n import org.apache.lucene.search.ScoreMode;\n import org.apache.lucene.search.Scorer;\n import org.apache.lucene.search.Weight;\n \n import java.io.IOException;\n import java.util.Arrays;\n+import java.util.Comparator;\n import java.util.Objects;\n \n import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;\n@@ -30,9 +32,9 @@ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;\n /**\n  * A query that matches the provided docs with their scores.\n  *\n- * Note: this query was adapted from Lucene's DocAndScoreQuery from the class\n+ * Note: this query was originally adapted from Lucene's DocAndScoreQuery from the class\n  * {@link org.apache.lucene.search.KnnFloatVectorQuery}, which is package-private.\n- * There are no changes to the behavior, just some renames.\n+\n  */\n public class KnnScoreDocQuery extends Query {\n     private final int[] docs;\n@@ -49,13 +51,18 @@ public class KnnScoreDocQuery extends Query {\n     /**\n      * Creates a query.\n      *\n-     * @param docs the global doc IDs of documents that match, in ascending order\n-     * @param scores the scores of the matching documents\n+     * @param scoreDocs an array of ScoreDocs to use for the query\n      * @param reader IndexReader\n      */\n-    KnnScoreDocQuery(int[] docs, float[] scores, IndexReader reader) {\n-        this.docs = docs;\n-        this.scores = scores;\n+    KnnScoreDocQuery(ScoreDoc[] scoreDocs, IndexReader reader) {\n+        // Ensure that the docs are sorted by docId, as they are later searched using binary search\n+        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));\n+        this.docs = new int[scoreDocs.length];\n+        this.scores = new float[scoreDocs.length];\n+        for (int i = 0; i < scoreDocs.length; i++) {\n+            docs[i] = scoreDocs[i].doc;\n+            scores[i] = scoreDocs[i].score;\n+        }\n         this.segmentStarts = findSegmentStarts(reader, docs);\n         this.contextIdentity = reader.getContext().id();\n     }",
+                  "edit_type": "replace",
+                  "verified": true,
+                  "verification_result": "Deterministic file editor applied",
+                  "applied": true,
+                  "apply_result": "SUCCESS"
+                },
+                {
+                  "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java",
+                  "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java",
+                  "old_string": "<deterministic file-editor diff>",
+                  "new_string": "diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java\nindex 6fa83ccfb6a..1a81f4b984e 100644\n--- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java\n+++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java\n@@ -141,15 +141,7 @@ public class KnnScoreDocQueryBuilder extends AbstractQueryBuilder<KnnScoreDocQue\n \n     @Override\n     protected Query doToQuery(SearchExecutionContext context) throws IOException {\n-        int numDocs = scoreDocs.length;\n-        int[] docs = new int[numDocs];\n-        float[] scores = new float[numDocs];\n-        for (int i = 0; i < numDocs; i++) {\n-            docs[i] = scoreDocs[i].doc;\n-            scores[i] = scoreDocs[i].score;\n-        }\n-\n-        return new KnnScoreDocQuery(docs, scores, context.getIndexReader());\n+        return new KnnScoreDocQuery(scoreDocs, context.getIndexReader());\n     }\n \n     @Override",
+                  "edit_type": "replace",
+                  "verified": true,
+                  "verification_result": "Deterministic file editor applied",
+                  "applied": true,
+                  "apply_result": "SUCCESS"
+                },
+                {
+                  "target_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+                  "mainline_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+                  "old_string": "<deterministic file-editor diff>",
+                  "new_string": "diff --git a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java\nindex 967f310f935..c08b531a3b0 100644\n--- a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java\n+++ b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java\n@@ -16,14 +16,14 @@ import org.apache.lucene.search.DoubleValuesSource;\n import org.apache.lucene.search.IndexSearcher;\n import org.apache.lucene.search.Query;\n import org.apache.lucene.search.QueryVisitor;\n-import org.apache.lucene.search.ScoreDoc;\n+\n import org.apache.lucene.search.TopDocs;\n import org.elasticsearch.index.mapper.vectors.VectorSimilarityFloatValueSource;\n import org.elasticsearch.search.profile.query.QueryProfiler;\n \n import java.io.IOException;\n import java.util.Arrays;\n-import java.util.Comparator;\n+\n import java.util.Objects;\n \n /**\n@@ -60,16 +60,7 @@ public class RescoreKnnVectorQuery extends Query implements QueryProfilerProvide\n         // Retrieve top k documents from the rescored query\n         TopDocs topDocs = searcher.search(query, k);\n         vectorOperations = topDocs.totalHits.value;\n-        ScoreDoc[] scoreDocs = topDocs.scoreDocs;\n-        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));\n-        int[] docIds = new int[scoreDocs.length];\n-        float[] scores = new float[scoreDocs.length];\n-        for (int i = 0; i < scoreDocs.length; i++) {\n-            docIds[i] = scoreDocs[i].doc;\n-            scores[i] = scoreDocs[i].score;\n-        }\n-\n-        return new KnnScoreDocQuery(docIds, scores, searcher.getIndexReader());\n+        return new KnnScoreDocQuery(topDocs.scoreDocs, searcher.getIndexReader());\n     }\n \n     public Query innerQuery() {",
+                  "edit_type": "replace",
+                  "verified": true,
+                  "verification_result": "Deterministic file editor applied",
                   "applied": true,
                   "apply_result": "SUCCESS"
                 }

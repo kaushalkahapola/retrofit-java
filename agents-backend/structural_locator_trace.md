@@ -4,7 +4,7 @@
 - **Root Cause**: Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.
 
 ## Hunk Segregation
-- Code files: 1
+- Code files: 4
 - Test files: 0
 
 ## Code File Mappings
