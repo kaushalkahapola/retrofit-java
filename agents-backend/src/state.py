@@ -243,6 +243,12 @@ class AgentState(TypedDict):
     validation_failed_stage: NotRequired[
         str
     ]  # Stage where generation/validation failed (e.g. hunk_sanity_failed)
+    force_type_v_until_success: NotRequired[
+        bool
+    ]  # Sticky latch: keep execution_type TYPE_V across retries until validation passes
+    force_type_v_reason: NotRequired[
+        str
+    ]  # Human-readable reason for sticky TYPE_V latch
     generated_patch_hash: NotRequired[
         str
     ]  # Last generated code-patch hash (used to avoid identical retry loops)

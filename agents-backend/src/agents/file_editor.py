@@ -980,23 +980,91 @@ def _extract_added_lines_from_unified_diff(diff_text: str) -> list[str]:
     return added
 
 
+def _normalize_code_line(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip())
+
+
+def _collect_required_symbols_from_invariants(invariants: list[str]) -> list[str]:
+    """
+    Extract stable symbol-level requirements from invariant lines.
+    """
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for inv in invariants or []:
+        text = str(inv or "")
+        for token in re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", text):
+            if token in {
+                "if",
+                "for",
+                "while",
+                "switch",
+                "return",
+                "new",
+            }:
+                continue
+            if token not in seen:
+                seen.add(token)
+                symbols.append(token)
+    return symbols
+
+
+def _diff_has_symbol(diff_text: str, symbol: str) -> bool:
+    pat = re.compile(rf"\b{re.escape(symbol)}\s*\(")
+    for line in _extract_added_lines_from_unified_diff(diff_text):
+        if pat.search(line):
+            return True
+    return False
+
+
+def _find_near_miss_symbol(symbol: str, diff_text: str) -> str:
+    """
+    Detect potentially wrong renamed symbols in added lines.
+    """
+    target = symbol.lower()
+    tokens: set[str] = set()
+    for line in _extract_added_lines_from_unified_diff(diff_text):
+        for token in re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", line):
+            tokens.add(token)
+    for token in sorted(tokens):
+        tl = token.lower()
+        if tl == target:
+            continue
+        # Same stem-ish prefix is usually dangerous drift for method names.
+        if target.startswith(tl[:4]) or tl.startswith(target[:4]):
+            return token
+    return ""
+
+
 def _invariants_satisfied(diff_text: str, invariants: list[str]) -> tuple[bool, str]:
     normalized_added = [
-        re.sub(r"\s+", " ", (l or "").strip())
+        _normalize_code_line(l)
         for l in _extract_added_lines_from_unified_diff(diff_text)
-        if (l or "").strip()
+        if _normalize_code_line(l)
     ]
     normalized_invariants = [
-        re.sub(r"\s+", " ", (i or "").strip())
-        for i in (invariants or [])
-        if (i or "").strip()
+        _normalize_code_line(i) for i in (invariants or []) if _normalize_code_line(i)
     ]
     if not normalized_invariants:
         return True, "no_invariants"
 
-    missing = [inv for inv in normalized_invariants if inv not in normalized_added]
-    if missing:
-        return False, f"missing_required_invariants:{missing[:3]}"
+    # First pass: exact normalized line presence.
+    missing_lines = [
+        inv for inv in normalized_invariants if inv not in normalized_added
+    ]
+
+    # Second pass: symbol-level semantic presence for non-exactly matched lines.
+    required_symbols = _collect_required_symbols_from_invariants(missing_lines)
+    for sym in required_symbols:
+        if not _diff_has_symbol(diff_text, sym):
+            near = _find_near_miss_symbol(sym, diff_text)
+            if near:
+                return (
+                    False,
+                    f"missing_required_symbol:{sym};near_miss_symbol:{near}",
+                )
+            return False, f"missing_required_symbol:{sym}"
+
+    # If symbols exist but some exact invariants were not matched, accept as semantic pass.
     return True, "invariants_verified"
 
 
@@ -1388,6 +1456,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
     error_context: str = state.get("validation_error_context") or ""
     validation_failure_category = str(state.get("validation_failure_category") or "")
     validation_failed_stage = str(state.get("validation_failed_stage") or "")
+    force_type_v_latch = bool(state.get("force_type_v_until_success") or False)
+    force_type_v_reason = str(state.get("force_type_v_reason") or "").strip()
     retry_files_raw = state.get("validation_retry_files") or []
     previous_patch_hash = str(state.get("generated_patch_hash") or "")
 
@@ -1401,6 +1471,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
         failed_stage=validation_failed_stage,
         error_context=error_context,
     )
+    if force_type_v_latch:
+        coupled_retry_lock = True
 
     if not semantic_blueprint:
         msg = "Agent 3 Error: No semantic_blueprint in state."
@@ -1542,6 +1614,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
             for e in plan_entries
             if str((e or {}).get("execution_type") or "").strip()
         }
+        if force_type_v_latch:
+            execution_types.add("TYPE_V")
         if "TYPE_V" in execution_types:
             deterministic_only = False
         print(
@@ -1551,6 +1625,11 @@ async def file_editor_node(state: AgentState, config) -> dict:
         if base_types or execution_types:
             print(
                 f"    Agent 3: base_types={sorted(base_types)} execution_types={sorted(execution_types)}"
+            )
+        if force_type_v_latch:
+            print(
+                "    Agent 3: TYPE_V latch active for this attempt "
+                f"(reason={force_type_v_reason or 'sticky_type_v_retry_latch'})."
             )
 
         task_entry = {
@@ -1672,7 +1751,47 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 task_entry["reason"] = "generation_contract_failed"
                 task_entry["error"] = inv_reason
                 _git_reset_file(target_repo_path, target_file)
-                continue
+                return {
+                    "messages": [
+                        HumanMessage(
+                            content=(
+                                "Agent 3 (File Editor): Type V invariant gate failed; "
+                                "requesting sticky Type V replanning."
+                            )
+                        )
+                    ],
+                    "adapted_file_edits": adapted_file_edits,
+                    "all_adapted_file_edits": list(
+                        state.get("all_adapted_file_edits") or []
+                    )
+                    + [adapted_file_edits],
+                    "agent_trajectory_edits": agent_trajectory_edits
+                    + [current_attempt_trajectory],
+                    "adapted_code_hunks": adapted_code_hunks,
+                    "adapted_test_hunks": [],
+                    "generation_checklist": [
+                        {
+                            "mainline_file": mainline_file,
+                            "target_file": target_file,
+                            "hunk_index": 0,
+                            "status": "failed",
+                            "reason": "generation_contract_failed",
+                            "todo_steps": ["replan"],
+                            "completed_steps": [],
+                            "error": inv_reason,
+                            "execution_types": ["TYPE_V"],
+                        }
+                    ],
+                    "validation_failed_stage": "generation_contract_failed",
+                    "validation_failure_category": "context_mismatch",
+                    "validation_retry_files": [mainline_file, target_file],
+                    "validation_retry_hunks": [],
+                    "validation_attempts": validation_attempts + 1,
+                    "force_type_v_until_success": True,
+                    "force_type_v_reason": inv_reason,
+                    "generated_patch_hash": "",
+                    "token_usage": token_usage,
+                }
 
         task_entry["completed_steps"].append("capture_diff")
         print(
@@ -1813,6 +1932,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
             ],
             "validation_failed_stage": "generation_contract_failed",
             "generated_patch_hash": current_patch_hash,
+            "force_type_v_until_success": force_type_v_latch,
+            "force_type_v_reason": force_type_v_reason,
             "token_usage": token_usage,
         }
 
@@ -1832,5 +1953,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
         "adapted_test_hunks": [],
         "generation_checklist": generation_checklist,
         "generated_patch_hash": current_patch_hash,
+        "force_type_v_until_success": force_type_v_latch,
+        "force_type_v_reason": force_type_v_reason,
         "token_usage": token_usage,
     }

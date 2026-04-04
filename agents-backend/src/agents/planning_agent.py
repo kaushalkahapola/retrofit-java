@@ -1364,6 +1364,8 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     validation_error_context = str(state.get("validation_error_context") or "")
     validation_failure_category = str(state.get("validation_failure_category") or "")
     validation_failed_stage = str(state.get("validation_failed_stage") or "")
+    sticky_force_type_v = bool(state.get("force_type_v_until_success") or False)
+    sticky_force_type_v_reason = str(state.get("force_type_v_reason") or "").strip()
     consistency_map: dict[str, str] = state.get("consistency_map") or {}
     build_issue_types = _collect_build_issue_types_from_state(state)
 
@@ -1374,7 +1376,17 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         error_context=validation_error_context,
         build_issue_types=build_issue_types,
     )
-    if force_type_v:
+    if sticky_force_type_v:
+        force_type_v = True
+        if not force_type_v_reason:
+            force_type_v_reason = (
+                sticky_force_type_v_reason or "sticky_type_v_retry_latch"
+            )
+        print(
+            "Planning Agent: TYPE_V latch active; keeping execution mode TYPE_V "
+            f"(reason={force_type_v_reason})."
+        )
+    elif force_type_v:
         print(
             "Planning Agent: Promoting execution mode to TYPE_V due to "
             f"{force_type_v_reason}."
@@ -1639,5 +1651,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         ],
         "hunk_generation_plan": dict(plan),
         "last_plan_signature": plan_sig,
+        "force_type_v_until_success": bool(force_type_v),
+        "force_type_v_reason": force_type_v_reason if force_type_v else "",
         "token_usage": token_usage,
     }
