@@ -1,6 +1,6 @@
 # Post-Pipeline Developer Patch Comparison
 
-**Exact Developer Patch (code-only)**: True
+**Exact Developer Patch (code-only)**: False
 
 **Comparison Method**: file_state
 
@@ -15,7 +15,7 @@
 
 ## File State Comparison
 - Compared files: ['server/src/main/java/org/elasticsearch/script/ScriptStats.java']
-- Mismatched files: []
+- Mismatched files: ['server/src/main/java/org/elasticsearch/script/ScriptStats.java']
 - Error: None
 
 ## Comparison Scope
@@ -27,7 +27,7 @@
 ### server/src/main/java/org/elasticsearch/script/ScriptStats.java
 
 - Developer hunks: 2
-- Generated hunks: 2
+- Generated hunks: 4
 
 #### Hunk 1
 
@@ -46,20 +46,30 @@ Developer
 
 Generated
 ```diff
-@@ -25,6 +25,7 @@
- import java.util.Map;
+@@ -26,6 +26,7 @@
  import java.util.Objects;
  
-+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
  import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;
++import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
  import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;
  import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;
+ import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,8 +1,8 @@-@@ -25,6 +25,7 @@
+- import java.util.Map;
++@@ -26,6 +26,7 @@
+  import java.util.Objects;
+  
++ import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;
+ +import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
+- import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;
+  import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;
+  import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;
++ import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;
 
 ```
 
@@ -81,7 +91,82 @@ Developer
 
 Generated
 ```diff
-@@ -199,7 +200,7 @@
+@@ -149,7 +150,6 @@
+         );
+     }
+ 
+-    @Override
+     public void writeTo(StreamOutput out) throws IOException {
+         if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {
+             compilationsHistory.writeTo(out);
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+--- developer+++ generated@@ -1,9 +1,8 @@-@@ -199,7 +200,7 @@
+-                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
+-             }
+-             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
+--                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);
+-+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);
+-             }
+-             ob.array(CONTEXTS, contextStats.iterator());
+-         });
++@@ -149,7 +150,6 @@
++         );
++     }
++ 
++-    @Override
++     public void writeTo(StreamOutput out) throws IOException {
++         if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {
++             compilationsHistory.writeTo(out);
+
+```
+
+#### Hunk 3
+
+Developer
+```diff
+*No hunk*
+```
+
+Generated
+```diff
+@@ -189,7 +189,6 @@
+         return new ScriptCacheStats(contexts);
+     }
+ 
+-    @Override
+     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {
+         return ChunkedToXContent.builder(params).object(SCRIPT_STATS, ob -> {
+             ob.field(COMPILATIONS, compilations);
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+--- developer+++ generated@@ -1 +1,8 @@-*No hunk*+@@ -189,7 +189,6 @@
++         return new ScriptCacheStats(contexts);
++     }
++ 
++-    @Override
++     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {
++         return ChunkedToXContent.builder(params).object(SCRIPT_STATS, ob -> {
++             ob.field(COMPILATIONS, compilations);
+
+```
+
+#### Hunk 4
+
+Developer
+```diff
+*No hunk*
+```
+
+Generated
+```diff
+@@ -199,7 +198,7 @@
                  ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
              }
              if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
@@ -95,7 +180,15 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1 +1,9 @@-*No hunk*+@@ -199,7 +198,7 @@
++                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
++             }
++             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
++-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);
+++                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);
++             }
++             ob.array(CONTEXTS, contextStats.iterator());
++         });
 
 ```
 
@@ -104,18 +197,34 @@ Developer -> Generated (Unified Diff)
 ## Full Generated Patch (Agent-Only, code-only)
 ```diff
 diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
-index f24052ef7e3..e085eb50ffb 100644
+index f24052ef7e3..f44a51e738d 100644
 --- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java
 +++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
-@@ -25,6 +25,7 @@ import java.util.List;
- import java.util.Map;
+@@ -26,6 +26,7 @@ import java.util.Map;
  import java.util.Objects;
  
-+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
  import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;
++import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
  import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;
  import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;
-@@ -199,7 +200,7 @@ public record ScriptStats(
+ import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;
+@@ -149,7 +150,6 @@ public record ScriptStats(
+         );
+     }
+ 
+-    @Override
+     public void writeTo(StreamOutput out) throws IOException {
+         if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {
+             compilationsHistory.writeTo(out);
+@@ -189,7 +189,6 @@ public record ScriptStats(
+         return new ScriptCacheStats(contexts);
+     }
+ 
+-    @Override
+     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {
+         return ChunkedToXContent.builder(params).object(SCRIPT_STATS, ob -> {
+             ob.field(COMPILATIONS, compilations);
+@@ -199,7 +198,7 @@ public record ScriptStats(
                  ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
              }
              if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
@@ -130,18 +239,34 @@ index f24052ef7e3..e085eb50ffb 100644
 ## Full Generated Patch (Final Effective, code-only)
 ```diff
 diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
-index f24052ef7e3..e085eb50ffb 100644
+index f24052ef7e3..f44a51e738d 100644
 --- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java
 +++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
-@@ -25,6 +25,7 @@ import java.util.List;
- import java.util.Map;
+@@ -26,6 +26,7 @@ import java.util.Map;
  import java.util.Objects;
  
-+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
  import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;
++import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
  import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;
  import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;
-@@ -199,7 +200,7 @@ public record ScriptStats(
+ import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;
+@@ -149,7 +150,6 @@ public record ScriptStats(
+         );
+     }
+ 
+-    @Override
+     public void writeTo(StreamOutput out) throws IOException {
+         if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {
+             compilationsHistory.writeTo(out);
+@@ -189,7 +189,6 @@ public record ScriptStats(
+         return new ScriptCacheStats(contexts);
+     }
+ 
+-    @Override
+     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {
+         return ChunkedToXContent.builder(params).object(SCRIPT_STATS, ob -> {
+             ob.field(COMPILATIONS, compilations);
+@@ -199,7 +198,7 @@ public record ScriptStats(
                  ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
              }
              if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
