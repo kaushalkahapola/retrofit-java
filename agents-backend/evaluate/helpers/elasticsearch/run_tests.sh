@@ -28,8 +28,42 @@ echo "CPU detected: ${MAX_CPU}"
 if [ "${TEST_TARGETS:-}" == "ALL" ]; then
     GRADLE_ARGS="test --no-daemon -Dbuild.docker=false"
 elif [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ]; then
-    # Build a list of Gradle task args: ":module:test --tests ClassName" per target.
+    # Build a list of Gradle task args per target.
+    # Prefer source-set specific tasks when detectable from changed file hints:
+    # - src/internalClusterTest -> :module:internalClusterTest --tests Class
+    # - src/test                -> :module:test --tests Class
     GRADLE_ARGS=""
+    TEST_TARGET_FILES_LIST=()
+    if [ -n "${TEST_TARGET_FILES:-}" ]; then
+        IFS=',' read -ra TEST_TARGET_FILES_LIST <<< "${TEST_TARGET_FILES}"
+    fi
+
+    resolve_test_tasks() {
+        local module="$1"
+        local cls="$2"
+        local class_file
+        class_file="${cls//./\/}.java"
+
+        local file
+        for file in "${TEST_TARGET_FILES_LIST[@]}"; do
+            [ -z "${file}" ] && continue
+            if [[ "${file}" == *"${class_file}" ]]; then
+                if [[ "${file}" == */src/internalClusterTest/* ]]; then
+                    echo "internalClusterTest"
+                    return
+                fi
+                if [[ "${file}" == */src/test/* ]]; then
+                    echo "test"
+                    return
+                fi
+            fi
+        done
+
+        # Unknown source-set mapping: run both tasks to avoid silently skipping
+        # internalClusterTest classes when only class names are provided.
+        echo "test,internalClusterTest"
+    }
+
     for target in ${TEST_TARGETS}; do
         # target is "module:FullClassName"
         module="${target%%:*}"
@@ -38,12 +72,17 @@ elif [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ]; then
         gradle_module=":${module//\//:}"
         # Strip leading double-colon if module starts with /.
         gradle_module="${gradle_module//::/:}"
-        if [ -n "${GRADLE_ARGS}" ]; then
-            GRADLE_ARGS="${GRADLE_ARGS} ${gradle_module}:test"
-        else
-            GRADLE_ARGS="${gradle_module}:test"
-        fi
-        GRADLE_ARGS="${GRADLE_ARGS} --tests \"${cls}\""
+        test_tasks_csv="$(resolve_test_tasks "${module}" "${cls}")"
+        IFS=',' read -ra TEST_TASKS <<< "${test_tasks_csv}"
+        for test_task in "${TEST_TASKS[@]}"; do
+            [ -z "${test_task}" ] && continue
+            if [ -n "${GRADLE_ARGS}" ]; then
+                GRADLE_ARGS="${GRADLE_ARGS} ${gradle_module}:${test_task}"
+            else
+                GRADLE_ARGS="${gradle_module}:${test_task}"
+            fi
+            GRADLE_ARGS="${GRADLE_ARGS} --tests \"${cls}\""
+        done
     done
     GRADLE_ARGS="${GRADLE_ARGS} --no-daemon -Dbuild.docker=false -DfailIfNoTests=false"
 elif [ -n "${TEST_MODULES:-}" ]; then

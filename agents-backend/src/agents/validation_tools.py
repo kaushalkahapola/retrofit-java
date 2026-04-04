@@ -749,6 +749,15 @@ class ValidationToolkit:
                             "TEST_TARGETS": " ".join(sorted(set(test_targets)))
                             if test_targets
                             else "NONE",
+                            # Optional source file hints for helper scripts to pick
+                            # the correct Gradle test task (e.g., internalClusterTest).
+                            "TEST_TARGET_FILES": ",".join(
+                                str(p)
+                                for p in (
+                                    (info.get("raw") or {}).get("changed_files") or []
+                                )
+                                if str(p).strip()
+                            ),
                             # If explicit class targets are available, helpers should
                             # run those directly and not fall back to module mode.
                             "TEST_MODULES": ""
