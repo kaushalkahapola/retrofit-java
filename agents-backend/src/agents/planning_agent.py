@@ -307,6 +307,43 @@ def _nearest_non_empty_after(lines: list[str], index: int) -> str:
     return ""
 
 
+def _is_context_line(line: str) -> bool:
+    return line.startswith(" ")
+
+
+def _collect_replace_context(
+    body_lines: list[str],
+    delete_start: int,
+    delete_end_exclusive: int,
+    add_end_exclusive: int,
+    context_before_max: int = 2,
+    context_after_max: int = 1,
+) -> tuple[list[str], list[str]]:
+    before: list[str] = []
+    j = delete_start - 1
+    while j >= 0 and len(before) < context_before_max:
+        if _is_context_line(body_lines[j]):
+            before.append(body_lines[j][1:])
+        elif body_lines[j].strip() == "":
+            pass
+        else:
+            break
+        j -= 1
+    before.reverse()
+
+    after: list[str] = []
+    j = add_end_exclusive
+    while j < len(body_lines) and len(after) < context_after_max:
+        if _is_context_line(body_lines[j]):
+            after.append(body_lines[j][1:])
+        elif body_lines[j].strip() == "":
+            pass
+        else:
+            break
+        j += 1
+    return before, after
+
+
 def _decompose_hunk_to_required_entries(
     *,
     hunk_idx: int,
@@ -331,6 +368,7 @@ def _decompose_hunk_to_required_entries(
         # Collect contiguous deletion block.
         if line.startswith("-") and not line.startswith("---"):
             dels: list[str] = []
+            delete_start = i
             while i < len(body_lines):
                 cur = body_lines[i]
                 if cur.startswith("-") and not cur.startswith("---"):
@@ -349,17 +387,44 @@ def _decompose_hunk_to_required_entries(
                     continue
                 break
 
+            delete_end_exclusive = delete_start + len(dels)
+            add_end_exclusive = i
+
             if adds:
+                old_string = "\n".join(dels)
+                new_string = _apply_consistency_map("\n".join(adds), consistency_map)
+
+                # Preserve surrounding context for fragile mixed-chain replacements.
+                before_ctx, after_ctx = _collect_replace_context(
+                    body_lines,
+                    delete_start,
+                    delete_end_exclusive,
+                    add_end_exclusive,
+                    context_before_max=2,
+                    context_after_max=1,
+                )
+                if not (before_ctx or after_ctx) and len(dels) <= 2:
+                    before_ctx, after_ctx = _collect_replace_context(
+                        body_lines,
+                        delete_start,
+                        delete_end_exclusive,
+                        add_end_exclusive,
+                        context_before_max=3,
+                        context_after_max=2,
+                    )
+                if before_ctx or after_ctx:
+                    old_string = "\n".join(before_ctx + dels + after_ctx)
+                    new_string = "\n".join(before_ctx + adds + after_ctx)
+                    new_string = _apply_consistency_map(new_string, consistency_map)
+
                 entries.append(
                     {
                         "hunk_index": hunk_idx,
                         "target_file": target_file,
                         "operation_index": op_index,
                         "edit_type": "replace",
-                        "old_string": "\n".join(dels),
-                        "new_string": _apply_consistency_map(
-                            "\n".join(adds), consistency_map
-                        ),
+                        "old_string": old_string,
+                        "new_string": new_string,
                         "verified": False,
                         "verification_result": "deterministic_required_replace",
                         "notes": "required_op_replace",
@@ -1433,6 +1498,22 @@ def _resolve_old_in_content(content: str, old_string: str) -> tuple[str, str]:
             lines = [l for l in content.splitlines() if l.strip() == stripped]
             if len(lines) == 1:
                 return lines[0], "line_trimmed_unique"
+
+            # Generic-type wildcard fallback for single-line Java calls/signatures.
+            # Example: <AcknowledgedResponse> vs <FreezeResponse>
+            generic_wild = re.sub(r"<[^>]+>", r"<__GENERIC__>", stripped)
+            if generic_wild != stripped and "<__GENERIC__>" in generic_wild:
+                wildcard_re = re.escape(generic_wild).replace(
+                    re.escape("<__GENERIC__>"), r"<[^>]+>"
+                )
+                hits = [
+                    l
+                    for l in content.splitlines()
+                    if re.search(rf"^{wildcard_re}$", l.strip())
+                ]
+                if len(hits) == 1:
+                    return hits[0], "line_generic_wildcard_unique"
+
         if old_string.lstrip() != old_string and old_string.lstrip() in content:
             return old_string.lstrip(), "lstrip_exact"
         return "", "not_found_single"

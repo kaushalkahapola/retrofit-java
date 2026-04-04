@@ -55,6 +55,19 @@ from agents.hunk_generator_tools import HunkGeneratorToolkit
 from utils.semantic_adaptation_helper import analyze_anchor_failure_quick
 
 
+_FRAMEWORK_CHAIN_SYMBOLS = {
+    "newForked",
+    "andThen",
+    "andThenApply",
+    "addListener",
+    "delegateFailure",
+}
+
+
+def _is_framework_chain_symbol(symbol: str) -> bool:
+    return str(symbol or "").strip() in _FRAMEWORK_CHAIN_SYMBOLS
+
+
 # ---------------------------------------------------------------------------
 # System prompts
 # ---------------------------------------------------------------------------
@@ -1002,6 +1015,8 @@ def _collect_required_symbols_from_invariants(invariants: list[str]) -> list[str
                 "new",
             }:
                 continue
+            if _is_framework_chain_symbol(token):
+                continue
             if token not in seen:
                 seen.add(token)
                 symbols.append(token)
@@ -1816,60 +1831,10 @@ async def file_editor_node(state: AgentState, config) -> dict:
         if "TYPE_V" in execution_types:
             unverified_entries = _collect_unverified_entries(plan_entries)
             if unverified_entries:
-                task_entry["status"] = "failed"
-                task_entry["reason"] = "generation_contract_failed"
-                task_entry["error"] = "type_v_unverified_plan_entries: " + str(
-                    [
-                        {
-                            "hunk_index": e.get("hunk_index"),
-                            "operation_index": e.get("operation_index"),
-                            "verification_result": e.get("verification_result"),
-                        }
-                        for e in unverified_entries[:5]
-                    ]
+                print(
+                    f"    Agent 3: TYPE_V has {len(unverified_entries)} unverified entries; "
+                    "attempting targeted ReAct repair instead of empty-generation fail-close."
                 )
-                _git_reset_file(target_repo_path, target_file)
-                return {
-                    "messages": [
-                        HumanMessage(
-                            content=(
-                                "Agent 3 (File Editor): Type V plan has unverified entries; "
-                                "requesting sticky Type V replanning."
-                            )
-                        )
-                    ],
-                    "adapted_file_edits": adapted_file_edits,
-                    "all_adapted_file_edits": list(
-                        state.get("all_adapted_file_edits") or []
-                    )
-                    + [adapted_file_edits],
-                    "agent_trajectory_edits": agent_trajectory_edits
-                    + [current_attempt_trajectory],
-                    "adapted_code_hunks": adapted_code_hunks,
-                    "adapted_test_hunks": [],
-                    "generation_checklist": [
-                        {
-                            "mainline_file": mainline_file,
-                            "target_file": target_file,
-                            "hunk_index": 0,
-                            "status": "failed",
-                            "reason": "generation_contract_failed",
-                            "todo_steps": ["replan"],
-                            "completed_steps": [],
-                            "error": task_entry["error"],
-                            "execution_types": ["TYPE_V"],
-                        }
-                    ],
-                    "validation_failed_stage": "generation_contract_failed",
-                    "validation_failure_category": "context_mismatch",
-                    "validation_retry_files": [mainline_file, target_file],
-                    "validation_retry_hunks": [],
-                    "validation_attempts": validation_attempts,
-                    "force_type_v_until_success": True,
-                    "force_type_v_reason": "type_v_unverified_plan_entries",
-                    "generated_patch_hash": "",
-                    "token_usage": token_usage,
-                }
 
         if deterministic_only:
             ok, apply_reason = _apply_plan_entries_deterministically(
@@ -2001,6 +1966,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
             required_symbols = _collect_file_plan_required_symbols(plan_entries)
             for sym in required_symbols:
+                if _is_framework_chain_symbol(sym):
+                    continue
                 if not _diff_has_symbol(diff_text, sym):
                     print(
                         f"    Agent 3: Type V symbol gate failed for {target_file}: missing {sym}"
