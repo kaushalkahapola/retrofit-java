@@ -3,13 +3,14 @@ project=elasticsearch
 mainline_commit=f5e2a92a3171808bd163570c3e1546230ec7c5ac
 backport_commit=2aa011d594ee87cefbae255310afe75afc6a00e1
 mode=full
-started_at=2026-04-04T09:53:58.681532
+started_at=2026-04-04T10:19:34.293764
 ----------------------------------------
 Running full workflow graph
 Completed node=context_analyzer
 Completed node=structural_locator
 Completed node=planning_agent
 Completed node=hunk_generator
+Completed node=validation
 
 [elasticsearch/elasticsearch_f5e2a92a] Setting up repositories for mode=full...
 [elasticsearch/elasticsearch_f5e2a92a] Found cached Phase 0 results. Skipping Phase 0 and reusing baseline test state.
@@ -90,52 +91,7 @@ Agent 4 (Validation): Starting 'Prove Red, Make Green' loop...
     Agent 4: Executing elasticsearch helper build script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_build.sh
     Agent 4: Executing elasticsearch helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_tests.sh
 Trace saved to validation_trace.md
-Router: Validation FAILED (attempt 1/3). Routing back to hunk_generator for retry.
-  Completed: validationCompleted node=validation
-Completed node=hunk_generator
-Completed node=validation
-Completed node=planning_agent
-Completed node=hunk_generator
-Completed node=validation
-Workflow completed successfully
+Router: Validation PASSED after 1 attempt(s). Done.
+  Completed: validation
+[elasticsearch/elasticsearch_f5e2a92a] Full workflow completed!Workflow completed successfully
 
-Agent 3 (File Editor): Starting direct file-edit workflow...
-  Agent 3: Retry #1 - deterministic re-application with failure context.
-LLM Provider: openai, Model: gpt-4.1-mini, Temperature: 0
-  Agent 3: Processing 1 edit(s) for server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java (op=MODIFIED)
-    Agent 3: Classified server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java as TYPE_II (deterministic path)
-    Agent 3: Captured diff for server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java (13 lines)
-    Agent 3: Skipping LLM intent check for server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java (TYPE_II).
-  Agent 3: Processing 6 edit(s) for server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java (op=MODIFIED)
-    Agent 3: Classified server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java as TYPE_II (deterministic path)
-    Agent 3: Captured diff for server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java (55 lines)
-    Agent 3: Skipping LLM intent check for server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java (TYPE_II).
-  Agent 3: Processing 1 edit(s) for server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java (op=MODIFIED)
-    Agent 3: Classified server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java as TYPE_II (deterministic path)
-    Agent 3: Captured diff for server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java (21 lines)
-    Agent 3: Skipping LLM intent check for server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java (TYPE_II).
-  Agent 3: Processing 3 edit(s) for server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java (op=MODIFIED)
-    Agent 3: Classified server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java as TYPE_II (deterministic path)
-    Agent 3: Captured diff for server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java (39 lines)
-    Agent 3: Skipping LLM intent check for server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java (TYPE_II).
-  Agent 3 (File Editor): Done. 4 file(s) adapted, 4 edit record(s).
-  Agent 3: Identical patch hash detected on retry; flagging for replanning.
-  Completed: hunk_generator
-Agent 4 (Validation): Starting 'Prove Red, Make Green' loop...
-  Agent 4: Validation deferred: generator checklist has incomplete hunk tasks. Route back to planning/generation before running build/tests. Incomplete hunks: [{"mainline_file": "<all>", "target_file": "<all>", "hunk_index": 0, "status": "failed", "reason": "generation_contract_failed", "todo_steps": ["replan"], "completed_steps": []}]
-Router: Generation contract FAILED. Routing to planning_agent for structural fix.
-  Completed: validation
-Planning Agent: Building per-hunk str_replace edit plans...
-LLM Provider: openai, Model: gpt-4.1-mini, Temperature: 0
-Planning Agent: Complete. Planned 5 adapted edit(s).
-  Completed: planning_agent
-Agent 3 (File Editor): Starting direct file-edit workflow...
-  Agent 3: Retry #2 - deterministic re-application with failure context.
-LLM Provider: openai, Model: gpt-4.1-mini, Temperature: 0
-  Agent 3 (File Editor): Done. 0 file(s) adapted, 0 edit record(s).
-  Completed: hunk_generator
-Agent 4 (Validation): Starting 'Prove Red, Make Green' loop...
-  Agent 4: Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors.
-Router: Validation FAILED after 3 attempt(s). Max retries reached. Exiting.
-  Completed: validation
-[elasticsearch/elasticsearch_f5e2a92a] Full workflow completed!

@@ -15,7 +15,7 @@
 
 ## File State Comparison
 - Compared files: ['server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java', 'server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java', 'server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java', 'server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java']
-- Mismatched files: ['server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java', 'server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java', 'server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java', 'server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java']
+- Mismatched files: ['server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java', 'server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java']
 - Error: None
 
 ## Comparison Scope
@@ -27,7 +27,7 @@
 ### server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
 
 - Developer hunks: 1
-- Generated hunks: 0
+- Generated hunks: 1
 
 #### Hunk 1
 
@@ -47,28 +47,29 @@ Developer
 
 Generated
 ```diff
-*No hunk*
+@@ -1228,7 +1228,7 @@
+         }
+     }
+ 
+-    private enum VectorIndexType {
++    public enum VectorIndexType {
+         HNSW("hnsw", false) {
+             @Override
+             public IndexOptions parseIndexOptions(String fieldName, Map<String, ?> indexOptionsMap) {
+
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,9 +1 @@-@@ -1228,7 +1228,7 @@
--         }
--     }
-- 
---    private enum VectorIndexType {
--+    public enum VectorIndexType {
--         HNSW("hnsw", false) {
--             @Override
--             public IndexOptions parseIndexOptions(String fieldName, Map<String, ?> indexOptionsMap) {
-+*No hunk*
+(No textual difference)
+
 ```
 
 
 ### server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java
 
 - Developer hunks: 3
-- Generated hunks: 0
+- Generated hunks: 3
 
 #### Hunk 1
 
@@ -94,27 +95,28 @@ Developer
 
 Generated
 ```diff
-*No hunk*
+@@ -17,12 +17,14 @@
+ import org.apache.lucene.search.MatchNoDocsQuery;
+ import org.apache.lucene.search.Query;
+ import org.apache.lucene.search.QueryVisitor;
++import org.apache.lucene.search.ScoreDoc;
+ import org.apache.lucene.search.ScoreMode;
+ import org.apache.lucene.search.Scorer;
+ import org.apache.lucene.search.Weight;
+ 
+ import java.io.IOException;
+ import java.util.Arrays;
++import java.util.Comparator;
+ import java.util.Objects;
+ 
+ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
+
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,15 +1 @@-@@ -17,12 +17,14 @@
-- import org.apache.lucene.search.MatchNoDocsQuery;
-- import org.apache.lucene.search.Query;
-- import org.apache.lucene.search.QueryVisitor;
--+import org.apache.lucene.search.ScoreDoc;
-- import org.apache.lucene.search.ScoreMode;
-- import org.apache.lucene.search.Scorer;
-- import org.apache.lucene.search.Weight;
-- 
-- import java.io.IOException;
-- import java.util.Arrays;
--+import java.util.Comparator;
-- import java.util.Objects;
-- 
-- import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
-+*No hunk*
+(No textual difference)
+
 ```
 
 #### Hunk 2
@@ -137,23 +139,36 @@ Developer
 
 Generated
 ```diff
-*No hunk*
+@@ -30,9 +32,9 @@
+ /**
+  * A query that matches the provided docs with their scores.
+  *
+- * Note: this query was adapted from Lucene's DocAndScoreQuery from the class
++ * Note: this query was originally adapted from Lucene's DocAndScoreQuery from the class
+  * {@link org.apache.lucene.search.KnnFloatVectorQuery}, which is package-private.
+- * There are no changes to the behavior, just some renames.
++
+  */
+ public class KnnScoreDocQuery extends Query {
+     private final int[] docs;
+
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,11 +1 @@-@@ -30,9 +32,8 @@
-- /**
--  * A query that matches the provided docs with their scores.
--  *
--- * Note: this query was adapted from Lucene's DocAndScoreQuery from the class
--+ * Note: this query was originally adapted from Lucene's DocAndScoreQuery from the class
--  * {@link org.apache.lucene.search.KnnFloatVectorQuery}, which is package-private.
--- * There are no changes to the behavior, just some renames.
--  */
-- public class KnnScoreDocQuery extends Query {
--     private final int[] docs;
-+*No hunk*
+--- developer+++ generated@@ -1,4 +1,4 @@-@@ -30,9 +32,8 @@
++@@ -30,9 +32,9 @@
+  /**
+   * A query that matches the provided docs with their scores.
+   *
+@@ -6,6 +6,7 @@ + * Note: this query was originally adapted from Lucene's DocAndScoreQuery from the class
+   * {@link org.apache.lucene.search.KnnFloatVectorQuery}, which is package-private.
+ - * There are no changes to the behavior, just some renames.
+++
+   */
+  public class KnnScoreDocQuery extends Query {
+      private final int[] docs;
+
 ```
 
 #### Hunk 3
@@ -189,43 +204,48 @@ Developer
 
 Generated
 ```diff
-*No hunk*
+@@ -49,13 +51,18 @@
+     /**
+      * Creates a query.
+      *
+-     * @param docs the global doc IDs of documents that match, in ascending order
+-     * @param scores the scores of the matching documents
++     * @param scoreDocs an array of ScoreDocs to use for the query
+      * @param reader IndexReader
+      */
+-    KnnScoreDocQuery(int[] docs, float[] scores, IndexReader reader) {
+-        this.docs = docs;
+-        this.scores = scores;
++    KnnScoreDocQuery(ScoreDoc[] scoreDocs, IndexReader reader) {
++        // Ensure that the docs are sorted by docId, as they are later searched using binary search
++        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));
++        this.docs = new int[scoreDocs.length];
++        this.scores = new float[scoreDocs.length];
++        for (int i = 0; i < scoreDocs.length; i++) {
++            docs[i] = scoreDocs[i].doc;
++            scores[i] = scoreDocs[i].score;
++        }
+         this.segmentStarts = findSegmentStarts(reader, docs);
+         this.contextIdentity = reader.getContext().id();
+     }
+
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,24 +1 @@-@@ -49,13 +50,18 @@
--     /**
--      * Creates a query.
--      *
---     * @param docs the global doc IDs of documents that match, in ascending order
---     * @param scores the scores of the matching documents
--+     * @param scoreDocs an array of ScoreDocs to use for the query
--      * @param reader IndexReader
--      */
---    KnnScoreDocQuery(int[] docs, float[] scores, IndexReader reader) {
---        this.docs = docs;
---        this.scores = scores;
--+    KnnScoreDocQuery(ScoreDoc[] scoreDocs, IndexReader reader) {
--+        // Ensure that the docs are sorted by docId, as they are later searched using binary search
--+        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));
--+        this.docs = new int[scoreDocs.length];
--+        this.scores = new float[scoreDocs.length];
--+        for (int i = 0; i < scoreDocs.length; i++) {
--+            docs[i] = scoreDocs[i].doc;
--+            scores[i] = scoreDocs[i].score;
--+        }
--         this.segmentStarts = findSegmentStarts(reader, docs);
--         this.contextIdentity = reader.getContext().id();
--     }
-+*No hunk*
+--- developer+++ generated@@ -1,4 +1,4 @@-@@ -49,13 +50,18 @@
++@@ -49,13 +51,18 @@
+      /**
+       * Creates a query.
+       *
+
 ```
 
 
 ### server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java
 
 - Developer hunks: 1
-- Generated hunks: 0
+- Generated hunks: 1
 
 #### Hunk 1
 
@@ -253,36 +273,37 @@ Developer
 
 Generated
 ```diff
-*No hunk*
+@@ -141,15 +141,7 @@
+ 
+     @Override
+     protected Query doToQuery(SearchExecutionContext context) throws IOException {
+-        int numDocs = scoreDocs.length;
+-        int[] docs = new int[numDocs];
+-        float[] scores = new float[numDocs];
+-        for (int i = 0; i < numDocs; i++) {
+-            docs[i] = scoreDocs[i].doc;
+-            scores[i] = scoreDocs[i].score;
+-        }
+-
+-        return new KnnScoreDocQuery(docs, scores, context.getIndexReader());
++        return new KnnScoreDocQuery(scoreDocs, context.getIndexReader());
+     }
+ 
+     @Override
+
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,17 +1 @@-@@ -141,15 +141,7 @@
-- 
--     @Override
--     protected Query doToQuery(SearchExecutionContext context) throws IOException {
---        int numDocs = scoreDocs.length;
---        int[] docs = new int[numDocs];
---        float[] scores = new float[numDocs];
---        for (int i = 0; i < numDocs; i++) {
---            docs[i] = scoreDocs[i].doc;
---            scores[i] = scoreDocs[i].score;
---        }
---
---        return new KnnScoreDocQuery(docs, scores, context.getIndexReader());
--+        return new KnnScoreDocQuery(scoreDocs, context.getIndexReader());
--     }
-- 
--     @Override
-+*No hunk*
+(No textual difference)
+
 ```
 
 
 ### server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java
 
 - Developer hunks: 2
-- Generated hunks: 0
+- Generated hunks: 2
 
 #### Hunk 1
 
@@ -308,27 +329,46 @@ Developer
 
 Generated
 ```diff
-*No hunk*
+@@ -16,14 +16,14 @@
+ import org.apache.lucene.search.IndexSearcher;
+ import org.apache.lucene.search.Query;
+ import org.apache.lucene.search.QueryVisitor;
+-import org.apache.lucene.search.ScoreDoc;
++
+ import org.apache.lucene.search.TopDocs;
+ import org.elasticsearch.index.mapper.vectors.VectorSimilarityFloatValueSource;
+ import org.elasticsearch.search.profile.query.QueryProfiler;
+ 
+ import java.io.IOException;
+ import java.util.Arrays;
+-import java.util.Comparator;
++
+ import java.util.Objects;
+ 
+ /**
+
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,15 +1 @@-@@ -16,14 +16,12 @@
-- import org.apache.lucene.search.IndexSearcher;
-- import org.apache.lucene.search.Query;
-- import org.apache.lucene.search.QueryVisitor;
---import org.apache.lucene.search.ScoreDoc;
-- import org.apache.lucene.search.TopDocs;
-- import org.elasticsearch.index.mapper.vectors.VectorSimilarityFloatValueSource;
-- import org.elasticsearch.search.profile.query.QueryProfiler;
-- 
-- import java.io.IOException;
-- import java.util.Arrays;
---import java.util.Comparator;
-- import java.util.Objects;
-- 
-- /**
-+*No hunk*
+--- developer+++ generated@@ -1,8 +1,9 @@-@@ -16,14 +16,12 @@
++@@ -16,14 +16,14 @@
+  import org.apache.lucene.search.IndexSearcher;
+  import org.apache.lucene.search.Query;
+  import org.apache.lucene.search.QueryVisitor;
+ -import org.apache.lucene.search.ScoreDoc;
+++
+  import org.apache.lucene.search.TopDocs;
+  import org.elasticsearch.index.mapper.vectors.VectorSimilarityFloatValueSource;
+  import org.elasticsearch.search.profile.query.QueryProfiler;
+@@ -10,6 +11,7 @@  import java.io.IOException;
+  import java.util.Arrays;
+ -import java.util.Comparator;
+++
+  import java.util.Objects;
+  
+  /**
+
 ```
 
 #### Hunk 2
@@ -358,41 +398,302 @@ Developer
 
 Generated
 ```diff
-*No hunk*
+@@ -60,16 +60,7 @@
+         // Retrieve top k documents from the rescored query
+         TopDocs topDocs = searcher.search(query, k);
+         vectorOperations = topDocs.totalHits.value;
+-        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+-        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));
+-        int[] docIds = new int[scoreDocs.length];
+-        float[] scores = new float[scoreDocs.length];
+-        for (int i = 0; i < scoreDocs.length; i++) {
+-            docIds[i] = scoreDocs[i].doc;
+-            scores[i] = scoreDocs[i].score;
+-        }
+-
+-        return new KnnScoreDocQuery(docIds, scores, searcher.getIndexReader());
++        return new KnnScoreDocQuery(topDocs.scoreDocs, searcher.getIndexReader());
+     }
+ 
+     public Query innerQuery() {
+
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,18 +1 @@-@@ -60,16 +58,7 @@
--         // Retrieve top k documents from the rescored query
--         TopDocs topDocs = searcher.search(query, k);
--         vectorOperations = topDocs.totalHits.value;
---        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
---        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));
---        int[] docIds = new int[scoreDocs.length];
---        float[] scores = new float[scoreDocs.length];
---        for (int i = 0; i < scoreDocs.length; i++) {
---            docIds[i] = scoreDocs[i].doc;
---            scores[i] = scoreDocs[i].score;
---        }
---
---        return new KnnScoreDocQuery(docIds, scores, searcher.getIndexReader());
--+        return new KnnScoreDocQuery(topDocs.scoreDocs, searcher.getIndexReader());
--     }
-- 
--     public Query innerQuery() {
-+*No hunk*
+--- developer+++ generated@@ -1,4 +1,4 @@-@@ -60,16 +58,7 @@
++@@ -60,16 +60,7 @@
+          // Retrieve top k documents from the rescored query
+          TopDocs topDocs = searcher.search(query, k);
+          vectorOperations = topDocs.totalHits.value;
+
 ```
 
 
 
 ## Full Generated Patch (Agent-Only, code-only)
 ```diff
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java b/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
+index ae6140a1caf..4a44ad2f360 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
+@@ -1228,7 +1228,7 @@ public class DenseVectorFieldMapper extends FieldMapper {
+         }
+     }
+ 
+-    private enum VectorIndexType {
++    public enum VectorIndexType {
+         HNSW("hnsw", false) {
+             @Override
+             public IndexOptions parseIndexOptions(String fieldName, Map<String, ?> indexOptionsMap) {
+diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java
+index 2855fe8bcf0..37708be09e1 100644
+--- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java
++++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java
+@@ -17,12 +17,14 @@ import org.apache.lucene.search.IndexSearcher;
+ import org.apache.lucene.search.MatchNoDocsQuery;
+ import org.apache.lucene.search.Query;
+ import org.apache.lucene.search.QueryVisitor;
++import org.apache.lucene.search.ScoreDoc;
+ import org.apache.lucene.search.ScoreMode;
+ import org.apache.lucene.search.Scorer;
+ import org.apache.lucene.search.Weight;
+ 
+ import java.io.IOException;
+ import java.util.Arrays;
++import java.util.Comparator;
+ import java.util.Objects;
+ 
+ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
+@@ -30,9 +32,9 @@ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
+ /**
+  * A query that matches the provided docs with their scores.
+  *
+- * Note: this query was adapted from Lucene's DocAndScoreQuery from the class
++ * Note: this query was originally adapted from Lucene's DocAndScoreQuery from the class
+  * {@link org.apache.lucene.search.KnnFloatVectorQuery}, which is package-private.
+- * There are no changes to the behavior, just some renames.
++
+  */
+ public class KnnScoreDocQuery extends Query {
+     private final int[] docs;
+@@ -49,13 +51,18 @@ public class KnnScoreDocQuery extends Query {
+     /**
+      * Creates a query.
+      *
+-     * @param docs the global doc IDs of documents that match, in ascending order
+-     * @param scores the scores of the matching documents
++     * @param scoreDocs an array of ScoreDocs to use for the query
+      * @param reader IndexReader
+      */
+-    KnnScoreDocQuery(int[] docs, float[] scores, IndexReader reader) {
+-        this.docs = docs;
+-        this.scores = scores;
++    KnnScoreDocQuery(ScoreDoc[] scoreDocs, IndexReader reader) {
++        // Ensure that the docs are sorted by docId, as they are later searched using binary search
++        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));
++        this.docs = new int[scoreDocs.length];
++        this.scores = new float[scoreDocs.length];
++        for (int i = 0; i < scoreDocs.length; i++) {
++            docs[i] = scoreDocs[i].doc;
++            scores[i] = scoreDocs[i].score;
++        }
+         this.segmentStarts = findSegmentStarts(reader, docs);
+         this.contextIdentity = reader.getContext().id();
+     }
+diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java
+index 6fa83ccfb6a..1a81f4b984e 100644
+--- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java
++++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java
+@@ -141,15 +141,7 @@ public class KnnScoreDocQueryBuilder extends AbstractQueryBuilder<KnnScoreDocQue
+ 
+     @Override
+     protected Query doToQuery(SearchExecutionContext context) throws IOException {
+-        int numDocs = scoreDocs.length;
+-        int[] docs = new int[numDocs];
+-        float[] scores = new float[numDocs];
+-        for (int i = 0; i < numDocs; i++) {
+-            docs[i] = scoreDocs[i].doc;
+-            scores[i] = scoreDocs[i].score;
+-        }
+-
+-        return new KnnScoreDocQuery(docs, scores, context.getIndexReader());
++        return new KnnScoreDocQuery(scoreDocs, context.getIndexReader());
+     }
+ 
+     @Override
+diff --git a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java
+index 967f310f935..c08b531a3b0 100644
+--- a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java
++++ b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java
+@@ -16,14 +16,14 @@ import org.apache.lucene.search.DoubleValuesSource;
+ import org.apache.lucene.search.IndexSearcher;
+ import org.apache.lucene.search.Query;
+ import org.apache.lucene.search.QueryVisitor;
+-import org.apache.lucene.search.ScoreDoc;
++
+ import org.apache.lucene.search.TopDocs;
+ import org.elasticsearch.index.mapper.vectors.VectorSimilarityFloatValueSource;
+ import org.elasticsearch.search.profile.query.QueryProfiler;
+ 
+ import java.io.IOException;
+ import java.util.Arrays;
+-import java.util.Comparator;
++
+ import java.util.Objects;
+ 
+ /**
+@@ -60,16 +60,7 @@ public class RescoreKnnVectorQuery extends Query implements QueryProfilerProvide
+         // Retrieve top k documents from the rescored query
+         TopDocs topDocs = searcher.search(query, k);
+         vectorOperations = topDocs.totalHits.value;
+-        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+-        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));
+-        int[] docIds = new int[scoreDocs.length];
+-        float[] scores = new float[scoreDocs.length];
+-        for (int i = 0; i < scoreDocs.length; i++) {
+-            docIds[i] = scoreDocs[i].doc;
+-            scores[i] = scoreDocs[i].score;
+-        }
+-
+-        return new KnnScoreDocQuery(docIds, scores, searcher.getIndexReader());
++        return new KnnScoreDocQuery(topDocs.scoreDocs, searcher.getIndexReader());
+     }
+ 
+     public Query innerQuery() {
 
 ```
 
 ## Full Generated Patch (Final Effective, code-only)
 ```diff
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java b/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
+index ae6140a1caf..4a44ad2f360 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
+@@ -1228,7 +1228,7 @@ public class DenseVectorFieldMapper extends FieldMapper {
+         }
+     }
+ 
+-    private enum VectorIndexType {
++    public enum VectorIndexType {
+         HNSW("hnsw", false) {
+             @Override
+             public IndexOptions parseIndexOptions(String fieldName, Map<String, ?> indexOptionsMap) {
+diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java
+index 2855fe8bcf0..37708be09e1 100644
+--- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java
++++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java
+@@ -17,12 +17,14 @@ import org.apache.lucene.search.IndexSearcher;
+ import org.apache.lucene.search.MatchNoDocsQuery;
+ import org.apache.lucene.search.Query;
+ import org.apache.lucene.search.QueryVisitor;
++import org.apache.lucene.search.ScoreDoc;
+ import org.apache.lucene.search.ScoreMode;
+ import org.apache.lucene.search.Scorer;
+ import org.apache.lucene.search.Weight;
+ 
+ import java.io.IOException;
+ import java.util.Arrays;
++import java.util.Comparator;
+ import java.util.Objects;
+ 
+ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
+@@ -30,9 +32,9 @@ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
+ /**
+  * A query that matches the provided docs with their scores.
+  *
+- * Note: this query was adapted from Lucene's DocAndScoreQuery from the class
++ * Note: this query was originally adapted from Lucene's DocAndScoreQuery from the class
+  * {@link org.apache.lucene.search.KnnFloatVectorQuery}, which is package-private.
+- * There are no changes to the behavior, just some renames.
++
+  */
+ public class KnnScoreDocQuery extends Query {
+     private final int[] docs;
+@@ -49,13 +51,18 @@ public class KnnScoreDocQuery extends Query {
+     /**
+      * Creates a query.
+      *
+-     * @param docs the global doc IDs of documents that match, in ascending order
+-     * @param scores the scores of the matching documents
++     * @param scoreDocs an array of ScoreDocs to use for the query
+      * @param reader IndexReader
+      */
+-    KnnScoreDocQuery(int[] docs, float[] scores, IndexReader reader) {
+-        this.docs = docs;
+-        this.scores = scores;
++    KnnScoreDocQuery(ScoreDoc[] scoreDocs, IndexReader reader) {
++        // Ensure that the docs are sorted by docId, as they are later searched using binary search
++        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));
++        this.docs = new int[scoreDocs.length];
++        this.scores = new float[scoreDocs.length];
++        for (int i = 0; i < scoreDocs.length; i++) {
++            docs[i] = scoreDocs[i].doc;
++            scores[i] = scoreDocs[i].score;
++        }
+         this.segmentStarts = findSegmentStarts(reader, docs);
+         this.contextIdentity = reader.getContext().id();
+     }
+diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java
+index 6fa83ccfb6a..1a81f4b984e 100644
+--- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java
++++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java
+@@ -141,15 +141,7 @@ public class KnnScoreDocQueryBuilder extends AbstractQueryBuilder<KnnScoreDocQue
+ 
+     @Override
+     protected Query doToQuery(SearchExecutionContext context) throws IOException {
+-        int numDocs = scoreDocs.length;
+-        int[] docs = new int[numDocs];
+-        float[] scores = new float[numDocs];
+-        for (int i = 0; i < numDocs; i++) {
+-            docs[i] = scoreDocs[i].doc;
+-            scores[i] = scoreDocs[i].score;
+-        }
+-
+-        return new KnnScoreDocQuery(docs, scores, context.getIndexReader());
++        return new KnnScoreDocQuery(scoreDocs, context.getIndexReader());
+     }
+ 
+     @Override
+diff --git a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java
+index 967f310f935..c08b531a3b0 100644
+--- a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java
++++ b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java
+@@ -16,14 +16,14 @@ import org.apache.lucene.search.DoubleValuesSource;
+ import org.apache.lucene.search.IndexSearcher;
+ import org.apache.lucene.search.Query;
+ import org.apache.lucene.search.QueryVisitor;
+-import org.apache.lucene.search.ScoreDoc;
++
+ import org.apache.lucene.search.TopDocs;
+ import org.elasticsearch.index.mapper.vectors.VectorSimilarityFloatValueSource;
+ import org.elasticsearch.search.profile.query.QueryProfiler;
+ 
+ import java.io.IOException;
+ import java.util.Arrays;
+-import java.util.Comparator;
++
+ import java.util.Objects;
+ 
+ /**
+@@ -60,16 +60,7 @@ public class RescoreKnnVectorQuery extends Query implements QueryProfilerProvide
+         // Retrieve top k documents from the rescored query
+         TopDocs topDocs = searcher.search(query, k);
+         vectorOperations = topDocs.totalHits.value;
+-        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+-        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));
+-        int[] docIds = new int[scoreDocs.length];
+-        float[] scores = new float[scoreDocs.length];
+-        for (int i = 0; i < scoreDocs.length; i++) {
+-            docIds[i] = scoreDocs[i].doc;
+-            scores[i] = scoreDocs[i].score;
+-        }
+-
+-        return new KnnScoreDocQuery(docIds, scores, searcher.getIndexReader());
++        return new KnnScoreDocQuery(topDocs.scoreDocs, searcher.getIndexReader());
+     }
+ 
+     public Query innerQuery() {
 
 ```
 ## Full Developer Backport Patch (full commit diff)
