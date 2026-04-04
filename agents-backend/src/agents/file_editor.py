@@ -1079,6 +1079,152 @@ async def _invoke_react_with_backoff(
     raise RuntimeError("ReAct invocation failed without explicit exception")
 
 
+def _trajectory_has_surrounding_code_read(
+    *,
+    trajectory: list[dict[str, Any]],
+    target_file: str,
+) -> bool:
+    read_tools = {
+        "read_file_window",
+        "read_full_file",
+        "get_exact_lines",
+        "grep_in_file",
+    }
+    for item in trajectory:
+        if str(item.get("target_file") or "") != target_file:
+            continue
+        if str(item.get("tool") or "") in read_tools:
+            return True
+    return False
+
+
+async def _run_react_edit_pass(
+    *,
+    llm,
+    toolkit: HunkGeneratorToolkit,
+    state: AgentState,
+    mainline_file: str,
+    target_file: str,
+    plan_entries: list[dict[str, Any]],
+    validation_attempts: int,
+    error_context: str,
+    current_attempt_trajectory: list[dict[str, Any]],
+    extra_retry_context: str = "",
+) -> tuple[bool, str]:
+    import json
+
+    mapping_hints = []
+    if mainline_file in state.get("mapped_target_context", {}):
+        for m in state["mapped_target_context"][mainline_file]:
+            hint = (
+                "Hunk suggests mapping around line "
+                f"{m.get('start_line', 'unknown')} with context:\n```java\n"
+                f"{m.get('code_snippet', '')[:300]}\n```"
+            )
+            mapping_hints.append(hint)
+
+    truncated_error_context = error_context
+    if len(error_context) > 8000:
+        truncated_error_context = (
+            error_context[:4000]
+            + "\n\n... [TRUNCATED DUE TO LENGTH] ...\n\n"
+            + error_context[-4000:]
+        )
+
+    if extra_retry_context:
+        combined_context = (
+            truncated_error_context + "\n\n" if truncated_error_context else ""
+        ) + f"DETERMINISTIC_FAILURE_CONTEXT:\n{extra_retry_context}"
+    else:
+        combined_context = truncated_error_context
+
+    patch_diff_for_prompt = state.get("patch_diff") or "<no patch diff found>"
+    if len(patch_diff_for_prompt) > 6000:
+        patch_diff_for_prompt = (
+            patch_diff_for_prompt[:3000]
+            + "\n\n... [TRUNCATED PATCH BODY] ...\n\n"
+            + patch_diff_for_prompt[-3000:]
+        )
+
+    system_prompt = _FILE_EDITOR_AGENT_SYSTEM.format(
+        patch_diff=patch_diff_for_prompt,
+        hunk_generation_plan=json.dumps(plan_entries, indent=2),
+        mapping_hints="\n---\n".join(mapping_hints)
+        if mapping_hints
+        else "No structural mapping hints available.",
+        semantic_blueprint=json.dumps(state.get("semantic_blueprint", {}), indent=2),
+        consistency_map=json.dumps(state.get("consistency_map", {}), indent=2),
+        mainline_file=mainline_file,
+        target_file=target_file,
+        retry_context=f"RETRY LOGS:\n{combined_context}"
+        if (validation_attempts > 0 or extra_retry_context)
+        else "",
+    )
+
+    if len(plan_entries) >= 3:
+        system_prompt += (
+            "\n\n## IMPORTANT: Multi-Edit File Detection\n"
+            "This file has 3+ distinct edits. You MUST use 'edit_file' (exact string matching) "
+            "or AST tools instead of line numbers to avoid line drift.\n"
+            "Do NOT use replace_lines unless absolutely necessary."
+        )
+
+    if extra_retry_context:
+        system_prompt += (
+            "\n\n## Smart Refinement Requirement\n"
+            "Deterministic application already failed. You MUST first inspect surrounding code "
+            "using read_file_window/read_full_file/get_exact_lines before applying fixes."
+        )
+
+    editor_agent = create_react_agent(llm, toolkit.get_tools())
+
+    try:
+        print(f"    Agent 3: Invoking ReAct agent for {target_file}")
+        response = await _invoke_react_with_backoff(
+            editor_agent=editor_agent,
+            target_file=target_file,
+            payload={
+                "messages": [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(
+                        content="Start your Todo list now.\n"
+                        "1. Analyze logic changes and structural differences.\n"
+                        "2. Apply changes using AST tools (Priority 1) or `edit_file` (Priority 2).\n"
+                        "3. Use `check_java_syntax` after edits to catch errors immediately.\n"
+                        "4. Use `read_file_window` to verify context and avoid duplication."
+                    ),
+                ]
+            },
+        )
+
+        last_msg = response["messages"][-1]
+        print(f"    Agent 3: Agent finished. Last msg: {str(last_msg.content)[:100]}")
+
+        for m in response.get("messages", []):
+            if hasattr(m, "tool_calls") and m.tool_calls:
+                for tc in m.tool_calls:
+                    current_attempt_trajectory.append(
+                        {
+                            "target_file": target_file,
+                            "tool": tc["name"],
+                            "args": tc.get("args", {}),
+                        }
+                    )
+
+        if extra_retry_context and not _trajectory_has_surrounding_code_read(
+            trajectory=current_attempt_trajectory,
+            target_file=target_file,
+        ):
+            return (
+                False,
+                "react_refinement_missing_surrounding_code_check",
+            )
+
+        return True, "react_apply_success"
+    except Exception as e:
+        return False, str(e)
+
+
 async def _check_intent(
     llm,
     diff_text: str,
@@ -1333,6 +1479,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
             continue
 
         # Step B: Apply edits via deterministic or ReAct path.
+        used_react = False
         if deterministic_only:
             ok, apply_reason = _apply_plan_entries_deterministically(
                 toolkit=toolkit,
@@ -1343,112 +1490,49 @@ async def file_editor_node(state: AgentState, config) -> dict:
             )
             if not ok:
                 print(
-                    f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}"
+                    f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}. "
+                    "Escalating to smart ReAct refinement."
                 )
-                task_entry["status"] = "failed"
-                task_entry["reason"] = "generation_contract_failed"
-                task_entry["error"] = apply_reason
                 _git_reset_file(target_repo_path, target_file)
-                continue
+                used_react = True
+                react_ok, react_reason = await _run_react_edit_pass(
+                    llm=llm,
+                    toolkit=toolkit,
+                    state=state,
+                    mainline_file=mainline_file,
+                    target_file=target_file,
+                    plan_entries=plan_entries,
+                    validation_attempts=validation_attempts,
+                    error_context=error_context,
+                    current_attempt_trajectory=current_attempt_trajectory,
+                    extra_retry_context=apply_reason,
+                )
+                if not react_ok:
+                    task_entry["status"] = "failed"
+                    task_entry["reason"] = "generation_contract_failed"
+                    task_entry["error"] = f"react_refinement_failed: {react_reason}"[
+                        :1000
+                    ]
+                    _git_reset_file(target_repo_path, target_file)
+                    continue
         else:
-            import json
-
-            mapping_hints = []
-            if mainline_file in state.get("mapped_target_context", {}):
-                for m in state["mapped_target_context"][mainline_file]:
-                    hint = f"Hunk suggests mapping around line {m.get('start_line', 'unknown')} with context:\n```java\n{m.get('code_snippet', '')[:300]}\n```"
-                    mapping_hints.append(hint)
-
-            truncated_error_context = error_context
-            if len(error_context) > 8000:
-                truncated_error_context = (
-                    error_context[:4000]
-                    + "\n\n... [TRUNCATED DUE TO LENGTH] ...\n\n"
-                    + error_context[-4000:]
-                )
-
-            patch_diff_for_prompt = state.get("patch_diff") or "<no patch diff found>"
-            if len(patch_diff_for_prompt) > 6000:
-                patch_diff_for_prompt = (
-                    patch_diff_for_prompt[:3000]
-                    + "\n\n... [TRUNCATED PATCH BODY] ...\n\n"
-                    + patch_diff_for_prompt[-3000:]
-                )
-
-            system_prompt = _FILE_EDITOR_AGENT_SYSTEM.format(
-                patch_diff=patch_diff_for_prompt,
-                hunk_generation_plan=json.dumps(plan_entries, indent=2),
-                mapping_hints="\n---\n".join(mapping_hints)
-                if mapping_hints
-                else "No structural mapping hints available.",
-                semantic_blueprint=json.dumps(
-                    state.get("semantic_blueprint", {}), indent=2
-                ),
-                consistency_map=json.dumps(state.get("consistency_map", {}), indent=2),
+            used_react = True
+            react_ok, react_reason = await _run_react_edit_pass(
+                llm=llm,
+                toolkit=toolkit,
+                state=state,
                 mainline_file=mainline_file,
                 target_file=target_file,
-                retry_context=f"RETRY LOGS:\n{truncated_error_context}"
-                if validation_attempts > 0
-                else "",
+                plan_entries=plan_entries,
+                validation_attempts=validation_attempts,
+                error_context=error_context,
+                current_attempt_trajectory=current_attempt_trajectory,
             )
-
-            if len(plan_entries) >= 3:
-                system_prompt += (
-                    "\n\n## IMPORTANT: Multi-Edit File Detection\n"
-                    "This file has 3+ distinct edits. You MUST use 'edit_file' (exact string matching) "
-                    "or AST tools instead of line numbers to avoid line drift.\n"
-                    "Do NOT use replace_lines unless absolutely necessary."
-                )
-
-            editor_agent = create_react_agent(llm, toolkit.get_tools())
-
-            try:
-                print(f"    Agent 3: Invoking ReAct agent for {target_file}")
-                response = await _invoke_react_with_backoff(
-                    editor_agent=editor_agent,
-                    target_file=target_file,
-                    payload={
-                        "messages": [
-                            SystemMessage(content=system_prompt),
-                            HumanMessage(
-                                content="Start your Todo list now.\n"
-                                "1. Analyze logic changes and structural differences.\n"
-                                "2. Apply changes using AST tools (Priority 1) or `edit_file` (Priority 2).\n"
-                                "3. Use `check_java_syntax` after edits to catch errors immediately.\n"
-                                "4. Use `read_file_window` to verify context and avoid duplication."
-                            ),
-                        ]
-                    },
-                )
-
-                last_msg = response["messages"][-1]
-                print(
-                    f"    Agent 3: Agent finished. Last msg: {str(last_msg.content)[:100]}"
-                )
-
-                for m in response.get("messages", []):
-                    if hasattr(m, "tool_calls") and m.tool_calls:
-                        for tc in m.tool_calls:
-                            if tc["name"] in (
-                                "replace_lines",
-                                "insert_after_line",
-                                "verify_guidelines",
-                                "check_java_syntax",
-                                "edit_file",
-                                "str_replace_in_file",
-                            ):
-                                current_attempt_trajectory.append(
-                                    {
-                                        "target_file": target_file,
-                                        "tool": tc["name"],
-                                        "args": tc["args"],
-                                    }
-                                )
-            except Exception as e:
-                print(f"    Agent 3: Agent failed: {e}")
+            if not react_ok:
+                print(f"    Agent 3: Agent failed: {react_reason}")
                 task_entry["status"] = "failed"
                 task_entry["reason"] = "generation_contract_failed"
-                task_entry["error"] = str(e)[:500]
+                task_entry["error"] = str(react_reason)[:500]
                 _git_reset_file(target_repo_path, target_file)
                 continue
 
@@ -1482,13 +1566,13 @@ async def file_editor_node(state: AgentState, config) -> dict:
             "target_file": target_file,
             "mainline_file": mainline_file,
             "old_string": "<deterministic file-editor diff>"
-            if deterministic_only
+            if not used_react
             else "<line-based ReAct agent diff>",
             "new_string": diff_text.strip(),
             "edit_type": "replace",
             "verified": True,
             "verification_result": "Deterministic file editor applied"
-            if deterministic_only
+            if not used_react
             else "ReAct agent applied",
             "applied": True,
             "apply_result": "SUCCESS",
@@ -1515,7 +1599,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 break
 
         # Step E: Intent check (skip extra LLM call for deterministic TYPE I/II/III)
-        if deterministic_only:
+        if deterministic_only and not used_react:
             intent_ok = True
             print(
                 f"    Agent 3: Skipping LLM intent check for {target_file} ({adaptation_type})."
