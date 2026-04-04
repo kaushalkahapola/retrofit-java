@@ -34,7 +34,7 @@
                   "summary": "Adds logic (+1 lines).",
                   "role": "declaration",
                   "connects_to_next": "Prepares next hunk in same file with related context.",
-                  "global_index": 2
+                  "global_index": 1
                 },
                 {
                   "hunk_index": 2,
@@ -914,11 +914,13 @@
             ],
             "generated_patch_hash": "14ae635aab7c422e8ce2a4fb8edf0772f8313d2c36450432222339d1bb35a20d",
             "token_usage": {
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "total_tokens": 0,
+              "input_tokens": 566,
+              "output_tokens": 1,
+              "total_tokens": 567,
               "estimated": false,
-              "sources": []
+              "sources": [
+                "file_editor.intent.provider_usage"
+              ]
             }
           }
         }
