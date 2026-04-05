@@ -1,0 +1,513 @@
+{
+  "adapted_file_edits": [
+    {
+      "target_file": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java",
+      "mainline_file": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java",
+      "old_string": "<developer patch fast path>",
+      "new_string": "diff --git a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java\nindex 559860c95a2..949a18d6648 100644\n--- a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java\n+++ b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java\n@@ -20,29 +20,38 @@ public class DeprecatedIndexPredicate {\n \n     public static final IndexVersion MINIMUM_WRITEABLE_VERSION_AFTER_UPGRADE = IndexVersions.V_8_0_0;\n \n-    /*\n+    /**\n      * This predicate allows through only indices that were created with a previous lucene version, meaning that they need to be reindexed\n-     * in order to be writable in the _next_ lucene version.\n+     * in order to be writable in the _next_ lucene version. It excludes searchable snapshots as they are not writable.\n      *\n      * It ignores searchable snapshots as they are not writable.\n+     *\n+     * @param metadata the cluster metadata\n+     * @param filterToBlockedStatus if true, only indices that are write blocked will be returned,\n+     *                              if false, only those without a block are returned\n+     * @return a predicate that returns true for indices that need to be reindexed\n      */\n-    public static Predicate<Index> getReindexRequiredPredicate(Metadata metadata) {\n+    public static Predicate<Index> getReindexRequiredPredicate(Metadata metadata, boolean filterToBlockedStatus) {\n         return index -> {\n             IndexMetadata indexMetadata = metadata.index(index);\n-            return reindexRequired(indexMetadata);\n+            return reindexRequired(indexMetadata, filterToBlockedStatus);\n         };\n     }\n \n-    public static boolean reindexRequired(IndexMetadata indexMetadata) {\n+    /**\n+     * This method check if the indices that were created with a previous lucene version, meaning that they need to be reindexed\n+     * in order to be writable in the _next_ lucene version. It excludes searchable snapshots as they are not writable.\n+     *\n+     * @param indexMetadata the index metadata\n+     * @param filterToBlockedStatus if true, only indices that are write blocked will be returned,\n+     *                              if false, only those without a block are returned\n+     * @return a predicate that returns true for indices that need to be reindexed\n+     */\n+    public static boolean reindexRequired(IndexMetadata indexMetadata, boolean filterToBlockedStatus) {\n         return creationVersionBeforeMinimumWritableVersion(indexMetadata)\n             && isNotSearchableSnapshot(indexMetadata)\n             && isNotClosed(indexMetadata)\n-            && isNotVerifiedReadOnly(indexMetadata);\n-    }\n-\n-    private static boolean isNotVerifiedReadOnly(IndexMetadata indexMetadata) {\n-        // no need to check blocks.\n-        return MetadataIndexStateService.VERIFIED_READ_ONLY_SETTING.get(indexMetadata.getSettings()) == false;\n+            && matchBlockedStatus(indexMetadata, filterToBlockedStatus);\n     }\n \n     private static boolean isNotSearchableSnapshot(IndexMetadata indexMetadata) {\n@@ -57,4 +66,7 @@ public class DeprecatedIndexPredicate {\n         return indexMetadata.getState().equals(IndexMetadata.State.CLOSE) == false;\n     }\n \n+    private static boolean matchBlockedStatus(IndexMetadata indexMetadata, boolean filterToBlockedStatus) {\n+        return MetadataIndexStateService.VERIFIED_READ_ONLY_SETTING.get(indexMetadata.getSettings()) == filterToBlockedStatus;\n+    }\n }",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "developer_fast_path_ok",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    },
+    {
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java",
+      "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java",
+      "old_string": "<developer patch fast path>",
+      "new_string": "diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java\nindex c82f9cb0476..aac2446fa96 100644\n--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java\n+++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java\n@@ -24,10 +24,7 @@ public class DataStreamDeprecationChecks {\n     static DeprecationIssue oldIndicesCheck(DataStream dataStream, ClusterState clusterState) {\n         List<Index> backingIndices = dataStream.getIndices();\n \n-        Set<String> indicesNeedingUpgrade = backingIndices.stream()\n-            .filter(DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterState.metadata()))\n-            .map(Index::getName)\n-            .collect(Collectors.toUnmodifiableSet());\n+        Set<String> indicesNeedingUpgrade = getReindexRequiredIndices(backingIndices, clusterState, false);\n \n         if (indicesNeedingUpgrade.isEmpty() == false) {\n             return new DeprecationIssue(\n@@ -47,4 +44,40 @@ public class DataStreamDeprecationChecks {\n \n         return null;\n     }\n+\n+    static DeprecationIssue ignoredOldIndicesCheck(DataStream dataStream, ClusterState clusterState) {\n+        List<Index> backingIndices = dataStream.getIndices();\n+\n+        Set<String> ignoredIndices = getReindexRequiredIndices(backingIndices, clusterState, true);\n+\n+        if (ignoredIndices.isEmpty() == false) {\n+            return new DeprecationIssue(\n+                DeprecationIssue.Level.WARNING,\n+                \"Old data stream with a compatibility version < 8.0 Have Been Ignored\",\n+                \"https://www.elastic.co/guide/en/elasticsearch/reference/current/migrating-8.0.html#breaking-changes-8.0\",\n+                \"This data stream has read only backing indices that were created before Elasticsearch 8.0.0 and have been marked as \"\n+                    + \"OK to remain read-only after upgrade\",\n+                false,\n+                ofEntries(\n+                    entry(\"reindex_required\", true),\n+                    entry(\"total_backing_indices\", backingIndices.size()),\n+                    entry(\"ignored_indices_requiring_upgrade_count\", ignoredIndices.size()),\n+                    entry(\"ignored_indices_requiring_upgrade\", ignoredIndices)\n+                )\n+            );\n+        }\n+\n+        return null;\n+    }\n+\n+    private static Set<String> getReindexRequiredIndices(\n+        List<Index> backingIndices,\n+        ClusterState clusterState,\n+        boolean filterToBlockedStatus\n+    ) {\n+        return backingIndices.stream()\n+            .filter(DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterState.metadata(), filterToBlockedStatus))\n+            .map(Index::getName)\n+            .collect(Collectors.toUnmodifiableSet());\n+    }\n }",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "developer_fast_path_ok",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    },
+    {
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+      "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+      "old_string": "<developer patch fast path>",
+      "new_string": "diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java\nindex 898367ca706..fc5c0c4eeef 100644\n--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java\n+++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java\n@@ -95,6 +95,7 @@ public class DeprecationChecks {\n \n     static List<BiFunction<IndexMetadata, ClusterState, DeprecationIssue>> INDEX_SETTINGS_CHECKS = List.of(\n         IndexDeprecationChecks::oldIndicesCheck,\n+        IndexDeprecationChecks::ignoredOldIndicesCheck,\n         IndexDeprecationChecks::translogRetentionSettingCheck,\n         IndexDeprecationChecks::checkIndexDataPath,\n         IndexDeprecationChecks::storeTypeSettingCheck,\n@@ -103,7 +104,8 @@ public class DeprecationChecks {\n     );\n \n     static List<BiFunction<DataStream, ClusterState, DeprecationIssue>> DATA_STREAM_CHECKS = List.of(\n-        DataStreamDeprecationChecks::oldIndicesCheck\n+        DataStreamDeprecationChecks::oldIndicesCheck,\n+        DataStreamDeprecationChecks::ignoredOldIndicesCheck\n     );\n \n     /**",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "developer_fast_path_ok",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    },
+    {
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
+      "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
+      "old_string": "<developer patch fast path>",
+      "new_string": "diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java\nindex 0afc3e5b457..0327a27d69d 100644\n--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java\n+++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java\n@@ -36,7 +36,7 @@ public class IndexDeprecationChecks {\n         // TODO: this check needs to be revised. It's trivially true right now.\n         IndexVersion currentCompatibilityVersion = indexMetadata.getCompatibilityVersion();\n         // We intentionally exclude indices that are in data streams because they will be picked up by DataStreamDeprecationChecks\n-        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n+        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata, false) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n             return new DeprecationIssue(\n                 DeprecationIssue.Level.CRITICAL,\n                 \"Old index with a compatibility version < 8.0\",\n@@ -49,6 +49,24 @@ public class IndexDeprecationChecks {\n         return null;\n     }\n \n+    static DeprecationIssue ignoredOldIndicesCheck(IndexMetadata indexMetadata, ClusterState clusterState) {\n+        IndexVersion currentCompatibilityVersion = indexMetadata.getCompatibilityVersion();\n+        // We intentionally exclude indices that are in data streams because they will be picked up by DataStreamDeprecationChecks\n+        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata, true) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n+            return new DeprecationIssue(\n+                DeprecationIssue.Level.WARNING,\n+                \"Old index with a compatibility version < 8.0 Has Been Ignored\",\n+                \"https://www.elastic.co/guide/en/elasticsearch/reference/current/migrating-8.0.html#breaking-changes-8.0\",\n+                \"This read-only index has version: \"\n+                    + currentCompatibilityVersion.toReleaseVersion()\n+                    + \" and will be supported as read-only in 9.0\",\n+                false,\n+                Collections.singletonMap(\"reindex_required\", true)\n+            );\n+        }\n+        return null;\n+    }\n+\n     private static boolean isNotDataStreamIndex(IndexMetadata indexMetadata, ClusterState clusterState) {\n         return clusterState.metadata().findDataStreams(indexMetadata.getIndex().getName()).isEmpty();\n     }",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "developer_fast_path_ok",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    },
+    {
+      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+      "old_string": "<developer patch fast path>",
+      "new_string": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 58a90ce15e9..99d24b64065 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -118,7 +118,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         IndexMetadata sourceIndex = clusterService.state().getMetadata().index(sourceIndexName);\n         Settings settingsBefore = sourceIndex.getSettings();\n \n-        var hasOldVersion = DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterService.state().metadata());\n+        var hasOldVersion = DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterService.state().metadata(), false);\n         if (hasOldVersion.test(sourceIndex.getIndex()) == false) {\n             logger.warn(\n                 \"Migrating index [{}] with version [{}] is unnecessary as its version is not before [{}]\",",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "developer_fast_path_ok",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    },
+    {
+      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java",
+      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java",
+      "old_string": "<developer patch fast path>",
+      "new_string": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java\nindex 2d7c17db054..74545153fd7 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java\n@@ -68,7 +68,7 @@ public class ReindexDataStreamTransportAction extends HandledTransportAction<Rei\n             return;\n         }\n         int totalIndices = dataStream.getIndices().size();\n-        int totalIndicesToBeUpgraded = (int) dataStream.getIndices().stream().filter(getReindexRequiredPredicate(metadata)).count();\n+        int totalIndicesToBeUpgraded = (int) dataStream.getIndices().stream().filter(getReindexRequiredPredicate(metadata, false)).count();\n         ReindexDataStreamTaskParams params = new ReindexDataStreamTaskParams(\n             sourceDataStreamName,\n             transportService.getThreadPool().absoluteTimeInMillis(),",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "developer_fast_path_ok",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    },
+    {
+      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java",
+      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java",
+      "old_string": "<developer patch fast path>",
+      "new_string": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java\nindex 7fb59bbbf61..d9645cc817d 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java\n@@ -110,7 +110,7 @@ public class ReindexDataStreamPersistentTaskExecutor extends PersistentTasksExec\n             List<GetDataStreamAction.Response.DataStreamInfo> dataStreamInfos = response.getDataStreams();\n             if (dataStreamInfos.size() == 1) {\n                 DataStream dataStream = dataStreamInfos.get(0).getDataStream();\n-                if (getReindexRequiredPredicate(clusterService.state().metadata()).test(dataStream.getWriteIndex())) {\n+                if (getReindexRequiredPredicate(clusterService.state().metadata(), false).test(dataStream.getWriteIndex())) {\n                     RolloverRequest rolloverRequest = new RolloverRequest(sourceDataStream, null);\n                     rolloverRequest.setParentTask(taskId);\n                     client.execute(\n@@ -156,7 +156,9 @@ public class ReindexDataStreamPersistentTaskExecutor extends PersistentTasksExec\n         TaskId parentTaskId\n     ) {\n         List<Index> indices = dataStream.getIndices();\n-        List<Index> indicesToBeReindexed = indices.stream().filter(getReindexRequiredPredicate(clusterService.state().metadata())).toList();\n+        List<Index> indicesToBeReindexed = indices.stream()\n+            .filter(getReindexRequiredPredicate(clusterService.state().metadata(), false))\n+            .toList();\n         final ReindexDataStreamPersistentTaskState updatedState;\n         if (params.totalIndices() != totalIndicesInDataStream\n             || params.totalIndicesToBeUpgraded() != indicesToBeReindexed.size()",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "developer_fast_path_ok",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    }
+  ],
+  "all_adapted_file_edits": [
+    [
+      {
+        "target_file": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java",
+        "mainline_file": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java\nindex 559860c95a2..949a18d6648 100644\n--- a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java\n+++ b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java\n@@ -20,29 +20,38 @@ public class DeprecatedIndexPredicate {\n \n     public static final IndexVersion MINIMUM_WRITEABLE_VERSION_AFTER_UPGRADE = IndexVersions.V_8_0_0;\n \n-    /*\n+    /**\n      * This predicate allows through only indices that were created with a previous lucene version, meaning that they need to be reindexed\n-     * in order to be writable in the _next_ lucene version.\n+     * in order to be writable in the _next_ lucene version. It excludes searchable snapshots as they are not writable.\n      *\n      * It ignores searchable snapshots as they are not writable.\n+     *\n+     * @param metadata the cluster metadata\n+     * @param filterToBlockedStatus if true, only indices that are write blocked will be returned,\n+     *                              if false, only those without a block are returned\n+     * @return a predicate that returns true for indices that need to be reindexed\n      */\n-    public static Predicate<Index> getReindexRequiredPredicate(Metadata metadata) {\n+    public static Predicate<Index> getReindexRequiredPredicate(Metadata metadata, boolean filterToBlockedStatus) {\n         return index -> {\n             IndexMetadata indexMetadata = metadata.index(index);\n-            return reindexRequired(indexMetadata);\n+            return reindexRequired(indexMetadata, filterToBlockedStatus);\n         };\n     }\n \n-    public static boolean reindexRequired(IndexMetadata indexMetadata) {\n+    /**\n+     * This method check if the indices that were created with a previous lucene version, meaning that they need to be reindexed\n+     * in order to be writable in the _next_ lucene version. It excludes searchable snapshots as they are not writable.\n+     *\n+     * @param indexMetadata the index metadata\n+     * @param filterToBlockedStatus if true, only indices that are write blocked will be returned,\n+     *                              if false, only those without a block are returned\n+     * @return a predicate that returns true for indices that need to be reindexed\n+     */\n+    public static boolean reindexRequired(IndexMetadata indexMetadata, boolean filterToBlockedStatus) {\n         return creationVersionBeforeMinimumWritableVersion(indexMetadata)\n             && isNotSearchableSnapshot(indexMetadata)\n             && isNotClosed(indexMetadata)\n-            && isNotVerifiedReadOnly(indexMetadata);\n-    }\n-\n-    private static boolean isNotVerifiedReadOnly(IndexMetadata indexMetadata) {\n-        // no need to check blocks.\n-        return MetadataIndexStateService.VERIFIED_READ_ONLY_SETTING.get(indexMetadata.getSettings()) == false;\n+            && matchBlockedStatus(indexMetadata, filterToBlockedStatus);\n     }\n \n     private static boolean isNotSearchableSnapshot(IndexMetadata indexMetadata) {\n@@ -57,4 +66,7 @@ public class DeprecatedIndexPredicate {\n         return indexMetadata.getState().equals(IndexMetadata.State.CLOSE) == false;\n     }\n \n+    private static boolean matchBlockedStatus(IndexMetadata indexMetadata, boolean filterToBlockedStatus) {\n+        return MetadataIndexStateService.VERIFIED_READ_ONLY_SETTING.get(indexMetadata.getSettings()) == filterToBlockedStatus;\n+    }\n }",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      },
+      {
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java",
+        "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java\nindex c82f9cb0476..aac2446fa96 100644\n--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java\n+++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java\n@@ -24,10 +24,7 @@ public class DataStreamDeprecationChecks {\n     static DeprecationIssue oldIndicesCheck(DataStream dataStream, ClusterState clusterState) {\n         List<Index> backingIndices = dataStream.getIndices();\n \n-        Set<String> indicesNeedingUpgrade = backingIndices.stream()\n-            .filter(DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterState.metadata()))\n-            .map(Index::getName)\n-            .collect(Collectors.toUnmodifiableSet());\n+        Set<String> indicesNeedingUpgrade = getReindexRequiredIndices(backingIndices, clusterState, false);\n \n         if (indicesNeedingUpgrade.isEmpty() == false) {\n             return new DeprecationIssue(\n@@ -47,4 +44,40 @@ public class DataStreamDeprecationChecks {\n \n         return null;\n     }\n+\n+    static DeprecationIssue ignoredOldIndicesCheck(DataStream dataStream, ClusterState clusterState) {\n+        List<Index> backingIndices = dataStream.getIndices();\n+\n+        Set<String> ignoredIndices = getReindexRequiredIndices(backingIndices, clusterState, true);\n+\n+        if (ignoredIndices.isEmpty() == false) {\n+            return new DeprecationIssue(\n+                DeprecationIssue.Level.WARNING,\n+                \"Old data stream with a compatibility version < 8.0 Have Been Ignored\",\n+                \"https://www.elastic.co/guide/en/elasticsearch/reference/current/migrating-8.0.html#breaking-changes-8.0\",\n+                \"This data stream has read only backing indices that were created before Elasticsearch 8.0.0 and have been marked as \"\n+                    + \"OK to remain read-only after upgrade\",\n+                false,\n+                ofEntries(\n+                    entry(\"reindex_required\", true),\n+                    entry(\"total_backing_indices\", backingIndices.size()),\n+                    entry(\"ignored_indices_requiring_upgrade_count\", ignoredIndices.size()),\n+                    entry(\"ignored_indices_requiring_upgrade\", ignoredIndices)\n+                )\n+            );\n+        }\n+\n+        return null;\n+    }\n+\n+    private static Set<String> getReindexRequiredIndices(\n+        List<Index> backingIndices,\n+        ClusterState clusterState,\n+        boolean filterToBlockedStatus\n+    ) {\n+        return backingIndices.stream()\n+            .filter(DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterState.metadata(), filterToBlockedStatus))\n+            .map(Index::getName)\n+            .collect(Collectors.toUnmodifiableSet());\n+    }\n }",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      },
+      {
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+        "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java\nindex 898367ca706..fc5c0c4eeef 100644\n--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java\n+++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java\n@@ -95,6 +95,7 @@ public class DeprecationChecks {\n \n     static List<BiFunction<IndexMetadata, ClusterState, DeprecationIssue>> INDEX_SETTINGS_CHECKS = List.of(\n         IndexDeprecationChecks::oldIndicesCheck,\n+        IndexDeprecationChecks::ignoredOldIndicesCheck,\n         IndexDeprecationChecks::translogRetentionSettingCheck,\n         IndexDeprecationChecks::checkIndexDataPath,\n         IndexDeprecationChecks::storeTypeSettingCheck,\n@@ -103,7 +104,8 @@ public class DeprecationChecks {\n     );\n \n     static List<BiFunction<DataStream, ClusterState, DeprecationIssue>> DATA_STREAM_CHECKS = List.of(\n-        DataStreamDeprecationChecks::oldIndicesCheck\n+        DataStreamDeprecationChecks::oldIndicesCheck,\n+        DataStreamDeprecationChecks::ignoredOldIndicesCheck\n     );\n \n     /**",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      },
+      {
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
+        "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java\nindex 0afc3e5b457..0327a27d69d 100644\n--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java\n+++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java\n@@ -36,7 +36,7 @@ public class IndexDeprecationChecks {\n         // TODO: this check needs to be revised. It's trivially true right now.\n         IndexVersion currentCompatibilityVersion = indexMetadata.getCompatibilityVersion();\n         // We intentionally exclude indices that are in data streams because they will be picked up by DataStreamDeprecationChecks\n-        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n+        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata, false) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n             return new DeprecationIssue(\n                 DeprecationIssue.Level.CRITICAL,\n                 \"Old index with a compatibility version < 8.0\",\n@@ -49,6 +49,24 @@ public class IndexDeprecationChecks {\n         return null;\n     }\n \n+    static DeprecationIssue ignoredOldIndicesCheck(IndexMetadata indexMetadata, ClusterState clusterState) {\n+        IndexVersion currentCompatibilityVersion = indexMetadata.getCompatibilityVersion();\n+        // We intentionally exclude indices that are in data streams because they will be picked up by DataStreamDeprecationChecks\n+        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata, true) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n+            return new DeprecationIssue(\n+                DeprecationIssue.Level.WARNING,\n+                \"Old index with a compatibility version < 8.0 Has Been Ignored\",\n+                \"https://www.elastic.co/guide/en/elasticsearch/reference/current/migrating-8.0.html#breaking-changes-8.0\",\n+                \"This read-only index has version: \"\n+                    + currentCompatibilityVersion.toReleaseVersion()\n+                    + \" and will be supported as read-only in 9.0\",\n+                false,\n+                Collections.singletonMap(\"reindex_required\", true)\n+            );\n+        }\n+        return null;\n+    }\n+\n     private static boolean isNotDataStreamIndex(IndexMetadata indexMetadata, ClusterState clusterState) {\n         return clusterState.metadata().findDataStreams(indexMetadata.getIndex().getName()).isEmpty();\n     }",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      },
+      {
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 58a90ce15e9..99d24b64065 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -118,7 +118,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         IndexMetadata sourceIndex = clusterService.state().getMetadata().index(sourceIndexName);\n         Settings settingsBefore = sourceIndex.getSettings();\n \n-        var hasOldVersion = DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterService.state().metadata());\n+        var hasOldVersion = DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterService.state().metadata(), false);\n         if (hasOldVersion.test(sourceIndex.getIndex()) == false) {\n             logger.warn(\n                 \"Migrating index [{}] with version [{}] is unnecessary as its version is not before [{}]\",",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      },
+      {
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java",
+        "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java\nindex 2d7c17db054..74545153fd7 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java\n@@ -68,7 +68,7 @@ public class ReindexDataStreamTransportAction extends HandledTransportAction<Rei\n             return;\n         }\n         int totalIndices = dataStream.getIndices().size();\n-        int totalIndicesToBeUpgraded = (int) dataStream.getIndices().stream().filter(getReindexRequiredPredicate(metadata)).count();\n+        int totalIndicesToBeUpgraded = (int) dataStream.getIndices().stream().filter(getReindexRequiredPredicate(metadata, false)).count();\n         ReindexDataStreamTaskParams params = new ReindexDataStreamTaskParams(\n             sourceDataStreamName,\n             transportService.getThreadPool().absoluteTimeInMillis(),",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      },
+      {
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java",
+        "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java\nindex 7fb59bbbf61..d9645cc817d 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java\n@@ -110,7 +110,7 @@ public class ReindexDataStreamPersistentTaskExecutor extends PersistentTasksExec\n             List<GetDataStreamAction.Response.DataStreamInfo> dataStreamInfos = response.getDataStreams();\n             if (dataStreamInfos.size() == 1) {\n                 DataStream dataStream = dataStreamInfos.get(0).getDataStream();\n-                if (getReindexRequiredPredicate(clusterService.state().metadata()).test(dataStream.getWriteIndex())) {\n+                if (getReindexRequiredPredicate(clusterService.state().metadata(), false).test(dataStream.getWriteIndex())) {\n                     RolloverRequest rolloverRequest = new RolloverRequest(sourceDataStream, null);\n                     rolloverRequest.setParentTask(taskId);\n                     client.execute(\n@@ -156,7 +156,9 @@ public class ReindexDataStreamPersistentTaskExecutor extends PersistentTasksExec\n         TaskId parentTaskId\n     ) {\n         List<Index> indices = dataStream.getIndices();\n-        List<Index> indicesToBeReindexed = indices.stream().filter(getReindexRequiredPredicate(clusterService.state().metadata())).toList();\n+        List<Index> indicesToBeReindexed = indices.stream()\n+            .filter(getReindexRequiredPredicate(clusterService.state().metadata(), false))\n+            .toList();\n         final ReindexDataStreamPersistentTaskState updatedState;\n         if (params.totalIndices() != totalIndicesInDataStream\n             || params.totalIndicesToBeUpgraded() != indicesToBeReindexed.size()",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      }
+    ]
+  ],
+  "agent_trajectory_edits": [
+    []
+  ],
+  "adapted_code_hunks": [
+    {
+      "target_file": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java",
+      "mainline_file": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java",
+      "hunk_text": "diff --git a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java\nindex 559860c95a2..949a18d6648 100644\n--- a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java\n+++ b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java\n@@ -20,29 +20,38 @@ public class DeprecatedIndexPredicate {\n \n     public static final IndexVersion MINIMUM_WRITEABLE_VERSION_AFTER_UPGRADE = IndexVersions.V_8_0_0;\n \n-    /*\n+    /**\n      * This predicate allows through only indices that were created with a previous lucene version, meaning that they need to be reindexed\n-     * in order to be writable in the _next_ lucene version.\n+     * in order to be writable in the _next_ lucene version. It excludes searchable snapshots as they are not writable.\n      *\n      * It ignores searchable snapshots as they are not writable.\n+     *\n+     * @param metadata the cluster metadata\n+     * @param filterToBlockedStatus if true, only indices that are write blocked will be returned,\n+     *                              if false, only those without a block are returned\n+     * @return a predicate that returns true for indices that need to be reindexed\n      */\n-    public static Predicate<Index> getReindexRequiredPredicate(Metadata metadata) {\n+    public static Predicate<Index> getReindexRequiredPredicate(Metadata metadata, boolean filterToBlockedStatus) {\n         return index -> {\n             IndexMetadata indexMetadata = metadata.index(index);\n-            return reindexRequired(indexMetadata);\n+            return reindexRequired(indexMetadata, filterToBlockedStatus);\n         };\n     }\n \n-    public static boolean reindexRequired(IndexMetadata indexMetadata) {\n+    /**\n+     * This method check if the indices that were created with a previous lucene version, meaning that they need to be reindexed\n+     * in order to be writable in the _next_ lucene version. It excludes searchable snapshots as they are not writable.\n+     *\n+     * @param indexMetadata the index metadata\n+     * @param filterToBlockedStatus if true, only indices that are write blocked will be returned,\n+     *                              if false, only those without a block are returned\n+     * @return a predicate that returns true for indices that need to be reindexed\n+     */\n+    public static boolean reindexRequired(IndexMetadata indexMetadata, boolean filterToBlockedStatus) {\n         return creationVersionBeforeMinimumWritableVersion(indexMetadata)\n             && isNotSearchableSnapshot(indexMetadata)\n             && isNotClosed(indexMetadata)\n-            && isNotVerifiedReadOnly(indexMetadata);\n-    }\n-\n-    private static boolean isNotVerifiedReadOnly(IndexMetadata indexMetadata) {\n-        // no need to check blocks.\n-        return MetadataIndexStateService.VERIFIED_READ_ONLY_SETTING.get(indexMetadata.getSettings()) == false;\n+            && matchBlockedStatus(indexMetadata, filterToBlockedStatus);\n     }\n \n     private static boolean isNotSearchableSnapshot(IndexMetadata indexMetadata) {\n@@ -57,4 +66,7 @@ public class DeprecatedIndexPredicate {\n         return indexMetadata.getState().equals(IndexMetadata.State.CLOSE) == false;\n     }\n \n+    private static boolean matchBlockedStatus(IndexMetadata indexMetadata, boolean filterToBlockedStatus) {\n+        return MetadataIndexStateService.VERIFIED_READ_ONLY_SETTING.get(indexMetadata.getSettings()) == filterToBlockedStatus;\n+    }\n }\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java",
+      "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java",
+      "hunk_text": "diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java\nindex c82f9cb0476..aac2446fa96 100644\n--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java\n+++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java\n@@ -24,10 +24,7 @@ public class DataStreamDeprecationChecks {\n     static DeprecationIssue oldIndicesCheck(DataStream dataStream, ClusterState clusterState) {\n         List<Index> backingIndices = dataStream.getIndices();\n \n-        Set<String> indicesNeedingUpgrade = backingIndices.stream()\n-            .filter(DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterState.metadata()))\n-            .map(Index::getName)\n-            .collect(Collectors.toUnmodifiableSet());\n+        Set<String> indicesNeedingUpgrade = getReindexRequiredIndices(backingIndices, clusterState, false);\n \n         if (indicesNeedingUpgrade.isEmpty() == false) {\n             return new DeprecationIssue(\n@@ -47,4 +44,40 @@ public class DataStreamDeprecationChecks {\n \n         return null;\n     }\n+\n+    static DeprecationIssue ignoredOldIndicesCheck(DataStream dataStream, ClusterState clusterState) {\n+        List<Index> backingIndices = dataStream.getIndices();\n+\n+        Set<String> ignoredIndices = getReindexRequiredIndices(backingIndices, clusterState, true);\n+\n+        if (ignoredIndices.isEmpty() == false) {\n+            return new DeprecationIssue(\n+                DeprecationIssue.Level.WARNING,\n+                \"Old data stream with a compatibility version < 8.0 Have Been Ignored\",\n+                \"https://www.elastic.co/guide/en/elasticsearch/reference/current/migrating-8.0.html#breaking-changes-8.0\",\n+                \"This data stream has read only backing indices that were created before Elasticsearch 8.0.0 and have been marked as \"\n+                    + \"OK to remain read-only after upgrade\",\n+                false,\n+                ofEntries(\n+                    entry(\"reindex_required\", true),\n+                    entry(\"total_backing_indices\", backingIndices.size()),\n+                    entry(\"ignored_indices_requiring_upgrade_count\", ignoredIndices.size()),\n+                    entry(\"ignored_indices_requiring_upgrade\", ignoredIndices)\n+                )\n+            );\n+        }\n+\n+        return null;\n+    }\n+\n+    private static Set<String> getReindexRequiredIndices(\n+        List<Index> backingIndices,\n+        ClusterState clusterState,\n+        boolean filterToBlockedStatus\n+    ) {\n+        return backingIndices.stream()\n+            .filter(DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterState.metadata(), filterToBlockedStatus))\n+            .map(Index::getName)\n+            .collect(Collectors.toUnmodifiableSet());\n+    }\n }\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+      "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+      "hunk_text": "diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java\nindex 898367ca706..fc5c0c4eeef 100644\n--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java\n+++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java\n@@ -95,6 +95,7 @@ public class DeprecationChecks {\n \n     static List<BiFunction<IndexMetadata, ClusterState, DeprecationIssue>> INDEX_SETTINGS_CHECKS = List.of(\n         IndexDeprecationChecks::oldIndicesCheck,\n+        IndexDeprecationChecks::ignoredOldIndicesCheck,\n         IndexDeprecationChecks::translogRetentionSettingCheck,\n         IndexDeprecationChecks::checkIndexDataPath,\n         IndexDeprecationChecks::storeTypeSettingCheck,\n@@ -103,7 +104,8 @@ public class DeprecationChecks {\n     );\n \n     static List<BiFunction<DataStream, ClusterState, DeprecationIssue>> DATA_STREAM_CHECKS = List.of(\n-        DataStreamDeprecationChecks::oldIndicesCheck\n+        DataStreamDeprecationChecks::oldIndicesCheck,\n+        DataStreamDeprecationChecks::ignoredOldIndicesCheck\n     );\n \n     /**\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
+      "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
+      "hunk_text": "diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java\nindex 0afc3e5b457..0327a27d69d 100644\n--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java\n+++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java\n@@ -36,7 +36,7 @@ public class IndexDeprecationChecks {\n         // TODO: this check needs to be revised. It's trivially true right now.\n         IndexVersion currentCompatibilityVersion = indexMetadata.getCompatibilityVersion();\n         // We intentionally exclude indices that are in data streams because they will be picked up by DataStreamDeprecationChecks\n-        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n+        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata, false) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n             return new DeprecationIssue(\n                 DeprecationIssue.Level.CRITICAL,\n                 \"Old index with a compatibility version < 8.0\",\n@@ -49,6 +49,24 @@ public class IndexDeprecationChecks {\n         return null;\n     }\n \n+    static DeprecationIssue ignoredOldIndicesCheck(IndexMetadata indexMetadata, ClusterState clusterState) {\n+        IndexVersion currentCompatibilityVersion = indexMetadata.getCompatibilityVersion();\n+        // We intentionally exclude indices that are in data streams because they will be picked up by DataStreamDeprecationChecks\n+        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata, true) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n+            return new DeprecationIssue(\n+                DeprecationIssue.Level.WARNING,\n+                \"Old index with a compatibility version < 8.0 Has Been Ignored\",\n+                \"https://www.elastic.co/guide/en/elasticsearch/reference/current/migrating-8.0.html#breaking-changes-8.0\",\n+                \"This read-only index has version: \"\n+                    + currentCompatibilityVersion.toReleaseVersion()\n+                    + \" and will be supported as read-only in 9.0\",\n+                false,\n+                Collections.singletonMap(\"reindex_required\", true)\n+            );\n+        }\n+        return null;\n+    }\n+\n     private static boolean isNotDataStreamIndex(IndexMetadata indexMetadata, ClusterState clusterState) {\n         return clusterState.metadata().findDataStreams(indexMetadata.getIndex().getName()).isEmpty();\n     }\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+      "hunk_text": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 58a90ce15e9..99d24b64065 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -118,7 +118,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         IndexMetadata sourceIndex = clusterService.state().getMetadata().index(sourceIndexName);\n         Settings settingsBefore = sourceIndex.getSettings();\n \n-        var hasOldVersion = DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterService.state().metadata());\n+        var hasOldVersion = DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterService.state().metadata(), false);\n         if (hasOldVersion.test(sourceIndex.getIndex()) == false) {\n             logger.warn(\n                 \"Migrating index [{}] with version [{}] is unnecessary as its version is not before [{}]\",\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java",
+      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java",
+      "hunk_text": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java\nindex 2d7c17db054..74545153fd7 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java\n@@ -68,7 +68,7 @@ public class ReindexDataStreamTransportAction extends HandledTransportAction<Rei\n             return;\n         }\n         int totalIndices = dataStream.getIndices().size();\n-        int totalIndicesToBeUpgraded = (int) dataStream.getIndices().stream().filter(getReindexRequiredPredicate(metadata)).count();\n+        int totalIndicesToBeUpgraded = (int) dataStream.getIndices().stream().filter(getReindexRequiredPredicate(metadata, false)).count();\n         ReindexDataStreamTaskParams params = new ReindexDataStreamTaskParams(\n             sourceDataStreamName,\n             transportService.getThreadPool().absoluteTimeInMillis(),\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java",
+      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java",
+      "hunk_text": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java\nindex 7fb59bbbf61..d9645cc817d 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java\n@@ -110,7 +110,7 @@ public class ReindexDataStreamPersistentTaskExecutor extends PersistentTasksExec\n             List<GetDataStreamAction.Response.DataStreamInfo> dataStreamInfos = response.getDataStreams();\n             if (dataStreamInfos.size() == 1) {\n                 DataStream dataStream = dataStreamInfos.get(0).getDataStream();\n-                if (getReindexRequiredPredicate(clusterService.state().metadata()).test(dataStream.getWriteIndex())) {\n+                if (getReindexRequiredPredicate(clusterService.state().metadata(), false).test(dataStream.getWriteIndex())) {\n                     RolloverRequest rolloverRequest = new RolloverRequest(sourceDataStream, null);\n                     rolloverRequest.setParentTask(taskId);\n                     client.execute(\n@@ -156,7 +156,9 @@ public class ReindexDataStreamPersistentTaskExecutor extends PersistentTasksExec\n         TaskId parentTaskId\n     ) {\n         List<Index> indices = dataStream.getIndices();\n-        List<Index> indicesToBeReindexed = indices.stream().filter(getReindexRequiredPredicate(clusterService.state().metadata())).toList();\n+        List<Index> indicesToBeReindexed = indices.stream()\n+            .filter(getReindexRequiredPredicate(clusterService.state().metadata(), false))\n+            .toList();\n         final ReindexDataStreamPersistentTaskState updatedState;\n         if (params.totalIndices() != totalIndicesInDataStream\n             || params.totalIndicesToBeUpgraded() != indicesToBeReindexed.size()\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "validation_repeated_patch_detected": false,
+  "validation_repeated_plan_detected": false,
+  "best_effort_adapted_code_hunks": [
+    {
+      "target_file": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java",
+      "mainline_file": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java",
+      "hunk_text": "diff --git a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java\nindex 559860c95a2..949a18d6648 100644\n--- a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java\n+++ b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java\n@@ -20,29 +20,38 @@ public class DeprecatedIndexPredicate {\n \n     public static final IndexVersion MINIMUM_WRITEABLE_VERSION_AFTER_UPGRADE = IndexVersions.V_8_0_0;\n \n-    /*\n+    /**\n      * This predicate allows through only indices that were created with a previous lucene version, meaning that they need to be reindexed\n-     * in order to be writable in the _next_ lucene version.\n+     * in order to be writable in the _next_ lucene version. It excludes searchable snapshots as they are not writable.\n      *\n      * It ignores searchable snapshots as they are not writable.\n+     *\n+     * @param metadata the cluster metadata\n+     * @param filterToBlockedStatus if true, only indices that are write blocked will be returned,\n+     *                              if false, only those without a block are returned\n+     * @return a predicate that returns true for indices that need to be reindexed\n      */\n-    public static Predicate<Index> getReindexRequiredPredicate(Metadata metadata) {\n+    public static Predicate<Index> getReindexRequiredPredicate(Metadata metadata, boolean filterToBlockedStatus) {\n         return index -> {\n             IndexMetadata indexMetadata = metadata.index(index);\n-            return reindexRequired(indexMetadata);\n+            return reindexRequired(indexMetadata, filterToBlockedStatus);\n         };\n     }\n \n-    public static boolean reindexRequired(IndexMetadata indexMetadata) {\n+    /**\n+     * This method check if the indices that were created with a previous lucene version, meaning that they need to be reindexed\n+     * in order to be writable in the _next_ lucene version. It excludes searchable snapshots as they are not writable.\n+     *\n+     * @param indexMetadata the index metadata\n+     * @param filterToBlockedStatus if true, only indices that are write blocked will be returned,\n+     *                              if false, only those without a block are returned\n+     * @return a predicate that returns true for indices that need to be reindexed\n+     */\n+    public static boolean reindexRequired(IndexMetadata indexMetadata, boolean filterToBlockedStatus) {\n         return creationVersionBeforeMinimumWritableVersion(indexMetadata)\n             && isNotSearchableSnapshot(indexMetadata)\n             && isNotClosed(indexMetadata)\n-            && isNotVerifiedReadOnly(indexMetadata);\n-    }\n-\n-    private static boolean isNotVerifiedReadOnly(IndexMetadata indexMetadata) {\n-        // no need to check blocks.\n-        return MetadataIndexStateService.VERIFIED_READ_ONLY_SETTING.get(indexMetadata.getSettings()) == false;\n+            && matchBlockedStatus(indexMetadata, filterToBlockedStatus);\n     }\n \n     private static boolean isNotSearchableSnapshot(IndexMetadata indexMetadata) {\n@@ -57,4 +66,7 @@ public class DeprecatedIndexPredicate {\n         return indexMetadata.getState().equals(IndexMetadata.State.CLOSE) == false;\n     }\n \n+    private static boolean matchBlockedStatus(IndexMetadata indexMetadata, boolean filterToBlockedStatus) {\n+        return MetadataIndexStateService.VERIFIED_READ_ONLY_SETTING.get(indexMetadata.getSettings()) == filterToBlockedStatus;\n+    }\n }\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java",
+      "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java",
+      "hunk_text": "diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java\nindex c82f9cb0476..aac2446fa96 100644\n--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java\n+++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java\n@@ -24,10 +24,7 @@ public class DataStreamDeprecationChecks {\n     static DeprecationIssue oldIndicesCheck(DataStream dataStream, ClusterState clusterState) {\n         List<Index> backingIndices = dataStream.getIndices();\n \n-        Set<String> indicesNeedingUpgrade = backingIndices.stream()\n-            .filter(DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterState.metadata()))\n-            .map(Index::getName)\n-            .collect(Collectors.toUnmodifiableSet());\n+        Set<String> indicesNeedingUpgrade = getReindexRequiredIndices(backingIndices, clusterState, false);\n \n         if (indicesNeedingUpgrade.isEmpty() == false) {\n             return new DeprecationIssue(\n@@ -47,4 +44,40 @@ public class DataStreamDeprecationChecks {\n \n         return null;\n     }\n+\n+    static DeprecationIssue ignoredOldIndicesCheck(DataStream dataStream, ClusterState clusterState) {\n+        List<Index> backingIndices = dataStream.getIndices();\n+\n+        Set<String> ignoredIndices = getReindexRequiredIndices(backingIndices, clusterState, true);\n+\n+        if (ignoredIndices.isEmpty() == false) {\n+            return new DeprecationIssue(\n+                DeprecationIssue.Level.WARNING,\n+                \"Old data stream with a compatibility version < 8.0 Have Been Ignored\",\n+                \"https://www.elastic.co/guide/en/elasticsearch/reference/current/migrating-8.0.html#breaking-changes-8.0\",\n+                \"This data stream has read only backing indices that were created before Elasticsearch 8.0.0 and have been marked as \"\n+                    + \"OK to remain read-only after upgrade\",\n+                false,\n+                ofEntries(\n+                    entry(\"reindex_required\", true),\n+                    entry(\"total_backing_indices\", backingIndices.size()),\n+                    entry(\"ignored_indices_requiring_upgrade_count\", ignoredIndices.size()),\n+                    entry(\"ignored_indices_requiring_upgrade\", ignoredIndices)\n+                )\n+            );\n+        }\n+\n+        return null;\n+    }\n+\n+    private static Set<String> getReindexRequiredIndices(\n+        List<Index> backingIndices,\n+        ClusterState clusterState,\n+        boolean filterToBlockedStatus\n+    ) {\n+        return backingIndices.stream()\n+            .filter(DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterState.metadata(), filterToBlockedStatus))\n+            .map(Index::getName)\n+            .collect(Collectors.toUnmodifiableSet());\n+    }\n }\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+      "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+      "hunk_text": "diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java\nindex 898367ca706..fc5c0c4eeef 100644\n--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java\n+++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java\n@@ -95,6 +95,7 @@ public class DeprecationChecks {\n \n     static List<BiFunction<IndexMetadata, ClusterState, DeprecationIssue>> INDEX_SETTINGS_CHECKS = List.of(\n         IndexDeprecationChecks::oldIndicesCheck,\n+        IndexDeprecationChecks::ignoredOldIndicesCheck,\n         IndexDeprecationChecks::translogRetentionSettingCheck,\n         IndexDeprecationChecks::checkIndexDataPath,\n         IndexDeprecationChecks::storeTypeSettingCheck,\n@@ -103,7 +104,8 @@ public class DeprecationChecks {\n     );\n \n     static List<BiFunction<DataStream, ClusterState, DeprecationIssue>> DATA_STREAM_CHECKS = List.of(\n-        DataStreamDeprecationChecks::oldIndicesCheck\n+        DataStreamDeprecationChecks::oldIndicesCheck,\n+        DataStreamDeprecationChecks::ignoredOldIndicesCheck\n     );\n \n     /**\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
+      "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
+      "hunk_text": "diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java\nindex 0afc3e5b457..0327a27d69d 100644\n--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java\n+++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java\n@@ -36,7 +36,7 @@ public class IndexDeprecationChecks {\n         // TODO: this check needs to be revised. It's trivially true right now.\n         IndexVersion currentCompatibilityVersion = indexMetadata.getCompatibilityVersion();\n         // We intentionally exclude indices that are in data streams because they will be picked up by DataStreamDeprecationChecks\n-        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n+        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata, false) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n             return new DeprecationIssue(\n                 DeprecationIssue.Level.CRITICAL,\n                 \"Old index with a compatibility version < 8.0\",\n@@ -49,6 +49,24 @@ public class IndexDeprecationChecks {\n         return null;\n     }\n \n+    static DeprecationIssue ignoredOldIndicesCheck(IndexMetadata indexMetadata, ClusterState clusterState) {\n+        IndexVersion currentCompatibilityVersion = indexMetadata.getCompatibilityVersion();\n+        // We intentionally exclude indices that are in data streams because they will be picked up by DataStreamDeprecationChecks\n+        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata, true) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n+            return new DeprecationIssue(\n+                DeprecationIssue.Level.WARNING,\n+                \"Old index with a compatibility version < 8.0 Has Been Ignored\",\n+                \"https://www.elastic.co/guide/en/elasticsearch/reference/current/migrating-8.0.html#breaking-changes-8.0\",\n+                \"This read-only index has version: \"\n+                    + currentCompatibilityVersion.toReleaseVersion()\n+                    + \" and will be supported as read-only in 9.0\",\n+                false,\n+                Collections.singletonMap(\"reindex_required\", true)\n+            );\n+        }\n+        return null;\n+    }\n+\n     private static boolean isNotDataStreamIndex(IndexMetadata indexMetadata, ClusterState clusterState) {\n         return clusterState.metadata().findDataStreams(indexMetadata.getIndex().getName()).isEmpty();\n     }\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+      "hunk_text": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\nindex 58a90ce15e9..99d24b64065 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java\n@@ -118,7 +118,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio\n         IndexMetadata sourceIndex = clusterService.state().getMetadata().index(sourceIndexName);\n         Settings settingsBefore = sourceIndex.getSettings();\n \n-        var hasOldVersion = DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterService.state().metadata());\n+        var hasOldVersion = DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterService.state().metadata(), false);\n         if (hasOldVersion.test(sourceIndex.getIndex()) == false) {\n             logger.warn(\n                 \"Migrating index [{}] with version [{}] is unnecessary as its version is not before [{}]\",\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java",
+      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java",
+      "hunk_text": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java\nindex 2d7c17db054..74545153fd7 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java\n@@ -68,7 +68,7 @@ public class ReindexDataStreamTransportAction extends HandledTransportAction<Rei\n             return;\n         }\n         int totalIndices = dataStream.getIndices().size();\n-        int totalIndicesToBeUpgraded = (int) dataStream.getIndices().stream().filter(getReindexRequiredPredicate(metadata)).count();\n+        int totalIndicesToBeUpgraded = (int) dataStream.getIndices().stream().filter(getReindexRequiredPredicate(metadata, false)).count();\n         ReindexDataStreamTaskParams params = new ReindexDataStreamTaskParams(\n             sourceDataStreamName,\n             transportService.getThreadPool().absoluteTimeInMillis(),\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java",
+      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java",
+      "hunk_text": "diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java\nindex 7fb59bbbf61..d9645cc817d 100644\n--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java\n+++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java\n@@ -110,7 +110,7 @@ public class ReindexDataStreamPersistentTaskExecutor extends PersistentTasksExec\n             List<GetDataStreamAction.Response.DataStreamInfo> dataStreamInfos = response.getDataStreams();\n             if (dataStreamInfos.size() == 1) {\n                 DataStream dataStream = dataStreamInfos.get(0).getDataStream();\n-                if (getReindexRequiredPredicate(clusterService.state().metadata()).test(dataStream.getWriteIndex())) {\n+                if (getReindexRequiredPredicate(clusterService.state().metadata(), false).test(dataStream.getWriteIndex())) {\n                     RolloverRequest rolloverRequest = new RolloverRequest(sourceDataStream, null);\n                     rolloverRequest.setParentTask(taskId);\n                     client.execute(\n@@ -156,7 +156,9 @@ public class ReindexDataStreamPersistentTaskExecutor extends PersistentTasksExec\n         TaskId parentTaskId\n     ) {\n         List<Index> indices = dataStream.getIndices();\n-        List<Index> indicesToBeReindexed = indices.stream().filter(getReindexRequiredPredicate(clusterService.state().metadata())).toList();\n+        List<Index> indicesToBeReindexed = indices.stream()\n+            .filter(getReindexRequiredPredicate(clusterService.state().metadata(), false))\n+            .toList();\n         final ReindexDataStreamPersistentTaskState updatedState;\n         if (params.totalIndices() != totalIndicesInDataStream\n             || params.totalIndicesToBeUpgraded() != indicesToBeReindexed.size()\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java",
+      "target_file": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "developer_fast_path",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    },
+    {
+      "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java",
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "developer_fast_path",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    },
+    {
+      "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "developer_fast_path",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    },
+    {
+      "mainline_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "developer_fast_path",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    },
+    {
+      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "developer_fast_path",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    },
+    {
+      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java",
+      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "developer_fast_path",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    },
+    {
+      "mainline_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java",
+      "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "developer_fast_path",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    }
+  ],
+  "generated_patch_hash": "78c3979be98d957afbe700cef62af18a0333f8ed8f29b6ee294a47f296c0f214",
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}
