@@ -1065,6 +1065,20 @@ def _run_mandatory_file_checks(
     return True, "verified", diff_text
 
 
+def _merge_token_usage(
+    total: dict[str, Any],
+    usage: dict[str, int] | None,
+    *,
+    source: str,
+) -> None:
+    if not usage:
+        return
+    in_t = int(usage.get("input_tokens", 0) or 0)
+    out_t = int(usage.get("output_tokens", 0) or 0)
+    if in_t or out_t:
+        add_usage(total, in_t, out_t, source)
+
+
 def _extract_added_lines_from_unified_diff(diff_text: str) -> list[str]:
     added: list[str] = []
     for line in (diff_text or "").splitlines():
@@ -1095,6 +1109,8 @@ def _collect_required_symbols_from_invariants(invariants: list[str]) -> list[str
                 "switch",
                 "return",
                 "new",
+                "this",
+                "super",
             }:
                 continue
             if _is_framework_chain_symbol(token):
@@ -1113,6 +1129,8 @@ def _dedupe_nonframework_symbols(symbols: list[str]) -> list[str]:
         if not s:
             continue
         if _is_framework_chain_symbol(s):
+            continue
+        if s in {"this", "super"}:
             continue
         if s in seen:
             continue
@@ -1533,9 +1551,8 @@ async def _run_react_edit_pass(
     current_attempt_trajectory: list[dict[str, Any]],
     extra_retry_context: str = "",
     patch_complexity: str = "REWRITE",
+    token_usage: dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
-    import json
-
     mapping_hints = []
     if mainline_file in state.get("mapped_target_context", {}):
         for m in state["mapped_target_context"][mainline_file]:
@@ -1627,6 +1644,16 @@ async def _run_react_edit_pass(
                 tool_calls_count += len(m.tool_calls)
         if tool_calls_count > tool_budget:
             return False, f"tool_budget_exceeded:{tool_calls_count}>{tool_budget}"
+
+        # Capture provider token usage from returned AI messages if available.
+        if token_usage is not None:
+            for m in response.get("messages", []):
+                usage = extract_usage_from_response(m)
+                _merge_token_usage(
+                    token_usage,
+                    usage,
+                    source="file_editor.react.provider_usage",
+                )
 
         last_msg = response["messages"][-1]
         print(f"    Agent 3: Agent finished. Last msg: {str(last_msg.content)[:100]}")
@@ -1810,6 +1837,9 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
     adapted_file_edits: list[FileEdit] = []
     adapted_code_hunks: list[AdaptedHunk] = []
+    best_effort_adapted_code_hunks: list[AdaptedHunk] = list(
+        state.get("best_effort_adapted_code_hunks") or []
+    )
     generation_checklist: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
@@ -2000,6 +2030,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     current_attempt_trajectory=current_attempt_trajectory,
                     extra_retry_context=apply_reason,
                     patch_complexity=patch_complexity,
+                    token_usage=token_usage,
                 )
                 if not react_ok:
                     task_entry["status"] = "failed"
@@ -2022,6 +2053,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 error_context=error_context,
                 current_attempt_trajectory=current_attempt_trajectory,
                 patch_complexity=patch_complexity,
+                token_usage=token_usage,
             )
             if not react_ok:
                 print(f"    Agent 3: Agent failed: {react_reason}")
@@ -2083,6 +2115,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     "agent_trajectory_edits": agent_trajectory_edits
                     + [current_attempt_trajectory],
                     "adapted_code_hunks": adapted_code_hunks,
+                    "best_effort_adapted_code_hunks": best_effort_adapted_code_hunks,
                     "adapted_test_hunks": [],
                     "generation_checklist": [
                         {
@@ -2105,6 +2138,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     "force_type_v_until_success": True,
                     "force_type_v_reason": inv_reason,
                     "generated_patch_hash": "",
+                    "validation_repeated_patch_detected": False,
                     "token_usage": token_usage,
                 }
 
@@ -2138,6 +2172,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         "agent_trajectory_edits": agent_trajectory_edits
                         + [current_attempt_trajectory],
                         "adapted_code_hunks": adapted_code_hunks,
+                        "best_effort_adapted_code_hunks": best_effort_adapted_code_hunks,
                         "adapted_test_hunks": [],
                         "generation_checklist": [
                             {
@@ -2160,6 +2195,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         "force_type_v_until_success": True,
                         "force_type_v_reason": f"missing_required_symbol:{sym}",
                         "generated_patch_hash": "",
+                        "validation_repeated_patch_detected": False,
                         "token_usage": token_usage,
                     }
 
@@ -2193,6 +2229,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         "agent_trajectory_edits": agent_trajectory_edits
                         + [current_attempt_trajectory],
                         "adapted_code_hunks": adapted_code_hunks,
+                        "best_effort_adapted_code_hunks": best_effort_adapted_code_hunks,
                         "adapted_test_hunks": [],
                         "generation_checklist": [
                             {
@@ -2215,6 +2252,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         "force_type_v_until_success": True,
                         "force_type_v_reason": f"missing_preserve_symbol:{sym}",
                         "generated_patch_hash": "",
+                        "validation_repeated_patch_detected": False,
                         "token_usage": token_usage,
                     }
 
@@ -2249,6 +2287,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     "agent_trajectory_edits": agent_trajectory_edits
                     + [current_attempt_trajectory],
                     "adapted_code_hunks": adapted_code_hunks,
+                    "best_effort_adapted_code_hunks": best_effort_adapted_code_hunks,
                     "adapted_test_hunks": [],
                     "generation_checklist": [
                         {
@@ -2271,6 +2310,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     "force_type_v_until_success": True,
                     "force_type_v_reason": prot_reason,
                     "generated_patch_hash": "",
+                    "validation_repeated_patch_detected": False,
                     "token_usage": token_usage,
                 }
 
@@ -2305,6 +2345,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     "agent_trajectory_edits": agent_trajectory_edits
                     + [current_attempt_trajectory],
                     "adapted_code_hunks": adapted_code_hunks,
+                    "best_effort_adapted_code_hunks": best_effort_adapted_code_hunks,
                     "adapted_test_hunks": [],
                     "generation_checklist": [
                         {
@@ -2327,6 +2368,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     "force_type_v_until_success": True,
                     "force_type_v_reason": chain_reason,
                     "generated_patch_hash": "",
+                    "validation_repeated_patch_detected": False,
                     "token_usage": token_usage,
                 }
 
@@ -2409,6 +2451,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         "agent_trajectory_edits": agent_trajectory_edits
                         + [current_attempt_trajectory],
                         "adapted_code_hunks": adapted_code_hunks,
+                        "best_effort_adapted_code_hunks": best_effort_adapted_code_hunks,
                         "adapted_test_hunks": [],
                         "generation_checklist": [
                             {
@@ -2431,6 +2474,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         "force_type_v_until_success": True,
                         "force_type_v_reason": "type_v_intent_check_failed",
                         "generated_patch_hash": "",
+                        "validation_repeated_patch_detected": False,
                         "token_usage": token_usage,
                     }
         task_entry["completed_steps"].append("intent_check")
@@ -2459,6 +2503,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
             "path_resolution_reason": op_plan.get("reason", "unknown"),
         }
         adapted_code_hunks.append(hunk)
+        best_effort_adapted_code_hunks.append(hunk)
 
     print(
         f"  Agent 3 (File Editor): Done. "
@@ -2501,6 +2546,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
             "all_adapted_file_edits": all_edits_history,
             "agent_trajectory_edits": agent_trajectory_edits,
             "adapted_code_hunks": adapted_code_hunks,
+            "best_effort_adapted_code_hunks": best_effort_adapted_code_hunks,
             "adapted_test_hunks": [],
             "generation_checklist": [
                 {
@@ -2514,6 +2560,10 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 }
             ],
             "validation_failed_stage": "generation_contract_failed",
+            "validation_repeated_patch_detected": True,
+            "validation_repeated_plan_detected": bool(
+                state.get("validation_repeated_plan_detected", False)
+            ),
             "generated_patch_hash": current_patch_hash,
             "force_type_v_until_success": force_type_v_latch,
             "force_type_v_reason": force_type_v_reason,
@@ -2533,6 +2583,11 @@ async def file_editor_node(state: AgentState, config) -> dict:
         "all_adapted_file_edits": all_edits_history,
         "agent_trajectory_edits": agent_trajectory_edits,
         "adapted_code_hunks": adapted_code_hunks,
+        "validation_repeated_patch_detected": False,
+        "validation_repeated_plan_detected": bool(
+            state.get("validation_repeated_plan_detected", False)
+        ),
+        "best_effort_adapted_code_hunks": best_effort_adapted_code_hunks,
         "adapted_test_hunks": [],
         "generation_checklist": generation_checklist,
         "generated_patch_hash": current_patch_hash,

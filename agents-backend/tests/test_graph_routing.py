@@ -33,6 +33,31 @@ class TestGraphRouting(unittest.TestCase):
         }
         self.assertEqual(route_validation(state), "END")
 
+    def test_validation_stagnation_ends_for_non_rewrite(self):
+        state = {
+            "validation_passed": False,
+            "validation_attempts": 1,
+            "patch_complexity": "STRUCTURAL",
+            "validation_repeated_patch_detected": True,
+        }
+        self.assertEqual(route_validation(state), "END")
+
+    def test_validation_stagnation_escalates_for_rewrite(self):
+        state = {
+            "validation_passed": False,
+            "validation_attempts": 1,
+            "patch_complexity": "REWRITE",
+            "validation_repeated_plan_detected": True,
+        }
+        self.assertEqual(route_validation(state), "planning_agent")
+
+    def test_route_after_structural_downgrades_blob_match(self):
+        state = {
+            "patch_complexity": "REWRITE",
+            "structural_locator_git_match_method": "GIT_BLOB",
+        }
+        self.assertEqual(route_after_structural(state), "hunk_generator")
+
 
 if __name__ == "__main__":
     unittest.main()

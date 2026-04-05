@@ -264,6 +264,15 @@ class AgentState(TypedDict):
     last_plan_signature: NotRequired[
         str
     ]  # Hash of last planner output to detect identical planning loops
+    validation_repeated_patch_detected: NotRequired[
+        bool
+    ]  # True when file editor regenerated same patch hash on retry
+    validation_repeated_plan_detected: NotRequired[
+        bool
+    ]  # True when planner generated same plan signature on retry
+    best_effort_adapted_code_hunks: NotRequired[
+        list
+    ]  # Best generated code hunks preserved even when contract gates fail
     pair_consistency: NotRequired[
         dict[str, Any]
     ]  # Mainline/backport commit-pair overlap metrics (diagnostics)

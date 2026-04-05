@@ -620,6 +620,8 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     consistency_map: dict[str, str] = {}
     # Changed to support multiple hunks per file: dict[file_path] = list[hunk_mappings]
     mapped_target_context: dict[str, list] = {}
+    git_match_method: str = ""
+    git_match_reason: str = ""
 
     # Setup a lightweight retriever (lazy index build — only when Phase 2 git methods fail)
     try:
@@ -707,6 +709,12 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 )
                 if git_candidates:
                     git_target = git_candidates[0]["file"]
+                    git_method = str(git_candidates[0].get("method") or "")
+                    git_reason = str(git_candidates[0].get("reason") or "")
+                    if not git_match_method:
+                        git_match_method = git_method
+                    if not git_match_reason:
+                        git_match_reason = git_reason
                     print(f"  Agent 2: Git resolution found target: {git_target}")
                     logger.info(
                         "Git resolution selected target=%s for file=%s",
@@ -1191,6 +1199,8 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         ],
         "consistency_map": consistency_map,
         "mapped_target_context": mapped_target_context,
+        "structural_locator_git_match_method": git_match_method,
+        "structural_locator_git_match_reason": git_match_reason,
         "token_usage": {
             "input_tokens": 0,
             "output_tokens": 0,

@@ -318,6 +318,80 @@ def _nearest_non_empty_after(lines: list[str], index: int) -> str:
     return ""
 
 
+def _is_weak_anchor_line(line: str) -> bool:
+    s = (line or "").strip()
+    if not s:
+        return True
+    if len(s) < 8:
+        return True
+    if s in {"{", "}", "();", ");", "("}:
+        return True
+    if re.fullmatch(r"[{}();,\s]+", s):
+        return True
+    return False
+
+
+def _is_anchor_unique_enough(lines: list[str], anchor: str, max_hits: int = 2) -> bool:
+    s = (anchor or "").strip()
+    if not s:
+        return False
+    hits = 0
+    for ln in lines or []:
+        if ln and ln[0] in {"+", "-", " "}:
+            txt = ln[1:].strip()
+        else:
+            txt = (ln or "").strip()
+        if txt == s:
+            hits += 1
+            if hits > max_hits:
+                return False
+    return hits > 0
+
+
+def _select_stable_insert_anchor(
+    body_lines: list[str],
+    block_start: int,
+    block_end_inclusive: int,
+) -> tuple[str, str]:
+    """
+    Prefer strong unique context anchors for insertions.
+    Returns (anchor, mode) where mode is insert_before or insert_after.
+    """
+    # 1) Prefer next context anchor.
+    j = block_end_inclusive + 1
+    while j < len(body_lines):
+        ln = body_lines[j]
+        if ln.startswith(" "):
+            cand = ln[1:]
+            if (not _is_weak_anchor_line(cand)) and _is_anchor_unique_enough(
+                body_lines, cand
+            ):
+                return cand, "insert_before"
+        elif ln.startswith(("+", "-")):
+            pass
+        else:
+            break
+        j += 1
+
+    # 2) Fallback to previous context anchor.
+    j = block_start - 1
+    while j >= 0:
+        ln = body_lines[j]
+        if ln.startswith(" "):
+            cand = ln[1:]
+            if (not _is_weak_anchor_line(cand)) and _is_anchor_unique_enough(
+                body_lines, cand
+            ):
+                return cand, "insert_after"
+        elif ln.startswith(("+", "-")):
+            pass
+        else:
+            break
+        j -= 1
+
+    return "", ""
+
+
 def _is_context_line(line: str) -> bool:
     return line.startswith(" ")
 
@@ -471,34 +545,35 @@ def _decompose_hunk_to_required_entries(
                 break
 
             added_text = _apply_consistency_map("\n".join(adds), consistency_map)
-            prev_anchor = _nearest_non_empty_before(body_lines, block_start)
-            next_anchor = _nearest_non_empty_after(body_lines, i - 1)
+            anchor, anchor_mode = _select_stable_insert_anchor(
+                body_lines,
+                block_start,
+                i - 1,
+            )
 
-            # Prefer insert_before(next_anchor) when available; this is more stable
-            # for blocks inserted before an existing method/class member.
-            if next_anchor:
+            if anchor and anchor_mode == "insert_before":
                 entries.append(
                     {
                         "hunk_index": hunk_idx,
                         "target_file": target_file,
                         "operation_index": op_index,
                         "edit_type": "insert_before",
-                        "old_string": next_anchor,
-                        "new_string": f"{added_text}\n{next_anchor}",
+                        "old_string": anchor,
+                        "new_string": f"{added_text}\n{anchor}",
                         "verified": False,
                         "verification_result": "deterministic_required_insert_before",
                         "notes": "required_op_insert_before",
                     }
                 )
-            elif prev_anchor:
+            elif anchor and anchor_mode == "insert_after":
                 entries.append(
                     {
                         "hunk_index": hunk_idx,
                         "target_file": target_file,
                         "operation_index": op_index,
                         "edit_type": "insert_after",
-                        "old_string": prev_anchor,
-                        "new_string": f"{prev_anchor}\n{added_text}",
+                        "old_string": anchor,
+                        "new_string": f"{anchor}\n{added_text}",
                         "verified": False,
                         "verification_result": "deterministic_required_insert_after",
                         "notes": "required_op_insert_after",
@@ -2104,6 +2179,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     validation_failed_stage = str(state.get("validation_failed_stage") or "")
     sticky_force_type_v = bool(state.get("force_type_v_until_success") or False)
     sticky_force_type_v_reason = str(state.get("force_type_v_reason") or "").strip()
+    previous_plan_signature = str(state.get("last_plan_signature") or "")
     consistency_map: dict[str, str] = state.get("consistency_map") or {}
     build_issue_types = _collect_build_issue_types_from_state(state)
 
@@ -2199,6 +2275,18 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 consistency_map=consistency_map,
             )
 
+            # If deterministic decomposition already yields fully verified,
+            # concrete operations and we're not in forced TYPE_V mode,
+            # skip per-hunk LLM planning to avoid unnecessary token burn.
+            deterministic_only = bool(
+                required_entries
+                and all(
+                    str((e or {}).get("old_string") or "").strip()
+                    and str((e or {}).get("new_string") or "") is not None
+                    for e in required_entries
+                )
+            )
+
             target_content = _read_target_file(target_repo_path, target_file)
             sanitized_entries = list(required_entries)
             if target_content:
@@ -2244,73 +2332,78 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 target_after,
             )
 
-            planner_prompt = _build_hunk_planner_prompt(
-                mainline_file=mainline_file,
-                target_file=target_file,
-                hunk_index=hidx,
-                raw_hunk=raw_hunk,
-                mainline_old_start=old_start,
-                target_start_line=target_start,
-                mainline_pre_before=main_before,
-                mainline_pre_after=main_after,
-                target_before=target_before,
-                target_after=target_after,
-                consistency_map=consistency_map,
-                deterministic_entries=sanitized_entries,
-                retry_failure_context=truncated_failure_context,
-            )
-
-            planner_messages = [
-                SystemMessage(content=_PLANNER_SYSTEM),
-                HumanMessage(content=planner_prompt),
-            ]
-
             payload = None
-            try:
-                response = await llm.ainvoke(planner_messages)
-                usage = extract_usage_from_response(response)
-                if usage and (usage["input_tokens"] or usage["output_tokens"]):
-                    add_usage(
-                        token_usage,
-                        usage["input_tokens"],
-                        usage["output_tokens"],
-                        "planning_agent.provider_usage",
-                    )
-                else:
-                    approx_in = count_text_tokens(
-                        _PLANNER_SYSTEM + "\n" + planner_prompt,
-                        model_name,
-                    )
+            if deterministic_only and not force_type_v:
+                llm_entries = list(sanitized_entries)
+            else:
+                planner_prompt = _build_hunk_planner_prompt(
+                    mainline_file=mainline_file,
+                    target_file=target_file,
+                    hunk_index=hidx,
+                    raw_hunk=raw_hunk,
+                    mainline_old_start=old_start,
+                    target_start_line=target_start,
+                    mainline_pre_before=main_before,
+                    mainline_pre_after=main_after,
+                    target_before=target_before,
+                    target_after=target_after,
+                    consistency_map=consistency_map,
+                    deterministic_entries=sanitized_entries,
+                    retry_failure_context=truncated_failure_context,
+                )
+
+                planner_messages = [
+                    SystemMessage(content=_PLANNER_SYSTEM),
+                    HumanMessage(content=planner_prompt),
+                ]
+
+                try:
+                    response = await llm.ainvoke(planner_messages)
+                    usage = extract_usage_from_response(response)
+                    if usage and (usage["input_tokens"] or usage["output_tokens"]):
+                        add_usage(
+                            token_usage,
+                            usage["input_tokens"],
+                            usage["output_tokens"],
+                            "planning_agent.provider_usage",
+                        )
+                    else:
+                        approx_in = count_text_tokens(
+                            _PLANNER_SYSTEM + "\n" + planner_prompt,
+                            model_name,
+                        )
+                        response_text = (
+                            response.content
+                            if hasattr(response, "content")
+                            else str(response)
+                        )
+                        add_usage(
+                            token_usage,
+                            approx_in,
+                            count_text_tokens(str(response_text), model_name),
+                            "planning_agent.tiktoken",
+                        )
+                        token_usage["estimated"] = True
+
                     response_text = (
                         response.content
                         if hasattr(response, "content")
                         else str(response)
                     )
-                    add_usage(
-                        token_usage,
-                        approx_in,
-                        count_text_tokens(str(response_text), model_name),
-                        "planning_agent.tiktoken",
+                    payload = _extract_json_payload(str(response_text))
+                except Exception as e:
+                    print(
+                        f"    Planning Agent: LLM planning failed for {target_file}[{hidx}]: {e}"
                     )
-                    token_usage["estimated"] = True
 
-                response_text = (
-                    response.content if hasattr(response, "content") else str(response)
+                llm_entries = _normalize_planner_response_entries(
+                    payload if isinstance(payload, dict) else {},
+                    sanitized_entries,
+                    target_file,
+                    hidx,
                 )
-                payload = _extract_json_payload(str(response_text))
-            except Exception as e:
-                print(
-                    f"    Planning Agent: LLM planning failed for {target_file}[{hidx}]: {e}"
-                )
-
-            llm_entries = _normalize_planner_response_entries(
-                payload if isinstance(payload, dict) else {},
-                sanitized_entries,
-                target_file,
-                hidx,
-            )
-            if not llm_entries:
-                llm_entries = list(sanitized_entries)
+                if not llm_entries:
+                    llm_entries = list(sanitized_entries)
 
             entries = _ensure_required_coverage(llm_entries, required_entries)
 
@@ -2438,6 +2531,16 @@ async def planning_agent_node(state: AgentState, config) -> dict:
 
     plan_json = json.dumps(dict(plan), sort_keys=True)
     plan_sig = hashlib.sha256(plan_json.encode("utf-8")).hexdigest()
+    repeated_plan_detected = bool(
+        validation_attempts > 0
+        and previous_plan_signature
+        and previous_plan_signature == plan_sig
+    )
+    if repeated_plan_detected:
+        print(
+            "Planning Agent: Repeated plan signature detected on retry; "
+            "marking stagnation signal."
+        )
 
     return {
         "messages": [
@@ -2447,6 +2550,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         ],
         "hunk_generation_plan": dict(plan),
         "last_plan_signature": plan_sig,
+        "validation_repeated_plan_detected": repeated_plan_detected,
         "force_type_v_until_success": bool(force_type_v),
         "force_type_v_reason": force_type_v_reason if force_type_v else "",
         "token_usage": token_usage,

@@ -387,6 +387,11 @@ async def validation_agent(state: AgentState, config) -> dict:
 
     # 3.0 Setup
     code_hunks = state.get("adapted_code_hunks", [])
+    if not code_hunks:
+        # Preserve best-so-far candidate hunks from generation attempts so
+        # validation does not fail as empty_generation when a retry path dropped
+        # final emission despite having a valid prior candidate.
+        code_hunks = state.get("best_effort_adapted_code_hunks", []) or []
     test_hunks = state.get("adapted_test_hunks", [])
     generation_checklist = state.get("generation_checklist", []) or []
     type_v_present, type_v_files = _detect_type_v_retry_scope(generation_checklist)
@@ -428,6 +433,12 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_error_context": msg,
             "validation_failure_category": "empty_generation",
             "validation_retry_files": [],
+            "validation_repeated_patch_detected": bool(
+                state.get("validation_repeated_patch_detected", False)
+            ),
+            "validation_repeated_plan_detected": bool(
+                state.get("validation_repeated_plan_detected", False)
+            ),
             "force_type_v_until_success": force_type_v_latch,
             "force_type_v_reason": force_type_v_reason,
         }

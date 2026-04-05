@@ -35,6 +35,7 @@ from graph import app
 from agents.context_analyzer import context_analyzer_node
 from agents.structural_locator import structural_locator_node
 from utils.patch_analyzer import PatchAnalyzer
+from utils.patch_complexity import classify_patch_complexity
 from utils.token_counter import has_tiktoken, resolve_model_name
 from dotenv import load_dotenv
 
@@ -1683,6 +1684,29 @@ async def run_full_pipeline(
             "developer_auxiliary_hunks": developer_aux_hunks,
             "use_phase_0_cache": True,
         }
+
+        # Always pre-compute deterministic complexity so cached Phase 0 runs do not
+        # lose routing context and accidentally default into REWRITE.
+        try:
+            complexity_info = classify_patch_complexity(
+                patch_diff=agent_eligible_patch,
+                target_repo_path=target_repo_path,
+                with_test_changes=False,
+            )
+            base_inputs["patch_complexity"] = str(
+                complexity_info.get("complexity") or "REWRITE"
+            )
+            base_inputs["complexity_reason"] = str(
+                complexity_info.get("reason") or "unknown"
+            )
+            base_inputs["complexity_details"] = complexity_info.get("details") or {}
+        except Exception as e:
+            print(
+                f"[{project}/{patch_id}] Warning: complexity preclassification failed: {e}"
+            )
+            base_inputs["patch_complexity"] = "REWRITE"
+            base_inputs["complexity_reason"] = "preclassification_error"
+            base_inputs["complexity_details"] = {}
 
         if run_mode == RUN_MODE_PHASE1:
             _append_runtime_log("Running mode=phase1")

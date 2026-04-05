@@ -73,6 +73,16 @@ def route_after_structural(state: AgentState) -> str:
     - TRIVIAL/STRUCTURAL: skip planning and go directly to file editor.
     """
     complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
+    git_match_method = (
+        str(state.get("structural_locator_git_match_method") or "").strip().upper()
+    )
+    if git_match_method in {"GIT_BLOB", "GIT_EXACT"} and complexity == "REWRITE":
+        print(
+            "Router: structural locator reported exact/blob git match; "
+            "downgrading REWRITE to STRUCTURAL path (skip planning)."
+        )
+        return "hunk_generator"
+
     if complexity == "REWRITE":
         print("Router: complexity=REWRITE -> planning_agent.")
         return "planning_agent"
@@ -124,6 +134,20 @@ def route_validation(state: AgentState) -> str:
     if attempts < MAX_VALIDATION_ATTEMPTS:
         failed_stage = (state.get("validation_failed_stage") or "").strip().lower()
         complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
+        repeated_patch = bool(state.get("validation_repeated_patch_detected", False))
+        repeated_plan = bool(state.get("validation_repeated_plan_detected", False))
+        if repeated_patch or repeated_plan:
+            if complexity == "REWRITE":
+                print(
+                    "Router: Stagnation detected (repeated plan/patch) on REWRITE. "
+                    "Escalating once via planning_agent."
+                )
+                return "planning_agent"
+            print(
+                "Router: Stagnation detected (repeated plan/patch) on non-REWRITE. "
+                "Stopping retries to prevent token burn."
+            )
+            return "END"
 
         # 1. Identical Patch Guard: force replanning if the patch didn't change
         # but validation still fails.
