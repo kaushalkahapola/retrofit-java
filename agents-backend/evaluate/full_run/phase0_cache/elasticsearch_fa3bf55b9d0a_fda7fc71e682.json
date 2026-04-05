@@ -1,0 +1,72 @@
+{
+  "fast_path_success": false,
+  "phase_0_test_targets": {
+    "test_targets": [
+      "x-pack/plugin/deprecation:org.elasticsearch.xpack.deprecation.IndexDeprecationCheckerTests"
+    ],
+    "source_modules": [
+      "x-pack/plugin/deprecation"
+    ],
+    "all_modules": [
+      "x-pack/plugin/deprecation"
+    ],
+    "raw": {
+      "source": "changed_files",
+      "changed_files": [
+        "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecker.java",
+        "x-pack/plugin/deprecation/src/test/java/org/elasticsearch/xpack/deprecation/IndexDeprecationCheckerTests.java"
+      ]
+    }
+  },
+  "phase_0_baseline_test_result": {
+    "success": false,
+    "compile_error": false,
+    "output": "=== Running Elasticsearch Tests for f655808 ===\nTarget: x-pack/plugin/deprecation:org.elasticsearch.xpack.deprecation.IndexDeprecationCheckerTests\n--- Container user: 1001:1002 ---\n--- Using Docker Image: retrofit-elasticsearch-builder:local ---\nCPU detected: 12\ngradle-cache-es\ngradle-wrapper-es\n--- Setting cache permissions ---\n--- Executing: ./gradlew :x-pack:plugin:deprecation:test --tests \"org.elasticsearch.xpack.deprecation.IndexDeprecationCheckerTests\" :x-pack:plugin:deprecation:internalClusterTest --tests \"org.elasticsearch.xpack.deprecation.IndexDeprecationCheckerTests\" --no-daemon -Dbuild.docker=false -DfailIfNoTests=false --max-workers=12 --project-cache-dir /tmp/gradle-project-cache ---\nDownloading https://services.gradle.org/distributions/gradle-8.12-all.zip\n.....................10%......................20%......................30%......................40%......................50%......................60%......................70%......................80%......................90%......................100%\nTo honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.12/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.\nDaemon will be stopped at the end of the build \n\n> Task :build-conventions:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: /repo/build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/LicensingPlugin.java uses unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\n> Task :build-conventions:pluginDescriptors\n> Task :build-conventions:processResources\n> Task :build-conventions:classes\n> Task :build-conventions:jar\n> Task :build-tools:reaper:compileJava\n> Task :build-tools:reaper:processResources NO-SOURCE\n> Task :build-tools:reaper:classes\n> Task :build-tools:reaper:jar\n> Task :build-tools-internal:extractPluginRequests\n> Task :build-tools-internal:generatePluginAdapters\n\n> Task :build-tools:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: Some input files use unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\n> Task :build-tools-internal:pluginDescriptors\n> Task :build-tools-internal:processResources\n> Task :build-tools:compileGroovy NO-SOURCE\n> Task :build-tools:generateVersionProperties\n> Task :build-tools:pluginDescriptors\n> Task :build-tools:processResources\n> Task :build-tools:classes\n> Task :build-tools:jar\n\n> Task :build-tools-internal:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: Some input files use unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\n> Task :build-tools-internal:compileGroovy\n> Task :build-tools-internal:compileGroovyPlugins\n> Task :build-tools-internal:classes\n> Task :build-tools-internal:jar\n\n[Incubating] Problems report is available at: file:///repo/build/reports/problems/problems-report.html\n\nFAILURE: Build failed with an exception.\n\n* What went wrong:\nCannot locate tasks that match ':x-pack:plugin:deprecation:internalClusterTest' as task 'internalClusterTest' not found in project ':x-pack:plugin:deprecation'.\n\n* Try:\n> Run gradlew tasks to get a list of available tasks.\n> For more on name expansion, please refer to https://docs.gradle.org/8.12/userguide/command_line_interface.html#sec:name_abbreviation in the Gradle documentation.\n> Run with --stacktrace option to get the stack trace.\n> Run with --info or --debug option to get more log output.\n> Get more help at https://help.gradle.org.\n\nBUILD FAILED in 2m 16s\n19 actionable tasks: 19 executed\n--- Test results are available in build/test-results/ ---\n\u274c Tests Failed\n--- Auto-fix rerun (task remap): ./gradlew :x-pack:plugin:deprecation:test --tests \"org.elasticsearch.xpack.deprecation.IndexDeprecationCheckerTests\" :x-pack:plugin:deprecation:internalClusterTest --tests \"org.elasticsearch.xpack.deprecation.IndexDeprecationCheckerTests\" --no-daemon -Dbuild.docker=false -DfailIfNoTests=false --max-workers=12 --project-cache-dir /tmp/gradle-project-cache ---\nDownloading https://services.gradle.org/distributions/gradle-8.12-all.zip\n.....................10%......................20%......................30%......................40%......................50%......................60%......................70%......................80%......................90%......................100%\nTo honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.12/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.\nDaemon will be stopped at the end of the build \n\n> Task :build-conventions:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: /repo/build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/LicensingPlugin.java uses unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\n> Task :build-conventions:pluginDescriptors\n> Task :build-conventions:processResources\n> Task :build-conventions:classes\n> Task :build-conventions:jar\n> Task :build-tools:reaper:compileJava\n> Task :build-tools:reaper:processResources NO-SOURCE\n> Task :build-tools:reaper:classes\n> Task :build-tools:reaper:jar\n> Task :build-tools-internal:extractPluginRequests\n> Task :build-tools-internal:generatePluginAdapters\n> Task :build-tools-internal:pluginDescriptors\n> Task :build-tools-internal:processResources\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: Some input files use unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\n> Task :build-tools:compileJava\n\n> Task :build-tools:compileGroovy NO-SOURCE\n> Task :build-tools:generateVersionProperties\n> Task :build-tools:pluginDescriptors\n> Task :build-tools:processResources\n> Task :build-tools:classes\n> Task :build-tools:jar\n\n> Task :build-tools-internal:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: Some input files use unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\n> Task :build-tools-internal:compileGroovy\n> Task :build-tools-internal:compileGroovyPlugins\n> Task :build-tools-internal:classes\n> Task :build-tools-internal:jar\n\nFAILURE: Build failed with an exception.\n\n[Incubating] Problems report is available at: file:///repo/build/reports/problems/problems-report.html\n\n* What went wrong:\nCannot locate tasks that match ':x-pack:plugin:deprecation:internalClusterTest' as task 'internalClusterTest' not found in project ':x-pack:plugin:deprecation'.\n\n* Try:\n> Run gradlew tasks to get a list of available tasks.\n> For more on name expansion, please refer to https://docs.gradle.org/8.12/userguide/command_line_interface.html#sec:name_abbreviation in the Gradle documentation.\n> Run with --stacktrace option to get the stack trace.\n> Run with --info or --debug option to get more log output.\n> Get more help at https://help.gradle.org.\n\n19 actionable tasks: 19 executedBUILD FAILED in 2m 7s\n\n--- Test results are available in build/test-results/ ---\nRETROFITTEST_RUNNER_CONFIG_UNRESOLVED: Gradle test task resolution failed after one rerun",
+    "failed_tests": [],
+    "mode": "elasticsearch-helper-script",
+    "targets": {
+      "test_targets": [
+        "x-pack/plugin/deprecation:org.elasticsearch.xpack.deprecation.IndexDeprecationCheckerTests"
+      ],
+      "source_modules": [
+        "x-pack/plugin/deprecation"
+      ],
+      "all_modules": [
+        "x-pack/plugin/deprecation"
+      ],
+      "raw": {
+        "source": "changed_files",
+        "changed_files": [
+          "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecker.java",
+          "x-pack/plugin/deprecation/src/test/java/org/elasticsearch/xpack/deprecation/IndexDeprecationCheckerTests.java"
+        ]
+      }
+    },
+    "test_state": {
+      "xml_reports": [
+        "/home/kaushal/retrofit-java/temp_repo_storage/elasticsearch/server/build/test-results/internalClusterTest/TEST-org.elasticsearch.search.query.RescoreKnnVectorQueryIT.xml",
+        "/home/kaushal/retrofit-java/temp_repo_storage/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.script.ScriptStatsTests.xml",
+        "/home/kaushal/retrofit-java/temp_repo_storage/elasticsearch/x-pack/plugin/migrate/build/test-results/internalClusterTest/TEST-org.elasticsearch.xpack.migrate.action.ReindexDatastreamIndexTransportActionIT.xml"
+      ],
+      "target_classes": [
+        "org.elasticsearch.xpack.deprecation.IndexDeprecationCheckerTests"
+      ],
+      "test_cases": {},
+      "classes": {},
+      "summary": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "total": 0
+      }
+    }
+  },
+  "phase_0_post_patch_test_result": {},
+  "phase_0_transition_evaluation": {
+    "valid_backport_signal": false,
+    "reason": "Invalid: git apply --check failed. error: patch failed: x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecker.java:95\nerror: x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/",
+    "fail_to_pass": [],
+    "pass_to_fail": [],
+    "newly_passing": []
+  }
+}

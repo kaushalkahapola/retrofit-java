@@ -1,0 +1,15 @@
+{
+  "validation_passed": false,
+  "validation_attempts": 3,
+  "validation_error_context": "Validation deferred: generator checklist has incomplete hunk tasks. Route back to planning/generation before running build/tests. Incomplete hunks: [{\"mainline_file\": \"<all>\", \"target_file\": \"<all>\", \"hunk_index\": 0, \"status\": \"failed\", \"reason\": \"generation_contract_failed\", \"todo_steps\": [\"replan\"], \"completed_steps\": []}]",
+  "validation_failure_category": "context_mismatch",
+  "validation_retry_files": [
+    "<all>"
+  ],
+  "validation_retry_hunks": [
+    0
+  ],
+  "validation_failed_stage": "generation_contract_failed",
+  "force_type_v_until_success": true,
+  "force_type_v_reason": "failed_stage_generation_contract"
+}

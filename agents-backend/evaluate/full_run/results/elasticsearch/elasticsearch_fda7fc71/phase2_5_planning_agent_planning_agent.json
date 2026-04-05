@@ -1,0 +1,59 @@
+{
+  "hunk_generation_plan": {
+    "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecker.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecker.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.index.IndexModule;",
+        "new_string": "import org.elasticsearch.core.Strings;\nimport org.elasticsearch.index.IndexModule;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before|forced_type_v:failed_stage_generation_contract",
+        "surround_before_3": [
+          "import org.elasticsearch.common.TriFunction;",
+          "import org.elasticsearch.common.time.DateFormatter;",
+          "import org.elasticsearch.common.time.LegacyFormatNames;"
+        ],
+        "surround_after_3": [
+          "import org.elasticsearch.index.IndexSettings;",
+          "import org.elasticsearch.index.IndexVersion;",
+          "import org.elasticsearch.index.engine.frozen.FrozenEngine;"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 16,
+          "target_declared_methods_count": 17,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ]
+  },
+  "last_plan_signature": "7fbd0bf00b20c5fb6aef85d8ec8fc7cbc55c93abc04fc39bb78f583297ee7fe9",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": true,
+  "force_type_v_reason": "failed_stage_generation_contract",
+  "token_usage": {
+    "input_tokens": 1244,
+    "output_tokens": 237,
+    "total_tokens": 1481,
+    "estimated": false,
+    "sources": [
+      "planning_agent.provider_usage"
+    ]
+  }
+}

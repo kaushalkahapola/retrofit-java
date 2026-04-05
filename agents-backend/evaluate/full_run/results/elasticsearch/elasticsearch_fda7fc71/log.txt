@@ -1,0 +1,16 @@
+patch_id=elasticsearch_fda7fc71
+project=elasticsearch
+mainline_commit=fda7fc71e68259f313d6fcfd6b43ca9fec97b983
+backport_commit=ff0932f74fe09a872c88b1c4d3a089e031c438f9
+mode=full
+started_at=2026-04-05T03:25:07.453853
+----------------------------------------
+Running full workflow graph
+
+[elasticsearch/elasticsearch_fda7fc71] Setting up repositories for mode=full...
+[elasticsearch/elasticsearch_fda7fc71] Running full workflow graph...
+Router: Running Phase 0.
+Phase 0 (Optimistic): Checking direct patch applicability...
+Phase 0: Experiment mode — checking out parent of ff0932f74fe09a872c88b1c4d3a089e031c438f9...
+Phase 0: Building baseline by applying developer backport test hunks only...
+  Validation: x-pack/plugin/deprecation/src/test/java/org/elasticsearch/xpack/deprecation/IndexDeprecationCheckerTests.java - applying 7 hunk(s) one by one in bottom-to-top order: [299, 277, 177, 161, 130, 103, 80]
