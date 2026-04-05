@@ -2182,16 +2182,26 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 )
                 if not _pr.ok:
                     agent_metrics["plan_preflight_failures"] += 1
-                    print(
-                        f"    Agent 3: PLAN_PREFLIGHT_FAILED {target_file}: {_pr.reason} "
-                        "(skipping deterministic apply and ReAct; fix planning decomposition)"
+                    _react_recovery = validation_attempts > 0 or bool(
+                        state.get("evaluation_full_workflow")
                     )
-                    task_entry["status"] = "failed"
-                    task_entry["reason"] = "plan_preflight_failed"
-                    task_entry["error"] = str(_pr.reason)[:800]
-                    task_entry["completed_steps"].append("plan_preflight_failed")
-                    _git_reset_file(target_repo_path, target_file)
-                    continue
+                    if _react_recovery:
+                        print(
+                            f"    Agent 3: PLAN_PREFLIGHT_FAILED {target_file}: {_pr.reason} "
+                            "— falling back to ReAct (stale anchors after build failure or eval mode)."
+                        )
+                        deterministic_only = False
+                    else:
+                        print(
+                            f"    Agent 3: PLAN_PREFLIGHT_FAILED {target_file}: {_pr.reason} "
+                            "(skipping deterministic apply and ReAct; fix planning decomposition)"
+                        )
+                        task_entry["status"] = "failed"
+                        task_entry["reason"] = "plan_preflight_failed"
+                        task_entry["error"] = str(_pr.reason)[:800]
+                        task_entry["completed_steps"].append("plan_preflight_failed")
+                        _git_reset_file(target_repo_path, target_file)
+                        continue
             except Exception as _pex:
                 print(f"    Agent 3: Plan preflight read error for {target_file}: {_pex}")
 

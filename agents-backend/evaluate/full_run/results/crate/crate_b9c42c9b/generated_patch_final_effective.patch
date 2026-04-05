@@ -1,0 +1,54 @@
+diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java
+index dd4bfdf4ed..bb582259ea 100644
+--- a/server/src/main/java/io/crate/session/Session.java
++++ b/server/src/main/java/io/crate/session/Session.java
+@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {
+         if (activeExecution == null) {
+             return triggerDeferredExecutions(forceBulk);
+         } else {
++            LOGGER.debug("method=sync activeExecution={}", activeExecution);
+             var result = activeExecution;
+             activeExecution = null;
+             return result;
+@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {
+     }
+ 
+     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {
+-        switch (deferredExecutionsByStmt.size()) {
++        int numDeferred = deferredExecutionsByStmt.size();
++        LOGGER.debug("method=sync deferredExecutions={}", numDeferred);
++        switch (numDeferred) {
+             case 0:
+-                LOGGER.debug("method=sync deferredExecutions=0");
+                 return CompletableFuture.completedFuture(null);
+             case 1: {
+                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();
+diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
++++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+@@ -159,10 +167,21 @@
+     }
+ 
+     public void resume() {
+-        assert activeIt != null : "resume must only be called if suspended() returned true and activeIt is not null";
+-        BatchIterator<Row> iterator = this.activeIt;
+-        this.activeIt = null;
+-        consumeIt(iterator);
++        assert suspended() : "resume must only be called if suspended() returned true";
++        BatchIterator<Row> it = null;
++        try {
++            it = suspendedIt.join();
++            suspendedIt = new CompletableFuture<>();
++            resultReceiver.setNextRow(it.currentElement());
++            rowCount++;
++            consumeIt(it);
++        } catch (Throwable t) {
++            if (it != null) {
++                it.close();
++            }
++            completionFuture.completeExceptionally(t);
++            resultReceiver.fail(t);
++        }
+     }
+ 
+     @Override

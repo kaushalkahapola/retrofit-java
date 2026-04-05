@@ -1,0 +1,1220 @@
+{
+  "project": "crate",
+  "patch_id": "crate_b9c42c9b",
+  "mainline_commit": "b9c42c9bbc08a39b51c7205a98da6972b56ce612",
+  "backport_commit": "e01a59319d802383fe4193c04cc0afce9d0c8d9a",
+  "run_mode": "full",
+  "timestamp": "2026-04-05T05:18:29.259086",
+  "phases": {
+    "phase1_context_analyzer": {
+      "context_analyzer": {
+        "node": "context_analyzer",
+        "outputs": {
+          "semantic_blueprint": {
+            "root_cause_hypothesis": "Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.",
+            "fix_logic": "Apply each source hunk with target-verified context and symbol consistency while preserving behavior.",
+            "dependent_apis": [
+              "if",
+              "consumeIt",
+              "suspended",
+              "catch",
+              "switch"
+            ],
+            "patch_intent_summary": "Backport patch behavior to target branch with minimal, context-correct edits.",
+            "hunk_chain": [
+              {
+                "hunk_index": 1,
+                "file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "summary": "Modifies logic (+1/-1 lines).",
+                "role": "declaration",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 1
+              },
+              {
+                "hunk_index": 2,
+                "file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "summary": "Adds logic (+1 lines).",
+                "role": "propagation",
+                "connects_to_next": "",
+                "global_index": 2
+              },
+              {
+                "hunk_index": 1,
+                "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "summary": "Modifies logic (+2/-2 lines).",
+                "role": "core_fix",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 3
+              },
+              {
+                "hunk_index": 2,
+                "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "summary": "Modifies logic (+9/-8 lines).",
+                "role": "guard",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 4
+              },
+              {
+                "hunk_index": 3,
+                "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "summary": "Modifies logic (+1/-1 lines).",
+                "role": "core_fix",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 5
+              },
+              {
+                "hunk_index": 4,
+                "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "summary": "Modifies logic (+4/-4 lines).",
+                "role": "guard",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 6
+              },
+              {
+                "hunk_index": 5,
+                "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "summary": "Modifies logic (+1/-1 lines).",
+                "role": "propagation",
+                "connects_to_next": "",
+                "global_index": 7
+              },
+              {
+                "hunk_index": 1,
+                "file": "server/src/main/java/io/crate/session/Session.java",
+                "summary": "Adds logic (+1 lines).",
+                "role": "core_fix",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 8
+              },
+              {
+                "hunk_index": 2,
+                "file": "server/src/main/java/io/crate/session/Session.java",
+                "summary": "Modifies logic (+3/-2 lines).",
+                "role": "core_fix",
+                "connects_to_next": "",
+                "global_index": 9
+              }
+            ]
+          },
+          "patch_diff": "diff --git a/a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/b/server/src/main/java/io/crate/protocols/postgres/Portal.java\nindex 0000000..0000000 100644\n--- a/a/server/src/main/java/io/crate/protocols/postgres/Portal.java\n+++ b/b/server/src/main/java/io/crate/protocols/postgres/Portal.java\n@@ -25,9 +25,9 @@\n \n import org.jetbrains.annotations.Nullable;\n \n+import io.crate.analyze.AnalyzedStatement;\n import io.crate.session.PreparedStmt;\n import io.crate.session.RowConsumerToResultReceiver;\n-import io.crate.analyze.AnalyzedStatement;\n \n public final class Portal {\n \n@@ -91,6 +91,7 @@\n         return \"Portal{\" +\n                \"portalName=\" + portalName +\n                \", preparedStmt=\" + preparedStmt.rawStatement() +\n+               \", consumer=\" + consumer +\n                '}';\n     }\n }\ndiff --git a/a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\nindex 0000000..0000000 100644\n--- a/a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n+++ b/b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n@@ -45,12 +45,12 @@\n      * Reset per suspend/execute\n      */\n     private int rowCount = 0;\n-    private BatchIterator<Row> activeIt;\n+    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n \n     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n         this.resultReceiver = resultReceiver;\n         this.maxRows = maxRows;\n-        completionFuture.whenComplete((res, err) -> {\n+        completionFuture.whenComplete((_, err) -> {\n             onCompletion.accept(err);\n         });\n     }\n@@ -77,23 +77,24 @@\n         while (true) {\n             try {\n                 while (iterator.moveNext()) {\n+                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n+                        suspendedIt.complete(iterator);\n+                        resultReceiver.batchFinished();\n+                        return; // resumed via postgres protocol, close is done later\n+                    }\n                     rowCount++;\n                     CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                     if (writeFuture != null) {\n                         LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n-                        activeIt = iterator;\n+                        suspendedIt.complete(iterator);\n                         writeFuture.thenRun(() -> {\n                             LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n-                            resume();\n+                            suspendedIt = new CompletableFuture<>();\n+                            rowCount = 0;\n+                            consumeIt(iterator);\n                         });\n                         return;\n                     }\n-\n-                    if (maxRows > 0 && rowCount % maxRows == 0) {\n-                        activeIt = iterator;\n-                        resultReceiver.batchFinished();\n-                        return; // resumed via postgres protocol, close is done later\n-                    }\n                 }\n                 if (iterator.allLoaded()) {\n                     completionFuture.complete(null);\n@@ -109,7 +110,7 @@\n                         }\n                         continue;\n                     }\n-                    nextBatch.whenComplete((r, f) -> {\n+                    nextBatch.whenComplete((_, f) -> {\n                         if (f == null) {\n                             consumeIt(iterator);\n                         } else {\n@@ -135,17 +136,17 @@\n      * and finish the ResultReceiver\n      */\n     public void closeAndFinishIfSuspended() {\n-        if (activeIt != null) {\n-            activeIt.close();\n+        suspendedIt.whenComplete((it, _) -> {\n+            it.close();\n             completionFuture.complete(null);\n             // resultReceiver is left untouched:\n             // - A previous .batchCompleted() call already flushed out pending messages\n             // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.\n-        }\n+        });\n     }\n \n     public boolean suspended() {\n-        return activeIt != null;\n+        return suspendedIt.isDone();\n     }\n \n     public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {\n@@ -171,7 +182,7 @@\n                \"resultReceiver=\" + resultReceiver +\n                \", maxRows=\" + maxRows +\n                \", rowCount=\" + rowCount +\n-               \", activeIt=\" + activeIt +\n+               \", activeIt=\" + suspendedIt +\n                '}';\n     }\n }\ndiff --git a/a/server/src/main/java/io/crate/session/Session.java b/b/server/src/main/java/io/crate/session/Session.java\nindex 0000000..0000000 100644\n--- a/a/server/src/main/java/io/crate/session/Session.java\n+++ b/b/server/src/main/java/io/crate/session/Session.java\n@@ -630,6 +630,7 @@\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -679,9 +680,10 @@\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n",
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "reason": "deterministic_no_llm"
+          }
+        }
+      }
+    },
+    "phase2_structural_locator": {
+      "structural_locator": {
+        "node": "structural_locator",
+        "outputs": {
+          "consistency_map": {},
+          "mapped_target_context": {
+            "server/src/main/java/io/crate/protocols/postgres/Portal.java": [
+              {
+                "hunk_index": 1,
+                "mainline_method": "<import>",
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "target_method": "<import>",
+                "start_line": 30,
+                "end_line": 30,
+                "code_snippet": " *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.protocols.postgres;\n\nimport java.util.List;\n\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.session.PreparedStmt;\nimport io.crate.session.RowConsumerToResultReceiver;\nimport io.crate.analyze.AnalyzedStatement;\n\npublic final class Portal {\n\n    private String portalName;\n    private final PreparedStmt preparedStmt;\n    private final List<Object> params;\n\n    @Nullable\n    private final FormatCodes.FormatCode[] resultFormatCodes;\n\n    private RowConsumerToResultReceiver consumer;\n\n    public Portal(String portalName,\n                  PreparedStmt preparedStmt,\n                  List<Object> params,\n                  @Nullable FormatCodes.FormatCode[] resultFormatCodes) {\n        this.portalName = portalName;\n        this.preparedStmt = preparedStmt;\n        this.params = params;\n        this.resultFormatCodes = resultFormatCodes;",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved",
+                "anchor_strategy": "deterministic_realign"
+              },
+              {
+                "hunk_index": 2,
+                "mainline_method": "hunk_2",
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "target_method": null,
+                "start_line": 91,
+                "end_line": 91,
+                "code_snippet": "        return preparedStmt.analyzedStatement();\n    }\n\n    public void setActiveConsumer(RowConsumerToResultReceiver consumer) {\n        this.consumer = consumer;\n    }\n\n    @Nullable\n    public RowConsumerToResultReceiver activeConsumer() {\n        return consumer;\n    }\n\n    public void closeActiveConsumer() {\n        if (consumer != null) {\n            consumer.closeAndFinishIfSuspended();\n        }\n    }\n\n    @Override\n    public String toString() {\n        return \"Portal{\" +\n               \"portalName=\" + portalName +\n               \", preparedStmt=\" + preparedStmt.rawStatement() +\n               '}';\n    }\n}",
+                "anchor_confidence": "medium",
+                "anchor_reason": "line_resolved_method_unresolved",
+                "anchor_strategy": "deterministic_realign"
+              }
+            ],
+            "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java": [
+              {
+                "hunk_index": 1,
+                "mainline_method": "hunk_1",
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "target_method": null,
+                "start_line": 48,
+                "end_line": 48,
+                "code_snippet": "import org.apache.logging.log4j.Logger;\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.BatchIterator;\nimport io.crate.data.Row;\nimport io.crate.data.RowConsumer;\nimport io.crate.exceptions.SQLExceptions;\n\npublic class RowConsumerToResultReceiver implements RowConsumer {\n\n    private static final Logger LOGGER = LogManager.getLogger(RowConsumerToResultReceiver.class);\n\n    private final CompletableFuture<?> completionFuture = new CompletableFuture<>();\n    private ResultReceiver<?> resultReceiver;\n    private int maxRows;\n\n    /**\n     * Reset per suspend/execute\n     */\n    private int rowCount = 0;\n    private BatchIterator<Row> activeIt;\n\n    public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n        this.resultReceiver = resultReceiver;\n        this.maxRows = maxRows;\n        completionFuture.whenComplete((res, err) -> {\n            onCompletion.accept(err);\n        });\n    }\n\n    @Override\n    public void accept(BatchIterator<Row> iterator, @Nullable Throwable failure) {\n        if (failure == null) {\n            consumeIt(iterator);\n        } else {\n            if (iterator != null) {\n                iterator.close();\n            }\n            completionFuture.completeExceptionally(failure);\n            resultReceiver.fail(failure);\n        }",
+                "anchor_confidence": "medium",
+                "anchor_reason": "line_resolved_method_unresolved",
+                "anchor_strategy": "deterministic_realign"
+              },
+              {
+                "hunk_index": 2,
+                "mainline_method": "hunk_2",
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "target_method": null,
+                "start_line": 84,
+                "end_line": 84,
+                "code_snippet": "                iterator.close();\n            }\n            completionFuture.completeExceptionally(failure);\n            resultReceiver.fail(failure);\n        }\n    }\n\n    @Override\n    public CompletableFuture<?> completionFuture() {\n        return completionFuture;\n    }\n\n    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        activeIt = iterator;\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            resume();\n                        });\n                        return;\n                    }\n\n                    if (maxRows > 0 && rowCount % maxRows == 0) {\n                        activeIt = iterator;\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                    iterator.close();\n                    resultReceiver.allFinished();\n                    return;\n                } else {\n                    var nextBatch = iterator.loadNextBatch().toCompletableFuture();",
+                "anchor_confidence": "medium",
+                "anchor_reason": "line_resolved_method_unresolved",
+                "anchor_strategy": "deterministic_realign"
+              },
+              {
+                "hunk_index": 3,
+                "mainline_method": "hunk_3",
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "target_method": null,
+                "start_line": 112,
+                "end_line": 112,
+                "code_snippet": "                    if (maxRows > 0 && rowCount % maxRows == 0) {\n                        activeIt = iterator;\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                    iterator.close();\n                    resultReceiver.allFinished();\n                    return;\n                } else {\n                    var nextBatch = iterator.loadNextBatch().toCompletableFuture();\n                    if (nextBatch.isDone()) {\n                        if (nextBatch.isCompletedExceptionally()) {\n                            // trigger exception\n                            nextBatch.join();\n                        }\n                        continue;\n                    }\n                    nextBatch.whenComplete((r, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            Throwable t = SQLExceptions.unwrap(f);\n                            iterator.close();\n                            completionFuture.completeExceptionally(t);\n                            resultReceiver.fail(t);\n                        }\n                    });\n                    return;\n                }\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }\n",
+                "anchor_confidence": "medium",
+                "anchor_reason": "line_resolved_method_unresolved",
+                "anchor_strategy": "deterministic_realign"
+              },
+              {
+                "hunk_index": 4,
+                "mainline_method": "closeAndFinishIfSuspended",
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "target_method": "closeAndFinishIfSuspended",
+                "start_line": 138,
+                "end_line": 138,
+                "code_snippet": "                            completionFuture.completeExceptionally(t);\n                            resultReceiver.fail(t);\n                        }\n                    });\n                    return;\n                }\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }\n\n    /**\n     * If this consumer suspended itself (due to {@code maxRows} being > 0, it will close the BatchIterator\n     * and finish the ResultReceiver\n     */\n    public void closeAndFinishIfSuspended() {\n        if (activeIt != null) {\n            activeIt.close();\n            completionFuture.complete(null);\n            // resultReceiver is left untouched:\n            // - A previous .batchCompleted() call already flushed out pending messages\n            // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.\n        }\n    }\n\n    public boolean suspended() {\n        return activeIt != null;\n    }\n\n    public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {\n        if (!this.resultReceiver.completionFuture().isDone()) {\n            // finish previous resultReceiver before replacing it, to ensure future triggers\n            this.resultReceiver.allFinished();\n        }\n        this.rowCount = 0;\n        this.resultReceiver = resultReceiver;\n        this.maxRows = maxRows;",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved",
+                "anchor_strategy": "deterministic_realign"
+              },
+              {
+                "hunk_index": 5,
+                "mainline_method": "hunk_5",
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "target_method": null,
+                "start_line": 174,
+                "end_line": 174,
+                "code_snippet": "            this.resultReceiver.allFinished();\n        }\n        this.rowCount = 0;\n        this.resultReceiver = resultReceiver;\n        this.maxRows = maxRows;\n    }\n\n    public void resume() {\n        assert activeIt != null : \"resume must only be called if suspended() returned true and activeIt is not null\";\n        BatchIterator<Row> iterator = this.activeIt;\n        this.activeIt = null;\n        consumeIt(iterator);\n    }\n\n    @Override\n    public String toString() {\n        return \"RowConsumerToResultReceiver{\" +\n               \"resultReceiver=\" + resultReceiver +\n               \", maxRows=\" + maxRows +\n               \", rowCount=\" + rowCount +\n               \", activeIt=\" + activeIt +\n               '}';\n    }\n}",
+                "anchor_confidence": "medium",
+                "anchor_reason": "line_resolved_method_unresolved",
+                "anchor_strategy": "deterministic_realign"
+              }
+            ],
+            "server/src/main/java/io/crate/session/Session.java": [
+              {
+                "hunk_index": 1,
+                "mainline_method": "hunk_1",
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "target_method": null,
+                "start_line": 585,
+                "end_line": 585,
+                "code_snippet": "                        oldValue.add(deferredExecution);\n                        return oldValue;\n                    }\n                }\n            );\n            return resultReceiver.completionFuture();\n        } else {\n            if (analyzedStmt instanceof AnalyzedClose close) {\n                String cursorName = close.cursorName();\n                if (cursorName != null) {\n                    Portal removedPortal = portals.remove(cursorName);\n                    if (removedPortal != null) {\n                        removedPortal.closeActiveConsumer();\n                    }\n                }\n            }\n            if (!deferredExecutionsByStmt.isEmpty()) {\n                throw new UnsupportedOperationException(\n                    \"Only write operations are allowed in Batch statements\");\n            }\n            if (activeExecution == null) {\n                activeExecution = singleExec(portal, resultReceiver, maxRows);\n            } else {\n                activeExecution = activeExecution\n                    .thenCompose(ignored -> singleExec(portal, resultReceiver, maxRows));\n            }\n            return activeExecution;\n        }\n        return null;\n    }\n\n    public void flush() {\n        assert !deferredExecutionsByStmt.isEmpty()\n            : \"Session.flush() must only be called if there are deferred executions\";\n\n        // This will make `sync` use the triggered execution instead of\n        // returning a new completed future.\n        //\n        // We need to wait for the operation that is now being triggered to complete\n        // before any further messages are sent to clients.\n        // E.g. PostgresWireProtocol would otherwise send a `ReadyForQuery` message too",
+                "anchor_confidence": "medium",
+                "anchor_reason": "line_resolved_method_unresolved",
+                "anchor_strategy": "deterministic_realign"
+              },
+              {
+                "hunk_index": 2,
+                "mainline_method": "triggerDeferredExecutions",
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "target_method": "triggerDeferredExecutions",
+                "start_line": 663,
+                "end_line": 663,
+                "code_snippet": "        long remainingTimeoutMs = (long) ((timeoutNanos - durationNs) * 0.000001);\n        assert remainingTimeoutMs > 0 : \"Execute must have positive timeout if timeout was not exceeded on previous phases.\";\n        Runnable kill = () -> {\n            if (result.isDone()) {\n                return;\n            }\n            KillJobsNodeRequest request = new KillJobsNodeRequest(\n                List.of(),\n                List.of(jobId),\n                sessionSettings.userName(),\n                \"statement_timeout (\" + timeout.toString() + \")\"\n            );\n            executor.client().execute(KillJobsNodeAction.INSTANCE, request);\n        };\n        ScheduledExecutorService scheduler = executor.scheduler();\n        ScheduledFuture<?> schedule = scheduler.schedule(kill, remainingTimeoutMs, TimeUnit.MILLISECONDS);\n        result.whenComplete((_, _) -> schedule.cancel(false));\n    }\n\n    private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n        switch (deferredExecutionsByStmt.size()) {\n            case 0:\n                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                return CompletableFuture.completedFuture(null);\n            case 1: {\n                var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n                deferredExecutionsByStmt.clear();\n                return exec(deferredExecutions, forceBulk);\n            }\n            default: {\n                // Mix of different defered execution is PG specific.\n                // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.\n                // sequentiallize execution to ensure client receives row counts in correct order\n                CompletableFuture<?> allCompleted = null;\n                for (var entry : deferredExecutionsByStmt.entrySet()) {\n                    var deferredExecutions = entry.getValue();\n                    if (allCompleted == null) {\n                        allCompleted = exec(deferredExecutions, forceBulk);\n                    } else {\n                        allCompleted = allCompleted\n                            // individual rowReceiver will receive failure; must not break execution chain due to failures.",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved",
+                "anchor_strategy": "deterministic_realign"
+              }
+            ]
+          },
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "reason": "llm_usage_not_collected_in_this_node"
+          }
+        }
+      }
+    },
+    "phase2_5_planning_agent": {
+      "planning_agent": {
+        "node": "planning_agent",
+        "outputs": {
+          "hunk_generation_plan": {
+            "server/src/main/java/io/crate/session/Session.java": [
+              {
+                "hunk_index": 0,
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "operation_index": 0,
+                "edit_type": "insert_before",
+                "old_string": "            var result = activeExecution;",
+                "new_string": "            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n            var result = activeExecution;",
+                "verified": true,
+                "verification_result": "sanitize_resolved:exact",
+                "notes": "required_op_insert_before|forced_type_v:failed_stage_generation_contract",
+                "surround_before_3": [
+                  "        if (activeExecution == null) {",
+                  "            return triggerDeferredExecutions(forceBulk);",
+                  "        } else {"
+                ],
+                "surround_after_3": [
+                  "            activeExecution = null;",
+                  "            return result;",
+                  "        }"
+                ],
+                "adaptation_type": "TYPE_V",
+                "base_adaptation_type": "TYPE_V",
+                "execution_type": "TYPE_V",
+                "location_match": false,
+                "surrounding_match": true,
+                "blockers": [
+                  "Detected target surrounding context does not match mainline pre-patch surrounding context",
+                  "Target method sync(boolean) implementation differs significantly from mainline"
+                ],
+                "namespace_only_possible": false,
+                "namespace_changes": [],
+                "required_invariants": [
+                  "LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);"
+                ],
+                "required_symbols": [],
+                "protected_symbols": [],
+                "must_preserve_symbols": [],
+                "chain_constraints": [],
+                "api_inventory": {
+                  "mainline_declared_methods_count": 42,
+                  "target_declared_methods_count": 41,
+                  "matched_symbols_before": [],
+                  "missing_symbols_before": []
+                }
+              }
+            ]
+          },
+          "last_plan_signature": "e6df1d54eff27fdb913c7c87bbbfb7a4931e14fa21a38f8c129d6aa3cb825b22",
+          "validation_repeated_plan_detected": false,
+          "force_type_v_until_success": true,
+          "force_type_v_reason": "failed_stage_generation_contract",
+          "token_usage": {
+            "input_tokens": 1217,
+            "output_tokens": 250,
+            "total_tokens": 1467,
+            "estimated": false,
+            "sources": [
+              "planning_agent.provider_usage"
+            ]
+          }
+        }
+      }
+    },
+    "phase3_hunk_generator": {
+      "hunk_generator": {
+        "node": "hunk_generator",
+        "outputs": {
+          "adapted_file_edits": [
+            {
+              "target_file": "server/src/main/java/io/crate/session/Session.java",
+              "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+              "old_string": "<line-based ReAct agent diff>",
+              "new_string": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..bb582259ea 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();",
+              "edit_type": "replace",
+              "verified": true,
+              "verification_result": "ReAct agent applied",
+              "applied": true,
+              "apply_result": "SUCCESS"
+            }
+          ],
+          "all_adapted_file_edits": [
+            [
+              {
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "mainline_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "old_string": "<developer patch fast path>",
+                "new_string": "diff --git a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/server/src/main/java/io/crate/protocols/postgres/Portal.java\nindex 8dcba13cda..c4bf4f630a 100644\n--- a/server/src/main/java/io/crate/protocols/postgres/Portal.java\n+++ b/server/src/main/java/io/crate/protocols/postgres/Portal.java\n@@ -25,9 +25,9 @@ import java.util.List;\n \n import org.jetbrains.annotations.Nullable;\n \n+import io.crate.analyze.AnalyzedStatement;\n import io.crate.session.PreparedStmt;\n import io.crate.session.RowConsumerToResultReceiver;\n-import io.crate.analyze.AnalyzedStatement;\n \n public final class Portal {\n \n@@ -91,6 +91,7 @@ public final class Portal {\n         return \"Portal{\" +\n                \"portalName=\" + portalName +\n                \", preparedStmt=\" + preparedStmt.rawStatement() +\n+               \", consumer=\" + consumer +\n                '}';\n     }\n }",
+                "edit_type": "replace",
+                "verified": true,
+                "verification_result": "developer_fast_path_ok",
+                "applied": true,
+                "apply_result": "SUCCESS"
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "mainline_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "old_string": "<developer patch fast path>",
+                "new_string": "diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\nindex 6ecea107b3..4d54effe4e 100644\n--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n+++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n@@ -27,6 +27,7 @@ import java.util.function.Consumer;\n import org.apache.logging.log4j.LogManager;\n import org.apache.logging.log4j.Logger;\n import org.jetbrains.annotations.Nullable;\n+import org.jetbrains.annotations.VisibleForTesting;\n \n import io.crate.data.BatchIterator;\n import io.crate.data.Row;\n@@ -45,12 +46,13 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n      * Reset per suspend/execute\n      */\n     private int rowCount = 0;\n-    private BatchIterator<Row> activeIt;\n+    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n+    private boolean waitingForWrite = false;\n \n     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n         this.resultReceiver = resultReceiver;\n         this.maxRows = maxRows;\n-        completionFuture.whenComplete((res, err) -> {\n+        completionFuture.whenComplete((_, err) -> {\n             onCompletion.accept(err);\n         });\n     }\n@@ -77,23 +79,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n         while (true) {\n             try {\n                 while (iterator.moveNext()) {\n+                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n+                        suspendedIt.complete(iterator);\n+                        resultReceiver.batchFinished();\n+                        return; // resumed via postgres protocol, close is done later\n+                    }\n                     rowCount++;\n                     CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                     if (writeFuture != null) {\n                         LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n-                        activeIt = iterator;\n+                        waitingForWrite = true;\n                         writeFuture.thenRun(() -> {\n                             LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n-                            resume();\n+                            waitingForWrite = false;\n+                            rowCount = 0;\n+                            consumeIt(iterator);\n                         });\n                         return;\n                     }\n-\n-                    if (maxRows > 0 && rowCount % maxRows == 0) {\n-                        activeIt = iterator;\n-                        resultReceiver.batchFinished();\n-                        return; // resumed via postgres protocol, close is done later\n-                    }\n                 }\n                 if (iterator.allLoaded()) {\n                     completionFuture.complete(null);\n@@ -109,7 +112,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n                         }\n                         continue;\n                     }\n-                    nextBatch.whenComplete((r, f) -> {\n+                    nextBatch.whenComplete((_, f) -> {\n                         if (f == null) {\n                             consumeIt(iterator);\n                         } else {\n@@ -135,17 +138,22 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n      * and finish the ResultReceiver\n      */\n     public void closeAndFinishIfSuspended() {\n-        if (activeIt != null) {\n-            activeIt.close();\n+        suspendedIt.whenComplete((it, _) -> {\n+            it.close();\n             completionFuture.complete(null);\n             // resultReceiver is left untouched:\n             // - A previous .batchCompleted() call already flushed out pending messages\n             // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.\n-        }\n+        });\n     }\n \n     public boolean suspended() {\n-        return activeIt != null;\n+        return suspendedIt.isDone();\n+    }\n+\n+    @VisibleForTesting\n+    public boolean waitingForWrite() {\n+        return waitingForWrite;\n     }\n \n     public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {\n@@ -159,10 +167,21 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n     }\n \n     public void resume() {\n-        assert activeIt != null : \"resume must only be called if suspended() returned true and activeIt is not null\";\n-        BatchIterator<Row> iterator = this.activeIt;\n-        this.activeIt = null;\n-        consumeIt(iterator);\n+        assert suspended() : \"resume must only be called if suspended() returned true\";\n+        BatchIterator<Row> it = null;\n+        try {\n+            it = suspendedIt.join();\n+            suspendedIt = new CompletableFuture<>();\n+            resultReceiver.setNextRow(it.currentElement());\n+            rowCount++;\n+            consumeIt(it);\n+        } catch (Throwable t) {\n+            if (it != null) {\n+                it.close();\n+            }\n+            completionFuture.completeExceptionally(t);\n+            resultReceiver.fail(t);\n+        }\n     }\n \n     @Override\n@@ -171,7 +190,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n                \"resultReceiver=\" + resultReceiver +\n                \", maxRows=\" + maxRows +\n                \", rowCount=\" + rowCount +\n-               \", activeIt=\" + activeIt +\n+               \", activeIt=\" + suspendedIt +\n                '}';\n     }\n }",
+                "edit_type": "replace",
+                "verified": true,
+                "verification_result": "developer_fast_path_ok",
+                "applied": true,
+                "apply_result": "SUCCESS"
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+                "old_string": "<developer patch fast path>",
+                "new_string": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..60c4f48565 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n@@ -670,7 +672,7 @@ public class Session implements AutoCloseable {\n                 return exec(deferredExecutions, forceBulk);\n             }\n             default: {\n-                // Mix of different defered execution is PG specific.\n+                // Mix of different deferred execution is PG specific.\n                 // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.\n                 // sequentiallize execution to ensure client receives row counts in correct order\n                 CompletableFuture<?> allCompleted = null;",
+                "edit_type": "replace",
+                "verified": true,
+                "verification_result": "developer_fast_path_ok",
+                "applied": true,
+                "apply_result": "SUCCESS"
+              }
+            ],
+            [
+              {
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "mainline_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "old_string": "<line-based ReAct agent diff>",
+                "new_string": "diff --git a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/server/src/main/java/io/crate/protocols/postgres/Portal.java\nindex 8dcba13cda..55a9979244 100644\n--- a/server/src/main/java/io/crate/protocols/postgres/Portal.java\n+++ b/server/src/main/java/io/crate/protocols/postgres/Portal.java\n@@ -91,6 +91,7 @@ public final class Portal {\n         return \"Portal{\" +\n                \"portalName=\" + portalName +\n                \", preparedStmt=\" + preparedStmt.rawStatement() +\n+               \", consumer=\" + consumer +\n                '}';\n     }\n }",
+                "edit_type": "replace",
+                "verified": true,
+                "verification_result": "ReAct agent applied",
+                "applied": true,
+                "apply_result": "SUCCESS"
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "mainline_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "old_string": "<line-based ReAct agent diff>",
+                "new_string": "diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\nindex 6ecea107b3..aa740293b6 100644\n--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n+++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n@@ -45,12 +45,12 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n      * Reset per suspend/execute\n      */\n     private int rowCount = 0;\n-    private BatchIterator<Row> activeIt;\n+    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n \n     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n         this.resultReceiver = resultReceiver;\n         this.maxRows = maxRows;\n-        completionFuture.whenComplete((res, err) -> {\n+        completionFuture.whenComplete((_, err) -> {\n             onCompletion.accept(err);\n         });\n     }",
+                "edit_type": "replace",
+                "verified": true,
+                "verification_result": "ReAct agent applied",
+                "applied": true,
+                "apply_result": "SUCCESS"
+              }
+            ],
+            [
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+                "old_string": "<line-based ReAct agent diff>",
+                "new_string": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..bb582259ea 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();",
+                "edit_type": "replace",
+                "verified": true,
+                "verification_result": "ReAct agent applied",
+                "applied": true,
+                "apply_result": "SUCCESS"
+              }
+            ]
+          ],
+          "agent_trajectory_edits": [
+            [],
+            [
+              {
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                  "center_line": 30,
+                  "radius": 15
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                  "center_line": 91,
+                  "radius": 10
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                  "center_line": 91,
+                  "radius": 10
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                  "center_line": 90,
+                  "radius": 5
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                  "center_line": 40,
+                  "radius": 10
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                  "center_line": 50,
+                  "radius": 10
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                  "center_line": 80,
+                  "radius": 10
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "tool": "edit_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                  "old_string": "import io.crate.session.PreparedStmt;\nimport io.crate.session.RowConsumerToResultReceiver;\nimport io.crate.analyze.AnalyzedStatement;",
+                  "new_string": "import io.crate.session.PreparedStmt;\nimport io.crate.session.RowConsumerToResultReceiver;\nimport io.crate.analyze.AnalyzedStatement;",
+                  "replace_all": false
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "tool": "edit_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                  "old_string": "    @Override\n    public String toString() {\n        return \"Portal{\" +\n               \"portalName=\" + portalName +\n               \", preparedStmt=\" + preparedStmt.rawStatement() +\n               '}';\n    }",
+                  "new_string": "    @Override\n    public String toString() {\n        return \"Portal{\" +\n               \"portalName=\" + portalName +\n               \", preparedStmt=\" + preparedStmt.rawStatement() +\n               \", consumer=\" + consumer +\n               '}';\n    }",
+                  "replace_all": false
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+                "tool": "check_java_syntax",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "manage_todo",
+                "args": {
+                  "action": "add",
+                  "task": "Read file window around line 40 to 60 to find field declarations and constructor for RowConsumerToResultReceiver."
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "center_line": 50,
+                  "radius": 15
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "manage_todo",
+                "args": {
+                  "action": "add",
+                  "task": "Replace field 'private BatchIterator<Row> activeIt;' with 'private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();'."
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "manage_todo",
+                "args": {
+                  "action": "add",
+                  "task": "Replace constructor lambda parameter from (res, err) to (_, err) in completionFuture.whenComplete."
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "manage_todo",
+                "args": {
+                  "action": "add",
+                  "task": "Replace consumeIt method body to add logic for suspending and resuming with maxRows and rowCount checks, using suspendedIt CompletableFuture."
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "manage_todo",
+                "args": {
+                  "action": "add",
+                  "task": "Replace closeAndFinishIfSuspended method body to close suspended iterator and complete completionFuture."
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "manage_todo",
+                "args": {
+                  "action": "add",
+                  "task": "Replace suspended method body to return suspendedIt.isDone() instead of activeIt != null."
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "manage_todo",
+                "args": {
+                  "action": "add",
+                  "task": "Replace replaceResultReceiver method body to reset rowCount and suspendedIt, and update resultReceiver and maxRows."
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "manage_todo",
+                "args": {
+                  "action": "add",
+                  "task": "Replace toString method body to include suspendedIt instead of activeIt."
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "manage_todo",
+                "args": {
+                  "action": "list"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "replace_field",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "field_name": "activeIt",
+                  "new_declaration": "private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "replace_method_body",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "method_signature": "RowConsumerToResultReceiver(ResultReceiver<?>, int, Consumer<Throwable>)",
+                  "new_body": "    this.resultReceiver = resultReceiver;\n    this.maxRows = maxRows;\n    completionFuture.whenComplete((_, err) -> {\n        onCompletion.accept(err);\n    });"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "replace_method_body",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "method_signature": "void consumeIt(BatchIterator<Row>)",
+                  "new_body": "    while (true) {\n        try {\n            while (iterator.moveNext()) {\n                if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n                    suspendedIt.complete(iterator);\n                    resultReceiver.batchFinished();\n                    return; // resumed via postgres protocol, close is done later\n                }\n                rowCount++;\n                CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                if (writeFuture != null) {\n                    LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                    suspendedIt.complete(iterator);\n                    writeFuture.thenRun(() -> {\n                        LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                        suspendedIt = new CompletableFuture<>();\n                        rowCount = 0;\n                        consumeIt(iterator);\n                    });\n                    return;\n                }\n            }\n            if (iterator.allLoaded()) {\n                completionFuture.complete(null);\n            } else {\n                CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                if (nextBatch == null) {\n                    continue;\n                }\n                nextBatch.whenComplete((_, f) -> {\n                    if (f == null) {\n                        consumeIt(iterator);\n                    } else {\n                        completionFuture.completeExceptionally(f);\n                        resultReceiver.fail(f);\n                    }\n                });\n            }\n            return;\n        } catch (Throwable t) {\n            iterator.close();\n            completionFuture.completeExceptionally(t);\n            resultReceiver.fail(t);\n            return;\n        }\n    }"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "replace_method_body",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "method_signature": "void closeAndFinishIfSuspended()",
+                  "new_body": "    suspendedIt.whenComplete((it, _) -> {\n        it.close();\n        completionFuture.complete(null);\n        // resultReceiver is left untouched:\n        // - A previous .batchCompleted() call already flushed out pending messages\n        // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.\n    });"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "replace_method_body",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "method_signature": "boolean suspended()",
+                  "new_body": "    return suspendedIt.isDone();"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "replace_method_body",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "method_signature": "void replaceResultReceiver(ResultReceiver<?>, int)",
+                  "new_body": "    this.rowCount = 0;\n    this.resultReceiver = resultReceiver;\n    this.maxRows = maxRows;\n    this.suspendedIt = new CompletableFuture<>();"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "replace_method_body",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "method_signature": "public String toString()",
+                  "new_body": "    return \"RowConsumerToResultReceiver{\" +\n           \"resultReceiver=\" + resultReceiver +\n           \", maxRows=\" + maxRows +\n           \", rowCount=\" + rowCount +\n           \", activeIt=\" + suspendedIt +\n           '}';"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "center_line": 48,
+                  "radius": 20
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "edit_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "old_string": "    /**\n     * Reset per suspend/execute\n     */\n    private int rowCount = 0;\n    private BatchIterator<Row> activeIt;\n\n    public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n        this.resultReceiver = resultReceiver;\n        this.maxRows = maxRows;\n        completionFuture.whenComplete((res, err) -> {\n            onCompletion.accept(err);\n        });\n    }",
+                  "new_string": "    /**\n     * Reset per suspend/execute\n     */\n    private int rowCount = 0;\n    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n\n    public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n        this.resultReceiver = resultReceiver;\n        this.maxRows = maxRows;\n        completionFuture.whenComplete((_, err) -> {\n            onCompletion.accept(err);\n        });\n    }"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "edit_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "old_string": "    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    if (maxRows > 0 && rowCount % maxRows == 0) {\n                        activeIt = iterator;\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        activeIt = iterator;\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            resume();\n                        });\n                        return;\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                } else {\n                    CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                    if (nextBatch == null) {\n                        continue;\n                    }\n                    nextBatch.whenComplete((r, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            completionFuture.completeExceptionally(f);\n                            resultReceiver.fail(f);\n                        }\n                    });\n                }\n                return;\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }",
+                  "new_string": "    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n                        suspendedIt.complete(iterator);\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        suspendedIt.complete(iterator);\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            suspendedIt = new CompletableFuture<>();\n                            rowCount = 0;\n                            consumeIt(iterator);\n                        });\n                        return;\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                } else {\n                    CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                    if (nextBatch == null) {\n                        continue;\n                    }\n                    nextBatch.whenComplete((_, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            completionFuture.completeExceptionally(f);\n                            resultReceiver.fail(f);\n                        }\n                    });\n                }\n                return;\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "center_line": 80,
+                  "radius": 20
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "edit_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "old_string": "    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        activeIt = iterator;\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            resume();\n                        });\n                        return;\n                    }\n\n                    if (maxRows > 0 && rowCount % maxRows == 0) {\n                        activeIt = iterator;\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                    iterator.close();\n                } else {\n                    CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                    if (nextBatch == null) {\n                        continue;\n                    }\n                    nextBatch.whenComplete((r, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            completionFuture.completeExceptionally(f);\n                            resultReceiver.fail(f);\n                        }\n                    });\n                }\n                return;\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }",
+                  "new_string": "    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n                        suspendedIt.complete(iterator);\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        suspendedIt.complete(iterator);\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            suspendedIt = new CompletableFuture<>();\n                            rowCount = 0;\n                            consumeIt(iterator);\n                        });\n                        return;\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                    iterator.close();\n                } else {\n                    CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                    if (nextBatch == null) {\n                        continue;\n                    }\n                    nextBatch.whenComplete((_, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            completionFuture.completeExceptionally(f);\n                            resultReceiver.fail(f);\n                        }\n                    });\n                }\n                return;\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "center_line": 75,
+                  "radius": 10
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "edit_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "old_string": "    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        activeIt = iterator;\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            resume();\n                        });\n                        return;\n                    }\n\n                    if (maxRows > 0 && rowCount % maxRows == 0) {\n                        activeIt = iterator;\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                    iterator.close();\n                } else {\n                    CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                    if (nextBatch == null) {\n                        continue;\n                    }\n                    nextBatch.whenComplete((r, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            completionFuture.completeExceptionally(f);\n                            resultReceiver.fail(f);\n                        }\n                    });\n                }\n                return;\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }",
+                  "new_string": "    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n                        suspendedIt.complete(iterator);\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        suspendedIt.complete(iterator);\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            suspendedIt = new CompletableFuture<>();\n                            rowCount = 0;\n                            consumeIt(iterator);\n                        });\n                        return;\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                    iterator.close();\n                } else {\n                    CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                    if (nextBatch == null) {\n                        continue;\n                    }\n                    nextBatch.whenComplete((_, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            completionFuture.completeExceptionally(f);\n                            resultReceiver.fail(f);\n                        }\n                    });\n                }\n                return;\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+                  "center_line": 75,
+                  "radius": 20
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "manage_todo",
+                "args": {
+                  "action": "add",
+                  "task": "Analyze logic changes and structural differences in server/src/main/java/io/crate/session/Session.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "center_line": 630,
+                  "radius": 15
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "center_line": 680,
+                  "radius": 15
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "search_text": "activeExecution"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "center_line": 585,
+                  "radius": 15
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "center_line": 663,
+                  "radius": 15
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "center_line": 700,
+                  "radius": 15
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "center_line": 635,
+                  "radius": 15
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "search_text": "LOGGER.debug(\"method=sync deferredExecutions="
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "search_text": "LOGGER.debug(\"method=sync activeExecution="
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "search_text": "LOGGER.debug(\"method=sync deferredExecutions="
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "search_text": "LOGGER.debug(\"method=sync activeExecution="
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "search_text": "LOGGER.debug(\"method=sync deferredExecutions="
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "search_text": "LOGGER.debug(\"method=sync activeExecution="
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "search_text": "LOGGER.debug(\"method=sync activeExecution="
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "search_text": "LOGGER.debug(\"method=sync activeExecution="
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "search_text": "LOGGER.debug(\"method=sync activeExecution="
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "search_text": "LOGGER.debug(\"method=sync activeExecution="
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "search_text": "LOGGER.debug(\"method=sync activeExecution="
+                }
+              }
+            ],
+            [
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "manage_todo",
+                "args": {
+                  "action": "add",
+                  "task": "Locate and analyze the first hunk context around line 630 in server/src/main/java/io/crate/session/Session.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "center_line": 630,
+                  "radius": 15
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "center_line": 679,
+                  "radius": 15
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "find_method_definitions",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "symbol": "triggerDeferredExecutions"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "center_line": 662,
+                  "radius": 20
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "start_line": 670,
+                  "end_line": 700
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "get_exact_lines",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "start_line": 670,
+                  "end_line": 700
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "get_exact_lines",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "start_line": 625,
+                  "end_line": 635
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "edit_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "old_string": "        if (activeExecution == null) {\n            return triggerDeferredExecutions(forceBulk);\n        } else {\n            var result = activeExecution;\n            activeExecution = null;\n            return result;\n        }",
+                  "new_string": "        if (activeExecution == null) {\n            return triggerDeferredExecutions(forceBulk);\n        } else {\n            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n            var result = activeExecution;\n            activeExecution = null;\n            return result;\n        }",
+                  "replace_all": false
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "edit_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java",
+                  "old_string": "        switch (deferredExecutionsByStmt.size()) {\n            case 0:\n                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                return CompletableFuture.completedFuture(null);\n            case 1: {\n                var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n                deferredExecutionsByStmt.clear();\n                return exec(deferredExecutions, forceBulk);\n            }\n            default: {\n                // Mix of different defered execution is PG specific.\n                // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.\n                // sequentiallize execution to ensure client receives row counts in correct order\n                CompletableFuture<?> allCompleted = null;\n                for (var entry : deferredExecutionsByStmt.entrySet()) {\n                    var deferredExecutions = entry.getValue();\n                    if (allCompleted == null) {\n                        allCompleted = exec(deferredExecutions, forceBulk);\n                    } else {\n                        allCompleted = allCompleted\n                            // individual rowReceiver will receive failure; must not break execution chain due to failures.\n                            // No need to log execution and as it's handled in the exec() call.\n                            .exceptionally(_ -> null)\n                            .thenCompose(_ -> exec(deferredExecutions, forceBulk));\n                    }\n                }\n                deferredExecutionsByStmt.clear();\n                return allCompleted;\n            }\n        }",
+                  "new_string": "        int numDeferred = deferredExecutionsByStmt.size();\n        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n        switch (numDeferred) {\n            case 0:\n                return CompletableFuture.completedFuture(null);\n            case 1: {\n                var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n                deferredExecutionsByStmt.clear();\n                return exec(deferredExecutions, forceBulk);\n            }\n            default: {\n                // Mix of different defered execution is PG specific.\n                // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.\n                // sequentiallize execution to ensure client receives row counts in correct order\n                CompletableFuture<?> allCompleted = null;\n                for (var entry : deferredExecutionsByStmt.entrySet()) {\n                    var deferredExecutions = entry.getValue();\n                    if (allCompleted == null) {\n                        allCompleted = exec(deferredExecutions, forceBulk);\n                    } else {\n                        allCompleted = allCompleted\n                            // individual rowReceiver will receive failure; must not break execution chain due to failures.\n                            // No need to log execution and as it's handled in the exec() call.\n                            .exceptionally(_ -> null)\n                            .thenCompose(_ -> exec(deferredExecutions, forceBulk));\n                    }\n                }\n                deferredExecutionsByStmt.clear();\n                return allCompleted;\n            }\n        }",
+                  "replace_all": false
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "check_java_syntax",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "git_diff_file",
+                "args": {
+                  "file_path": "server/src/main/java/io/crate/session/Session.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/session/Session.java",
+                "tool": "verify_guidelines",
+                "args": {
+                  "diff_text": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..bb582259ea 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n@@ -679,7 +681,7 @@\n                     if (allCompleted == null) {\n                         allCompleted = exec(deferredExecutions, forceBulk);\n                     } else {\n-                        allCompleted = allCompleted\n-                            // individual rowReceiver will receive failure; must not break execution chain due to failures.\n-                            // No need to log execution and as it's handled in the exec() call.\n-                            .exceptionally(_ -> null)\n-                            .thenCompose(_ -> exec(deferredExecutions, forceBulk));\n+                        allCompleted = allCompleted\n+                            // individual rowReceiver will receive failure; must not break execution chain due to failures.\n+                            // No need to log execution and as it's handled in the exec() call.\n+                            .exceptionally(_ -> null)\n+                            .thenCompose(_ -> exec(deferredExecutions, forceBulk));\n                     }\n                 }\n                 deferredExecutionsByStmt.clear();\n                 return allCompleted;\n             }\n         }\n     }\n"
+                }
+              }
+            ]
+          ],
+          "adapted_code_hunks": [
+            {
+              "target_file": "server/src/main/java/io/crate/session/Session.java",
+              "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+              "hunk_text": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..bb582259ea 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n",
+              "insertion_line": 611,
+              "intent_verified": true,
+              "file_operation": "MODIFIED",
+              "old_target_file": null,
+              "file_operation_required": true,
+              "path_resolution_reason": "modified_target_mapped"
+            }
+          ],
+          "validation_repeated_patch_detected": false,
+          "validation_repeated_plan_detected": false,
+          "best_effort_adapted_code_hunks": [
+            {
+              "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+              "mainline_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+              "hunk_text": "diff --git a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/server/src/main/java/io/crate/protocols/postgres/Portal.java\nindex 8dcba13cda..c4bf4f630a 100644\n--- a/server/src/main/java/io/crate/protocols/postgres/Portal.java\n+++ b/server/src/main/java/io/crate/protocols/postgres/Portal.java\n@@ -25,9 +25,9 @@ import java.util.List;\n \n import org.jetbrains.annotations.Nullable;\n \n+import io.crate.analyze.AnalyzedStatement;\n import io.crate.session.PreparedStmt;\n import io.crate.session.RowConsumerToResultReceiver;\n-import io.crate.analyze.AnalyzedStatement;\n \n public final class Portal {\n \n@@ -91,6 +91,7 @@ public final class Portal {\n         return \"Portal{\" +\n                \"portalName=\" + portalName +\n                \", preparedStmt=\" + preparedStmt.rawStatement() +\n+               \", consumer=\" + consumer +\n                '}';\n     }\n }\n",
+              "insertion_line": 1,
+              "intent_verified": true,
+              "file_operation": "MODIFIED",
+              "old_target_file": null,
+              "file_operation_required": true,
+              "path_resolution_reason": "modified_target_mapped"
+            },
+            {
+              "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+              "mainline_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+              "hunk_text": "diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\nindex 6ecea107b3..4d54effe4e 100644\n--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n+++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n@@ -27,6 +27,7 @@ import java.util.function.Consumer;\n import org.apache.logging.log4j.LogManager;\n import org.apache.logging.log4j.Logger;\n import org.jetbrains.annotations.Nullable;\n+import org.jetbrains.annotations.VisibleForTesting;\n \n import io.crate.data.BatchIterator;\n import io.crate.data.Row;\n@@ -45,12 +46,13 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n      * Reset per suspend/execute\n      */\n     private int rowCount = 0;\n-    private BatchIterator<Row> activeIt;\n+    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n+    private boolean waitingForWrite = false;\n \n     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n         this.resultReceiver = resultReceiver;\n         this.maxRows = maxRows;\n-        completionFuture.whenComplete((res, err) -> {\n+        completionFuture.whenComplete((_, err) -> {\n             onCompletion.accept(err);\n         });\n     }\n@@ -77,23 +79,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n         while (true) {\n             try {\n                 while (iterator.moveNext()) {\n+                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n+                        suspendedIt.complete(iterator);\n+                        resultReceiver.batchFinished();\n+                        return; // resumed via postgres protocol, close is done later\n+                    }\n                     rowCount++;\n                     CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                     if (writeFuture != null) {\n                         LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n-                        activeIt = iterator;\n+                        waitingForWrite = true;\n                         writeFuture.thenRun(() -> {\n                             LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n-                            resume();\n+                            waitingForWrite = false;\n+                            rowCount = 0;\n+                            consumeIt(iterator);\n                         });\n                         return;\n                     }\n-\n-                    if (maxRows > 0 && rowCount % maxRows == 0) {\n-                        activeIt = iterator;\n-                        resultReceiver.batchFinished();\n-                        return; // resumed via postgres protocol, close is done later\n-                    }\n                 }\n                 if (iterator.allLoaded()) {\n                     completionFuture.complete(null);\n@@ -109,7 +112,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n                         }\n                         continue;\n                     }\n-                    nextBatch.whenComplete((r, f) -> {\n+                    nextBatch.whenComplete((_, f) -> {\n                         if (f == null) {\n                             consumeIt(iterator);\n                         } else {\n@@ -135,17 +138,22 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n      * and finish the ResultReceiver\n      */\n     public void closeAndFinishIfSuspended() {\n-        if (activeIt != null) {\n-            activeIt.close();\n+        suspendedIt.whenComplete((it, _) -> {\n+            it.close();\n             completionFuture.complete(null);\n             // resultReceiver is left untouched:\n             // - A previous .batchCompleted() call already flushed out pending messages\n             // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.\n-        }\n+        });\n     }\n \n     public boolean suspended() {\n-        return activeIt != null;\n+        return suspendedIt.isDone();\n+    }\n+\n+    @VisibleForTesting\n+    public boolean waitingForWrite() {\n+        return waitingForWrite;\n     }\n \n     public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {\n@@ -159,10 +167,21 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n     }\n \n     public void resume() {\n-        assert activeIt != null : \"resume must only be called if suspended() returned true and activeIt is not null\";\n-        BatchIterator<Row> iterator = this.activeIt;\n-        this.activeIt = null;\n-        consumeIt(iterator);\n+        assert suspended() : \"resume must only be called if suspended() returned true\";\n+        BatchIterator<Row> it = null;\n+        try {\n+            it = suspendedIt.join();\n+            suspendedIt = new CompletableFuture<>();\n+            resultReceiver.setNextRow(it.currentElement());\n+            rowCount++;\n+            consumeIt(it);\n+        } catch (Throwable t) {\n+            if (it != null) {\n+                it.close();\n+            }\n+            completionFuture.completeExceptionally(t);\n+            resultReceiver.fail(t);\n+        }\n     }\n \n     @Override\n@@ -171,7 +190,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n                \"resultReceiver=\" + resultReceiver +\n                \", maxRows=\" + maxRows +\n                \", rowCount=\" + rowCount +\n-               \", activeIt=\" + activeIt +\n+               \", activeIt=\" + suspendedIt +\n                '}';\n     }\n }\n",
+              "insertion_line": 1,
+              "intent_verified": true,
+              "file_operation": "MODIFIED",
+              "old_target_file": null,
+              "file_operation_required": true,
+              "path_resolution_reason": "modified_target_mapped"
+            },
+            {
+              "target_file": "server/src/main/java/io/crate/session/Session.java",
+              "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+              "hunk_text": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..60c4f48565 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n@@ -670,7 +672,7 @@ public class Session implements AutoCloseable {\n                 return exec(deferredExecutions, forceBulk);\n             }\n             default: {\n-                // Mix of different defered execution is PG specific.\n+                // Mix of different deferred execution is PG specific.\n                 // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.\n                 // sequentiallize execution to ensure client receives row counts in correct order\n                 CompletableFuture<?> allCompleted = null;\n",
+              "insertion_line": 1,
+              "intent_verified": true,
+              "file_operation": "MODIFIED",
+              "old_target_file": null,
+              "file_operation_required": true,
+              "path_resolution_reason": "modified_target_mapped"
+            },
+            {
+              "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+              "mainline_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+              "hunk_text": "diff --git a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/server/src/main/java/io/crate/protocols/postgres/Portal.java\nindex 8dcba13cda..55a9979244 100644\n--- a/server/src/main/java/io/crate/protocols/postgres/Portal.java\n+++ b/server/src/main/java/io/crate/protocols/postgres/Portal.java\n@@ -91,6 +91,7 @@ public final class Portal {\n         return \"Portal{\" +\n                \"portalName=\" + portalName +\n                \", preparedStmt=\" + preparedStmt.rawStatement() +\n+               \", consumer=\" + consumer +\n                '}';\n     }\n }\n",
+              "insertion_line": 91,
+              "intent_verified": false,
+              "file_operation": "MODIFIED",
+              "old_target_file": null,
+              "file_operation_required": true,
+              "path_resolution_reason": "modified_target_mapped"
+            },
+            {
+              "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+              "mainline_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+              "hunk_text": "diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\nindex 6ecea107b3..aa740293b6 100644\n--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n+++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n@@ -45,12 +45,12 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n      * Reset per suspend/execute\n      */\n     private int rowCount = 0;\n-    private BatchIterator<Row> activeIt;\n+    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n \n     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n         this.resultReceiver = resultReceiver;\n         this.maxRows = maxRows;\n-        completionFuture.whenComplete((res, err) -> {\n+        completionFuture.whenComplete((_, err) -> {\n             onCompletion.accept(err);\n         });\n     }\n",
+              "insertion_line": 45,
+              "intent_verified": false,
+              "file_operation": "MODIFIED",
+              "old_target_file": null,
+              "file_operation_required": true,
+              "path_resolution_reason": "modified_target_mapped"
+            },
+            {
+              "target_file": "server/src/main/java/io/crate/session/Session.java",
+              "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+              "hunk_text": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..bb582259ea 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n",
+              "insertion_line": 611,
+              "intent_verified": true,
+              "file_operation": "MODIFIED",
+              "old_target_file": null,
+              "file_operation_required": true,
+              "path_resolution_reason": "modified_target_mapped"
+            }
+          ],
+          "adapted_test_hunks": [],
+          "generation_checklist": [
+            {
+              "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+              "target_file": "server/src/main/java/io/crate/session/Session.java",
+              "hunk_index": 0,
+              "adaptation_type": "TYPE_V",
+              "execution_types": [
+                "TYPE_V"
+              ],
+              "status": "success",
+              "reason": "generated_and_validated",
+              "todo_steps": [
+                "reset_file",
+                "apply_edits",
+                "capture_diff",
+                "intent_check",
+                "restore_file"
+              ],
+              "completed_steps": [
+                "reset_file",
+                "apply_edits",
+                "capture_diff",
+                "intent_check",
+                "restore_file"
+              ]
+            }
+          ],
+          "generated_patch_hash": "76cab973239dcb5cfe1a4aac98da7a9b7ea666f3abc26104a0816a0fc5139a8e",
+          "force_type_v_until_success": true,
+          "force_type_v_reason": "failed_stage_generation_contract",
+          "token_usage": {
+            "input_tokens": 107691,
+            "output_tokens": 1729,
+            "total_tokens": 109420,
+            "estimated": false,
+            "sources": [
+              "file_editor.react.aggregate_usage",
+              "file_editor.intent.provider_usage"
+            ]
+          }
+        }
+      }
+    },
+    "phase4_validation": {
+      "validation": {
+        "node": "validation",
+        "outputs": {
+          "validation_passed": false,
+          "validation_attempts": 3,
+          "validation_error_context": "Build failed: API/signature mismatch in generated patch against target branch.",
+          "validation_results": {
+            "hunk_application": {
+              "success": true,
+              "raw": "All hunks applied successfully."
+            },
+            "build": {
+              "success": false,
+              "raw": "--- Building code for 508dde5 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/retrofit-java/temp_repo_storage/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] crate-libs-azure-testing                                           [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-copy-azure                                                   [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      [jar]\n[INFO] crate-jmx-monitoring                                               [jar]\n[INFO] jlink-jdk                                                        [jlink]\n[INFO] crate-app                                                          [jar]\n[INFO] crate-benchmarks                                                   [jar]\n[INFO] \n[INFO] Using the MultiThreadedBuilder implementation with a thread count of 12\n[INFO] \n[INFO] ---------------------------< io.crate:crate >---------------------------\n[INFO] Building crate 5.10.12                                            [1/26]\n[INFO]   from pom.xml\n[INFO] --------------------------------[ pom ]---------------------------------\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate ---\n[INFO] Deleting /repo/target\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate ---\n[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireMavenVersion passed\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ crate ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Begin to install JDK 23.0.2\n[INFO] Download OpenJDK23U-jdk_x64_linux_hotspot_23.0.2_7.tar.gz from https://github.com/adoptium/temurin23-binaries/releases/download/jdk-23.0.2%2B7/OpenJDK23U-jdk_x64_linux_hotspot_23.0.2_7.tar.gz\n[INFO] Extract OpenJDK23U-jdk_x64_linux_hotspot_23.0.2_7.tar.gz\n[INFO] JDK installed: /root/.m2/jdks/jdk-23.0.2+7\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/target/jacoco.exec\n[INFO] \n[INFO] --- forbiddenapis:3.8:check (default) @ crate ---\n[INFO] Skipping execution for packaging \"pom\"\n[INFO] \n[INFO] --- install:3.1.3:install (default-install) @ crate ---\n[INFO] Installing /repo/pom.xml to /root/.m2/repository/io/crate/crate/5.10.12/crate-5.10.12.pom\n[INFO] \n[INFO] ---------------------< io.crate:crate-libs-shared >---------------------\n[INFO] Building crate-libs-shared 5.10.12                                [2/26]\n[INFO]   from libs/shared/pom.xml\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] \n[INFO] ---------------------< io.crate:crate-libs-guice >----------------------\n[INFO] \n[INFO] Building crate-libs-guice 5.10.12                                 [3/26]\n[INFO] ---------------------< io.crate:crate-libs-pgwire >---------------------\n[INFO]   from libs/guice/pom.xml\n[INFO] Building crate-libs-pgwire 5.10.12                                [4/26]\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO]   from libs/pgwire/pom.xml\n[INFO] \n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] -------------------------< io.crate:jlink-jdk >-------------------------\n[INFO] Building jlink-jdk 5.10.12                                        [5/26]\n[INFO]   from jlink-jdk/pom.xml\n[INFO] -------------------------------[ jlink ]--------------------------------\n[WARNING] *****************************************************************\n[WARNING] * Your build is requesting parallel execution, but this         *\n[WARNING] * project contains the following plugin(s) that have goals not  *\n[WARNING] * marked as thread-safe to support parallel execution.          *\n[WARNING] * While this /may/ work fine, please look for plugin updates    *\n[WARNING] * and/or request plugins be made thread-safe.                   *\n[WARNING] * If reporting an issue, report it against the plugin in        *\n[WARNING] * question, not against Apache Maven.                           *\n[WARNING] *****************************************************************\n[WARNING] The following plugins are not marked as thread-safe in jlink-jdk:\n[WARNING]   org.apache.maven.plugins:maven-jlink-plugin:3.1.0\n[WARNING] \n[WARNING] Enable debug to see precisely which goals are not marked as thread-safe.\n[WARNING] *****************************************************************\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ jlink-jdk ---\n[INFO] Deleting /repo/jlink-jdk/target\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate-libs-guice ---\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate-libs-shared ---\n[INFO] Deleting /repo/libs/guice/target\n[INFO] Deleting /repo/libs/shared/target\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate-libs-pgwire ---\n[INFO] Deleting /repo/libs/pgwire/target\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate-libs-shared ---\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ crate-libs-shared ---\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate-libs-guice ---\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ crate-libs-guice ---\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ jlink-jdk ---\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ jlink-jdk ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ jlink-jdk ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ jlink-jdk ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/jlink-jdk/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ jlink-jdk ---\n[INFO] skip non existing resourceDirectory /repo/jlink-jdk/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ jlink-jdk ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ jlink-jdk ---\n[INFO] skip non existing resourceDirectory /repo/jlink-jdk/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ jlink-jdk ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- surefire:3.5.1:test (default-test) @ jlink-jdk ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jlink:3.1.0:jlink (default-jlink) @ jlink-jdk ---\n[INFO] Toolchain in maven-jlink-plugin: jlink [ /root/.m2/jdks/jdk-23.0.2+7/bin/jlink ]\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-pgwire ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-pgwire ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/pgwire/target/jacoco.exec\n[INFO] \n[INFO] --- antlr4:4.13.2:antlr4 (antlr) @ crate-libs-pgwire ---\n[INFO] ANTLR 4: Processing source directory /repo/libs/pgwire/src/main/antlr\n[INFO] Processing grammar: io/crate/protocols/postgres/antlr/PgArray.g4\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-pgwire ---\n[INFO] skip non existing resourceDirectory /repo/libs/pgwire/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-pgwire ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Recompiling the module because of changed source code.\n[INFO] Compiling 7 source files with javac [forked debug target 23] to target/classes\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-shared ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-shared ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/shared/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-shared ---\n[INFO] skip non existing resourceDirectory /repo/libs/shared/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-shared ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Recompiling the module because of changed source code.\n[INFO] Compiling 48 source files with javac [forked debug target 23] to target/classes\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-guice ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-guice ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/guice/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-guice ---\n[INFO] skip non existing resourceDirectory /repo/libs/guice/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-guice ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Recompiling the module because of changed source code.\n[INFO] Compiling 169 source files with javac [forked debug target 23] to target/classes\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-pgwire ---\n[INFO] skip non existing resourceDirectory /repo/libs/pgwire/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-pgwire ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 1 source file with javac [forked debug target 23] to target/test-classes\n[INFO] \n[INFO] WARNING: Using incubator modules: jdk.incubator.vector\n[INFO] Building zip: /repo/jlink-jdk/target/jlink-jdk-5.10.12.zip\n[INFO] \n[INFO] --- build-helper:3.6.0:add-test-source (add-gradle-testfixtures) @ crate-libs-shared ---\n[INFO] Test Source directory: /repo/libs/shared/src/testFixtures/java added.\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-shared ---\n[INFO] skip non existing resourceDirectory /repo/libs/shared/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-shared ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 10 source files with javac [forked debug target 23] to target/test-classes\n[INFO] \n[INFO] --- surefire:3.5.1:test (default-test) @ crate-libs-pgwire ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.2:jar (default-jar) @ crate-libs-pgwire ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Building jar: /repo/libs/pgwire/target/crate-libs-pgwire-5.10.12.jar\n[INFO] \n[INFO] --- forbiddenapis:3.8:check (default) @ crate-libs-pgwire ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-23\n[INFO] Reading bundled API signatures: jdk-deprecated-23\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.14s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.3:install (default-install) @ crate-libs-pgwire ---\n[INFO] Installing /repo/libs/pgwire/pom.xml to /root/.m2/repository/io/crate/crate-libs-pgwire/5.10.12/crate-libs-pgwire-5.10.12.pom\n[INFO] Installing /repo/libs/pgwire/target/crate-libs-pgwire-5.10.12.jar to /root/.m2/repository/io/crate/crate-libs-pgwire/5.10.12/crate-libs-pgwire-5.10.12.jar\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-guice ---\n[INFO] skip non existing resourceDirectory /repo/libs/guice/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-guice ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- surefire:3.5.1:test (default-test) @ crate-libs-guice ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.2:jar (default-jar) @ crate-libs-guice ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Building jar: /repo/libs/guice/target/crate-libs-guice-5.10.12.jar\n[INFO] \n[INFO] --- forbiddenapis:3.8:check (default) @ crate-libs-guice ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-23\n[INFO] Reading bundled API signatures: jdk-deprecated-23\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] \n[INFO] --- forbiddenapis:3.8:check (default) @ jlink-jdk ---\n[INFO] Scanning for classes to check...\n[INFO] Classes directory does not exist, forbiddenapis check skipped: /repo/jlink-jdk/target/classes\n[INFO] \n[INFO] --- install:3.1.3:install (default-install) @ jlink-jdk ---\n[INFO] Installing /repo/jlink-jdk/pom.xml to /root/.m2/repository/io/crate/jlink-jdk/5.10.12/jlink-jdk-5.10.12.pom\n[INFO] Installing /repo/jlink-jdk/target/jlink-jdk-5.10.12.zip to /root/.m2/repository/io/crate/jlink-jdk/5.10.12/jlink-jdk-5.10.12.zip\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.27s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.3:install (default-install) @ crate-libs-guice ---\n[INFO] Installing /repo/libs/guice/pom.xml to /root/.m2/repository/io/crate/crate-libs-guice/5.10.12/crate-libs-guice-5.10.12.pom\n[INFO] Installing /repo/libs/guice/target/crate-libs-guice-5.10.12.jar to /root/.m2/repository/io/crate/crate-libs-guice/5.10.12/crate-libs-guice-5.10.12.jar\n[INFO] \n[INFO] --- surefire:3.5.1:test (default-test) @ crate-libs-shared ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.2:jar (default-jar) @ crate-libs-shared ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Building jar: /repo/libs/shared/target/crate-libs-shared-5.10.12.jar\n[INFO] \n[INFO] --- jar:3.4.2:test-jar (default) @ crate-libs-shared ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Building jar: /repo/libs/shared/target/crate-libs-shared-5.10.12-tests.jar\n[INFO] \n[INFO] --- forbiddenapis:3.8:check (default) @ crate-libs-shared ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-23\n[INFO] Reading bundled API signatures: jdk-deprecated-23\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] Scanned 78 class file(s) for forbidden API invocations (in 0.09s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.3:install (default-install) @ crate-libs-shared ---\n[INFO] Installing /repo/libs/shared/pom.xml to /root/.m2/repository/io/crate/crate-libs-shared/5.10.12/crate-libs-shared-5.10.12.pom\n[INFO] Installing /repo/libs/shared/target/crate-libs-shared-5.10.12.jar to /root/.m2/repository/io/crate/crate-libs-shared/5.10.12/crate-libs-shared-5.10.12.jar\n[INFO] Installing /repo/libs/shared/target/crate-libs-shared-5.10.12-tests.jar to /root/.m2/repository/io/crate/crate-libs-shared/5.10.12/crate-libs-shared-5.10.12-tests.jar\n[INFO] \n[INFO] ----------------------< io.crate:crate-libs-dex >-----------------------\n[INFO] Building crate-libs-dex 5.10.12                                   [6/26]\n[INFO] \n[INFO]   from libs/dex/pom.xml\n[INFO] ------------------< io.crate:crate-libs-es-x-content >------------------\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] Building crate-libs-es-x-content 5.10.12                          [7/26]\n[INFO]   from libs/es-x-content/pom.xml\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] \n[INFO] ----------------------< io.crate:crate-libs-cli >-----------------------\n[INFO] \n[INFO] Building crate-libs-cli 5.10.12                                   [8/26]\n[INFO] -------------------< io.crate:crate-libs-sql-parser >-------------------\n[INFO] Building crate-libs-sql-parser 5.10.12                            [9/26]\n[INFO]   from libs/cli/pom.xml\n[INFO]   from libs/sql-parser/pom.xml\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate-libs-dex ---\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate-libs-cli ---\n[INFO] Deleting /repo/libs/dex/target\n[INFO] Deleting /repo/libs/cli/target\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate-libs-cli ---\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate-libs-sql-parser ---\n[INFO] Deleting /repo/libs/sql-parser/target\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ crate-libs-cli ---\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate-libs-es-x-content ---\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate-libs-dex ---\n[INFO] Deleting /repo/libs/es-x-content/target\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ crate-libs-dex ---\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate-libs-es-x-content ---\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ crate-libs-es-x-content ---\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate-libs-sql-parser ---\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ crate-libs-sql-parser ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-cli ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-cli ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/cli/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-cli ---\n[INFO] skip non existing resourceDirectory /repo/libs/cli/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-cli ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 5 source files with javac [forked debug target 23] to target/classes\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-es-x-content ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-es-x-content ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/es-x-content/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-es-x-content ---\n[INFO] skip non existing resourceDirectory /repo/libs/es-x-content/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-es-x-content ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 27 source files with javac [forked debug target 23] to target/classes\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-dex ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-dex ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/dex/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-dex ---\n[INFO] skip non existing resourceDirectory /repo/libs/dex/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-dex ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 47 source files with javac [forked debug target 23] to target/classes\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-cli ---\n[INFO] skip non existing resourceDirectory /repo/libs/cli/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-cli ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- surefire:3.5.1:test (default-test) @ crate-libs-cli ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.2:jar (default-jar) @ crate-libs-cli ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Building jar: /repo/libs/cli/target/crate-libs-cli-5.10.12.jar\n[INFO] \n[INFO] --- forbiddenapis:3.8:check (default) @ crate-libs-cli ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-23\n[INFO] Reading bundled API signatures: jdk-deprecated-23\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.07s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.3:install (default-install) @ crate-libs-cli ---\n[INFO] Installing /repo/libs/cli/pom.xml to /root/.m2/repository/io/crate/crate-libs-cli/5.10.12/crate-libs-cli-5.10.12.pom\n[INFO] Installing /repo/libs/cli/target/crate-libs-cli-5.10.12.jar to /root/.m2/repository/io/crate/crate-libs-cli/5.10.12/crate-libs-cli-5.10.12.jar\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-sql-parser ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-sql-parser ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/sql-parser/target/jacoco.exec\n[INFO] \n[INFO] --- antlr4:4.13.2:antlr4 (antlr) @ crate-libs-sql-parser ---\n[INFO] ANTLR 4: Processing source directory /repo/libs/sql-parser/src/main/antlr\n[INFO] Processing grammar: io/crate/sql/parser/antlr/SqlBaseLexer.g4\n[INFO] Processing grammar: io/crate/sql/parser/antlr/SqlBaseParser.g4\n[INFO] \n[INFO] --- build-helper:3.6.0:add-test-source (add-testfixtures) @ crate-libs-dex ---\n[INFO] Test Source directory: /repo/libs/dex/src/testFixtures/java added.\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-dex ---\n[INFO] skip non existing resourceDirectory /repo/libs/dex/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-dex ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 22 source files with javac [forked debug target 23] to target/test-classes\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-sql-parser ---\n[INFO] skip non existing resourceDirectory /repo/libs/sql-parser/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-sql-parser ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 219 source files with javac [forked debug target 23] to target/classes\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-es-x-content ---\n[INFO] skip non existing resourceDirectory /repo/libs/es-x-content/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-es-x-content ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- surefire:3.5.1:test (default-test) @ crate-libs-es-x-content ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.2:jar (default-jar) @ crate-libs-es-x-content ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Building jar: /repo/libs/es-x-content/target/crate-libs-es-x-content-5.10.12.jar\n[INFO] \n[INFO] --- forbiddenapis:3.8:check (default) @ crate-libs-es-x-content ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-23\n[INFO] Reading bundled API signatures: jdk-deprecated-23\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] Scanned 61 class file(s) for forbidden API invocations (in 0.08s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.3:install (default-install) @ crate-libs-es-x-content ---\n[INFO] Installing /repo/libs/es-x-content/pom.xml to /root/.m2/repository/io/crate/crate-libs-es-x-content/5.10.12/crate-libs-es-x-content-5.10.12.pom\n[INFO] Installing /repo/libs/es-x-content/target/crate-libs-es-x-content-5.10.12.jar to /root/.m2/repository/io/crate/crate-libs-es-x-content/5.10.12/crate-libs-es-x-content-5.10.12.jar\n[INFO] \n[INFO] --- surefire:3.5.1:test (default-test) @ crate-libs-dex ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.2:jar (default-jar) @ crate-libs-dex ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Building jar: /repo/libs/dex/target/crate-libs-dex-5.10.12.jar\n[INFO] \n[INFO] --- jar:3.4.2:test-jar (default) @ crate-libs-dex ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Building jar: /repo/libs/dex/target/crate-libs-dex-5.10.12-tests.jar\n[INFO] \n[INFO] --- forbiddenapis:3.8:check (default) @ crate-libs-dex ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-23\n[INFO] Reading bundled API signatures: jdk-deprecated-23\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] Scanned 62 class file(s) for forbidden API invocations (in 0.03s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.3:install (default-install) @ crate-libs-dex ---\n[INFO] Installing /repo/libs/dex/pom.xml to /root/.m2/repository/io/crate/crate-libs-dex/5.10.12/crate-libs-dex-5.10.12.pom\n[INFO] Installing /repo/libs/dex/target/crate-libs-dex-5.10.12.jar to /root/.m2/repository/io/crate/crate-libs-dex/5.10.12/crate-libs-dex-5.10.12.jar\n[INFO] Installing /repo/libs/dex/target/crate-libs-dex-5.10.12-tests.jar to /root/.m2/repository/io/crate/crate-libs-dex/5.10.12/crate-libs-dex-5.10.12-tests.jar\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-sql-parser ---\n[INFO] Copying 22 resources from src/test/resources to target/test-classes\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-sql-parser ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 14 source files with javac [forked debug target 23] to target/test-classes\n[INFO] \n[INFO] --- surefire:3.5.1:test (default-test) @ crate-libs-sql-parser ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.2:jar (default-jar) @ crate-libs-sql-parser ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Building jar: /repo/libs/sql-parser/target/crate-libs-sql-parser-5.10.12.jar\n[INFO] \n[INFO] --- forbiddenapis:3.8:check (default) @ crate-libs-sql-parser ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-23\n[INFO] Reading bundled API signatures: jdk-deprecated-23\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] Scanned 584 class file(s) for forbidden API invocations (in 0.19s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.3:install (default-install) @ crate-libs-sql-parser ---\n[INFO] Installing /repo/libs/sql-parser/pom.xml to /root/.m2/repository/io/crate/crate-libs-sql-parser/5.10.12/crate-libs-sql-parser-5.10.12.pom\n[INFO] Installing /repo/libs/sql-parser/target/crate-libs-sql-parser-5.10.12.jar to /root/.m2/repository/io/crate/crate-libs-sql-parser/5.10.12/crate-libs-sql-parser-5.10.12.jar\n[INFO] \n[INFO] -----------------------< io.crate:crate-server >------------------------\n[INFO] Building crate-server 5.10.12                                    [10/26]\n[INFO]   from server/pom.xml\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate-server ---\n[INFO] Deleting /repo/server/target\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate-server ---\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ crate-server ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-server ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-server ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/server/target/jacoco.exec\n[INFO] \n[INFO] --- antlr4:4.13.2:antlr4 (antlr) @ crate-server ---\n[INFO] ANTLR 4: Processing source directory /repo/server/src/main/antlr\n[INFO] Processing grammar: io/crate/signatures/antlr/TypeSignatures.g4\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-server ---\n[INFO] Copying 9 resources from src/main/resources to target/classes\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-server ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 2872 source files with javac [forked debug target 23] to target/classes\n[INFO] -------------------------------------------------------------\n[ERROR] COMPILATION ERROR : \n[INFO] -------------------------------------------------------------\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[165,17] error: cannot find symbol\n  symbol:   variable suspendedIt\n  location: class RowConsumerToResultReceiver\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[166,12] error: cannot find symbol\n  symbol:   variable suspendedIt\n  location: class RowConsumerToResultReceiver\n[INFO] 2 errors \n[INFO] -------------------------------------------------------------\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Summary for crate 5.10.12:\n[INFO] \n[INFO] crate .............................................. SUCCESS [  5.616 s]\n[INFO] crate-libs-shared .................................. SUCCESS [  8.588 s]\n[INFO] crate-libs-dex ..................................... SUCCESS [  6.135 s]\n[INFO] crate-libs-es-x-content ............................ SUCCESS [  3.930 s]\n[INFO] crate-libs-cli ..................................... SUCCESS [  2.149 s]\n[INFO] crate-libs-guice ................................... SUCCESS [  8.220 s]\n[INFO] crate-libs-sql-parser .............................. SUCCESS [ 11.871 s]\n[INFO] crate-libs-pgwire .................................. SUCCESS [  6.811 s]\n[INFO] crate-server ....................................... FAILURE [01:13 min]\n[INFO] crate-libs-azure-testing ........................... SKIPPED\n[INFO] es-analysis-common ................................. SKIPPED\n[INFO] es-analysis-phonetic ............................... SKIPPED\n[INFO] es-discovery-ec2 ................................... SKIPPED\n[INFO] es-repository-s3 ................................... SKIPPED\n[INFO] es-repository-url .................................. SKIPPED\n[INFO] es-repository-azure ................................ SKIPPED\n[INFO] repository-gcs ..................................... SKIPPED\n[INFO] dns-discovery ...................................... SKIPPED\n[INFO] crate-copy-s3 ...................................... SKIPPED\n[INFO] crate-copy-azure ................................... SKIPPED\n[INFO] crate-functions .................................... SKIPPED\n[INFO] crate-lang-js ...................................... SKIPPED\n[INFO] crate-jmx-monitoring ............................... SKIPPED\n[INFO] jlink-jdk .......................................... SUCCESS [  8.300 s]\n[INFO] crate-app .......................................... SKIPPED\n[INFO] crate-benchmarks ................................... SKIPPED\n[INFO] ------------------------------------------------------------------------\n[INFO] BUILD FAILURE\n[INFO] ------------------------------------------------------------------------\n[INFO] Total time:  01:40 min (Wall Clock)\n[INFO] Finished at: 2026-04-05T05:25:50Z\n[INFO] ------------------------------------------------------------------------\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[165,17] error: cannot find symbol\n[ERROR]   symbol:   variable suspendedIt\n[ERROR]   location: class RowConsumerToResultReceiver\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[166,12] error: cannot find symbol\n[ERROR]   symbol:   variable suspendedIt\n[ERROR]   location: class RowConsumerToResultReceiver\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server\n\u274c Build Failed\n\n#0 building with \"default\" instance using docker driver\n\n#1 [internal] load build definition from Dockerfile\n#1 transferring dockerfile: 1.18kB done\n#1 DONE 0.0s\n\n#2 [internal] load metadata for docker.io/library/maven:3.9-eclipse-temurin-24\n#2 DONE 0.3s\n\n#3 [internal] load .dockerignore\n#3 transferring context: 2B done\n#3 DONE 0.0s\n\n#4 [1/5] FROM docker.io/library/maven:3.9-eclipse-temurin-24@sha256:a137a467ec89b5713d0be817b55bdba6b4d6ef16e3d05565a79bc08d8e775a1c\n#4 resolve docker.io/library/maven:3.9-eclipse-temurin-24@sha256:a137a467ec89b5713d0be817b55bdba6b4d6ef16e3d05565a79bc08d8e775a1c 0.0s done\n#4 DONE 0.0s\n\n#5 [2/5] RUN apt-get update && apt-get install -y     git     rsync     && rm -rf /var/lib/apt/lists/*\n#5 CACHED\n\n#6 [3/5] WORKDIR /repo\n#6 CACHED\n\n#7 [4/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/maven/conf/toolchains.xml /root/.m2/toolchains.xml &&     cp /usr/share/maven/conf/toolchains.xml /etc/maven/toolchains.xml &&     cp /usr/share/maven/conf/toolchains.xml /.m2/toolchains.xml &&     cp /usr/share/maven/conf/toolchains.xml /usr/share/maven/ref/toolchains.xml &&     chmod -R 777 /.m2 /usr/share/maven/ref/ /etc/maven /usr/share/maven/conf/toolchains.xml\n#8 CACHED\n\n#9 exporting to image\n#9 exporting layers done\n#9 exporting manifest sha256:0d74cc1c64aaf1c4c8b651e15ad4a4dfbb869c68af5759f6ebffff665b323376 done\n#9 exporting config sha256:0e3430a77d8bbc7e42e6f17589d44797d67bb006839a860d45cb45b257f56cf5 done\n#9 exporting attestation manifest sha256:ca6054ef28d8a7007fcdb099dacb1a1ff3835f09a463e872ad940890188adf49 0.0s done\n#9 exporting manifest list sha256:cf7ccc87eb71a4f520208f52983fdd6882463444284abe3c63afe6de516da433\n#9 exporting manifest list sha256:cf7ccc87eb71a4f520208f52983fdd6882463444284abe3c63afe6de516da433 0.0s done\n#9 naming to docker.io/library/retrofit-crate-builder:local done\n#9 unpacking to docker.io/library/retrofit-crate-builder:local 0.0s done\n#9 DONE 0.2s\nWARNING: A terminally deprecated method in sun.misc.Unsafe has been called\nWARNING: sun.misc.Unsafe::staticFieldBase has been called by com.google.inject.internal.aop.HiddenClassDefiner (file:/usr/share/maven/lib/guice-5.1.0-classes.jar)\nWARNING: Please consider reporting this to the maintainers of class com.google.inject.internal.aop.HiddenClassDefiner\nWARNING: sun.misc.Unsafe::staticFieldBase will be removed in a future release",
+              "agent_evaluation": "API/signature mismatch in generated patch against target branch.",
+              "error_context": "API/signature mismatch in generated patch against target branch.",
+              "diagnostics": {
+                "category": "context_mismatch",
+                "retry_files": [
+                  "server/src/main/java/io/crate/session/Session.java"
+                ],
+                "issues": [
+                  {
+                    "error_type": "api_or_signature_mismatch",
+                    "suggested_action": "replan_and_regenerate_with_api_compatibility",
+                    "compiler_errors": []
+                  }
+                ]
+              }
+            }
+          },
+          "validation_failure_category": "context_mismatch",
+          "validation_retry_files": [
+            "server/src/main/java/io/crate/session/Session.java"
+          ],
+          "force_type_v_until_success": true,
+          "force_type_v_reason": "failed_stage_generation_contract"
+        }
+      }
+    }
+  },
+  "pair_consistency": {
+    "mainline_java_files": [
+      "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+      "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+      "server/src/main/java/io/crate/session/Session.java"
+    ],
+    "developer_java_files": [
+      "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+      "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+      "server/src/main/java/io/crate/session/Session.java"
+    ],
+    "overlap_java_files": [
+      "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+      "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+      "server/src/main/java/io/crate/session/Session.java"
+    ],
+    "overlap_ratio_mainline": 1.0,
+    "pair_mismatch": false,
+    "reason": "scope_overlap_ok"
+  },
+  "exact_developer_patch": false,
+  "developer_patch_comparison": {
+    "comparison_method": "file_state",
+    "compared_files": [
+      "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+      "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+      "server/src/main/java/io/crate/session/Session.java"
+    ],
+    "mismatched_files": [
+      "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+      "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+      "server/src/main/java/io/crate/session/Session.java"
+    ],
+    "developer_files": [
+      "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+      "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+      "server/src/main/java/io/crate/session/Session.java"
+    ],
+    "generated_files": [
+      "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+      "server/src/main/java/io/crate/session/Session.java"
+    ],
+    "pair_consistency": {
+      "mainline_java_files": [
+        "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "server/src/main/java/io/crate/session/Session.java"
+      ],
+      "developer_java_files": [
+        "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "server/src/main/java/io/crate/session/Session.java"
+      ],
+      "overlap_java_files": [
+        "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "server/src/main/java/io/crate/session/Session.java"
+      ],
+      "overlap_ratio_mainline": 1.0,
+      "pair_mismatch": false,
+      "reason": "scope_overlap_ok"
+    },
+    "error": null
+  },
+  "generated_patch_files": {
+    "agent_only": "/home/kaushal/retrofit-java/agents-backend/evaluate/full_run/results/crate/crate_b9c42c9b/generated_patch_agent_only.patch",
+    "final_effective": "/home/kaushal/retrofit-java/agents-backend/evaluate/full_run/results/crate/crate_b9c42c9b/generated_patch_final_effective.patch"
+  },
+  "status": "completed"
+}

@@ -65,6 +65,27 @@ class TestGraphRouting(unittest.TestCase):
         }
         self.assertEqual(route_validation(state), "planning_agent")
 
+    def test_plan_preflight_failed_routes_as_generation_stage_not_stale_build_diag(self):
+        """Deferred validation with plan_preflight_failed must not hit api_or_signature branch."""
+        state = {
+            "validation_passed": False,
+            "validation_attempts": 2,
+            "patch_complexity": "STRUCTURAL",
+            "validation_failure_category": "context_mismatch",
+            "validation_failed_stage": "plan_preflight_failed",
+            "validation_results": {
+                "build": {
+                    "success": False,
+                    "diagnostics": {
+                        "issues": [
+                            {"error_type": "api_or_signature_mismatch"},
+                        ]
+                    },
+                }
+            },
+        }
+        self.assertEqual(route_validation(state), "hunk_generator")
+
     def test_validation_stagnation_escalates_for_rewrite(self):
         state = {
             "validation_passed": False,

@@ -1,0 +1,794 @@
+{
+  "adapted_file_edits": [
+    {
+      "target_file": "server/src/main/java/io/crate/session/Session.java",
+      "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+      "old_string": "<line-based ReAct agent diff>",
+      "new_string": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..bb582259ea 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "ReAct agent applied",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    }
+  ],
+  "all_adapted_file_edits": [
+    [
+      {
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "mainline_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/server/src/main/java/io/crate/protocols/postgres/Portal.java\nindex 8dcba13cda..c4bf4f630a 100644\n--- a/server/src/main/java/io/crate/protocols/postgres/Portal.java\n+++ b/server/src/main/java/io/crate/protocols/postgres/Portal.java\n@@ -25,9 +25,9 @@ import java.util.List;\n \n import org.jetbrains.annotations.Nullable;\n \n+import io.crate.analyze.AnalyzedStatement;\n import io.crate.session.PreparedStmt;\n import io.crate.session.RowConsumerToResultReceiver;\n-import io.crate.analyze.AnalyzedStatement;\n \n public final class Portal {\n \n@@ -91,6 +91,7 @@ public final class Portal {\n         return \"Portal{\" +\n                \"portalName=\" + portalName +\n                \", preparedStmt=\" + preparedStmt.rawStatement() +\n+               \", consumer=\" + consumer +\n                '}';\n     }\n }",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "mainline_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\nindex 6ecea107b3..4d54effe4e 100644\n--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n+++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n@@ -27,6 +27,7 @@ import java.util.function.Consumer;\n import org.apache.logging.log4j.LogManager;\n import org.apache.logging.log4j.Logger;\n import org.jetbrains.annotations.Nullable;\n+import org.jetbrains.annotations.VisibleForTesting;\n \n import io.crate.data.BatchIterator;\n import io.crate.data.Row;\n@@ -45,12 +46,13 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n      * Reset per suspend/execute\n      */\n     private int rowCount = 0;\n-    private BatchIterator<Row> activeIt;\n+    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n+    private boolean waitingForWrite = false;\n \n     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n         this.resultReceiver = resultReceiver;\n         this.maxRows = maxRows;\n-        completionFuture.whenComplete((res, err) -> {\n+        completionFuture.whenComplete((_, err) -> {\n             onCompletion.accept(err);\n         });\n     }\n@@ -77,23 +79,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n         while (true) {\n             try {\n                 while (iterator.moveNext()) {\n+                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n+                        suspendedIt.complete(iterator);\n+                        resultReceiver.batchFinished();\n+                        return; // resumed via postgres protocol, close is done later\n+                    }\n                     rowCount++;\n                     CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                     if (writeFuture != null) {\n                         LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n-                        activeIt = iterator;\n+                        waitingForWrite = true;\n                         writeFuture.thenRun(() -> {\n                             LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n-                            resume();\n+                            waitingForWrite = false;\n+                            rowCount = 0;\n+                            consumeIt(iterator);\n                         });\n                         return;\n                     }\n-\n-                    if (maxRows > 0 && rowCount % maxRows == 0) {\n-                        activeIt = iterator;\n-                        resultReceiver.batchFinished();\n-                        return; // resumed via postgres protocol, close is done later\n-                    }\n                 }\n                 if (iterator.allLoaded()) {\n                     completionFuture.complete(null);\n@@ -109,7 +112,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n                         }\n                         continue;\n                     }\n-                    nextBatch.whenComplete((r, f) -> {\n+                    nextBatch.whenComplete((_, f) -> {\n                         if (f == null) {\n                             consumeIt(iterator);\n                         } else {\n@@ -135,17 +138,22 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n      * and finish the ResultReceiver\n      */\n     public void closeAndFinishIfSuspended() {\n-        if (activeIt != null) {\n-            activeIt.close();\n+        suspendedIt.whenComplete((it, _) -> {\n+            it.close();\n             completionFuture.complete(null);\n             // resultReceiver is left untouched:\n             // - A previous .batchCompleted() call already flushed out pending messages\n             // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.\n-        }\n+        });\n     }\n \n     public boolean suspended() {\n-        return activeIt != null;\n+        return suspendedIt.isDone();\n+    }\n+\n+    @VisibleForTesting\n+    public boolean waitingForWrite() {\n+        return waitingForWrite;\n     }\n \n     public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {\n@@ -159,10 +167,21 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n     }\n \n     public void resume() {\n-        assert activeIt != null : \"resume must only be called if suspended() returned true and activeIt is not null\";\n-        BatchIterator<Row> iterator = this.activeIt;\n-        this.activeIt = null;\n-        consumeIt(iterator);\n+        assert suspended() : \"resume must only be called if suspended() returned true\";\n+        BatchIterator<Row> it = null;\n+        try {\n+            it = suspendedIt.join();\n+            suspendedIt = new CompletableFuture<>();\n+            resultReceiver.setNextRow(it.currentElement());\n+            rowCount++;\n+            consumeIt(it);\n+        } catch (Throwable t) {\n+            if (it != null) {\n+                it.close();\n+            }\n+            completionFuture.completeExceptionally(t);\n+            resultReceiver.fail(t);\n+        }\n     }\n \n     @Override\n@@ -171,7 +190,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n                \"resultReceiver=\" + resultReceiver +\n                \", maxRows=\" + maxRows +\n                \", rowCount=\" + rowCount +\n-               \", activeIt=\" + activeIt +\n+               \", activeIt=\" + suspendedIt +\n                '}';\n     }\n }",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..60c4f48565 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n@@ -670,7 +672,7 @@ public class Session implements AutoCloseable {\n                 return exec(deferredExecutions, forceBulk);\n             }\n             default: {\n-                // Mix of different defered execution is PG specific.\n+                // Mix of different deferred execution is PG specific.\n                 // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.\n                 // sequentiallize execution to ensure client receives row counts in correct order\n                 CompletableFuture<?> allCompleted = null;",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      }
+    ],
+    [
+      {
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "mainline_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "old_string": "<line-based ReAct agent diff>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/server/src/main/java/io/crate/protocols/postgres/Portal.java\nindex 8dcba13cda..55a9979244 100644\n--- a/server/src/main/java/io/crate/protocols/postgres/Portal.java\n+++ b/server/src/main/java/io/crate/protocols/postgres/Portal.java\n@@ -91,6 +91,7 @@ public final class Portal {\n         return \"Portal{\" +\n                \"portalName=\" + portalName +\n                \", preparedStmt=\" + preparedStmt.rawStatement() +\n+               \", consumer=\" + consumer +\n                '}';\n     }\n }",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "ReAct agent applied",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "mainline_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "old_string": "<line-based ReAct agent diff>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\nindex 6ecea107b3..aa740293b6 100644\n--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n+++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n@@ -45,12 +45,12 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n      * Reset per suspend/execute\n      */\n     private int rowCount = 0;\n-    private BatchIterator<Row> activeIt;\n+    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n \n     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n         this.resultReceiver = resultReceiver;\n         this.maxRows = maxRows;\n-        completionFuture.whenComplete((res, err) -> {\n+        completionFuture.whenComplete((_, err) -> {\n             onCompletion.accept(err);\n         });\n     }",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "ReAct agent applied",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      }
+    ],
+    [
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+        "old_string": "<line-based ReAct agent diff>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..bb582259ea 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "ReAct agent applied",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      }
+    ]
+  ],
+  "agent_trajectory_edits": [
+    [],
+    [
+      {
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "center_line": 30,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "center_line": 91,
+          "radius": 10
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "center_line": 91,
+          "radius": 10
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "center_line": 90,
+          "radius": 5
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "center_line": 40,
+          "radius": 10
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "center_line": 50,
+          "radius": 10
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "center_line": 80,
+          "radius": 10
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "old_string": "import io.crate.session.PreparedStmt;\nimport io.crate.session.RowConsumerToResultReceiver;\nimport io.crate.analyze.AnalyzedStatement;",
+          "new_string": "import io.crate.session.PreparedStmt;\nimport io.crate.session.RowConsumerToResultReceiver;\nimport io.crate.analyze.AnalyzedStatement;",
+          "replace_all": false
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "old_string": "    @Override\n    public String toString() {\n        return \"Portal{\" +\n               \"portalName=\" + portalName +\n               \", preparedStmt=\" + preparedStmt.rawStatement() +\n               '}';\n    }",
+          "new_string": "    @Override\n    public String toString() {\n        return \"Portal{\" +\n               \"portalName=\" + portalName +\n               \", preparedStmt=\" + preparedStmt.rawStatement() +\n               \", consumer=\" + consumer +\n               '}';\n    }",
+          "replace_all": false
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "tool": "check_java_syntax",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "manage_todo",
+        "args": {
+          "action": "add",
+          "task": "Read file window around line 40 to 60 to find field declarations and constructor for RowConsumerToResultReceiver."
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "center_line": 50,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "manage_todo",
+        "args": {
+          "action": "add",
+          "task": "Replace field 'private BatchIterator<Row> activeIt;' with 'private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();'."
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "manage_todo",
+        "args": {
+          "action": "add",
+          "task": "Replace constructor lambda parameter from (res, err) to (_, err) in completionFuture.whenComplete."
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "manage_todo",
+        "args": {
+          "action": "add",
+          "task": "Replace consumeIt method body to add logic for suspending and resuming with maxRows and rowCount checks, using suspendedIt CompletableFuture."
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "manage_todo",
+        "args": {
+          "action": "add",
+          "task": "Replace closeAndFinishIfSuspended method body to close suspended iterator and complete completionFuture."
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "manage_todo",
+        "args": {
+          "action": "add",
+          "task": "Replace suspended method body to return suspendedIt.isDone() instead of activeIt != null."
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "manage_todo",
+        "args": {
+          "action": "add",
+          "task": "Replace replaceResultReceiver method body to reset rowCount and suspendedIt, and update resultReceiver and maxRows."
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "manage_todo",
+        "args": {
+          "action": "add",
+          "task": "Replace toString method body to include suspendedIt instead of activeIt."
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "manage_todo",
+        "args": {
+          "action": "list"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "replace_field",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "field_name": "activeIt",
+          "new_declaration": "private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "replace_method_body",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "method_signature": "RowConsumerToResultReceiver(ResultReceiver<?>, int, Consumer<Throwable>)",
+          "new_body": "    this.resultReceiver = resultReceiver;\n    this.maxRows = maxRows;\n    completionFuture.whenComplete((_, err) -> {\n        onCompletion.accept(err);\n    });"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "replace_method_body",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "method_signature": "void consumeIt(BatchIterator<Row>)",
+          "new_body": "    while (true) {\n        try {\n            while (iterator.moveNext()) {\n                if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n                    suspendedIt.complete(iterator);\n                    resultReceiver.batchFinished();\n                    return; // resumed via postgres protocol, close is done later\n                }\n                rowCount++;\n                CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                if (writeFuture != null) {\n                    LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                    suspendedIt.complete(iterator);\n                    writeFuture.thenRun(() -> {\n                        LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                        suspendedIt = new CompletableFuture<>();\n                        rowCount = 0;\n                        consumeIt(iterator);\n                    });\n                    return;\n                }\n            }\n            if (iterator.allLoaded()) {\n                completionFuture.complete(null);\n            } else {\n                CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                if (nextBatch == null) {\n                    continue;\n                }\n                nextBatch.whenComplete((_, f) -> {\n                    if (f == null) {\n                        consumeIt(iterator);\n                    } else {\n                        completionFuture.completeExceptionally(f);\n                        resultReceiver.fail(f);\n                    }\n                });\n            }\n            return;\n        } catch (Throwable t) {\n            iterator.close();\n            completionFuture.completeExceptionally(t);\n            resultReceiver.fail(t);\n            return;\n        }\n    }"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "replace_method_body",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "method_signature": "void closeAndFinishIfSuspended()",
+          "new_body": "    suspendedIt.whenComplete((it, _) -> {\n        it.close();\n        completionFuture.complete(null);\n        // resultReceiver is left untouched:\n        // - A previous .batchCompleted() call already flushed out pending messages\n        // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.\n    });"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "replace_method_body",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "method_signature": "boolean suspended()",
+          "new_body": "    return suspendedIt.isDone();"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "replace_method_body",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "method_signature": "void replaceResultReceiver(ResultReceiver<?>, int)",
+          "new_body": "    this.rowCount = 0;\n    this.resultReceiver = resultReceiver;\n    this.maxRows = maxRows;\n    this.suspendedIt = new CompletableFuture<>();"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "replace_method_body",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "method_signature": "public String toString()",
+          "new_body": "    return \"RowConsumerToResultReceiver{\" +\n           \"resultReceiver=\" + resultReceiver +\n           \", maxRows=\" + maxRows +\n           \", rowCount=\" + rowCount +\n           \", activeIt=\" + suspendedIt +\n           '}';"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "center_line": 48,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "old_string": "    /**\n     * Reset per suspend/execute\n     */\n    private int rowCount = 0;\n    private BatchIterator<Row> activeIt;\n\n    public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n        this.resultReceiver = resultReceiver;\n        this.maxRows = maxRows;\n        completionFuture.whenComplete((res, err) -> {\n            onCompletion.accept(err);\n        });\n    }",
+          "new_string": "    /**\n     * Reset per suspend/execute\n     */\n    private int rowCount = 0;\n    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n\n    public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n        this.resultReceiver = resultReceiver;\n        this.maxRows = maxRows;\n        completionFuture.whenComplete((_, err) -> {\n            onCompletion.accept(err);\n        });\n    }"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "old_string": "    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    if (maxRows > 0 && rowCount % maxRows == 0) {\n                        activeIt = iterator;\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        activeIt = iterator;\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            resume();\n                        });\n                        return;\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                } else {\n                    CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                    if (nextBatch == null) {\n                        continue;\n                    }\n                    nextBatch.whenComplete((r, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            completionFuture.completeExceptionally(f);\n                            resultReceiver.fail(f);\n                        }\n                    });\n                }\n                return;\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }",
+          "new_string": "    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n                        suspendedIt.complete(iterator);\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        suspendedIt.complete(iterator);\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            suspendedIt = new CompletableFuture<>();\n                            rowCount = 0;\n                            consumeIt(iterator);\n                        });\n                        return;\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                } else {\n                    CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                    if (nextBatch == null) {\n                        continue;\n                    }\n                    nextBatch.whenComplete((_, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            completionFuture.completeExceptionally(f);\n                            resultReceiver.fail(f);\n                        }\n                    });\n                }\n                return;\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "center_line": 80,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "old_string": "    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        activeIt = iterator;\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            resume();\n                        });\n                        return;\n                    }\n\n                    if (maxRows > 0 && rowCount % maxRows == 0) {\n                        activeIt = iterator;\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                    iterator.close();\n                } else {\n                    CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                    if (nextBatch == null) {\n                        continue;\n                    }\n                    nextBatch.whenComplete((r, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            completionFuture.completeExceptionally(f);\n                            resultReceiver.fail(f);\n                        }\n                    });\n                }\n                return;\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }",
+          "new_string": "    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n                        suspendedIt.complete(iterator);\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        suspendedIt.complete(iterator);\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            suspendedIt = new CompletableFuture<>();\n                            rowCount = 0;\n                            consumeIt(iterator);\n                        });\n                        return;\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                    iterator.close();\n                } else {\n                    CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                    if (nextBatch == null) {\n                        continue;\n                    }\n                    nextBatch.whenComplete((_, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            completionFuture.completeExceptionally(f);\n                            resultReceiver.fail(f);\n                        }\n                    });\n                }\n                return;\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "center_line": 75,
+          "radius": 10
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "old_string": "    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        activeIt = iterator;\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            resume();\n                        });\n                        return;\n                    }\n\n                    if (maxRows > 0 && rowCount % maxRows == 0) {\n                        activeIt = iterator;\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                    iterator.close();\n                } else {\n                    CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                    if (nextBatch == null) {\n                        continue;\n                    }\n                    nextBatch.whenComplete((r, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            completionFuture.completeExceptionally(f);\n                            resultReceiver.fail(f);\n                        }\n                    });\n                }\n                return;\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }",
+          "new_string": "    private void consumeIt(BatchIterator<Row> iterator) {\n        while (true) {\n            try {\n                while (iterator.moveNext()) {\n                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n                        suspendedIt.complete(iterator);\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                    rowCount++;\n                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        suspendedIt.complete(iterator);\n                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            suspendedIt = new CompletableFuture<>();\n                            rowCount = 0;\n                            consumeIt(iterator);\n                        });\n                        return;\n                    }\n                }\n                if (iterator.allLoaded()) {\n                    completionFuture.complete(null);\n                    iterator.close();\n                } else {\n                    CompletableFuture<?> nextBatch = iterator.loadNextBatch();\n                    if (nextBatch == null) {\n                        continue;\n                    }\n                    nextBatch.whenComplete((_, f) -> {\n                        if (f == null) {\n                            consumeIt(iterator);\n                        } else {\n                            completionFuture.completeExceptionally(f);\n                            resultReceiver.fail(f);\n                        }\n                    });\n                }\n                return;\n            } catch (Throwable t) {\n                iterator.close();\n                completionFuture.completeExceptionally(t);\n                resultReceiver.fail(t);\n                return;\n            }\n        }\n    }"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "center_line": 75,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "manage_todo",
+        "args": {
+          "action": "add",
+          "task": "Analyze logic changes and structural differences in server/src/main/java/io/crate/session/Session.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "center_line": 630,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "center_line": 680,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "search_text": "activeExecution"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "center_line": 585,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "center_line": 663,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "center_line": 700,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "center_line": 635,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "search_text": "LOGGER.debug(\"method=sync deferredExecutions="
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "search_text": "LOGGER.debug(\"method=sync activeExecution="
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "search_text": "LOGGER.debug(\"method=sync deferredExecutions="
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "search_text": "LOGGER.debug(\"method=sync activeExecution="
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "search_text": "LOGGER.debug(\"method=sync deferredExecutions="
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "search_text": "LOGGER.debug(\"method=sync activeExecution="
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "search_text": "LOGGER.debug(\"method=sync activeExecution="
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "search_text": "LOGGER.debug(\"method=sync activeExecution="
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "search_text": "LOGGER.debug(\"method=sync activeExecution="
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "search_text": "LOGGER.debug(\"method=sync activeExecution="
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "search_text": "LOGGER.debug(\"method=sync activeExecution="
+        }
+      }
+    ],
+    [
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "manage_todo",
+        "args": {
+          "action": "add",
+          "task": "Locate and analyze the first hunk context around line 630 in server/src/main/java/io/crate/session/Session.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "center_line": 630,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "center_line": 679,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "find_method_definitions",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "symbol": "triggerDeferredExecutions"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "center_line": 662,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "start_line": 670,
+          "end_line": 700
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "get_exact_lines",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "start_line": 670,
+          "end_line": 700
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "get_exact_lines",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "start_line": 625,
+          "end_line": 635
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "old_string": "        if (activeExecution == null) {\n            return triggerDeferredExecutions(forceBulk);\n        } else {\n            var result = activeExecution;\n            activeExecution = null;\n            return result;\n        }",
+          "new_string": "        if (activeExecution == null) {\n            return triggerDeferredExecutions(forceBulk);\n        } else {\n            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n            var result = activeExecution;\n            activeExecution = null;\n            return result;\n        }",
+          "replace_all": false
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "old_string": "        switch (deferredExecutionsByStmt.size()) {\n            case 0:\n                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                return CompletableFuture.completedFuture(null);\n            case 1: {\n                var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n                deferredExecutionsByStmt.clear();\n                return exec(deferredExecutions, forceBulk);\n            }\n            default: {\n                // Mix of different defered execution is PG specific.\n                // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.\n                // sequentiallize execution to ensure client receives row counts in correct order\n                CompletableFuture<?> allCompleted = null;\n                for (var entry : deferredExecutionsByStmt.entrySet()) {\n                    var deferredExecutions = entry.getValue();\n                    if (allCompleted == null) {\n                        allCompleted = exec(deferredExecutions, forceBulk);\n                    } else {\n                        allCompleted = allCompleted\n                            // individual rowReceiver will receive failure; must not break execution chain due to failures.\n                            // No need to log execution and as it's handled in the exec() call.\n                            .exceptionally(_ -> null)\n                            .thenCompose(_ -> exec(deferredExecutions, forceBulk));\n                    }\n                }\n                deferredExecutionsByStmt.clear();\n                return allCompleted;\n            }\n        }",
+          "new_string": "        int numDeferred = deferredExecutionsByStmt.size();\n        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n        switch (numDeferred) {\n            case 0:\n                return CompletableFuture.completedFuture(null);\n            case 1: {\n                var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n                deferredExecutionsByStmt.clear();\n                return exec(deferredExecutions, forceBulk);\n            }\n            default: {\n                // Mix of different defered execution is PG specific.\n                // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.\n                // sequentiallize execution to ensure client receives row counts in correct order\n                CompletableFuture<?> allCompleted = null;\n                for (var entry : deferredExecutionsByStmt.entrySet()) {\n                    var deferredExecutions = entry.getValue();\n                    if (allCompleted == null) {\n                        allCompleted = exec(deferredExecutions, forceBulk);\n                    } else {\n                        allCompleted = allCompleted\n                            // individual rowReceiver will receive failure; must not break execution chain due to failures.\n                            // No need to log execution and as it's handled in the exec() call.\n                            .exceptionally(_ -> null)\n                            .thenCompose(_ -> exec(deferredExecutions, forceBulk));\n                    }\n                }\n                deferredExecutionsByStmt.clear();\n                return allCompleted;\n            }\n        }",
+          "replace_all": false
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "check_java_syntax",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "git_diff_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/session/Session.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "tool": "verify_guidelines",
+        "args": {
+          "diff_text": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..bb582259ea 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n@@ -679,7 +681,7 @@\n                     if (allCompleted == null) {\n                         allCompleted = exec(deferredExecutions, forceBulk);\n                     } else {\n-                        allCompleted = allCompleted\n-                            // individual rowReceiver will receive failure; must not break execution chain due to failures.\n-                            // No need to log execution and as it's handled in the exec() call.\n-                            .exceptionally(_ -> null)\n-                            .thenCompose(_ -> exec(deferredExecutions, forceBulk));\n+                        allCompleted = allCompleted\n+                            // individual rowReceiver will receive failure; must not break execution chain due to failures.\n+                            // No need to log execution and as it's handled in the exec() call.\n+                            .exceptionally(_ -> null)\n+                            .thenCompose(_ -> exec(deferredExecutions, forceBulk));\n                     }\n                 }\n                 deferredExecutionsByStmt.clear();\n                 return allCompleted;\n             }\n         }\n     }\n"
+        }
+      }
+    ]
+  ],
+  "adapted_code_hunks": [
+    {
+      "target_file": "server/src/main/java/io/crate/session/Session.java",
+      "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..bb582259ea 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n",
+      "insertion_line": 611,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "validation_repeated_patch_detected": false,
+  "validation_repeated_plan_detected": false,
+  "best_effort_adapted_code_hunks": [
+    {
+      "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+      "mainline_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/server/src/main/java/io/crate/protocols/postgres/Portal.java\nindex 8dcba13cda..c4bf4f630a 100644\n--- a/server/src/main/java/io/crate/protocols/postgres/Portal.java\n+++ b/server/src/main/java/io/crate/protocols/postgres/Portal.java\n@@ -25,9 +25,9 @@ import java.util.List;\n \n import org.jetbrains.annotations.Nullable;\n \n+import io.crate.analyze.AnalyzedStatement;\n import io.crate.session.PreparedStmt;\n import io.crate.session.RowConsumerToResultReceiver;\n-import io.crate.analyze.AnalyzedStatement;\n \n public final class Portal {\n \n@@ -91,6 +91,7 @@ public final class Portal {\n         return \"Portal{\" +\n                \"portalName=\" + portalName +\n                \", preparedStmt=\" + preparedStmt.rawStatement() +\n+               \", consumer=\" + consumer +\n                '}';\n     }\n }\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+      "mainline_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\nindex 6ecea107b3..4d54effe4e 100644\n--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n+++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n@@ -27,6 +27,7 @@ import java.util.function.Consumer;\n import org.apache.logging.log4j.LogManager;\n import org.apache.logging.log4j.Logger;\n import org.jetbrains.annotations.Nullable;\n+import org.jetbrains.annotations.VisibleForTesting;\n \n import io.crate.data.BatchIterator;\n import io.crate.data.Row;\n@@ -45,12 +46,13 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n      * Reset per suspend/execute\n      */\n     private int rowCount = 0;\n-    private BatchIterator<Row> activeIt;\n+    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n+    private boolean waitingForWrite = false;\n \n     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n         this.resultReceiver = resultReceiver;\n         this.maxRows = maxRows;\n-        completionFuture.whenComplete((res, err) -> {\n+        completionFuture.whenComplete((_, err) -> {\n             onCompletion.accept(err);\n         });\n     }\n@@ -77,23 +79,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n         while (true) {\n             try {\n                 while (iterator.moveNext()) {\n+                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n+                        suspendedIt.complete(iterator);\n+                        resultReceiver.batchFinished();\n+                        return; // resumed via postgres protocol, close is done later\n+                    }\n                     rowCount++;\n                     CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());\n                     if (writeFuture != null) {\n                         LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n-                        activeIt = iterator;\n+                        waitingForWrite = true;\n                         writeFuture.thenRun(() -> {\n                             LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n-                            resume();\n+                            waitingForWrite = false;\n+                            rowCount = 0;\n+                            consumeIt(iterator);\n                         });\n                         return;\n                     }\n-\n-                    if (maxRows > 0 && rowCount % maxRows == 0) {\n-                        activeIt = iterator;\n-                        resultReceiver.batchFinished();\n-                        return; // resumed via postgres protocol, close is done later\n-                    }\n                 }\n                 if (iterator.allLoaded()) {\n                     completionFuture.complete(null);\n@@ -109,7 +112,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n                         }\n                         continue;\n                     }\n-                    nextBatch.whenComplete((r, f) -> {\n+                    nextBatch.whenComplete((_, f) -> {\n                         if (f == null) {\n                             consumeIt(iterator);\n                         } else {\n@@ -135,17 +138,22 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n      * and finish the ResultReceiver\n      */\n     public void closeAndFinishIfSuspended() {\n-        if (activeIt != null) {\n-            activeIt.close();\n+        suspendedIt.whenComplete((it, _) -> {\n+            it.close();\n             completionFuture.complete(null);\n             // resultReceiver is left untouched:\n             // - A previous .batchCompleted() call already flushed out pending messages\n             // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.\n-        }\n+        });\n     }\n \n     public boolean suspended() {\n-        return activeIt != null;\n+        return suspendedIt.isDone();\n+    }\n+\n+    @VisibleForTesting\n+    public boolean waitingForWrite() {\n+        return waitingForWrite;\n     }\n \n     public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {\n@@ -159,10 +167,21 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n     }\n \n     public void resume() {\n-        assert activeIt != null : \"resume must only be called if suspended() returned true and activeIt is not null\";\n-        BatchIterator<Row> iterator = this.activeIt;\n-        this.activeIt = null;\n-        consumeIt(iterator);\n+        assert suspended() : \"resume must only be called if suspended() returned true\";\n+        BatchIterator<Row> it = null;\n+        try {\n+            it = suspendedIt.join();\n+            suspendedIt = new CompletableFuture<>();\n+            resultReceiver.setNextRow(it.currentElement());\n+            rowCount++;\n+            consumeIt(it);\n+        } catch (Throwable t) {\n+            if (it != null) {\n+                it.close();\n+            }\n+            completionFuture.completeExceptionally(t);\n+            resultReceiver.fail(t);\n+        }\n     }\n \n     @Override\n@@ -171,7 +190,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n                \"resultReceiver=\" + resultReceiver +\n                \", maxRows=\" + maxRows +\n                \", rowCount=\" + rowCount +\n-               \", activeIt=\" + activeIt +\n+               \", activeIt=\" + suspendedIt +\n                '}';\n     }\n }\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/session/Session.java",
+      "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..60c4f48565 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n@@ -670,7 +672,7 @@ public class Session implements AutoCloseable {\n                 return exec(deferredExecutions, forceBulk);\n             }\n             default: {\n-                // Mix of different defered execution is PG specific.\n+                // Mix of different deferred execution is PG specific.\n                 // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.\n                 // sequentiallize execution to ensure client receives row counts in correct order\n                 CompletableFuture<?> allCompleted = null;\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+      "mainline_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/server/src/main/java/io/crate/protocols/postgres/Portal.java\nindex 8dcba13cda..55a9979244 100644\n--- a/server/src/main/java/io/crate/protocols/postgres/Portal.java\n+++ b/server/src/main/java/io/crate/protocols/postgres/Portal.java\n@@ -91,6 +91,7 @@ public final class Portal {\n         return \"Portal{\" +\n                \"portalName=\" + portalName +\n                \", preparedStmt=\" + preparedStmt.rawStatement() +\n+               \", consumer=\" + consumer +\n                '}';\n     }\n }\n",
+      "insertion_line": 91,
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+      "mainline_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\nindex 6ecea107b3..aa740293b6 100644\n--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n+++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java\n@@ -45,12 +45,12 @@ public class RowConsumerToResultReceiver implements RowConsumer {\n      * Reset per suspend/execute\n      */\n     private int rowCount = 0;\n-    private BatchIterator<Row> activeIt;\n+    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n \n     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {\n         this.resultReceiver = resultReceiver;\n         this.maxRows = maxRows;\n-        completionFuture.whenComplete((res, err) -> {\n+        completionFuture.whenComplete((_, err) -> {\n             onCompletion.accept(err);\n         });\n     }\n",
+      "insertion_line": 45,
+      "intent_verified": false,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/session/Session.java",
+      "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java\nindex dd4bfdf4ed..bb582259ea 100644\n--- a/server/src/main/java/io/crate/session/Session.java\n+++ b/server/src/main/java/io/crate/session/Session.java\n@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {\n         if (activeExecution == null) {\n             return triggerDeferredExecutions(forceBulk);\n         } else {\n+            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n             var result = activeExecution;\n             activeExecution = null;\n             return result;\n@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {\n     }\n \n     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n-        switch (deferredExecutionsByStmt.size()) {\n+        int numDeferred = deferredExecutionsByStmt.size();\n+        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n+        switch (numDeferred) {\n             case 0:\n-                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                 return CompletableFuture.completedFuture(null);\n             case 1: {\n                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n",
+      "insertion_line": 611,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "server/src/main/java/io/crate/session/Session.java",
+      "target_file": "server/src/main/java/io/crate/session/Session.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_V",
+      "execution_types": [
+        "TYPE_V"
+      ],
+      "status": "success",
+      "reason": "generated_and_validated",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    }
+  ],
+  "generated_patch_hash": "76cab973239dcb5cfe1a4aac98da7a9b7ea666f3abc26104a0816a0fc5139a8e",
+  "force_type_v_until_success": true,
+  "force_type_v_reason": "failed_stage_generation_contract",
+  "token_usage": {
+    "input_tokens": 107691,
+    "output_tokens": 1729,
+    "total_tokens": 109420,
+    "estimated": false,
+    "sources": [
+      "file_editor.react.aggregate_usage",
+      "file_editor.intent.provider_usage"
+    ]
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/io/crate/session/Session.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "            var result = activeExecution;",
+        "new_string": "            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n            var result = activeExecution;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before|forced_type_v:failed_stage_generation_contract",
+        "surround_before_3": [
+          "        if (activeExecution == null) {",
+          "            return triggerDeferredExecutions(forceBulk);",
+          "        } else {"
+        ],
+        "surround_after_3": [
+          "            activeExecution = null;",
+          "            return result;",
+          "        }"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_V",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": true,
+        "blockers": [
+          "Detected target surrounding context does not match mainline pre-patch surrounding context",
+          "Target method sync(boolean) implementation differs significantly from mainline"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 42,
+          "target_declared_methods_count": 41,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ]
+  },
+  "last_plan_signature": "e6df1d54eff27fdb913c7c87bbbfb7a4931e14fa21a38f8c129d6aa3cb825b22",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": true,
+  "force_type_v_reason": "failed_stage_generation_contract",
+  "token_usage": {
+    "input_tokens": 1217,
+    "output_tokens": 250,
+    "total_tokens": 1467,
+    "estimated": false,
+    "sources": [
+      "planning_agent.provider_usage"
+    ]
+  }
+}

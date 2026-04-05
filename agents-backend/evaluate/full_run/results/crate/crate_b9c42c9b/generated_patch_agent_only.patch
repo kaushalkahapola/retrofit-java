@@ -1,0 +1,25 @@
+diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java
+index dd4bfdf4ed..bb582259ea 100644
+--- a/server/src/main/java/io/crate/session/Session.java
++++ b/server/src/main/java/io/crate/session/Session.java
+@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {
+         if (activeExecution == null) {
+             return triggerDeferredExecutions(forceBulk);
+         } else {
++            LOGGER.debug("method=sync activeExecution={}", activeExecution);
+             var result = activeExecution;
+             activeExecution = null;
+             return result;
+@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {
+     }
+ 
+     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {
+-        switch (deferredExecutionsByStmt.size()) {
++        int numDeferred = deferredExecutionsByStmt.size();
++        LOGGER.debug("method=sync deferredExecutions={}", numDeferred);
++        switch (numDeferred) {
+             case 0:
+-                LOGGER.debug("method=sync deferredExecutions=0");
+                 return CompletableFuture.completedFuture(null);
+             case 1: {
+                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();
