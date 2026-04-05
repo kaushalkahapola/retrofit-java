@@ -530,6 +530,13 @@ def _deterministic_map_hunks_for_file(
     return deterministic
 
 
+def _normalize_rel_path(path: str) -> str:
+    p = (path or "").strip().replace("\\", "/").lstrip("/")
+    if p.startswith("a/") or p.startswith("b/"):
+        p = p[2:]
+    return p
+
+
 # ---------------------------------------------------------------------------
 # Core Agent Node
 # ---------------------------------------------------------------------------
@@ -633,7 +640,11 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         # is actually needed (i.e., when Phase 1 git-based retrieval fails)
 
         toolkit = ReasoningToolkit(
-            retriever, target_repo_path, mainline_repo_path, patch_analysis
+            retriever,
+            target_repo_path,
+            mainline_repo_path,
+            patch_analysis,
+            state.get("original_commit", "HEAD"),
         )
         logger.debug("Retriever/toolkit initialized successfully")
     except Exception as e:
@@ -704,7 +715,9 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         git_candidates = None
         if toolkit:
             try:
-                git_candidates = toolkit.search_candidates(mainline_file)
+                git_candidates = toolkit.search_candidates(
+                    mainline_file, state.get("original_commit", "HEAD")
+                )
                 logger.debug(
                     "Git candidate search returned %d candidate(s) for %s",
                     len(git_candidates or []),
@@ -734,6 +747,27 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         target_file = mainline_file
         if git_candidates:
             target_file = git_candidates[0]["file"]
+            # If the resolved file does not actually exist on disk at the
+            # checked-out target HEAD, discard the git candidates entirely.
+            # This forces the LLM agent to search for the real equivalent
+            # (e.g. AlterTableClient → AlterTableOperation rename).
+            _candidate_full_path = (
+                os.path.join(target_repo_path, _normalize_rel_path(target_file))
+                if target_repo_path
+                else None
+            )
+            if _candidate_full_path and not os.path.exists(_candidate_full_path):
+                print(
+                    f"  Agent 2: Git candidate `{target_file}` is absent from "
+                    "target working tree — discarding to trigger LLM search."
+                )
+                logger.warning(
+                    "Git candidate absent from disk: file=%s candidate=%s; forcing LLM search",
+                    mainline_file,
+                    target_file,
+                )
+                git_candidates = None
+                target_file = mainline_file
 
         mapping_result = None
         used_deterministic = False

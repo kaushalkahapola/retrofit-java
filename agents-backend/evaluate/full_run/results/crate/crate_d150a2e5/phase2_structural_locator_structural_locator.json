@@ -1,0 +1,38 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<import>",
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "target_method": "<import>",
+        "start_line": 64,
+        "end_line": 64,
+        "code_snippet": "import org.elasticsearch.action.support.ActiveShardCount;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.inject.Inject;\nimport org.elasticsearch.common.inject.Singleton;\nimport org.elasticsearch.common.settings.IndexScopedSettings;\nimport org.elasticsearch.common.settings.Settings;\nimport org.jetbrains.annotations.Nullable;\nimport org.jetbrains.annotations.VisibleForTesting;\n\nimport io.crate.action.FutureActionListener;\nimport io.crate.session.CollectingResultReceiver;\nimport io.crate.session.Sessions;\nimport io.crate.analyze.AnalyzedAlterTableRenameTable;\nimport io.crate.analyze.BoundAlterTable;\nimport io.crate.data.Row;\nimport io.crate.execution.ddl.index.SwapAndDropIndexRequest;\nimport io.crate.execution.ddl.index.TransportSwapAndDropIndexNameAction;\nimport io.crate.execution.support.ChainableAction;\nimport io.crate.execution.support.ChainableActions;\nimport io.crate.metadata.GeneratedReference;\nimport io.crate.metadata.PartitionName;\nimport io.crate.metadata.RelationName;\nimport io.crate.metadata.table.TableInfo;\nimport io.crate.replication.logical.LogicalReplicationService;\nimport io.crate.replication.logical.metadata.Publication;\n\n@Singleton\npublic class AlterTableOperation {\n\n    public static final String RESIZE_PREFIX = \".resized.\";\n\n    private final ClusterService clusterService;\n    private final TransportAlterTableAction transportAlterTableAction;\n    private final TransportDropConstraintAction transportDropConstraintAction;\n    private final TransportAddColumnAction transportAddColumnAction;\n    private final TransportDropColumnAction transportDropColumnAction;\n    private final TransportRenameTableAction transportRenameTableAction;\n    private final TransportOpenCloseTableOrPartitionAction transportOpenCloseTableOrPartitionAction;\n    private final TransportResizeAction transportResizeAction;",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "addColumn",
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "target_method": "addColumn",
+        "start_line": 395,
+        "end_line": 395,
+        "code_snippet": "    private CompletableFuture<Long> swapAndDropIndex(String source, String target) {\n        SwapAndDropIndexRequest request = new SwapAndDropIndexRequest(source, target);\n        return transportSwapAndDropIndexNameAction.execute(request, response -> {\n            if (!response.isAcknowledged()) {\n                throw new RuntimeException(\"Publishing new cluster state during Shrink operation (rename phase) \" +\n                                           \"has timed out\");\n            }\n            return 0L;\n        });\n    }\n\n    public CompletableFuture<Long> rename(AnalyzedAlterTableRenameTable renameTable) {\n        var request = new RenameTableRequest(renameTable.sourceName(), renameTable.targetName(), renameTable.isPartitioned());\n        return transportRenameTableAction.execute(request, r -> -1L);\n    }\n\n    public CompletableFuture<Long> dropConstraint(DropConstraintRequest request) {\n        return transportDropConstraintAction.execute(request).thenApply(resp -> -1L);\n    }\n\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
+  }
+}

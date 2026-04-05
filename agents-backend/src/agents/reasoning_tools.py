@@ -1,12 +1,13 @@
-from typing import List, Dict, Optional
-from langchain_core.tools import StructuredTool
-from utils.retrieval.ensemble_retriever import EnsembleRetriever
-from utils.patch_analyzer import PatchAnalyzer, FileChange
 import os
 import re
 import subprocess
+from typing import Dict, List, Optional
+
+from langchain_core.tools import StructuredTool
 
 from utils.models import ImplementationPlan
+from utils.patch_analyzer import FileChange, PatchAnalyzer
+from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from utils.structural_matcher import find_best_matches
 
 
@@ -17,18 +18,27 @@ class ReasoningToolkit:
         target_repo_path: str,
         mainline_repo_path: str,
         patch_analysis: List[FileChange],
+        original_commit: str = "HEAD",
     ):
         self.retriever = retriever
         self.target_repo_path = target_repo_path
         self.mainline_repo_path = mainline_repo_path
         self.patch_analysis = patch_analysis
+        self.original_commit = original_commit or "HEAD"
 
-    def search_candidates(self, file_path: str) -> List[Dict]:
+    def search_candidates(
+        self, file_path: str, original_commit: Optional[str] = None
+    ) -> List[Dict]:
         """
         Searches for potential candidate files in the target repository that correspond to the given source file path.
         Returns a list of candidates with scores and reasoning.
+
+        Args:
+            file_path: Source file path from mainline patch context.
+            original_commit: Mainline commit to use for git-based retrieval; defaults to HEAD.
         """
-        return self.retriever.find_candidates(file_path, "HEAD")
+        commit = original_commit or self.original_commit or "HEAD"
+        return self.retriever.find_candidates(file_path, commit)
 
     def read_file(self, file_path: str) -> str:
         """
@@ -232,8 +242,8 @@ class ReasoningToolkit:
         Uses Method Fingerprinting to find a renamed method in a target file.
         Returns a JSON string with the best match.
         """
-        from utils.method_fingerprinter import MethodFingerprinter
         from utils.mcp_client import get_client
+        from utils.method_fingerprinter import MethodFingerprinter
 
         # 1. Get all methods from the target file using GetDependencyTool
         # We need to analyze just this one file to get its method list
@@ -265,7 +275,7 @@ class ReasoningToolkit:
         # But `find_method_match` doesn't currently take it.
         # Ideally we'd modify the tool signature. For now, let's use Pickaxe (which works if we search "recently").
 
-        from utils.method_discovery import GitMethodTracer, BodySimilarityMatcher
+        from utils.method_discovery import BodySimilarityMatcher, GitMethodTracer
 
         tracer = GitMethodTracer(self.target_repo_path)
 
