@@ -414,6 +414,7 @@ async def validation_agent(state: AgentState, config) -> dict:
     )
     force_type_v_latch = bool(state.get("force_type_v_until_success") or False)
     force_type_v_reason = str(state.get("force_type_v_reason") or "").strip()
+    force_type_v_retry_files = list(state.get("force_type_v_retry_files") or [])
 
     if attempts >= MAX_VALIDATION_ATTEMPTS:
         print(
@@ -441,6 +442,7 @@ async def validation_agent(state: AgentState, config) -> dict:
             ),
             "force_type_v_until_success": force_type_v_latch,
             "force_type_v_reason": force_type_v_reason,
+            "force_type_v_retry_files": force_type_v_retry_files,
         }
 
     incomplete_generation_items = []
@@ -501,6 +503,7 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_failed_stage": failed_stage,
             "force_type_v_until_success": force_type_v_latch,
             "force_type_v_reason": force_type_v_reason,
+            "force_type_v_retry_files": force_type_v_retry_files,
             # Preserve prior validation step results (e.g. failed compile/build) so
             # graph routing (stagnation + build-failure escalation) still sees them
             # after checklist-short-circuit returns.
@@ -597,6 +600,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 "validation_retry_files": retry_files,
                 "force_type_v_until_success": force_type_v_latch,
                 "force_type_v_reason": force_type_v_reason,
+                "force_type_v_retry_files": force_type_v_retry_files,
             }
 
         build_res = toolkit.run_build_script()
@@ -612,6 +616,10 @@ async def validation_agent(state: AgentState, config) -> dict:
             if type_v_present and type_v_files:
                 retry_files = sorted(set(retry_files) | set(type_v_files))
             sticky_type_v = bool(force_type_v_latch or type_v_present)
+            sticky_scope_files = sorted(
+                set(force_type_v_retry_files) | set(type_v_files)
+            )
+            retry_files = sorted(set(retry_files) | set(sticky_scope_files))
             sticky_reason = (
                 force_type_v_reason or "build_context_mismatch_type_v"
                 if sticky_type_v
@@ -639,6 +647,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 "validation_retry_files": retry_files,
                 "force_type_v_until_success": sticky_type_v,
                 "force_type_v_reason": sticky_reason,
+                "force_type_v_retry_files": sticky_scope_files,
             }
 
         inferred_project = os.path.basename(target_repo_path).strip().lower()
@@ -761,6 +770,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 retry_payload["force_type_v_reason"] = (
                     force_type_v_reason or "type_v_transition_retry"
                 )
+                retry_payload["force_type_v_retry_files"] = type_v_files
             return retry_payload
 
         validation_results["tests"]["agent_evaluation"] = (
@@ -783,6 +793,7 @@ async def validation_agent(state: AgentState, config) -> dict:
             "phase_0_transition_evaluation": transition_eval,
             "force_type_v_until_success": False,
             "force_type_v_reason": "",
+            "force_type_v_retry_files": [],
         }
 
     if apply_only_validation:

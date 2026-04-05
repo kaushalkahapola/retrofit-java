@@ -1630,12 +1630,13 @@ async def _repair_type_v_unverified_entries_with_subagent(
                     method_block_map,
                 )
                 repaired = _sanitize_entry_against_target(promoted, target_content)
+            det_fallback: dict[str, Any] | None = None
             if not repaired.get("verified", False):
                 # Fallback to deterministic required entry if it sanitizes better.
                 det_fallback = _sanitize_entry_against_target(
                     dict(fallback), target_content
                 )
-            if det_fallback.get("verified", False):
+            if det_fallback and det_fallback.get("verified", False):
                 repaired = det_fallback
 
         out.append(repaired)
@@ -2190,9 +2191,15 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     validation_failed_stage = str(state.get("validation_failed_stage") or "")
     sticky_force_type_v = bool(state.get("force_type_v_until_success") or False)
     sticky_force_type_v_reason = str(state.get("force_type_v_reason") or "").strip()
+    sticky_force_type_v_files_raw = state.get("force_type_v_retry_files") or []
     previous_plan_signature = str(state.get("last_plan_signature") or "")
     consistency_map: dict[str, str] = state.get("consistency_map") or {}
     build_issue_types = _collect_build_issue_types_from_state(state)
+    sticky_force_type_v_files = {
+        _normalize_path(str(p))
+        for p in sticky_force_type_v_files_raw
+        if str(p or "").strip()
+    }
 
     force_type_v, force_type_v_reason = _should_force_type_v_replanning(
         validation_attempts=validation_attempts,
@@ -2206,6 +2213,11 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         if not force_type_v_reason:
             force_type_v_reason = (
                 sticky_force_type_v_reason or "sticky_type_v_retry_latch"
+            )
+        if sticky_force_type_v_files:
+            print(
+                "Planning Agent: TYPE_V latch scope files="
+                f"{sorted(sticky_force_type_v_files)}"
             )
         print(
             "Planning Agent: TYPE_V latch active; keeping execution mode TYPE_V "
@@ -2250,6 +2262,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     }
     model_name = resolve_model_name()
     mainline_pre_cache: dict[str, str] = {}
+    forced_scope_files: set[str] = set()
 
     truncated_failure_context = validation_error_context
     if len(truncated_failure_context) > 2000:
@@ -2344,7 +2357,23 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             )
 
             payload = None
-            if deterministic_only and not force_type_v:
+            force_type_v_for_entry = bool(force_type_v)
+            if (
+                force_type_v_for_entry
+                and sticky_force_type_v
+                and sticky_force_type_v_files
+            ):
+                force_type_v_for_entry = bool(
+                    _normalize_path(normalized_mainline) in sticky_force_type_v_files
+                    or _normalize_path(target_file) in sticky_force_type_v_files
+                )
+            # Retry file filtering is already handled at file-iteration level.
+
+            if force_type_v_for_entry:
+                forced_scope_files.add(_normalize_path(normalized_mainline))
+                forced_scope_files.add(_normalize_path(target_file))
+
+            if deterministic_only and not force_type_v_for_entry:
                 llm_entries = list(sanitized_entries)
             else:
                 planner_prompt = _build_hunk_planner_prompt(
@@ -2419,7 +2448,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             entries = _ensure_required_coverage(llm_entries, required_entries)
 
             # TYPE_V repair subagent pass for unresolved operations.
-            if force_type_v and target_content:
+            if force_type_v_for_entry and target_content:
                 pre_unverified = _count_unverified_entries(entries)
                 required_symbols = _derive_required_symbols_from_hunk(
                     raw_hunk,
@@ -2479,7 +2508,9 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             if adaptation_type == "TYPE_I" and not loc_match:
                 adaptation_type = "TYPE_II"
             base_adaptation_type = adaptation_type
-            execution_type = "TYPE_V" if force_type_v else base_adaptation_type
+            execution_type = (
+                "TYPE_V" if force_type_v_for_entry else base_adaptation_type
+            )
 
             required_invariants = _derive_required_invariants_from_hunk(
                 raw_hunk,
@@ -2525,7 +2556,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 entry["must_preserve_symbols"] = must_preserve_symbols
                 entry["chain_constraints"] = chain_constraints
                 entry["api_inventory"] = api_inventory
-                if force_type_v:
+                if force_type_v_for_entry:
                     entry["notes"] = (
                         str(entry.get("notes") or "")
                         + f"|forced_type_v:{force_type_v_reason}"
@@ -2556,6 +2587,15 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             "marking stagnation signal."
         )
 
+    next_force_type_v_files: list[str] = []
+    if force_type_v:
+        if forced_scope_files:
+            next_force_type_v_files = sorted(f for f in forced_scope_files if f)
+        elif sticky_force_type_v_files:
+            next_force_type_v_files = sorted(sticky_force_type_v_files)
+        elif retry_files and "<all>" not in retry_files:
+            next_force_type_v_files = sorted(retry_files)
+
     return {
         "messages": [
             HumanMessage(
@@ -2567,5 +2607,6 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         "validation_repeated_plan_detected": repeated_plan_detected,
         "force_type_v_until_success": bool(force_type_v),
         "force_type_v_reason": force_type_v_reason if force_type_v else "",
+        "force_type_v_retry_files": next_force_type_v_files,
         "token_usage": token_usage,
     }

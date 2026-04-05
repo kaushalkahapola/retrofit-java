@@ -261,6 +261,9 @@ class AgentState(TypedDict):
     force_type_v_reason: NotRequired[
         str
     ]  # Human-readable reason for sticky TYPE_V latch
+    force_type_v_retry_files: NotRequired[
+        list[str]
+    ]  # Optional scope for TYPE_V latch (restricts heavy mode to implicated files)
     generated_patch_hash: NotRequired[
         str
     ]  # Last generated code-patch hash (used to avoid identical retry loops)
