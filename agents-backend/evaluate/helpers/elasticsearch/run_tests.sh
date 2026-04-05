@@ -44,12 +44,7 @@ elif [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ]; then
         local class_file
         class_file="${cls//./\/}.java"
 
-        # QA modules are mostly integration style in Elasticsearch.
-        if [[ "${module}" == x-pack/qa/* ]] || [[ "${module}" == qa/* ]]; then
-            echo "internalClusterTest"
-            return
-        fi
-
+        # 1) Prefer concrete paths from TEST_TARGET_FILES (accurate for source set).
         local file
         for file in "${TEST_TARGET_FILES_LIST[@]}"; do
             [ -z "${file}" ] && continue
@@ -58,15 +53,34 @@ elif [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ]; then
                     echo "internalClusterTest"
                     return
                 fi
-                if [[ "${file}" == */src/test/* ]]; then
-                    echo "test"
+                if [[ "${file}" == */src/javaRestTest/* ]]; then
+                    echo "javaRestTest"
+                    return
+                fi
+                if [[ "${file}" == */src/yamlRestTest/* ]]; then
+                    echo "yamlRestTest"
+                    return
+                fi
+                if [[ "${file}" == */src/test/java/* ]]; then
+                    if [[ "${module}" == x-pack/qa/* ]] || [[ "${module}" == qa/* ]]; then
+                        # Under ES QA, bare `test` is often ambiguous; javaRestTest is
+                        # the usual entry point for src/test/java REST-style ITs.
+                        echo "javaRestTest,internalClusterTest"
+                        return
+                    fi
+                    echo "test,internalClusterTest"
                     return
                 fi
             fi
         done
 
-        # Unknown source-set mapping: prefer internalClusterTest first,
-        # then test as fallback to reduce ambiguous task failures.
+        # 2) No file hint: avoid the old x-pack/qa -> internalClusterTest-only rule
+        #    (wrong for e.g. rolling-upgrade, which has no internalClusterTest task).
+        if [[ "${module}" == x-pack/qa/* ]] || [[ "${module}" == qa/* ]]; then
+            echo "javaRestTest,internalClusterTest"
+            return
+        fi
+
         echo "internalClusterTest,test"
     }
 
@@ -82,9 +96,14 @@ elif [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ]; then
             if [ "${mode}" == "primary" ]; then
                 test_tasks_csv="$(resolve_test_tasks "${module}" "${cls}")"
             else
-                # Auto-fix retry mode: if primary had internalClusterTest first,
-                # flip preference to test first as a single rerun strategy.
-                test_tasks_csv="test,internalClusterTest"
+                # Auto-fix retry: never use bare `test` first on ES QA modules — it is
+                # frequently ambiguous (Gradle abbrev expansion). Prefer flipping
+                # javaRestTest vs internalClusterTest instead.
+                if [[ "${module}" == x-pack/qa/* ]] || [[ "${module}" == qa/* ]]; then
+                    test_tasks_csv="internalClusterTest,javaRestTest"
+                else
+                    test_tasks_csv="test,internalClusterTest"
+                fi
             fi
 
             IFS=',' read -ra TEST_TASKS <<< "${test_tasks_csv}"

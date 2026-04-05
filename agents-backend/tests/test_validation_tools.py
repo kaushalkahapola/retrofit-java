@@ -312,5 +312,20 @@ class TestClassifyTestFailureSignal(unittest.TestCase):
         self.assertTrue(res["infrastructure_inconclusive"])
 
 
+class TestElasticsearchHarnessTestTargetFilter(unittest.TestCase):
+    def test_excludes_bwc_only_qa_modules(self):
+        from agents.validation_tools import _filter_elasticsearch_harness_test_targets
+
+        inp = [
+            "x-pack/plugin/migrate:org.elasticsearch.xpack.migrate.action.ReindexDatastreamIndexTransportActionIT",
+            "x-pack/qa/rolling-upgrade:org.elasticsearch.upgrades.DataStreamsUpgradeIT",
+        ]
+        kept, skipped = _filter_elasticsearch_harness_test_targets(inp)
+        self.assertEqual(len(kept), 1)
+        self.assertIn("migrate", kept[0])
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("rolling-upgrade", skipped[0])
+
+
 if __name__ == "__main__":
     unittest.main()

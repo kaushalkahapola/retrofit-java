@@ -10,7 +10,7 @@
         "new_string": "import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\nimport org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Insert additional import for TransportUpdateSettingsAction before existing UpdateSettingsRequest import.",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;",
           "import org.elasticsearch.action.admin.indices.refresh.RefreshAction;",
@@ -27,7 +27,7 @@
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
@@ -61,29 +61,14 @@
           "import java.util.Objects;",
           ""
         ],
-        "adaptation_type": "TYPE_IV",
-        "base_adaptation_type": "TYPE_IV",
-        "execution_type": "TYPE_IV",
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target start line (66) differs from mainline old-start (55); location shifted",
-          "PRE-PATCH surrounding context in target does not match mainline PRE-PATCH context (imports and nearby lines differ)",
-          "Mainline edit inserts an import (java.util.Arrays) at a location where the target's import ordering/nearby imports differ"
-        ],
-        "namespace_only_possible": true,
-        "namespace_changes": [
-          {
-            "from": "org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE",
-            "to": "org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA and org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY",
-            "reason": "Mainline replaced single WRITE APIBlock static import with METADATA and READ_ONLY static imports; this is an import-level/namespace change."
-          },
-          {
-            "from": "(no import) java.util.Arrays",
-            "to": "import java.util.Arrays",
-            "reason": "Mainline added java.util.Arrays import; adding an import is a namespace-level change to satisfy usage introduced by mainline."
-          }
-        ],
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
         "protected_symbols": [],
@@ -116,29 +101,14 @@
           "    ReindexDataStreamIndexAction.Request,",
           "    ReindexDataStreamIndexAction.Response> {"
         ],
-        "adaptation_type": "TYPE_IV",
-        "base_adaptation_type": "TYPE_IV",
-        "execution_type": "TYPE_IV",
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target start line (66) differs from mainline old-start (55); location shifted",
-          "PRE-PATCH surrounding context in target does not match mainline PRE-PATCH context (imports and nearby lines differ)",
-          "Mainline edit inserts an import (java.util.Arrays) at a location where the target's import ordering/nearby imports differ"
-        ],
-        "namespace_only_possible": true,
-        "namespace_changes": [
-          {
-            "from": "org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE",
-            "to": "org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA and org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY",
-            "reason": "Mainline replaced single WRITE APIBlock static import with METADATA and READ_ONLY static imports; this is an import-level/namespace change."
-          },
-          {
-            "from": "(no import) java.util.Arrays",
-            "to": "import java.util.Arrays",
-            "reason": "Mainline added java.util.Arrays import; adding an import is a namespace-level change to satisfy usage introduced by mainline."
-          }
-        ],
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
         "protected_symbols": [],
@@ -171,16 +141,12 @@
           "        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))",
           "            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_V",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target pre-patch surrounding context does not match mainline pre-patch context, so the mainline edit location is different.",
-          "The listener chain invocation 'SubscribableListener.<AcknowledgedResponse>newForked(l -> setBlockWrites(...))' referenced in the mainline hunk was not found at the expected location in the target (replace operation unresolvable).",
-          "Target already contains different lifecycle steps (e.g. sanityCheck, closeIndexIfWasClosed) that indicate the control flow has diverged; applying the mainline chain edits in-place is unsafe without structural rework."
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -227,16 +193,12 @@
         "notes": "required_op_replace|sanitize_old_not_found:not_found_multiline|sanitize_old_not_found:not_found_multiline",
         "surround_before_3": [],
         "surround_after_3": [],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_V",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target pre-patch surrounding context does not match mainline pre-patch context, so the mainline edit location is different.",
-          "The listener chain invocation 'SubscribableListener.<AcknowledgedResponse>newForked(l -> setBlockWrites(...))' referenced in the mainline hunk was not found at the expected location in the target (replace operation unresolvable).",
-          "Target already contains different lifecycle steps (e.g. sanityCheck, closeIndexIfWasClosed) that indicate the control flow has diverged; applying the mainline chain edits in-place is unsafe without structural rework."
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -291,16 +253,12 @@
           "            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))",
           "            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_V",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target pre-patch surrounding context does not match mainline pre-patch context, so the mainline edit location is different.",
-          "The listener chain invocation 'SubscribableListener.<AcknowledgedResponse>newForked(l -> setBlockWrites(...))' referenced in the mainline hunk was not found at the expected location in the target (replace operation unresolvable).",
-          "Target already contains different lifecycle steps (e.g. sanityCheck, closeIndexIfWasClosed) that indicate the control flow has diverged; applying the mainline chain edits in-place is unsafe without structural rework."
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -355,13 +313,13 @@
           "    }",
           ""
         ],
-        "adaptation_type": "TYPE_II",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           ".<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))"
@@ -410,10 +368,7 @@
         "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Mainline hunk start line (201) differs from detected target start line (225)",
-          "PRE-PATCH surrounding context does not match target surrounding context (code around the hunk has shifted/changed)"
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -464,7 +419,7 @@
         "location_match": false,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {",
@@ -498,21 +453,15 @@
       }
     ]
   },
-  "last_plan_signature": "00c3b81d9bed4b576b2caaee92a069f27c93fbbf6c1249d9ecec83ecce6ef1bf",
+  "last_plan_signature": "20cd11068054acdfa2a3655b485076505dce8c00c528f48f73a26026de519339",
+  "validation_repeated_plan_detected": false,
   "force_type_v_until_success": false,
   "force_type_v_reason": "",
   "token_usage": {
-    "input_tokens": 9184,
-    "output_tokens": 9928,
-    "total_tokens": 19112,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
     "estimated": false,
-    "sources": [
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage"
-    ]
+    "sources": []
   }
 }

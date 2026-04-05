@@ -159,7 +159,7 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
     complexity_details = complexity_info.get("details") or {}
     relevant_changed_files = [c.file_path for c in all_changes if c.file_path]
     test_targets = validation_toolkit.detect_relevant_test_targets_from_changed_files(
-        relevant_changed_files
+        relevant_changed_files, project=project_name
     )
 
     if use_phase0_cache and experiment_mode and backport_commit and original_commit:

@@ -1,6 +1,6 @@
 # Post-Pipeline Developer Patch Comparison
 
-**Exact Developer Patch (code-only)**: False
+**Exact Developer Patch (code-only)**: True
 
 **Comparison Method**: file_state
 
@@ -15,7 +15,7 @@
 
 ## File State Comparison
 - Compared files: ['x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java']
-- Mismatched files: ['x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java']
+- Mismatched files: []
 - Error: None
 
 ## Comparison Scope
@@ -46,30 +46,20 @@ Developer
 
 Generated
 ```diff
-@@ -25,6 +25,7 @@
+@@ -24,6 +24,7 @@
+ import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;
  import org.elasticsearch.action.admin.indices.refresh.RefreshAction;
  import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
- import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
 +import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;
+ import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
  import org.elasticsearch.action.bulk.BulkItemResponse;
  import org.elasticsearch.action.search.SearchRequest;
- import org.elasticsearch.action.support.ActionFilters;
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,8 +1,8 @@-@@ -24,6 +24,7 @@
-- import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;
-+@@ -25,6 +25,7 @@
-  import org.elasticsearch.action.admin.indices.refresh.RefreshAction;
-  import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
-+ import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
- +import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;
-- import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
-  import org.elasticsearch.action.bulk.BulkItemResponse;
-  import org.elasticsearch.action.search.SearchRequest;
-+ import org.elasticsearch.action.support.ActionFilters;
+(No textual difference)
 
 ```
 
@@ -97,7 +87,7 @@ Developer
 
 Generated
 ```diff
-@@ -59,10 +60,13 @@
+@@ -59,11 +60,13 @@
  import org.elasticsearch.xpack.core.frozen.action.FreezeIndexAction;
  import org.elasticsearch.xpack.migrate.MigrateTemplateRegistry;
  
@@ -106,31 +96,18 @@ Generated
  import java.util.Map;
  import java.util.Objects;
  
+-import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;
 +import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;
 +import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;
- import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;
  
  public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<
+     ReindexDataStreamIndexAction.Request,
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,4 +1,4 @@-@@ -59,11 +60,13 @@
-+@@ -59,10 +60,13 @@
-  import org.elasticsearch.xpack.core.frozen.action.FreezeIndexAction;
-  import org.elasticsearch.xpack.migrate.MigrateTemplateRegistry;
-  
-@@ -7,9 +7,8 @@  import java.util.Map;
-  import java.util.Objects;
-  
---import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;
- +import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;
- +import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;
-+ import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;
-  
-  public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<
--     ReindexDataStreamIndexAction.Request,
+(No textual difference)
 
 ```
 
@@ -168,12 +145,26 @@ Developer
 
 Generated
 ```diff
-@@ -161,8 +165,9 @@
+@@ -149,20 +152,12 @@
+             );
          }
+ 
+-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {
+-            var errorMessage = String.format(Locale.ROOT, "Cannot reindex index [%s] which has a read block.", destIndexName);
+-            listener.onFailure(new ElasticsearchException(errorMessage));
+-            return;
+-        }
+-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {
+-            var errorMessage = String.format(Locale.ROOT, "Cannot reindex index [%s] which has a metadata block.", destIndexName);
+-            listener.onFailure(new ElasticsearchException(errorMessage));
+-            return;
+-        }
          final boolean wasClosed = isClosed(sourceIndex);
-         SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
+-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
 -            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))
-+            .<AcknowledgedResponse>andThen(l -> removeMetadataBlocks(sourceIndexName, taskId, l))
++
++        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))
++            .<FreezeResponse>andThen(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
              .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))
 +            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))
              .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))
@@ -184,32 +175,7 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,23 +1,9 @@-@@ -149,20 +152,12 @@
--             );
-+@@ -161,8 +165,9 @@
-          }
-- 
---        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {
---            var errorMessage = String.format(Locale.ROOT, "Cannot reindex index [%s] which has a read block.", destIndexName);
---            listener.onFailure(new ElasticsearchException(errorMessage));
---            return;
---        }
---        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {
---            var errorMessage = String.format(Locale.ROOT, "Cannot reindex index [%s] which has a metadata block.", destIndexName);
---            listener.onFailure(new ElasticsearchException(errorMessage));
---            return;
---        }
-          final boolean wasClosed = isClosed(sourceIndex);
---        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
-+         SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
- -            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))
--+
--+        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))
--+            .<FreezeResponse>andThen(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
-++            .<AcknowledgedResponse>andThen(l -> removeMetadataBlocks(sourceIndexName, taskId, l))
-              .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))
- +            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))
-              .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))
+(No textual difference)
 
 ```
 
@@ -230,7 +196,7 @@ Developer
 
 Generated
 ```diff
-@@ -171,6 +176,7 @@
+@@ -171,6 +166,7 @@
              .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))
              .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))
              .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))
@@ -243,11 +209,7 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,4 +1,4 @@-@@ -171,6 +166,7 @@
-+@@ -171,6 +176,7 @@
-              .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))
-              .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))
-              .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))
+(No textual difference)
 
 ```
 
@@ -273,7 +235,7 @@ Developer
 
 Generated
 ```diff
-@@ -222,9 +228,9 @@
+@@ -222,9 +218,9 @@
          }
      }
  
@@ -291,11 +253,7 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,4 +1,4 @@-@@ -222,9 +218,9 @@
-+@@ -222,9 +228,9 @@
-          }
-      }
-  
+(No textual difference)
 
 ```
 
@@ -338,8 +296,8 @@ Developer
 
 Generated
 ```diff
-@@ -433,6 +439,29 @@
-         }));
+@@ -420,6 +416,29 @@
+         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);
      }
  
 +    /**
@@ -365,30 +323,15 @@ Generated
 +        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);
 +    }
 +
-     private void sanityCheck(
-         String sourceIndexName,
-         String destIndexName,
+     private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {
+         SearchRequest countRequest = new SearchRequest(index);
+         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,5 +1,5 @@-@@ -420,6 +416,29 @@
--         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);
-+@@ -433,6 +439,29 @@
-+         }));
-      }
-  
- +    /**
-@@ -25,6 +25,6 @@ +        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);
- +    }
- +
--     private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {
--         SearchRequest countRequest = new SearchRequest(index);
--         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);
-+     private void sanityCheck(
-+         String sourceIndexName,
-+         String destIndexName,
+(No textual difference)
 
 ```
 
@@ -397,18 +340,18 @@ Developer -> Generated (Unified Diff)
 ## Full Generated Patch (Agent-Only, code-only)
 ```diff
 diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
-index 93c005532e0..30228786541 100644
+index 93c005532e0..0b29e15510c 100644
 --- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
 +++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
-@@ -25,6 +25,7 @@ import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAct
+@@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;
+ import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;
  import org.elasticsearch.action.admin.indices.refresh.RefreshAction;
  import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
- import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
 +import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;
+ import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
  import org.elasticsearch.action.bulk.BulkItemResponse;
  import org.elasticsearch.action.search.SearchRequest;
- import org.elasticsearch.action.support.ActionFilters;
-@@ -59,10 +60,13 @@ import org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;
+@@ -59,11 +60,13 @@ import org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;
  import org.elasticsearch.xpack.core.frozen.action.FreezeIndexAction;
  import org.elasticsearch.xpack.migrate.MigrateTemplateRegistry;
  
@@ -417,23 +360,38 @@ index 93c005532e0..30228786541 100644
  import java.util.Map;
  import java.util.Objects;
  
+-import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;
 +import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;
 +import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;
- import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;
  
  public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<
-@@ -161,8 +165,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+     ReindexDataStreamIndexAction.Request,
+@@ -149,20 +152,12 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+             );
          }
+ 
+-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {
+-            var errorMessage = String.format(Locale.ROOT, "Cannot reindex index [%s] which has a read block.", destIndexName);
+-            listener.onFailure(new ElasticsearchException(errorMessage));
+-            return;
+-        }
+-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {
+-            var errorMessage = String.format(Locale.ROOT, "Cannot reindex index [%s] which has a metadata block.", destIndexName);
+-            listener.onFailure(new ElasticsearchException(errorMessage));
+-            return;
+-        }
          final boolean wasClosed = isClosed(sourceIndex);
-         SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
+-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
 -            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))
-+            .<AcknowledgedResponse>andThen(l -> removeMetadataBlocks(sourceIndexName, taskId, l))
++
++        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))
++            .<FreezeResponse>andThen(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
              .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))
 +            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))
              .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))
              .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))
              .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))
-@@ -171,6 +176,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+@@ -171,6 +166,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
              .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))
              .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))
              .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))
@@ -441,7 +399,7 @@ index 93c005532e0..30228786541 100644
              .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))
              .addListener(listener);
      }
-@@ -222,9 +228,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+@@ -222,9 +218,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
          }
      }
  
@@ -454,8 +412,8 @@ index 93c005532e0..30228786541 100644
              @Override
              public void onResponse(AddIndexBlockResponse response) {
                  if (response.isAcknowledged()) {
-@@ -433,6 +439,29 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
-         }));
+@@ -420,6 +416,29 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);
      }
  
 +    /**
@@ -481,27 +439,27 @@ index 93c005532e0..30228786541 100644
 +        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);
 +    }
 +
-     private void sanityCheck(
-         String sourceIndexName,
-         String destIndexName,
+     private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {
+         SearchRequest countRequest = new SearchRequest(index);
+         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);
 
 ```
 
 ## Full Generated Patch (Final Effective, code-only)
 ```diff
 diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
-index 93c005532e0..30228786541 100644
+index 93c005532e0..0b29e15510c 100644
 --- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
 +++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
-@@ -25,6 +25,7 @@ import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAct
+@@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;
+ import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;
  import org.elasticsearch.action.admin.indices.refresh.RefreshAction;
  import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
- import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
 +import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;
+ import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
  import org.elasticsearch.action.bulk.BulkItemResponse;
  import org.elasticsearch.action.search.SearchRequest;
- import org.elasticsearch.action.support.ActionFilters;
-@@ -59,10 +60,13 @@ import org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;
+@@ -59,11 +60,13 @@ import org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;
  import org.elasticsearch.xpack.core.frozen.action.FreezeIndexAction;
  import org.elasticsearch.xpack.migrate.MigrateTemplateRegistry;
  
@@ -510,23 +468,38 @@ index 93c005532e0..30228786541 100644
  import java.util.Map;
  import java.util.Objects;
  
+-import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;
 +import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;
 +import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;
- import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;
  
  public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<
-@@ -161,8 +165,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+     ReindexDataStreamIndexAction.Request,
+@@ -149,20 +152,12 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+             );
          }
+ 
+-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {
+-            var errorMessage = String.format(Locale.ROOT, "Cannot reindex index [%s] which has a read block.", destIndexName);
+-            listener.onFailure(new ElasticsearchException(errorMessage));
+-            return;
+-        }
+-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {
+-            var errorMessage = String.format(Locale.ROOT, "Cannot reindex index [%s] which has a metadata block.", destIndexName);
+-            listener.onFailure(new ElasticsearchException(errorMessage));
+-            return;
+-        }
          final boolean wasClosed = isClosed(sourceIndex);
-         SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
+-        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
 -            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))
-+            .<AcknowledgedResponse>andThen(l -> removeMetadataBlocks(sourceIndexName, taskId, l))
++
++        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))
++            .<FreezeResponse>andThen(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
              .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))
 +            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))
              .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))
              .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))
              .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))
-@@ -171,6 +176,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+@@ -171,6 +166,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
              .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))
              .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))
              .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))
@@ -534,7 +507,7 @@ index 93c005532e0..30228786541 100644
              .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))
              .addListener(listener);
      }
-@@ -222,9 +228,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+@@ -222,9 +218,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
          }
      }
  
@@ -547,8 +520,8 @@ index 93c005532e0..30228786541 100644
              @Override
              public void onResponse(AddIndexBlockResponse response) {
                  if (response.isAcknowledged()) {
-@@ -433,6 +439,29 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
-         }));
+@@ -420,6 +416,29 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+         client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);
      }
  
 +    /**
@@ -574,9 +547,9 @@ index 93c005532e0..30228786541 100644
 +        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);
 +    }
 +
-     private void sanityCheck(
-         String sourceIndexName,
-         String destIndexName,
+     private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {
+         SearchRequest countRequest = new SearchRequest(index);
+         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);
 
 ```
 ## Full Developer Backport Patch (full commit diff)
