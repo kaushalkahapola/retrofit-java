@@ -22,11 +22,24 @@
           "import org.elasticsearch.action.support.master.MasterNodeReadRequest;"
         ],
         "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
-        "namespace_changes": []
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 0,
@@ -49,11 +62,24 @@
           "import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;"
         ],
         "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
-        "namespace_changes": []
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 0,
@@ -76,11 +102,24 @@
           "import org.elasticsearch.cluster.block.ClusterBlockException;"
         ],
         "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
-        "namespace_changes": []
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 1,
@@ -103,68 +142,112 @@
           "import org.elasticsearch.injection.guice.Inject;"
         ],
         "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
-        "namespace_changes": []
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 2,
         "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
         "operation_index": 0,
         "edit_type": "replace",
-        "old_string": "    private final AllocationStatsService allocationStatsService;",
-        "new_string": "    private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;",
+        "old_string": "    public static final ActionType<TransportGetAllocationStatsAction.Response> TYPE = new ActionType<>(\"cluster:monitor/allocation/stats\");\n\n    private final AllocationStatsService allocationStatsService;\n    private final DiskThresholdSettings diskThresholdSettings;",
+        "new_string": "    public static final ActionType<TransportGetAllocationStatsAction.Response> TYPE = new ActionType<>(\"cluster:monitor/allocation/stats\");\n\n    private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;\n    private final DiskThresholdSettings diskThresholdSettings;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
         "notes": "required_op_replace",
         "surround_before_3": [
-          "",
-          "    public static final ActionType<TransportGetAllocationStatsAction.Response> TYPE = new ActionType<>(\"cluster:monitor/allocation/stats\");",
+          "    TransportGetAllocationStatsAction.Request,",
+          "    TransportGetAllocationStatsAction.Response> {",
           ""
         ],
         "surround_after_3": [
-          "    private final DiskThresholdSettings diskThresholdSettings;",
           "    private final FeatureService featureService;",
-          ""
+          "",
+          "    @Inject"
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
-        "namespace_changes": []
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 3,
         "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
         "operation_index": 0,
         "edit_type": "replace",
-        "old_string": "            threadPool.executor(ThreadPool.Names.MANAGEMENT)",
-        "new_string": "            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return\n            // very cheaply.\n            EsExecutors.DIRECT_EXECUTOR_SERVICE\n        );\n        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);\n        this.allocationStatsSupplier = new SingleResultDeduplicator<>(\n            threadPool.getThreadContext(),\n            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))",
+        "old_string": "            indexNameExpressionResolver,\n            TransportGetAllocationStatsAction.Response::new,\n            threadPool.executor(ThreadPool.Names.MANAGEMENT)\n        );",
+        "new_string": "            TransportGetAllocationStatsAction.Request::new,\n            TransportGetAllocationStatsAction.Response::new,\n            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return\n            // very cheaply.\n            EsExecutors.DIRECT_EXECUTOR_SERVICE\n        );\n        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);\n        this.allocationStatsSupplier = new SingleResultDeduplicator<>(\n            threadPool.getThreadContext(),\n            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))\n        );",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
         "notes": "required_op_replace",
         "surround_before_3": [
-          "            TransportGetAllocationStatsAction.Request::new,",
-          "            indexNameExpressionResolver,",
-          "            TransportGetAllocationStatsAction.Response::new,"
+          "            threadPool,",
+          "            actionFilters,",
+          "            TransportGetAllocationStatsAction.Request::new,"
         ],
         "surround_after_3": [
-          "        );",
           "        this.allocationStatsService = allocationStatsService;",
-          "        this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());"
+          "        this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());",
+          "        this.featureService = featureService;"
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target location line (73) differs from mainline old start line (69)",
-          "Pre-patch surrounding context in target differs from mainline pre-patch context"
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
-        "namespace_changes": []
+        "namespace_changes": [],
+        "required_invariants": [
+          "EsExecutors.DIRECT_EXECUTOR_SERVICE",
+          "final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);",
+          "this.allocationStatsSupplier = new SingleResultDeduplicator<>(",
+          "threadPool.getThreadContext(),",
+          "l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 3,
@@ -186,69 +269,125 @@
           "        this.featureService = featureService;",
           "    }"
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target location line (73) differs from mainline old start line (69)",
-          "Pre-patch surrounding context in target differs from mainline pre-patch context"
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
-        "namespace_changes": []
+        "namespace_changes": [],
+        "required_invariants": [
+          "EsExecutors.DIRECT_EXECUTOR_SERVICE",
+          "final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);",
+          "this.allocationStatsSupplier = new SingleResultDeduplicator<>(",
+          "threadPool.getThreadContext(),",
+          "l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 4,
         "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
         "operation_index": 0,
         "edit_type": "replace",
-        "old_string": "        listener.onResponse(\n            new Response(\n                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),",
-        "new_string": "        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool\n\n        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)\n            ? SubscribableListener.newForked(allocationStatsSupplier::execute)\n            : SubscribableListener.newSucceeded(Map.of());\n\n        allocationStatsStep.andThenApply(\n            allocationStats -> new Response(\n                allocationStats,",
+        "old_string": "    @Override\n    protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {\n        listener.onResponse(\n            new Response(\n                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),\n                request.metrics().contains(Metric.FS)",
+        "new_string": "    @Override\n    protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {\n        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool\n\n        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)\n            ? SubscribableListener.newForked(allocationStatsSupplier::execute)\n            : SubscribableListener.newSucceeded(Map.of());\n\n        allocationStatsStep.andThenApply(\n            allocationStats -> new Response(\n                allocationStats,\n                request.metrics().contains(Metric.FS)",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
         "notes": "required_op_replace",
         "surround_before_3": [
-          "",
-          "    @Override",
-          "    protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {"
+          "        super.doExecute(task, request, listener);",
+          "    }",
+          ""
         ],
         "surround_after_3": [
-          "                request.metrics().contains(Metric.FS)",
           "                    && featureService.clusterHasFeature(clusterService.state(), AllocationStatsFeatures.INCLUDE_DISK_THRESHOLD_SETTINGS)",
-          "                        ? diskThresholdSettings"
+          "                        ? diskThresholdSettings",
+          "                        : null"
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
-        "namespace_changes": []
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)",
+          "? SubscribableListener.newForked(allocationStatsSupplier::execute)",
+          ": SubscribableListener.newSucceeded(Map.of());",
+          "allocationStatsStep.andThenApply(",
+          "allocationStats -> new Response(",
+          ").addListener(listener);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 4,
         "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
         "operation_index": 1,
         "edit_type": "replace",
-        "old_string": "        );",
-        "new_string": "        ).addListener(listener);",
+        "old_string": "                        : null\n            )\n        );\n    }",
+        "new_string": "                        : null\n            )\n        ).addListener(listener);\n    }",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
         "notes": "required_op_replace",
         "surround_before_3": [
-          "            indexNameExpressionResolver,",
-          "            TransportGetAllocationStatsAction.Response::new,",
-          "            threadPool.executor(ThreadPool.Names.MANAGEMENT)"
+          "                request.metrics().contains(Metric.FS)",
+          "                    && featureService.clusterHasFeature(clusterService.state(), AllocationStatsFeatures.INCLUDE_DISK_THRESHOLD_SETTINGS)",
+          "                        ? diskThresholdSettings"
         ],
         "surround_after_3": [
-          "        this.allocationStatsService = allocationStatsService;",
-          "        this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());",
-          "        this.featureService = featureService;"
+          "",
+          "    @Override",
+          "    protected ClusterBlockException checkBlock(Request request, ClusterState state) {"
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
-        "namespace_changes": []
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)",
+          "? SubscribableListener.newForked(allocationStatsSupplier::execute)",
+          ": SubscribableListener.newSucceeded(Map.of());",
+          "allocationStatsStep.andThenApply(",
+          "allocationStats -> new Response(",
+          ").addListener(listener);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       }
     ],
     "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java": [
@@ -273,11 +412,24 @@
           ""
         ],
         "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
-        "namespace_changes": []
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 2,
+          "target_declared_methods_count": 2,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 1,
@@ -288,7 +440,7 @@
         "new_string": "        assert Transports.assertNotTransportThread(\"too expensive for a transport worker\");\n\n        var state = clusterService.state();",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Inserted assertion before state retrieval as in mainline patch",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "    }",
           "",
@@ -300,31 +452,38 @@
           ""
         ],
         "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target surrounding context does not match mainline pre-patch context",
-          "Target context lines before insertion point differ significantly from mainline"
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
-        "namespace_changes": []
+        "namespace_changes": [],
+        "required_invariants": [
+          "assert Transports.assertNotTransportThread(\"too expensive for a transport worker\");"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 2,
+          "target_declared_methods_count": 2,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       }
     ]
   },
-  "last_plan_signature": "98e76f72dc67530a916120d14c3a7442e427d8cded322f82f438849811110720",
+  "last_plan_signature": "7823ec25be8c43400f5220d8e432edbda9fbe58c797c22c9e6c6d3afc1145853",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
   "token_usage": {
-    "input_tokens": 9088,
-    "output_tokens": 2540,
-    "total_tokens": 11628,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
     "estimated": false,
-    "sources": [
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage"
-    ]
+    "sources": []
   }
 }

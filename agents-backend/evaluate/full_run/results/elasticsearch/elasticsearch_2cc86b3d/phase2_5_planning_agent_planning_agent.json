@@ -1,0 +1,467 @@
+{
+  "hunk_generation_plan": {
+    "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;",
+        "new_string": "import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;\nimport org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import org.elasticsearch.action.admin.indices.readonly.TransportAddIndexBlockAction;",
+          "import org.elasticsearch.action.admin.indices.refresh.RefreshAction;",
+          "import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;"
+        ],
+        "surround_after_3": [
+          "import org.elasticsearch.action.bulk.BulkItemResponse;",
+          "import org.elasticsearch.action.search.SearchRequest;",
+          "import org.elasticsearch.action.support.ActionFilters;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import java.util.Locale;",
+        "new_string": "import java.util.Arrays;\nimport java.util.Locale;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import org.elasticsearch.xpack.core.frozen.action.FreezeIndexAction;",
+          "import org.elasticsearch.xpack.migrate.MigrateTemplateRegistry;",
+          ""
+        ],
+        "surround_after_3": [
+          "import java.util.Map;",
+          "import java.util.Objects;",
+          ""
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "import java.util.Objects;\n\nimport static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;\n",
+        "new_string": "import java.util.Objects;\n\nimport static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;\nimport static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;\n",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "",
+          "import java.util.Locale;",
+          "import java.util.Map;"
+        ],
+        "surround_after_3": [
+          "public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<",
+          "    ReindexDataStreamIndexAction.Request,",
+          "    ReindexDataStreamIndexAction.Response> {"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "operation_index": 0,
+        "edit_type": "delete",
+        "old_string": "        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a metadata block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }",
+        "new_string": "",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_delete",
+        "surround_before_3": [
+          "            );",
+          "        }",
+          ""
+        ],
+        "surround_after_3": [
+          "        final boolean wasClosed = isClosed(sourceIndex);",
+          "        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))",
+          "            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))",
+          ".<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))"
+        ],
+        "required_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "protected_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "must_preserve_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "chain_constraints": [
+          [
+            "removeMetadataBlocks",
+            "setReadOnly"
+          ]
+        ],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "removeMetadataBlocks",
+            "setReadOnly"
+          ]
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<AcknowledgedResponse>newForked(l -> setBlockWrites(sourceIndexName, l, taskId))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))",
+        "new_string": "        final boolean wasClosed = isClosed(sourceIndex);\n        SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))\n            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))",
+        "verified": false,
+        "verification_result": "sanitize_old_not_found:not_found_multiline",
+        "notes": "required_op_replace|sanitize_old_not_found:not_found_multiline|sanitize_old_not_found:not_found_multiline",
+        "surround_before_3": [],
+        "surround_after_3": [],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))",
+          ".<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))"
+        ],
+        "required_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "protected_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "must_preserve_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "chain_constraints": [
+          [
+            "removeMetadataBlocks",
+            "setReadOnly"
+          ]
+        ],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "removeMetadataBlocks",
+            "setReadOnly"
+          ]
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "operation_index": 2,
+        "edit_type": "insert_before",
+        "old_string": "            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))",
+        "new_string": "            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))\n            .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))",
+          "            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))",
+          "            .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))"
+        ],
+        "surround_after_3": [
+          "            .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))",
+          "            .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))",
+          "            .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "SubscribableListener.<AcknowledgedResponse>newForked(l -> removeMetadataBlocks(sourceIndexName, taskId, l))",
+          ".<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))"
+        ],
+        "required_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "protected_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "must_preserve_symbols": [
+          "removeMetadataBlocks",
+          "setReadOnly"
+        ],
+        "chain_constraints": [
+          [
+            "removeMetadataBlocks",
+            "setReadOnly"
+          ]
+        ],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "removeMetadataBlocks",
+            "setReadOnly"
+          ]
+        }
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))",
+        "new_string": "            .<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))\n            .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))",
+          "            .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))",
+          "            .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))"
+        ],
+        "surround_after_3": [
+          "            .addListener(listener);",
+          "    }",
+          ""
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          ".<AcknowledgedResponse>andThen(l -> removeAPIBlocks(sourceIndexName, taskId, l, READ_ONLY))"
+        ],
+        "required_symbols": [
+          "removeAPIBlocks"
+        ],
+        "protected_symbols": [
+          "removeAPIBlocks"
+        ],
+        "must_preserve_symbols": [
+          "removeAPIBlocks"
+        ],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "removeAPIBlocks"
+          ]
+        }
+      },
+      {
+        "hunk_index": 4,
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "    }\n\n    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting write block on source index [{}]\", sourceIndexName);\n        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {\n            @Override",
+        "new_string": "    }\n\n    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {\n        logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);\n        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {\n            @Override",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "        } else {",
+          "            listener.onResponse(null);",
+          "        }"
+        ],
+        "surround_after_3": [
+          "            public void onResponse(AddIndexBlockResponse response) {",
+          "                if (response.isAcknowledged()) {",
+          "                    listener.onResponse(null);"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {",
+          "logger.debug(\"Setting read-only on source index [{}]\", sourceIndexName);",
+          "addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {"
+        ],
+        "required_symbols": [
+          "setReadOnly"
+        ],
+        "protected_symbols": [
+          "setReadOnly"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "setReadOnly"
+          ]
+        }
+      },
+      {
+        "hunk_index": 5,
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {",
+        "new_string": "    /**\n     * All metadata blocks need to be removed at the start for the following reasons:\n     * 1) If the source index has a metadata only block, the read-only block can't be added.\n     * 2) If the source index is read-only and closed, it can't be opened.\n     */\n    private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {\n        logger.debug(\"Removing metadata blocks from index [{}]\", indexName);\n        removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);\n    }\n\n    private void removeAPIBlocks(\n        String indexName,\n        TaskId parentTaskId,\n        ActionListener<AcknowledgedResponse> listener,\n        IndexMetadata.APIBlock... blocks\n    ) {\n        Settings.Builder settings = Settings.builder();\n        Arrays.stream(blocks).forEach(b -> settings.putNull(b.settingName()));\n        var updateSettingsRequest = new UpdateSettingsRequest(settings.build(), indexName);\n        updateSettingsRequest.setParentTask(parentTaskId);\n        client.execute(TransportUpdateSettingsAction.TYPE, updateSettingsRequest, listener);\n    }\n\n    private void getIndexDocCount(String index, TaskId parentTaskId, ActionListener<Long> listener) {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "        SearchRequest countRequest = new SearchRequest(index);",
+          "        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);",
+          "        countRequest.allowPartialSearchResults(false);"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private void removeMetadataBlocks(String indexName, TaskId parentTaskId, ActionListener<AcknowledgedResponse> listener) {",
+          "logger.debug(\"Removing metadata blocks from index [{}]\", indexName);",
+          "removeAPIBlocks(indexName, parentTaskId, listener, METADATA, READ_ONLY);",
+          "private void removeAPIBlocks(",
+          "TaskId parentTaskId,",
+          "ActionListener<AcknowledgedResponse> listener,",
+          "IndexMetadata.APIBlock... blocks",
+          "Settings.Builder settings = Settings.builder();"
+        ],
+        "required_symbols": [
+          "removeAPIBlocks",
+          "removeMetadataBlocks"
+        ],
+        "protected_symbols": [
+          "removeAPIBlocks",
+          "removeMetadataBlocks"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 19,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "removeAPIBlocks",
+            "removeMetadataBlocks"
+          ]
+        }
+      }
+    ]
+  },
+  "last_plan_signature": "20cd11068054acdfa2a3655b485076505dce8c00c528f48f73a26026de519339",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

@@ -163,9 +163,15 @@ class AgentState(TypedDict):
     evaluation_full_workflow: (
         bool  # If True, run full eval flow in validation (apply+build+tests)
     )
+    developer_patch_diff: NotRequired[
+        str
+    ]  # Full developer backport diff (eval harness); enables developer fast path in Agent 3
 
     # --- Phase 0: Pre-computed analysis ---
     patch_analysis: list  # List[FileChange] - from PatchAnalyzer
+    patch_complexity: NotRequired[str]  # TRIVIAL | STRUCTURAL | REWRITE
+    complexity_reason: NotRequired[str]  # Deterministic classifier reason
+    complexity_details: NotRequired[dict[str, Any]]  # Classifier diagnostics
 
     # --- Phase 0 fast-path result ---
     fast_path_success: bool  # True if git apply --check & tests passed cleanly
@@ -231,6 +237,12 @@ class AgentState(TypedDict):
     validation_results: dict[
         str, dict
     ]  # Detailed results per step (e.g. "hunk_application": {...})
+    validation_infrastructure_failure: NotRequired[
+        bool
+    ]  # True when failure is test infra/runner related (not code generation)
+    validation_infrastructure_inconclusive: NotRequired[
+        bool
+    ]  # True when result is infra-inconclusive and should stop retries
     validation_failure_category: NotRequired[
         str
     ]  # "path_or_file_operation" | "context_mismatch" | ...
@@ -243,12 +255,27 @@ class AgentState(TypedDict):
     validation_failed_stage: NotRequired[
         str
     ]  # Stage where generation/validation failed (e.g. hunk_sanity_failed)
+    force_type_v_until_success: NotRequired[
+        bool
+    ]  # Sticky latch: keep execution_type TYPE_V across retries until validation passes
+    force_type_v_reason: NotRequired[
+        str
+    ]  # Human-readable reason for sticky TYPE_V latch
     generated_patch_hash: NotRequired[
         str
     ]  # Last generated code-patch hash (used to avoid identical retry loops)
     last_plan_signature: NotRequired[
         str
     ]  # Hash of last planner output to detect identical planning loops
+    validation_repeated_patch_detected: NotRequired[
+        bool
+    ]  # True when file editor regenerated same patch hash on retry
+    validation_repeated_plan_detected: NotRequired[
+        bool
+    ]  # True when planner generated same plan signature on retry
+    best_effort_adapted_code_hunks: NotRequired[
+        list
+    ]  # Best generated code hunks preserved even when contract gates fail
     pair_consistency: NotRequired[
         dict[str, Any]
     ]  # Mainline/backport commit-pair overlap metrics (diagnostics)

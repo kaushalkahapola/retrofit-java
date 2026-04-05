@@ -10,7 +10,7 @@ import re
 from langchain_core.messages import HumanMessage, SystemMessage
 from state import AgentState, AdaptedHunk
 from utils.llm_provider import get_llm
-from agents.validation_tools import ValidationToolkit
+from agents.validation_tools import ValidationToolkit, classify_test_failure_signal
 from agents.hunk_generator import _extract_hunk_block
 
 # Test-suite compatibility shim for legacy patch target.
@@ -159,13 +159,22 @@ def _classify_build_failure(raw_output: str) -> tuple[str, list[str], list[dict]
         or "method" in text_lower
         and "cannot be applied" in text_lower
     ):
+        # Capture a few concrete javac error lines to provide grounded retry context.
+        concrete_errors = []
+        for ln in text.splitlines():
+            ll = ln.strip()
+            if ": error:" in ll and len(concrete_errors) < 8:
+                concrete_errors.append(ll)
         diagnostics.append(
             {
                 "error_type": "api_or_signature_mismatch",
                 "suggested_action": "replan_and_regenerate_with_api_compatibility",
+                "compiler_errors": concrete_errors,
             }
         )
         reason = "API/signature mismatch in generated patch against target branch."
+        if concrete_errors:
+            reason += " Compiler errors: " + " | ".join(concrete_errors[:3])
         return "context_mismatch", sorted(retry_files), diagnostics, reason
 
     diagnostics.append(
@@ -195,6 +204,28 @@ def _format_transition_summary(transition_eval: dict) -> str:
         f"newly_passing({len(newly_passing)}): {newly_passing}; "
         f"pass->fail({len(pass_to_fail)}): {pass_to_fail}"
     )
+
+
+def _detect_type_v_retry_scope(
+    generation_checklist: list[dict],
+) -> tuple[bool, list[str]]:
+    files: set[str] = set()
+    found = False
+    for item in generation_checklist or []:
+        exec_types = [
+            str(t).strip().upper()
+            for t in ((item or {}).get("execution_types") or [])
+            if str(t).strip()
+        ]
+        if "TYPE_V" in exec_types:
+            found = True
+            mainline_file = str((item or {}).get("mainline_file") or "").strip()
+            target_file = str((item or {}).get("target_file") or "").strip()
+            if mainline_file:
+                files.add(mainline_file)
+            if target_file:
+                files.add(target_file)
+    return found, sorted(files)
 
 
 async def _analyze_failure(step_name: str, error_output: str, state: AgentState) -> str:
@@ -356,8 +387,14 @@ async def validation_agent(state: AgentState, config) -> dict:
 
     # 3.0 Setup
     code_hunks = state.get("adapted_code_hunks", [])
+    if not code_hunks:
+        # Preserve best-so-far candidate hunks from generation attempts so
+        # validation does not fail as empty_generation when a retry path dropped
+        # final emission despite having a valid prior candidate.
+        code_hunks = state.get("best_effort_adapted_code_hunks", []) or []
     test_hunks = state.get("adapted_test_hunks", [])
     generation_checklist = state.get("generation_checklist", []) or []
+    type_v_present, type_v_files = _detect_type_v_retry_scope(generation_checklist)
     developer_aux_hunks = state.get("developer_auxiliary_hunks", [])
     attempts = state.get("validation_attempts", 0)
     blueprint = state.get("semantic_blueprint", {})
@@ -375,6 +412,8 @@ async def validation_agent(state: AgentState, config) -> dict:
     test_rename_map: dict = toolkit.build_test_rename_map_from_aux_hunks(
         developer_aux_hunks
     )
+    force_type_v_latch = bool(state.get("force_type_v_until_success") or False)
+    force_type_v_reason = str(state.get("force_type_v_reason") or "").strip()
 
     if attempts >= MAX_VALIDATION_ATTEMPTS:
         print(
@@ -394,6 +433,14 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_error_context": msg,
             "validation_failure_category": "empty_generation",
             "validation_retry_files": [],
+            "validation_repeated_patch_detected": bool(
+                state.get("validation_repeated_patch_detected", False)
+            ),
+            "validation_repeated_plan_detected": bool(
+                state.get("validation_repeated_plan_detected", False)
+            ),
+            "force_type_v_until_success": force_type_v_latch,
+            "force_type_v_reason": force_type_v_reason,
         }
 
     incomplete_generation_items = []
@@ -452,6 +499,12 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_retry_files": retry_files,
             "validation_retry_hunks": retry_hunks,
             "validation_failed_stage": failed_stage,
+            "force_type_v_until_success": force_type_v_latch,
+            "force_type_v_reason": force_type_v_reason,
+            # Preserve prior validation step results (e.g. failed compile/build) so
+            # graph routing (stagnation + build-failure escalation) still sees them
+            # after checklist-short-circuit returns.
+            "validation_results": dict(state.get("validation_results") or {}),
         }
 
     # Ensure clean repo
@@ -542,6 +595,8 @@ async def validation_agent(state: AgentState, config) -> dict:
                 "regeneration_hint": analysis,
                 "validation_failure_category": failure_category,
                 "validation_retry_files": retry_files,
+                "force_type_v_until_success": force_type_v_latch,
+                "force_type_v_reason": force_type_v_reason,
             }
 
         build_res = toolkit.run_build_script()
@@ -553,6 +608,14 @@ async def validation_agent(state: AgentState, config) -> dict:
         if not build_res.get("success", False):
             failure_category, retry_files, diagnostics, analysis = (
                 _classify_build_failure(build_res.get("output", ""))
+            )
+            if type_v_present and type_v_files:
+                retry_files = sorted(set(retry_files) | set(type_v_files))
+            sticky_type_v = bool(force_type_v_latch or type_v_present)
+            sticky_reason = (
+                force_type_v_reason or "build_context_mismatch_type_v"
+                if sticky_type_v
+                else ""
             )
             validation_results["build"]["agent_evaluation"] = analysis
             validation_results["build"]["error_context"] = analysis
@@ -574,6 +637,8 @@ async def validation_agent(state: AgentState, config) -> dict:
                 "regeneration_hint": analysis,
                 "validation_failure_category": failure_category,
                 "validation_retry_files": retry_files,
+                "force_type_v_until_success": sticky_type_v,
+                "force_type_v_reason": sticky_reason,
             }
 
         inferred_project = os.path.basename(target_repo_path).strip().lower()
@@ -615,8 +680,15 @@ async def validation_agent(state: AgentState, config) -> dict:
             analysis = await _analyze_failure(
                 "Relevant Tests (Compile Error)", test_res.get("output", ""), state
             )
+            signal = classify_test_failure_signal(
+                output_text=test_res.get("output", ""),
+                transition_reason=transition_eval.get("reason", ""),
+                success=test_res.get("success"),
+                compile_error=bool(test_res.get("compile_error", False)),
+            )
             validation_results["tests"]["agent_evaluation"] = analysis
             validation_results["tests"]["error_context"] = analysis
+            validation_results["tests"]["diagnostics"] = signal
             trace.append(
                 f"\n**Final Status: TEST EXECUTION FAILED (COMPILE ERROR)**\n\n**Agent Analysis:**\n{analysis}"
             )
@@ -628,6 +700,15 @@ async def validation_agent(state: AgentState, config) -> dict:
                 "validation_error_context": f"Tests failed to execute: {analysis}",
                 "validation_results": validation_results,
                 "regeneration_hint": analysis,
+                "validation_failure_category": signal.get(
+                    "category", "context_mismatch"
+                ),
+                "validation_infrastructure_failure": bool(
+                    signal.get("infrastructure_failure", False)
+                ),
+                "validation_infrastructure_inconclusive": bool(
+                    signal.get("infrastructure_inconclusive", False)
+                ),
             }
 
         if not transition_eval.get("valid_backport_signal", False):
@@ -635,8 +716,15 @@ async def validation_agent(state: AgentState, config) -> dict:
                 "Relevant-test state transition check failed. "
                 f"Transition summary: {transition_summary}"
             )
+            signal = classify_test_failure_signal(
+                output_text=test_res.get("output", ""),
+                transition_reason=transition_eval.get("reason", ""),
+                success=test_res.get("success"),
+                compile_error=bool(test_res.get("compile_error", False)),
+            )
             validation_results["tests"]["agent_evaluation"] = analysis
             validation_results["tests"]["error_context"] = analysis
+            validation_results["tests"]["diagnostics"] = signal
             trace.append(
                 "\n**Final Status: TEST STATE TRANSITION FAILED**\n\n"
                 f"**Transition Summary:**\n{transition_summary}\n\n"
@@ -644,13 +732,36 @@ async def validation_agent(state: AgentState, config) -> dict:
             )
             toolkit.write_trace("\n".join(trace), "validation_trace.md")
             toolkit.restore_repo_state()
-            return {
+            retry_payload = {
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
                 "validation_error_context": analysis,
                 "validation_results": validation_results,
                 "regeneration_hint": analysis,
+                "validation_failure_category": signal.get(
+                    "category", "context_mismatch"
+                ),
+                "validation_infrastructure_failure": bool(
+                    signal.get("infrastructure_failure", False)
+                ),
+                "validation_infrastructure_inconclusive": bool(
+                    signal.get("infrastructure_inconclusive", False)
+                ),
             }
+            if (
+                type_v_present
+                and type_v_files
+                and not bool(signal.get("infrastructure_failure", False))
+            ):
+                retry_payload["validation_failure_category"] = "context_mismatch"
+                retry_payload["validation_retry_files"] = type_v_files
+                retry_payload["validation_retry_hunks"] = []
+                retry_payload["validation_failed_stage"] = "generation_contract_failed"
+                retry_payload["force_type_v_until_success"] = True
+                retry_payload["force_type_v_reason"] = (
+                    force_type_v_reason or "type_v_transition_retry"
+                )
+            return retry_payload
 
         validation_results["tests"]["agent_evaluation"] = (
             "Relevant-test transition check passed: no pass->fail regressions and "
@@ -670,6 +781,8 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_error_context": "",
             "validation_results": validation_results,
             "phase_0_transition_evaluation": transition_eval,
+            "force_type_v_until_success": False,
+            "force_type_v_reason": "",
         }
 
     if apply_only_validation:
@@ -974,6 +1087,10 @@ async def validation_agent(state: AgentState, config) -> dict:
         analysis = await _analyze_failure(
             "Failure Confirmation (Compile)", res2["output"], state
         )
+        compile_context = (
+            f"Compilation error during failure confirmation: {res2.get('output', '')}\n"
+            f"Analysis: {analysis}"
+        )
         validation_results["failure_confirmation"]["agent_evaluation"] = analysis
         validation_results["failure_confirmation"]["error_context"] = analysis
         trace.append(
@@ -984,7 +1101,7 @@ async def validation_agent(state: AgentState, config) -> dict:
         return {
             "validation_passed": False,
             "validation_attempts": attempts + 1,
-            "validation_error_context": analysis,
+            "validation_error_context": compile_context,
             "adapted_test_hunks": test_hunks,
             "validation_results": validation_results,
             "regeneration_hint": analysis,

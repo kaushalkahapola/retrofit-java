@@ -1,0 +1,170 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "getReindexRequiredPredicate",
+        "target_file": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java",
+        "target_method": "getReindexRequiredPredicate",
+        "start_line": 1,
+        "end_line": 1,
+        "code_snippet": "/*\n * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one\n * or more contributor license agreements. Licensed under the Elastic License\n * 2.0; you may not use this file except in compliance with the Elastic License\n * 2.0.\n */\n\npackage org.elasticsearch.xpack.core.deprecation;\n\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.metadata.Metadata;\nimport org.elasticsearch.cluster.metadata.MetadataIndexStateService;\nimport org.elasticsearch.index.Index;\nimport org.elasticsearch.index.IndexVersion;\nimport org.elasticsearch.index.IndexVersions;\n\nimport java.util.function.Predicate;\n\npublic class DeprecatedIndexPredicate {\n\n    public static final IndexVersion MINIMUM_WRITEABLE_VERSION_AFTER_UPGRADE = IndexVersions.V_8_0_0;",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "<class_declaration>",
+        "target_file": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java",
+        "target_method": "<class_declaration>",
+        "start_line": 57,
+        "end_line": 57,
+        "code_snippet": "        return creationVersionBeforeMinimumWritableVersion(indexMetadata)\n            && isNotSearchableSnapshot(indexMetadata)\n            && isNotClosed(indexMetadata)\n            && isNotVerifiedReadOnly(indexMetadata);\n    }\n\n    private static boolean isNotVerifiedReadOnly(IndexMetadata indexMetadata) {\n        // no need to check blocks.\n        return MetadataIndexStateService.VERIFIED_READ_ONLY_SETTING.get(indexMetadata.getSettings()) == false;\n    }\n\n    private static boolean isNotSearchableSnapshot(IndexMetadata indexMetadata) {\n        return indexMetadata.isSearchableSnapshot() == false;\n    }\n\n    private static boolean creationVersionBeforeMinimumWritableVersion(IndexMetadata metadata) {\n        return metadata.getCreationVersion().before(MINIMUM_WRITEABLE_VERSION_AFTER_UPGRADE);\n    }\n\n    private static boolean isNotClosed(IndexMetadata indexMetadata) {\n        return indexMetadata.getState().equals(IndexMetadata.State.CLOSE) == false;\n    }\n\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "oldIndicesCheck",
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java",
+        "target_method": "oldIndicesCheck",
+        "start_line": 27,
+        "end_line": 27,
+        "code_snippet": "\npackage org.elasticsearch.xpack.deprecation;\n\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.DataStream;\nimport org.elasticsearch.index.Index;\nimport org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;\n\nimport java.util.List;\nimport java.util.Set;\nimport java.util.stream.Collectors;\n\nimport static java.util.Map.entry;\nimport static java.util.Map.ofEntries;\n\npublic class DataStreamDeprecationChecks {\n    static DeprecationIssue oldIndicesCheck(DataStream dataStream, ClusterState clusterState) {\n        List<Index> backingIndices = dataStream.getIndices();\n\n        Set<String> indicesNeedingUpgrade = backingIndices.stream()\n            .filter(DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterState.metadata()))\n            .map(Index::getName)\n            .collect(Collectors.toUnmodifiableSet());\n\n        if (indicesNeedingUpgrade.isEmpty() == false) {\n            return new DeprecationIssue(\n                DeprecationIssue.Level.CRITICAL,\n                \"Old data stream with a compatibility version < 8.0\",\n                \"https://www.elastic.co/guide/en/elasticsearch/reference/current/migrating-8.0.html#breaking-changes-8.0\",\n                \"This data stream has backing indices that were created before Elasticsearch 8.0.0\",\n                false,\n                ofEntries(\n                    entry(\"reindex_required\", true),\n                    entry(\"total_backing_indices\", backingIndices.size()),\n                    entry(\"indices_requiring_upgrade_count\", indicesNeedingUpgrade.size()),\n                    entry(\"indices_requiring_upgrade\", indicesNeedingUpgrade)\n                )\n            );\n        }\n",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "<class_declaration>",
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecks.java",
+        "target_method": "<class_declaration>",
+        "start_line": 48,
+        "end_line": 48,
+        "code_snippet": "            .filter(DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterState.metadata()))\n            .map(Index::getName)\n            .collect(Collectors.toUnmodifiableSet());\n\n        if (indicesNeedingUpgrade.isEmpty() == false) {\n            return new DeprecationIssue(\n                DeprecationIssue.Level.CRITICAL,\n                \"Old data stream with a compatibility version < 8.0\",\n                \"https://www.elastic.co/guide/en/elasticsearch/reference/current/migrating-8.0.html#breaking-changes-8.0\",\n                \"This data stream has backing indices that were created before Elasticsearch 8.0.0\",\n                false,\n                ofEntries(\n                    entry(\"reindex_required\", true),\n                    entry(\"total_backing_indices\", backingIndices.size()),\n                    entry(\"indices_requiring_upgrade_count\", indicesNeedingUpgrade.size()),\n                    entry(\"indices_requiring_upgrade\", indicesNeedingUpgrade)\n                )\n            );\n        }\n\n        return null;\n    }\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+        "target_method": null,
+        "start_line": 96,
+        "end_line": 96,
+        "code_snippet": "                NodeDeprecationChecks::checkMonitoringSettingExportersAlertsEnabled,\n                NodeDeprecationChecks::checkMonitoringSettingExportersAlertsBlacklist,\n                NodeDeprecationChecks::checkMonitoringSettingExportersIndexNameTimeFormat,\n                NodeDeprecationChecks::checkMonitoringSettingDecommissionAlerts,\n                NodeDeprecationChecks::checkMonitoringSettingEsCollectionEnabled,\n                NodeDeprecationChecks::checkMonitoringSettingCollectionEnabled,\n                NodeDeprecationChecks::checkMonitoringSettingCollectionInterval,\n                NodeDeprecationChecks::checkScriptContextCache,\n                NodeDeprecationChecks::checkScriptContextCompilationsRateLimitSetting,\n                NodeDeprecationChecks::checkScriptContextCacheSizeSetting,\n                NodeDeprecationChecks::checkScriptContextCacheExpirationSetting,\n                NodeDeprecationChecks::checkEnforceDefaultTierPreferenceSetting,\n                NodeDeprecationChecks::checkLifecyleStepMasterTimeoutSetting,\n                NodeDeprecationChecks::checkEqlEnabledSetting,\n                NodeDeprecationChecks::checkNodeAttrData,\n                NodeDeprecationChecks::checkWatcherBulkConcurrentRequestsSetting,\n                NodeDeprecationChecks::checkTracingApmSettings,\n                NodeDeprecationChecks::checkSourceModeInComponentTemplates\n            );\n\n    static List<BiFunction<IndexMetadata, ClusterState, DeprecationIssue>> INDEX_SETTINGS_CHECKS = List.of(\n        IndexDeprecationChecks::oldIndicesCheck,\n        IndexDeprecationChecks::translogRetentionSettingCheck,\n        IndexDeprecationChecks::checkIndexDataPath,\n        IndexDeprecationChecks::storeTypeSettingCheck,\n        IndexDeprecationChecks::frozenIndexSettingCheck,\n        IndexDeprecationChecks::deprecatedCamelCasePattern\n    );\n\n    static List<BiFunction<DataStream, ClusterState, DeprecationIssue>> DATA_STREAM_CHECKS = List.of(\n        DataStreamDeprecationChecks::oldIndicesCheck\n    );\n\n    /**\n     * helper utility function to reduce repeat of running a specific {@link List} of checks.\n     *\n     * @param checks The functional checks to execute using the mapper function\n     * @param mapper The function that executes the lambda check with the appropriate arguments\n     * @param <T> The signature of the check (BiFunction, Function, including the appropriate arguments)\n     * @return The list of {@link DeprecationIssue} that were found in the cluster\n     */",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+        "target_method": null,
+        "start_line": 106,
+        "end_line": 106,
+        "code_snippet": "                NodeDeprecationChecks::checkScriptContextCacheExpirationSetting,\n                NodeDeprecationChecks::checkEnforceDefaultTierPreferenceSetting,\n                NodeDeprecationChecks::checkLifecyleStepMasterTimeoutSetting,\n                NodeDeprecationChecks::checkEqlEnabledSetting,\n                NodeDeprecationChecks::checkNodeAttrData,\n                NodeDeprecationChecks::checkWatcherBulkConcurrentRequestsSetting,\n                NodeDeprecationChecks::checkTracingApmSettings,\n                NodeDeprecationChecks::checkSourceModeInComponentTemplates\n            );\n\n    static List<BiFunction<IndexMetadata, ClusterState, DeprecationIssue>> INDEX_SETTINGS_CHECKS = List.of(\n        IndexDeprecationChecks::oldIndicesCheck,\n        IndexDeprecationChecks::translogRetentionSettingCheck,\n        IndexDeprecationChecks::checkIndexDataPath,\n        IndexDeprecationChecks::storeTypeSettingCheck,\n        IndexDeprecationChecks::frozenIndexSettingCheck,\n        IndexDeprecationChecks::deprecatedCamelCasePattern\n    );\n\n    static List<BiFunction<DataStream, ClusterState, DeprecationIssue>> DATA_STREAM_CHECKS = List.of(\n        DataStreamDeprecationChecks::oldIndicesCheck\n    );\n\n    /**\n     * helper utility function to reduce repeat of running a specific {@link List} of checks.\n     *\n     * @param checks The functional checks to execute using the mapper function\n     * @param mapper The function that executes the lambda check with the appropriate arguments\n     * @param <T> The signature of the check (BiFunction, Function, including the appropriate arguments)\n     * @return The list of {@link DeprecationIssue} that were found in the cluster\n     */\n    static <T> List<DeprecationIssue> filterChecks(List<T> checks, Function<T, DeprecationIssue> mapper) {\n        return checks.stream().map(mapper).filter(Objects::nonNull).collect(Collectors.toList());\n    }\n\n    @FunctionalInterface\n    public interface NodeDeprecationCheck<A, B, C, D, R> {\n        R apply(A first, B second, C third, D fourth);\n    }\n}",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
+        "target_method": null,
+        "start_line": 39,
+        "end_line": 39,
+        "code_snippet": "import org.elasticsearch.xpack.core.deprecation.DeprecationIssue;\n\nimport java.util.ArrayList;\nimport java.util.Collections;\nimport java.util.List;\nimport java.util.Locale;\nimport java.util.Map;\nimport java.util.function.BiConsumer;\nimport java.util.function.BiFunction;\nimport java.util.function.Function;\n\n/**\n * Index-specific deprecation checks\n */\npublic class IndexDeprecationChecks {\n\n    static DeprecationIssue oldIndicesCheck(IndexMetadata indexMetadata, ClusterState clusterState) {\n        // TODO: this check needs to be revised. It's trivially true right now.\n        IndexVersion currentCompatibilityVersion = indexMetadata.getCompatibilityVersion();\n        // We intentionally exclude indices that are in data streams because they will be picked up by DataStreamDeprecationChecks\n        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n            return new DeprecationIssue(\n                DeprecationIssue.Level.CRITICAL,\n                \"Old index with a compatibility version < 8.0\",\n                \"https://www.elastic.co/guide/en/elasticsearch/reference/current/migrating-8.0.html#breaking-changes-8.0\",\n                \"This index has version: \" + currentCompatibilityVersion.toReleaseVersion(),\n                false,\n                Collections.singletonMap(\"reindex_required\", true)\n            );\n        }\n        return null;\n    }\n\n    private static boolean isNotDataStreamIndex(IndexMetadata indexMetadata, ClusterState clusterState) {\n        return clusterState.metadata().findDataStreams(indexMetadata.getIndex().getName()).isEmpty();\n    }\n\n    static DeprecationIssue translogRetentionSettingCheck(IndexMetadata indexMetadata, ClusterState clusterState) {\n        final boolean softDeletesEnabled = IndexSettings.INDEX_SOFT_DELETES_SETTING.get(indexMetadata.getSettings());\n        if (softDeletesEnabled) {\n            if (IndexSettings.INDEX_TRANSLOG_RETENTION_SIZE_SETTING.exists(indexMetadata.getSettings())",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "isNotDataStreamIndex",
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
+        "target_method": "isNotDataStreamIndex",
+        "start_line": 49,
+        "end_line": 49,
+        "code_snippet": "\n/**\n * Index-specific deprecation checks\n */\npublic class IndexDeprecationChecks {\n\n    static DeprecationIssue oldIndicesCheck(IndexMetadata indexMetadata, ClusterState clusterState) {\n        // TODO: this check needs to be revised. It's trivially true right now.\n        IndexVersion currentCompatibilityVersion = indexMetadata.getCompatibilityVersion();\n        // We intentionally exclude indices that are in data streams because they will be picked up by DataStreamDeprecationChecks\n        if (DeprecatedIndexPredicate.reindexRequired(indexMetadata) && isNotDataStreamIndex(indexMetadata, clusterState)) {\n            return new DeprecationIssue(\n                DeprecationIssue.Level.CRITICAL,\n                \"Old index with a compatibility version < 8.0\",\n                \"https://www.elastic.co/guide/en/elasticsearch/reference/current/migrating-8.0.html#breaking-changes-8.0\",\n                \"This index has version: \" + currentCompatibilityVersion.toReleaseVersion(),\n                false,\n                Collections.singletonMap(\"reindex_required\", true)\n            );\n        }\n        return null;\n    }\n\n    private static boolean isNotDataStreamIndex(IndexMetadata indexMetadata, ClusterState clusterState) {\n        return clusterState.metadata().findDataStreams(indexMetadata.getIndex().getName()).isEmpty();\n    }\n\n    static DeprecationIssue translogRetentionSettingCheck(IndexMetadata indexMetadata, ClusterState clusterState) {\n        final boolean softDeletesEnabled = IndexSettings.INDEX_SOFT_DELETES_SETTING.get(indexMetadata.getSettings());\n        if (softDeletesEnabled) {\n            if (IndexSettings.INDEX_TRANSLOG_RETENTION_SIZE_SETTING.exists(indexMetadata.getSettings())\n                || IndexSettings.INDEX_TRANSLOG_RETENTION_AGE_SETTING.exists(indexMetadata.getSettings())) {\n                List<String> settingKeys = new ArrayList<>();\n                if (IndexSettings.INDEX_TRANSLOG_RETENTION_SIZE_SETTING.exists(indexMetadata.getSettings())) {\n                    settingKeys.add(IndexSettings.INDEX_TRANSLOG_RETENTION_SIZE_SETTING.getKey());\n                }\n                if (IndexSettings.INDEX_TRANSLOG_RETENTION_AGE_SETTING.exists(indexMetadata.getSettings())) {\n                    settingKeys.add(IndexSettings.INDEX_TRANSLOG_RETENTION_AGE_SETTING.getKey());\n                }\n                Map<String, Object> meta = DeprecationIssue.createMetaMapForRemovableSettings(settingKeys);\n                return new DeprecationIssue(",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java",
+        "target_method": null,
+        "start_line": 121,
+        "end_line": 121,
+        "code_snippet": "            actionFilters,\n            ReindexDataStreamIndexAction.Request::new,\n            transportService.getThreadPool().executor(ThreadPool.Names.GENERIC)\n        );\n        this.clusterService = clusterService;\n        this.client = client;\n    }\n\n    @Override\n    protected void doExecute(\n        Task task,\n        ReindexDataStreamIndexAction.Request request,\n        ActionListener<ReindexDataStreamIndexAction.Response> listener\n    ) {\n        var sourceIndexName = request.getSourceIndex();\n        var destIndexName = generateDestIndexName(sourceIndexName);\n        TaskId taskId = new TaskId(clusterService.localNode().getId(), task.getId());\n        IndexMetadata sourceIndex = clusterService.state().getMetadata().index(sourceIndexName);\n        Settings settingsBefore = sourceIndex.getSettings();\n\n        var hasOldVersion = DeprecatedIndexPredicate.getReindexRequiredPredicate(clusterService.state().metadata());\n        if (hasOldVersion.test(sourceIndex.getIndex()) == false) {\n            logger.warn(\n                \"Migrating index [{}] with version [{}] is unnecessary as its version is not before [{}]\",\n                sourceIndexName,\n                sourceIndex.getCreationVersion(),\n                DeprecatedIndexPredicate.MINIMUM_WRITEABLE_VERSION_AFTER_UPGRADE\n            );\n        }\n\n        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a read block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {\n            var errorMessage = String.format(Locale.ROOT, \"Cannot reindex index [%s] which has a metadata block.\", destIndexName);\n            listener.onFailure(new ElasticsearchException(errorMessage));\n            return;\n        }\n",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamTransportAction.java",
+        "target_method": null,
+        "start_line": 71,
+        "end_line": 71,
+        "code_snippet": "            transportService,\n            actionFilters,\n            ReindexDataStreamRequest::new,\n            transportService.getThreadPool().executor(ThreadPool.Names.GENERIC)\n        );\n        this.transportService = transportService;\n        this.persistentTasksService = persistentTasksService;\n        this.clusterService = clusterService;\n    }\n\n    @Override\n    protected void doExecute(Task task, ReindexDataStreamRequest request, ActionListener<AcknowledgedResponse> listener) {\n        String sourceDataStreamName = request.getSourceDataStream();\n        Metadata metadata = clusterService.state().metadata();\n        DataStream dataStream = metadata.dataStreams().get(sourceDataStreamName);\n        if (dataStream == null) {\n            listener.onFailure(new ResourceNotFoundException(\"Data stream named [{}] does not exist\", sourceDataStreamName));\n            return;\n        }\n        int totalIndices = dataStream.getIndices().size();\n        int totalIndicesToBeUpgraded = (int) dataStream.getIndices().stream().filter(getReindexRequiredPredicate(metadata)).count();\n        ReindexDataStreamTaskParams params = new ReindexDataStreamTaskParams(\n            sourceDataStreamName,\n            transportService.getThreadPool().absoluteTimeInMillis(),\n            totalIndices,\n            totalIndicesToBeUpgraded,\n            ClientHelper.getPersistableSafeSecurityHeaders(transportService.getThreadPool().getThreadContext(), clusterService.state())\n        );\n        String persistentTaskId = getPersistentTaskId(sourceDataStreamName);\n        persistentTasksService.sendStartRequest(\n            persistentTaskId,\n            ReindexDataStreamTask.TASK_NAME,\n            params,\n            null,\n            ActionListener.wrap(startedTask -> listener.onResponse(AcknowledgedResponse.TRUE), listener::onFailure)\n        );\n    }\n\n    private String getPersistentTaskId(String dataStreamName) throws ResourceAlreadyExistsException {\n        return TASK_ID_PREFIX + dataStreamName;\n    }",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java",
+        "target_method": null,
+        "start_line": 113,
+        "end_line": 113,
+        "code_snippet": "        );\n    }\n\n    @Override\n    protected void nodeOperation(\n        AllocatedPersistentTask task,\n        ReindexDataStreamTaskParams params,\n        PersistentTaskState persistentTaskState\n    ) {\n        ReindexDataStreamPersistentTaskState state = (ReindexDataStreamPersistentTaskState) persistentTaskState;\n        String sourceDataStream = params.getSourceDataStream();\n        TaskId taskId = new TaskId(clusterService.localNode().getId(), task.getId());\n        GetDataStreamAction.Request request = new GetDataStreamAction.Request(TimeValue.MAX_VALUE, new String[] { sourceDataStream });\n        request.setParentTask(taskId);\n        assert task instanceof ReindexDataStreamTask;\n        final ReindexDataStreamTask reindexDataStreamTask = (ReindexDataStreamTask) task;\n        client.execute(GetDataStreamAction.INSTANCE, request, ActionListener.wrap(response -> {\n            List<GetDataStreamAction.Response.DataStreamInfo> dataStreamInfos = response.getDataStreams();\n            if (dataStreamInfos.size() == 1) {\n                DataStream dataStream = dataStreamInfos.get(0).getDataStream();\n                if (getReindexRequiredPredicate(clusterService.state().metadata()).test(dataStream.getWriteIndex())) {\n                    RolloverRequest rolloverRequest = new RolloverRequest(sourceDataStream, null);\n                    rolloverRequest.setParentTask(taskId);\n                    client.execute(\n                        RolloverAction.INSTANCE,\n                        rolloverRequest,\n                        ActionListener.wrap(\n                            rolloverResponse -> reindexIndices(\n                                dataStream,\n                                dataStream.getIndices().size() + 1,\n                                reindexDataStreamTask,\n                                params,\n                                state,\n                                sourceDataStream,\n                                taskId\n                            ),\n                            e -> completeFailedPersistentTask(reindexDataStreamTask, state, e)\n                        )\n                    );\n                } else {\n                    reindexIndices(",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/task/ReindexDataStreamPersistentTaskExecutor.java",
+        "target_method": null,
+        "start_line": 159,
+        "end_line": 159,
+        "code_snippet": "                        sourceDataStream,\n                        taskId\n                    );\n                }\n            } else {\n                completeFailedPersistentTask(reindexDataStreamTask, state, new ElasticsearchException(\"data stream does not exist\"));\n            }\n        }, exception -> completeFailedPersistentTask(reindexDataStreamTask, state, exception)));\n    }\n\n    private void reindexIndices(\n        DataStream dataStream,\n        int totalIndicesInDataStream,\n        ReindexDataStreamTask reindexDataStreamTask,\n        ReindexDataStreamTaskParams params,\n        ReindexDataStreamPersistentTaskState state,\n        String sourceDataStream,\n        TaskId parentTaskId\n    ) {\n        List<Index> indices = dataStream.getIndices();\n        List<Index> indicesToBeReindexed = indices.stream().filter(getReindexRequiredPredicate(clusterService.state().metadata())).toList();\n        final ReindexDataStreamPersistentTaskState updatedState;\n        if (params.totalIndices() != totalIndicesInDataStream\n            || params.totalIndicesToBeUpgraded() != indicesToBeReindexed.size()\n            || (state != null\n                && (state.totalIndices() != null\n                    && state.totalIndicesToBeUpgraded() != null\n                    && (state.totalIndices() != totalIndicesInDataStream\n                        || state.totalIndicesToBeUpgraded() != indicesToBeReindexed.size())))) {\n            updatedState = new ReindexDataStreamPersistentTaskState(\n                totalIndicesInDataStream,\n                indicesToBeReindexed.size(),\n                state == null ? null : state.completionTime()\n            );\n            reindexDataStreamTask.updatePersistentTaskState(updatedState, ActionListener.noop());\n        } else {\n            updatedState = state;\n        }\n        reindexDataStreamTask.setPendingIndicesCount(indicesToBeReindexed.size());\n        // The CountDownActionListener is 1 more than the number of indices so that the count is not 0 if we have no indices\n        CountDownActionListener listener = new CountDownActionListener(indicesToBeReindexed.size() + 1, ActionListener.wrap(response1 -> {",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
+  }
+}

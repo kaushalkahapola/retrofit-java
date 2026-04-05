@@ -27,6 +27,34 @@ from utils.file_operations import edit_file, extract_hunk_context_from_diff
 # Load environment variables from .env file
 load_dotenv()
 
+# Elasticsearch modules where targeted `--tests Class` against standard Gradle
+# verification tasks is not supported (BWC matrix-only QA, etc.). The harness
+# still runs other co-detected targets (e.g. plugin internalClusterTest).
+ELASTICSEARCH_HARNESS_EXCLUDED_TEST_MODULES: frozenset[str] = frozenset(
+    {
+        "x-pack/qa/rolling-upgrade",
+    }
+)
+
+
+def _filter_elasticsearch_harness_test_targets(
+    test_targets: List[str],
+) -> tuple[list[str], list[str]]:
+    kept: list[str] = []
+    skipped: list[str] = []
+    for t in test_targets or []:
+        s = str(t or "").strip()
+        if not s or ":" not in s:
+            if s:
+                kept.append(s)
+            continue
+        mod, _ = s.split(":", 1)
+        if mod in ELASTICSEARCH_HARNESS_EXCLUDED_TEST_MODULES:
+            skipped.append(s)
+        else:
+            kept.append(s)
+    return kept, skipped
+
 
 def _resolve_valid_java_home() -> str | None:
     """
@@ -93,6 +121,69 @@ def _clean_spotbugs_output(output: str) -> str:
             )
 
     return result.strip() if result.strip() else "SpotBugs completed with no findings."
+
+
+def classify_test_failure_signal(
+    *,
+    output_text: str,
+    transition_reason: str = "",
+    success: bool | None = None,
+    compile_error: bool = False,
+) -> Dict[str, Any]:
+    """Classify test-stage failures into code vs infrastructure categories."""
+    out = str(output_text or "")
+    out_lower = out.lower()
+    reason = str(transition_reason or "")
+    reason_lower = reason.lower()
+
+    if (
+        "retrofittest_runner_config_unresolved" in out_lower
+        or "cannot locate tasks that match" in out_lower
+        or "task 'test' is ambiguous" in out_lower
+    ):
+        return {
+            "category": "test_runner_config",
+            "infrastructure_failure": True,
+            "infrastructure_inconclusive": True,
+            "reason": "Gradle test task resolution failed (ambiguous/missing task).",
+        }
+
+    if "inconclusive: relevant target tests were not observed" in reason_lower:
+        return {
+            "category": "inconclusive_tests_observed_none",
+            "infrastructure_failure": True,
+            "infrastructure_inconclusive": True,
+            "reason": "Relevant target tests were not observed in baseline/patched runs.",
+        }
+
+    if compile_error:
+        return {
+            "category": "context_mismatch",
+            "infrastructure_failure": False,
+            "infrastructure_inconclusive": False,
+            "reason": "Test execution failed due to compilation errors.",
+        }
+
+    if success is False and (
+        "connection refused" in out_lower
+        or "timed out" in out_lower
+        or "daemon disappeared" in out_lower
+        or "could not resolve" in out_lower
+        and "dependency" in out_lower
+    ):
+        return {
+            "category": "test_infrastructure",
+            "infrastructure_failure": True,
+            "infrastructure_inconclusive": True,
+            "reason": "Test execution failed due to infrastructure/runtime issues.",
+        }
+
+    return {
+        "category": "unknown",
+        "infrastructure_failure": False,
+        "infrastructure_inconclusive": False,
+        "reason": "No infrastructure-specific signal detected.",
+    }
 
 
 class ValidationToolkit:
@@ -610,6 +701,14 @@ class ValidationToolkit:
         source_modules = sorted(set(parsed.get("source_modules") or []))
         all_modules = sorted(set(parsed.get("all_modules") or []))
 
+        if normalized_project == "elasticsearch" and test_targets:
+            kept, skipped = _filter_elasticsearch_harness_test_targets(test_targets)
+            test_targets = sorted(set(kept))
+            if skipped:
+                parsed = dict(parsed)
+                prev = set(parsed.get("harness_excluded_test_targets") or [])
+                parsed["harness_excluded_test_targets"] = sorted(prev | set(skipped))
+
         return {
             "test_targets": test_targets,
             "source_modules": source_modules,
@@ -618,7 +717,7 @@ class ValidationToolkit:
         }
 
     def detect_relevant_test_targets_from_changed_files(
-        self, changed_files: List[str]
+        self, changed_files: List[str], *, project: str = ""
     ) -> Dict[str, Any]:
         """
         Infer relevant tests/modules directly from changed file paths.
@@ -681,14 +780,23 @@ class ValidationToolkit:
                 except Exception:
                     continue
 
+        raw: Dict[str, Any] = {
+            "source": "changed_files",
+            "changed_files": sorted(set(changed_files or [])),
+        }
+        out_targets = sorted(test_targets)
+        np = (project or "").strip().lower()
+        if np == "elasticsearch" and out_targets:
+            kept, skipped = _filter_elasticsearch_harness_test_targets(out_targets)
+            out_targets = sorted(set(kept))
+            if skipped:
+                raw["harness_excluded_test_targets"] = sorted(set(skipped))
+
         return {
-            "test_targets": sorted(test_targets),
+            "test_targets": out_targets,
             "source_modules": sorted(source_modules),
             "all_modules": sorted(all_modules),
-            "raw": {
-                "source": "changed_files",
-                "changed_files": sorted(set(changed_files or [])),
-            },
+            "raw": raw,
         }
 
     def run_relevant_tests(
@@ -705,6 +813,21 @@ class ValidationToolkit:
         info = target_info or self.detect_relevant_test_targets(project)
         test_targets = list(info.get("test_targets") or [])
         source_modules = list(info.get("source_modules") or [])
+
+        normalized_project = (
+            project or ""
+        ).strip().lower() or self._detect_project_name()
+
+        if normalized_project == "elasticsearch" and test_targets:
+            kept, skipped = _filter_elasticsearch_harness_test_targets(test_targets)
+            test_targets = kept
+            if skipped:
+                raw_info = info.get("raw")
+                if isinstance(raw_info, dict):
+                    prev = set(raw_info.get("harness_excluded_test_targets") or [])
+                    raw_info["harness_excluded_test_targets"] = sorted(
+                        prev | set(skipped)
+                    )
 
         if not test_targets and not source_modules:
             return {
@@ -725,9 +848,6 @@ class ValidationToolkit:
 
         self._clear_previous_junit_reports()
 
-        normalized_project = (
-            project or ""
-        ).strip().lower() or self._detect_project_name()
         if self._is_known_project_with_helper(normalized_project):
             helper_script = os.path.join(
                 self._get_project_helper_dir(normalized_project), "run_tests.sh"

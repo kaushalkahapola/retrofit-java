@@ -44,6 +44,7 @@ elif [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ]; then
         local class_file
         class_file="${cls//./\/}.java"
 
+        # 1) Prefer concrete paths from TEST_TARGET_FILES (accurate for source set).
         local file
         for file in "${TEST_TARGET_FILES_LIST[@]}"; do
             [ -z "${file}" ] && continue
@@ -52,39 +53,78 @@ elif [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ]; then
                     echo "internalClusterTest"
                     return
                 fi
-                if [[ "${file}" == */src/test/* ]]; then
+                if [[ "${file}" == */src/javaRestTest/* ]]; then
+                    echo "javaRestTest"
+                    return
+                fi
+                if [[ "${file}" == */src/yamlRestTest/* ]]; then
+                    echo "yamlRestTest"
+                    return
+                fi
+                if [[ "${file}" == */src/test/java/* ]]; then
+                    if [[ "${module}" == x-pack/qa/* ]] || [[ "${module}" == qa/* ]]; then
+                        # Under ES QA, bare `test` is often ambiguous; javaRestTest is
+                        # the usual entry point for src/test/java REST-style ITs.
+                        echo "javaRestTest,internalClusterTest"
+                        return
+                    fi
+                    # Standard unit tests live under src/test/java. Do not append
+                    # internalClusterTest here: many plugins (e.g. x-pack/plugin/deprecation)
+                    # do not register that task, and Gradle fails the whole invocation
+                    # if any listed task is missing.
                     echo "test"
                     return
                 fi
             fi
         done
 
-        # Unknown source-set mapping: run both tasks to avoid silently skipping
-        # internalClusterTest classes when only class names are provided.
-        echo "test,internalClusterTest"
+        # 2) No file hint: avoid the old x-pack/qa -> internalClusterTest-only rule
+        #    (wrong for e.g. rolling-upgrade, which has no internalClusterTest task).
+        if [[ "${module}" == x-pack/qa/* ]] || [[ "${module}" == qa/* ]]; then
+            echo "javaRestTest,internalClusterTest"
+            return
+        fi
+
+        echo "internalClusterTest,test"
     }
 
-    for target in ${TEST_TARGETS}; do
-        # target is "module:FullClassName"
-        module="${target%%:*}"
-        cls="${target#*:}"
-        # Convert Maven-style module path (with /) to Gradle project path (:).
-        gradle_module=":${module//\//:}"
-        # Strip leading double-colon if module starts with /.
-        gradle_module="${gradle_module//::/:}"
-        test_tasks_csv="$(resolve_test_tasks "${module}" "${cls}")"
-        IFS=',' read -ra TEST_TASKS <<< "${test_tasks_csv}"
-        for test_task in "${TEST_TASKS[@]}"; do
-            [ -z "${test_task}" ] && continue
-            if [ -n "${GRADLE_ARGS}" ]; then
-                GRADLE_ARGS="${GRADLE_ARGS} ${gradle_module}:${test_task}"
+    append_target_args() {
+        local mode="$1"
+        local out=""
+        for target in ${TEST_TARGETS}; do
+            module="${target%%:*}"
+            cls="${target#*:}"
+            gradle_module=":${module//\//:}"
+            gradle_module="${gradle_module//::/:}"
+
+            if [ "${mode}" == "primary" ]; then
+                test_tasks_csv="$(resolve_test_tasks "${module}" "${cls}")"
             else
-                GRADLE_ARGS="${gradle_module}:${test_task}"
+                # Auto-fix retry: never use bare `test` first on ES QA modules — it is
+                # frequently ambiguous (Gradle abbrev expansion). Prefer flipping
+                # javaRestTest vs internalClusterTest instead.
+                if [[ "${module}" == x-pack/qa/* ]] || [[ "${module}" == qa/* ]]; then
+                    test_tasks_csv="internalClusterTest,javaRestTest"
+                else
+                    test_tasks_csv="test,internalClusterTest"
+                fi
             fi
-            GRADLE_ARGS="${GRADLE_ARGS} --tests \"${cls}\""
+
+            IFS=',' read -ra TEST_TASKS <<< "${test_tasks_csv}"
+            for test_task in "${TEST_TASKS[@]}"; do
+                [ -z "${test_task}" ] && continue
+                if [ -n "${out}" ]; then
+                    out="${out} ${gradle_module}:${test_task}"
+                else
+                    out="${gradle_module}:${test_task}"
+                fi
+                out="${out} --tests \"${cls}\""
+            done
         done
-    done
-    GRADLE_ARGS="${GRADLE_ARGS} --no-daemon -Dbuild.docker=false -DfailIfNoTests=false"
+        echo "${out} --no-daemon -Dbuild.docker=false -DfailIfNoTests=false"
+    }
+
+    GRADLE_ARGS="$(append_target_args primary)"
 elif [ -n "${TEST_MODULES:-}" ]; then
     # Module-level fallback — run all tests in the module.
     GRADLE_ARGS=""
@@ -126,26 +166,68 @@ ${DOCKER_CMD} run --rm -u root \
 GRADLE_CMD="./gradlew ${GRADLE_ARGS} --max-workers=${MAX_CPU} --project-cache-dir /tmp/gradle-project-cache"
 echo "--- Executing: ${GRADLE_CMD} ---"
 
-if ${DOCKER_CMD} run --rm \
-    --dns=8.8.8.8 \
-    -e HOME=/tmp \
-    -e XDG_CONFIG_HOME=/tmp \
-    -u "${HOST_UID}:${HOST_GID}" \
-    -v "gradle-cache-es:/home/gradle/.gradle/caches" \
-    -v "gradle-wrapper-es:/home/gradle/.gradle/wrapper" \
-    -v "${PROJECT_DIR}:/repo" \
-    -w /repo \
-    "${IMAGE_TAG}" \
-    bash -c "git config --global --add safe.directory /repo || true; \
-    export GRADLE_OPTS=\"\${GRADLE_OPTS:-} -XX:ActiveProcessorCount=${MAX_CPU}\"; \
-    mkdir -p /tmp/gradle-project-cache && \
-    ${GRADLE_CMD}; \
-    GRADLE_EXIT=\$?; \
-    echo '--- Test results are available in build/test-results/ ---'; \
-    exit \$GRADLE_EXIT"; then
+run_gradle_cmd() {
+    local cmd="$1"
+    local log_file="$2"
+    if [ -z "${log_file}" ]; then
+        log_file="/tmp/retrofit-es-tests.log"
+    fi
+
+    set +e
+    ${DOCKER_CMD} run --rm \
+        --dns=8.8.8.8 \
+        -e HOME=/tmp \
+        -e XDG_CONFIG_HOME=/tmp \
+        -u "${HOST_UID}:${HOST_GID}" \
+        -v "gradle-cache-es:/home/gradle/.gradle/caches" \
+        -v "gradle-wrapper-es:/home/gradle/.gradle/wrapper" \
+        -v "${PROJECT_DIR}:/repo" \
+        -w /repo \
+        "${IMAGE_TAG}" \
+        bash -c "git config --global --add safe.directory /repo || true; \
+        export GRADLE_OPTS=\"\${GRADLE_OPTS:-} -XX:ActiveProcessorCount=${MAX_CPU}\"; \
+        mkdir -p /tmp/gradle-project-cache && \
+        ${cmd}; \
+        GRADLE_EXIT=\$?; \
+        echo '--- Test results are available in build/test-results/ ---'; \
+        exit \$GRADLE_EXIT" 2>&1 | tee "${log_file}"
+    local rc=${PIPESTATUS[0]}
+    set -e
+    return ${rc}
+}
+
+is_task_resolution_failure() {
+    local log_file="$1"
+    [ -z "${log_file}" ] && return 1
+    [ ! -f "${log_file}" ] && return 1
+    if grep -Eiq "Cannot locate tasks that match|Task 'test' is ambiguous|Task '.+' is ambiguous" "${log_file}"; then
+        return 0
+    fi
+    return 1
+}
+
+PRIMARY_LOG="/tmp/retrofit-es-tests-primary.log"
+RETRY_LOG="/tmp/retrofit-es-tests-retry.log"
+
+if run_gradle_cmd "${GRADLE_CMD}" "${PRIMARY_LOG}"; then
     echo "✅ Tests Passed"
     exit 0
 else
     echo "❌ Tests Failed"
+
+    # One-time auto-fix rerun for ambiguous/missing task selection.
+    if [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ] && is_task_resolution_failure "${PRIMARY_LOG}"; then
+        RETRY_GRADLE_ARGS="$(append_target_args retry)"
+        RETRY_GRADLE_CMD="./gradlew ${RETRY_GRADLE_ARGS} --max-workers=${MAX_CPU} --project-cache-dir /tmp/gradle-project-cache"
+        echo "--- Auto-fix rerun (task remap): ${RETRY_GRADLE_CMD} ---"
+        if run_gradle_cmd "${RETRY_GRADLE_CMD}" "${RETRY_LOG}"; then
+            echo "✅ Tests Passed after task auto-fix rerun"
+            exit 0
+        fi
+        if is_task_resolution_failure "${RETRY_LOG}"; then
+            echo "RETROFITTEST_RUNNER_CONFIG_UNRESOLVED: Gradle test task resolution failed after one rerun"
+            exit 1
+        fi
+    fi
     exit 1
 fi

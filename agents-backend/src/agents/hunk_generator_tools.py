@@ -25,6 +25,10 @@ from typing import Any, Optional
 
 from langchain_core.tools import StructuredTool
 from agents.claw_file_editor import edit_file as claw_edit_file, verify_edit_output
+from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_line
+
+
+MAX_READ_FILE_WINDOW_RADIUS = 50
 
 
 class HunkGeneratorToolkit:
@@ -100,14 +104,15 @@ class HunkGeneratorToolkit:
             return f"ERROR: Cannot read file '{file_path}' in target repo."
 
         total = len(lines)
+        safe_radius = max(1, min(int(radius), MAX_READ_FILE_WINDOW_RADIUS))
         # Convert to 0-indexed for slicing
         center_0 = max(0, center_line - 1)
-        start_0 = max(0, center_0 - radius)
-        end_0 = min(total, center_0 + radius + 1)
+        start_0 = max(0, center_0 - safe_radius)
+        end_0 = min(total, center_0 + safe_radius + 1)
 
         out_parts: list[str] = [
             f"[read_file_window] {file_path}  (total lines: {total})",
-            f"Showing lines {start_0 + 1}-{end_0}  (center={center_line}):",
+            f"Showing lines {start_0 + 1}-{end_0}  (center={center_line}, radius={safe_radius}):",
             "",
         ]
         for i in range(start_0, end_0):
@@ -654,7 +659,7 @@ class HunkGeneratorToolkit:
                 )
             elif re.match(r"^(private|public|protected)\s+(static\s+)?(final\s+)?$", s):
                 issues.append(f"syntax_guard_failed: truncated declaration '{s}'")
-            elif s.endswith("=") and not s.endswith("=="):
+            elif should_flag_dangling_equals_on_added_line(s):
                 issues.append(
                     f"syntax_guard_failed: dangling assignment in added line '{s}'"
                 )

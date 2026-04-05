@@ -35,7 +35,12 @@ from graph import app
 from agents.context_analyzer import context_analyzer_node
 from agents.structural_locator import structural_locator_node
 from utils.patch_analyzer import PatchAnalyzer
-from utils.token_counter import has_tiktoken, resolve_model_name
+from utils.patch_complexity import classify_patch_complexity
+from utils.token_counter import (
+    aggregate_usage_from_messages,
+    has_tiktoken,
+    resolve_model_name,
+)
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -81,6 +86,35 @@ def _phase_output_file(
     return os.path.join(
         _patch_results_dir(project, patch_id), f"{phase_name}_{agent_name}.json"
     )
+
+
+def _save_generated_patch_artifacts(
+    project: str,
+    patch_id: str,
+    agent_only_patch_diff: str,
+    final_effective_patch_diff: str,
+) -> dict[str, str]:
+    """
+    Persist generated patch artifacts as standalone files for later inspection.
+    """
+    out_dir = _patch_results_dir(project, patch_id)
+    os.makedirs(out_dir, exist_ok=True)
+
+    agent_only_path = os.path.join(out_dir, "generated_patch_agent_only.patch")
+    final_effective_path = os.path.join(
+        out_dir, "generated_patch_final_effective.patch"
+    )
+
+    with open(agent_only_path, "w", encoding="utf-8") as f:
+        f.write((agent_only_patch_diff or "").strip() + "\n")
+
+    with open(final_effective_path, "w", encoding="utf-8") as f:
+        f.write((final_effective_patch_diff or "").strip() + "\n")
+
+    return {
+        "agent_only": agent_only_path,
+        "final_effective": final_effective_path,
+    }
 
 
 def is_phase_processed(
@@ -1518,31 +1552,44 @@ async def run_full_pipeline(
     ) -> None:
         exact_hit = False
 
-        if _consume_usage(
+        msgs = node_output.get("messages", []) if isinstance(node_output, dict) else []
+        agg = aggregate_usage_from_messages(msgs)
+        if agg.get("input_tokens") or agg.get("output_tokens"):
+            if _consume_usage(
+                node_name,
+                {
+                    "input_tokens": agg.get("input_tokens", 0),
+                    "output_tokens": agg.get("output_tokens", 0),
+                    "total_tokens": agg.get("total_tokens", 0),
+                },
+                "msg.aggregate_usage_from_messages",
+            ):
+                exact_hit = True
+        elif _consume_usage(
             node_name, node_output.get("token_usage"), "node.token_usage"
         ):
             exact_hit = True
 
-        msgs = node_output.get("messages", []) if isinstance(node_output, dict) else []
-        for m in msgs:
-            md = getattr(m, "response_metadata", {}) or {}
-            if isinstance(md, dict):
-                if _consume_usage(
-                    node_name,
-                    md.get("token_usage"),
-                    "msg.response_metadata.token_usage",
-                ):
-                    exact_hit = True
-                if _consume_usage(
-                    node_name,
-                    md.get("usage"),
-                    "msg.response_metadata.usage",
-                ):
-                    exact_hit = True
+        if not exact_hit:
+            for m in msgs:
+                md = getattr(m, "response_metadata", {}) or {}
+                if isinstance(md, dict):
+                    if _consume_usage(
+                        node_name,
+                        md.get("token_usage"),
+                        "msg.response_metadata.token_usage",
+                    ):
+                        exact_hit = True
+                    if _consume_usage(
+                        node_name,
+                        md.get("usage"),
+                        "msg.response_metadata.usage",
+                    ):
+                        exact_hit = True
 
-            um = getattr(m, "usage_metadata", {}) or {}
-            if _consume_usage(node_name, um, "msg.usage_metadata"):
-                exact_hit = True
+                um = getattr(m, "usage_metadata", {}) or {}
+                if _consume_usage(node_name, um, "msg.usage_metadata"):
+                    exact_hit = True
 
         if not exact_hit and msgs:
             in_chars = 0
@@ -1652,8 +1699,32 @@ async def run_full_pipeline(
             "evaluation_full_workflow": True,
             "with_test_changes": False,
             "developer_auxiliary_hunks": developer_aux_hunks,
+            "developer_patch_diff": developer_patch_diff,
             "use_phase_0_cache": True,
         }
+
+        # Always pre-compute deterministic complexity so cached Phase 0 runs do not
+        # lose routing context and accidentally default into REWRITE.
+        try:
+            complexity_info = classify_patch_complexity(
+                patch_diff=agent_eligible_patch,
+                target_repo_path=target_repo_path,
+                with_test_changes=False,
+            )
+            base_inputs["patch_complexity"] = str(
+                complexity_info.get("complexity") or "REWRITE"
+            )
+            base_inputs["complexity_reason"] = str(
+                complexity_info.get("reason") or "unknown"
+            )
+            base_inputs["complexity_details"] = complexity_info.get("details") or {}
+        except Exception as e:
+            print(
+                f"[{project}/{patch_id}] Warning: complexity preclassification failed: {e}"
+            )
+            base_inputs["patch_complexity"] = "REWRITE"
+            base_inputs["complexity_reason"] = "preclassification_error"
+            base_inputs["complexity_details"] = {}
 
         if run_mode == RUN_MODE_PHASE1:
             _append_runtime_log("Running mode=phase1")
@@ -1962,6 +2033,14 @@ async def run_full_pipeline(
             ]
         )
         final_generated_patch_diff = comparison.get("generated_patch_diff", "")
+
+        generated_patch_files = _save_generated_patch_artifacts(
+            project=project,
+            patch_id=patch_id,
+            agent_only_patch_diff=agent_only_generated_patch_diff,
+            final_effective_patch_diff=final_generated_patch_diff,
+        )
+        results["generated_patch_files"] = generated_patch_files
 
         agent_hunk_markdown = _build_hunk_comparison_markdown(
             developer_patch_diff=developer_patch_diff,

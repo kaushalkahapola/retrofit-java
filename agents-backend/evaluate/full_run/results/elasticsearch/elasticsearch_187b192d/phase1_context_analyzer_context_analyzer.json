@@ -1,0 +1,76 @@
+{
+  "semantic_blueprint": {
+    "root_cause_hypothesis": "Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.",
+    "fix_logic": "Apply each source hunk with target-verified context and symbol consistency while preserving behavior.",
+    "dependent_apis": [
+      "Response"
+    ],
+    "patch_intent_summary": "Backport patch behavior to target branch with minimal, context-correct edits.",
+    "hunk_chain": [
+      {
+        "hunk_index": 1,
+        "file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "summary": "Adds logic (+3 lines).",
+        "role": "declaration",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 1
+      },
+      {
+        "hunk_index": 2,
+        "file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "summary": "Adds logic (+1 lines).",
+        "role": "declaration",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 2
+      },
+      {
+        "hunk_index": 3,
+        "file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "summary": "Modifies logic (+1/-1 lines).",
+        "role": "declaration",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 3
+      },
+      {
+        "hunk_index": 4,
+        "file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "summary": "Modifies logic (+8/-2 lines).",
+        "role": "guard",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 4
+      },
+      {
+        "hunk_index": 5,
+        "file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+        "summary": "Modifies logic (+9/-6 lines).",
+        "role": "core_fix",
+        "connects_to_next": "",
+        "global_index": 5
+      },
+      {
+        "hunk_index": 1,
+        "file": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+        "summary": "Adds logic (+1 lines).",
+        "role": "declaration",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 6
+      },
+      {
+        "hunk_index": 2,
+        "file": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+        "summary": "Adds logic (+2 lines).",
+        "role": "guard",
+        "connects_to_next": "",
+        "global_index": 7
+      }
+    ]
+  },
+  "patch_diff": "diff --git a/a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java b/b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java\nindex 0000000..0000000 100644\n--- a/a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java\n+++ b/b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java\n@@ -13,9 +13,12 @@\n import org.elasticsearch.action.ActionListener;\n import org.elasticsearch.action.ActionRequestValidationException;\n import org.elasticsearch.action.ActionResponse;\n+import org.elasticsearch.action.ActionRunnable;\n import org.elasticsearch.action.ActionType;\n+import org.elasticsearch.action.SingleResultDeduplicator;\n import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;\n import org.elasticsearch.action.support.ActionFilters;\n+import org.elasticsearch.action.support.SubscribableListener;\n import org.elasticsearch.action.support.master.MasterNodeReadRequest;\n import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;\n import org.elasticsearch.cluster.ClusterState;\n@@ -28,6 +31,7 @@\n import org.elasticsearch.cluster.service.ClusterService;\n import org.elasticsearch.common.io.stream.StreamInput;\n import org.elasticsearch.common.io.stream.StreamOutput;\n+import org.elasticsearch.common.util.concurrent.EsExecutors;\n import org.elasticsearch.core.Nullable;\n import org.elasticsearch.core.TimeValue;\n import org.elasticsearch.injection.guice.Inject;\n@@ -46,7 +50,7 @@\n \n     public static final ActionType<TransportGetAllocationStatsAction.Response> TYPE = new ActionType<>(\"cluster:monitor/allocation/stats\");\n \n-    private final AllocationStatsService allocationStatsService;\n+    private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;\n     private final DiskThresholdSettings diskThresholdSettings;\n \n     @Inject\n@@ -66,9 +70,15 @@\n             actionFilters,\n             TransportGetAllocationStatsAction.Request::new,\n             TransportGetAllocationStatsAction.Response::new,\n-            threadPool.executor(ThreadPool.Names.MANAGEMENT)\n+            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return\n+            // very cheaply.\n+            EsExecutors.DIRECT_EXECUTOR_SERVICE\n+        );\n+        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);\n+        this.allocationStatsSupplier = new SingleResultDeduplicator<>(\n+            threadPool.getThreadContext(),\n+            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))\n         );\n-        this.allocationStatsService = allocationStatsService;\n         this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());\n     }\n \n@@ -84,12 +94,15 @@\n \n     @Override\n     protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {\n-        listener.onResponse(\n-            new Response(\n-                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),\n-                request.metrics().contains(Metric.FS) ? diskThresholdSettings : null\n-            )\n-        );\n+        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool\n+\n+        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)\n+            ? SubscribableListener.newForked(allocationStatsSupplier::execute)\n+            : SubscribableListener.newSucceeded(Map.of());\n+\n+        allocationStatsStep.andThenApply(\n+            allocationStats -> new Response(allocationStats, request.metrics().contains(Metric.FS) ? diskThresholdSettings : null)\n+        ).addListener(listener);\n     }\n \n     @Override\ndiff --git a/a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java b/b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java\nindex 0000000..0000000 100644\n--- a/a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java\n+++ b/b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java\n@@ -14,6 +14,7 @@\n import org.elasticsearch.cluster.routing.allocation.allocator.DesiredBalanceShardsAllocator;\n import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;\n import org.elasticsearch.cluster.service.ClusterService;\n+import org.elasticsearch.transport.Transports;\n \n import java.util.Map;\n import java.util.function.Supplier;\n@@ -46,6 +47,8 @@\n      * Returns a map of node IDs to node allocation stats.\n      */\n     public Map<String, NodeAllocationStats> stats() {\n+        assert Transports.assertNotTransportThread(\"too expensive for a transport worker\");\n+\n         var clusterState = clusterService.state();\n         var nodesStatsAndWeights = nodeAllocationStatsAndWeightsCalculator.nodesAllocationStatsAndWeights(\n             clusterState.metadata(),\n",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "deterministic_no_llm"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "hunk_generation_plan": {
+    "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecker.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecker.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.index.IndexModule;",
+        "new_string": "import org.elasticsearch.core.Strings;\nimport org.elasticsearch.index.IndexModule;\nimport org.elasticsearch.index.IndexModule;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "Insert import as in mainline, but build fails due to missing symbols, indicating surrounding context differs and additional changes needed|type_v_subagent_repaired|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "import org.elasticsearch.common.TriFunction;",
+          "import org.elasticsearch.common.time.DateFormatter;",
+          "import org.elasticsearch.common.time.LegacyFormatNames;"
+        ],
+        "surround_after_3": [
+          "import org.elasticsearch.index.IndexSettings;",
+          "import org.elasticsearch.index.IndexVersion;",
+          "import org.elasticsearch.index.engine.frozen.FrozenEngine;"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [
+          "Detected target imports include 'import org.elasticsearch.index.engine.frozen.FrozenEngine;' which is not in mainline surrounding context",
+          "Mainline after imports include 'import org.elasticsearch.xpack.core.transform.transforms.TransformConfig;' which is missing in target",
+          "Compiler errors indicate 'cannot find symbol' errors likely due to missing or different imports"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 16,
+          "target_declared_methods_count": 17,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ]
+  },
+  "last_plan_signature": "801af0976dd0bb3fd9f41d711c6c7fc0f967043d63fc84fd7e9cd035c4c0d1e1",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": true,
+  "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
+  "token_usage": {
+    "input_tokens": 5310,
+    "output_tokens": 446,
+    "total_tokens": 5756,
+    "estimated": true,
+    "sources": [
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken"
+    ]
+  }
+}

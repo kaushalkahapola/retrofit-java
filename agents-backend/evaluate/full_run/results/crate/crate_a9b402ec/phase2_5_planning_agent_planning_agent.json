@@ -1,0 +1,475 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.common.inject.Inject;",
+        "new_string": "import org.elasticsearch.cluster.SnapshotsInProgress;\nimport org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.inject.Inject;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import org.apache.logging.log4j.LogManager;",
+          "import org.apache.logging.log4j.Logger;",
+          "import org.elasticsearch.Version;"
+        ],
+        "surround_after_3": [
+          "import org.elasticsearch.common.inject.Singleton;",
+          "import org.elasticsearch.repositories.RepositoriesService;",
+          "import org.elasticsearch.repositories.Repository;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 3,
+          "target_declared_methods_count": 3,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+        "operation_index": 1,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.repositories.RepositoriesService;",
+        "new_string": "import org.elasticsearch.repositories.IndexId;\nimport org.elasticsearch.repositories.RepositoriesService;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import org.elasticsearch.Version;",
+          "import org.elasticsearch.common.inject.Inject;",
+          "import org.elasticsearch.common.inject.Singleton;"
+        ],
+        "surround_after_3": [
+          "import org.elasticsearch.repositories.Repository;",
+          "import org.elasticsearch.snapshots.SnapshotException;",
+          "import org.elasticsearch.snapshots.SnapshotId;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 3,
+          "target_declared_methods_count": 3,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import org.jetbrains.annotations.VisibleForTesting;",
+        "new_string": "import org.elasticsearch.snapshots.SnapshotsService;\nimport org.jetbrains.annotations.Nullable;\nimport org.jetbrains.annotations.VisibleForTesting;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import org.elasticsearch.snapshots.SnapshotShardFailure;",
+          "import org.elasticsearch.snapshots.SnapshotState;",
+          ""
+        ],
+        "surround_after_3": [
+          "import io.crate.common.collections.Lists;",
+          "import io.crate.common.concurrent.CompletableFutures;",
+          "import io.crate.common.exceptions.Exceptions;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 3,
+          "target_declared_methods_count": 3,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "    @VisibleForTesting",
+        "new_string": "    private final ClusterService clusterService;\n    @VisibleForTesting",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        this(repositoriesService::getRepositoriesList);",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "    SysSnapshots(Supplier<Collection<Repository>> getRepositories) {",
+          "        this.getRepositories = getRepositories;",
+          "    }"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private final ClusterService clusterService;",
+          "public SysSnapshots(RepositoriesService repositoriesService, ClusterService clusterService) {",
+          "this(repositoriesService::getRepositoriesList, clusterService);",
+          "SysSnapshots(Supplier<Collection<Repository>> getRepositories, ClusterService clusterService) {",
+          "this.clusterService = clusterService;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 3,
+          "target_declared_methods_count": 3,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "\n    @Inject\n    public SysSnapshots(RepositoriesService repositoriesService) {\n        this(repositoriesService::getRepositoriesList);\n    }",
+        "new_string": "\n    @Inject\n    public SysSnapshots(RepositoriesService repositoriesService, ClusterService clusterService) {\n        this(repositoriesService::getRepositoriesList, clusterService);\n    }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "",
+          "    private static final Logger LOGGER = LogManager.getLogger(SysSnapshots.class);",
+          "    private final Supplier<Collection<Repository>> getRepositories;"
+        ],
+        "surround_after_3": [
+          "",
+          "    @VisibleForTesting",
+          "    SysSnapshots(Supplier<Collection<Repository>> getRepositories) {"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private final ClusterService clusterService;",
+          "public SysSnapshots(RepositoriesService repositoriesService, ClusterService clusterService) {",
+          "this(repositoriesService::getRepositoriesList, clusterService);",
+          "SysSnapshots(Supplier<Collection<Repository>> getRepositories, ClusterService clusterService) {",
+          "this.clusterService = clusterService;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 3,
+          "target_declared_methods_count": 3,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+        "operation_index": 2,
+        "edit_type": "replace",
+        "old_string": "\n    @VisibleForTesting\n    SysSnapshots(Supplier<Collection<Repository>> getRepositories) {\n        this.getRepositories = getRepositories;",
+        "new_string": "\n    @VisibleForTesting\n    SysSnapshots(Supplier<Collection<Repository>> getRepositories, ClusterService clusterService) {\n        this.getRepositories = getRepositories;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "    public SysSnapshots(RepositoriesService repositoriesService) {",
+          "        this(repositoriesService::getRepositoriesList);",
+          "    }"
+        ],
+        "surround_after_3": [
+          "    }",
+          "",
+          "    public CompletableFuture<Iterable<SysSnapshot>> currentSnapshots() {"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private final ClusterService clusterService;",
+          "public SysSnapshots(RepositoriesService repositoriesService, ClusterService clusterService) {",
+          "this(repositoriesService::getRepositoriesList, clusterService);",
+          "SysSnapshots(Supplier<Collection<Repository>> getRepositories, ClusterService clusterService) {",
+          "this.clusterService = clusterService;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 3,
+          "target_declared_methods_count": 3,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+        "operation_index": 3,
+        "edit_type": "insert_before",
+        "old_string": "    public CompletableFuture<Iterable<SysSnapshot>> currentSnapshots() {",
+        "new_string": "        this.clusterService = clusterService;\n    public CompletableFuture<Iterable<SysSnapshot>> currentSnapshots() {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        this.getRepositories = getRepositories;",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "        ArrayList<CompletableFuture<List<SysSnapshot>>> sysSnapshots = new ArrayList<>();",
+          "        for (Repository repository : getRepositories.get()) {",
+          "            var futureSnapshots = repository.getRepositoryData()"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private final ClusterService clusterService;",
+          "public SysSnapshots(RepositoriesService repositoriesService, ClusterService clusterService) {",
+          "this(repositoriesService::getRepositoriesList, clusterService);",
+          "SysSnapshots(Supplier<Collection<Repository>> getRepositories, ClusterService clusterService) {",
+          "this.clusterService = clusterService;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 3,
+          "target_declared_methods_count": 3,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "        return CompletableFutures.allSuccessfulAsList(sysSnapshots).thenApply(data -> {",
+        "new_string": "\n            // Add snapshots in progress in this repository.\n            final SnapshotsInProgress snapshotsInProgress = clusterService.state().custom(SnapshotsInProgress.TYPE);\n            List<SysSnapshot> inProgressSnapshots = snapshotsInProgress(snapshotsInProgress, repository.getMetadata().name());\n            sysSnapshots.add(CompletableFuture.completedFuture(inProgressSnapshots));\n        return CompletableFutures.allSuccessfulAsList(sysSnapshots).thenApply(data -> {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "                });",
+          "            sysSnapshots.add(futureSnapshots);",
+          "        }"
+        ],
+        "surround_after_3": [
+          "            ArrayList<SysSnapshot> result = new ArrayList<>();",
+          "            for (Collection<SysSnapshot> datum : data) {",
+          "                result.addAll(datum);"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "final SnapshotsInProgress snapshotsInProgress = clusterService.state().custom(SnapshotsInProgress.TYPE);",
+          "List<SysSnapshot> inProgressSnapshots = snapshotsInProgress(snapshotsInProgress, repository.getMetadata().name());",
+          "sysSnapshots.add(CompletableFuture.completedFuture(inProgressSnapshots));"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 3,
+          "target_declared_methods_count": 3,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 4,
+        "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "    private static CompletableFuture<SysSnapshot> createSysSnapshot(Repository repository, SnapshotId snapshotId) {",
+        "new_string": "    private static SysSnapshot toSysSnapshot(String repositoryName,\n                                             SnapshotsInProgress.Entry entry,\n                                             List<String> partedTables) {\n        return new SysSnapshot(\n            entry.snapshot().getSnapshotId().getName(),\n            repositoryName,\n            entry.indices().stream().map(IndexId::getName).toList(),\n            partedTables,\n            entry.startTime(),\n            0L,\n            Version.CURRENT.toString(),\n            SnapshotState.IN_PROGRESS.name(),\n            Collections.emptyList()\n        );\n    }\n\n    private static CompletableFuture<SysSnapshot> createSysSnapshot(Repository repository, SnapshotId snapshotId) {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        );",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "        return repository.getSnapshotGlobalMetadata(snapshotId).thenCombine(",
+          "            repository.getSnapshotInfo(snapshotId),",
+          "            (metadata, snapshotInfo) -> {"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private static SysSnapshot toSysSnapshot(String repositoryName,",
+          "SnapshotsInProgress.Entry entry,",
+          "List<String> partedTables) {",
+          "return new SysSnapshot(",
+          "entry.snapshot().getSnapshotId().getName(),",
+          "entry.indices().stream().map(IndexId::getName).toList(),",
+          "entry.startTime(),",
+          "Version.CURRENT.toString(),"
+        ],
+        "required_symbols": [
+          "toSysSnapshot"
+        ],
+        "protected_symbols": [
+          "toSysSnapshot"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 3,
+          "target_declared_methods_count": 3,
+          "matched_symbols_before": [
+            "toSysSnapshot"
+          ],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 5,
+        "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+        "operation_index": 0,
+        "edit_type": "insert_after",
+        "old_string": "                throw Exceptions.toRuntimeException(err);",
+        "new_string": "                throw Exceptions.toRuntimeException(err);\n\n    /**\n     * Returns a list of currently running snapshots from repository sorted by snapshot creation date\n     *\n     * @param snapshotsInProgress snapshots in progress in the cluster state\n     * @param repositoryName repository to check running snapshots\n     * @return list of snapshots\n     */\n    public static List<SysSnapshot> snapshotsInProgress(@Nullable SnapshotsInProgress snapshotsInProgress,\n                                                        String repositoryName) {\n        List<SysSnapshot> sysSnapshots = new ArrayList<>();\n        List<SnapshotsInProgress.Entry> entries =\n            SnapshotsService.currentSnapshots(snapshotsInProgress, repositoryName, Collections.emptyList());\n        for (SnapshotsInProgress.Entry entry : entries) {\n            List<String> partedTables = new ArrayList<>();\n            for (var template : entry.templates()) {\n                partedTables.add(RelationName.fqnFromIndexName(template));\n            }\n            sysSnapshots.add(SysSnapshots.toSysSnapshot(repositoryName, entry, partedTables));\n        }\n        return sysSnapshots;\n    }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_after",
+        "surround_before_3": [
+          "                        List.of()",
+          "                    );",
+          "                }"
+        ],
+        "surround_after_3": [
+          "            });",
+          "    }",
+          "}"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "public static List<SysSnapshot> snapshotsInProgress(@Nullable SnapshotsInProgress snapshotsInProgress,",
+          "String repositoryName) {",
+          "List<SysSnapshot> sysSnapshots = new ArrayList<>();",
+          "List<SnapshotsInProgress.Entry> entries =",
+          "SnapshotsService.currentSnapshots(snapshotsInProgress, repositoryName, Collections.emptyList());",
+          "for (SnapshotsInProgress.Entry entry : entries) {",
+          "List<String> partedTables = new ArrayList<>();",
+          "for (var template : entry.templates()) {"
+        ],
+        "required_symbols": [
+          "snapshotsInProgress"
+        ],
+        "protected_symbols": [
+          "snapshotsInProgress"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 3,
+          "target_declared_methods_count": 3,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "snapshotsInProgress"
+          ]
+        }
+      }
+    ]
+  },
+  "last_plan_signature": "9b003e67a7100a85225e61767102b174e644e36dfeb55a72928ecbf5c1bb970d",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

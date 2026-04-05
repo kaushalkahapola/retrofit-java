@@ -16,6 +16,7 @@ import subprocess
 from langchain_core.messages import HumanMessage
 from state import AgentState
 from utils.patch_analyzer import PatchAnalyzer
+from utils.patch_complexity import classify_patch_complexity
 from agents.validation_tools import ValidationToolkit
 
 
@@ -147,9 +148,18 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
     use_phase0_cache = state.get("use_phase_0_cache", True)
 
     validation_toolkit = ValidationToolkit(target_repo_path)
+
+    complexity_info = classify_patch_complexity(
+        patch_diff=diff_text,
+        target_repo_path=target_repo_path,
+        with_test_changes=state.get("with_test_changes", False),
+    )
+    patch_complexity = str(complexity_info.get("complexity") or "REWRITE")
+    complexity_reason = str(complexity_info.get("reason") or "unknown")
+    complexity_details = complexity_info.get("details") or {}
     relevant_changed_files = [c.file_path for c in all_changes if c.file_path]
     test_targets = validation_toolkit.detect_relevant_test_targets_from_changed_files(
-        relevant_changed_files
+        relevant_changed_files, project=project_name
     )
 
     if use_phase0_cache and experiment_mode and backport_commit and original_commit:
@@ -187,6 +197,9 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
                     "phase_0_post_patch_test_result", {}
                 ),
                 "phase_0_transition_evaluation": cached_transition,
+                "patch_complexity": patch_complexity,
+                "complexity_reason": complexity_reason,
+                "complexity_details": complexity_details,
             }
 
     if experiment_mode and backport_commit:
@@ -321,6 +334,9 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
                 "patch_analysis": java_code_changes,
                 "patch_diff": diff_text,
                 "fast_path_success": False,
+                "patch_complexity": patch_complexity,
+                "complexity_reason": complexity_reason,
+                "complexity_details": complexity_details,
             }
 
         if patch_apply_result is None or patch_apply_result.returncode != 0:
@@ -336,6 +352,9 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
                 "patch_analysis": java_code_changes,
                 "patch_diff": diff_text,
                 "fast_path_success": False,
+                "patch_complexity": patch_complexity,
+                "complexity_reason": complexity_reason,
+                "complexity_details": complexity_details,
             }
 
         # Build and run relevant tests against the fully applied mainline patch.
@@ -387,6 +406,9 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
                 "phase_0_baseline_test_result": phase0_baseline_test_result,
                 "phase_0_post_patch_test_result": {},
                 "phase_0_transition_evaluation": transition_eval,
+                "patch_complexity": patch_complexity,
+                "complexity_reason": complexity_reason,
+                "complexity_details": complexity_details,
             }
 
         test_result = validation_toolkit.run_relevant_tests(
@@ -480,6 +502,9 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
                 "phase_0_baseline_test_result": phase0_baseline_test_result,
                 "phase_0_post_patch_test_result": test_result,
                 "phase_0_transition_evaluation": transition_eval,
+                "patch_complexity": patch_complexity,
+                "complexity_reason": complexity_reason,
+                "complexity_details": complexity_details,
             }
         else:
             print("Phase 0: Transition-based test validation failed. Rolling back.")
@@ -532,4 +557,7 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
             "fast_path_success": False,
             "phase_0_test_targets": test_targets,
             "phase_0_baseline_test_result": phase0_baseline_test_result,
+            "patch_complexity": patch_complexity,
+            "complexity_reason": complexity_reason,
+            "complexity_details": complexity_details,
         }

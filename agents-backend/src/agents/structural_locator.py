@@ -620,6 +620,8 @@ async def structural_locator_node(state: AgentState, config) -> dict:
     consistency_map: dict[str, str] = {}
     # Changed to support multiple hunks per file: dict[file_path] = list[hunk_mappings]
     mapped_target_context: dict[str, list] = {}
+    git_match_method: str = ""
+    git_match_reason: str = ""
 
     # Setup a lightweight retriever (lazy index build — only when Phase 2 git methods fail)
     try:
@@ -707,6 +709,12 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 )
                 if git_candidates:
                     git_target = git_candidates[0]["file"]
+                    git_method = str(git_candidates[0].get("method") or "")
+                    git_reason = str(git_candidates[0].get("reason") or "")
+                    if not git_match_method:
+                        git_match_method = git_method
+                    if not git_match_reason:
+                        git_match_reason = git_reason
                     print(f"  Agent 2: Git resolution found target: {git_target}")
                     logger.info(
                         "Git resolution selected target=%s for file=%s",
@@ -980,6 +988,27 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 if new_snippet:
                     m["code_snippet"] = new_snippet
 
+                # Second-chance line recovery when realignment left no anchor (short hunks / drift).
+                if m.get("start_line") is None and raw_hunk:
+                    _tl = _load_target_file_lines(
+                        target_repo_path, str(m.get("target_file") or target_file)
+                    )
+                    if _tl:
+                        for _cand in _extract_hunk_anchor_candidates(raw_hunk):
+                            _s = (_cand or "").strip()
+                            if len(_s) < 16:
+                                continue
+                            _hit = _find_line_in_target(_tl, _s)
+                            if _hit is not None:
+                                m["start_line"] = _hit
+                                m["end_line"] = _hit
+                                m["code_snippet"] = _build_window_snippet(_tl, _hit)
+                                trace += (
+                                    f"  - Recovered start_line for hunk {hunk_idx} via "
+                                    f"context anchor (len={len(_s)})\n"
+                                )
+                                break
+
                 # CRITICAL: For import hunks, we need to ensure proper line numbers
                 # Without proper start_line/end_line, hunk_generator will fall back to original mainline line numbers,
                 # which won't match the target file. The sorting in apply_adapted_hunks depends on correct insertion_line values.
@@ -1191,6 +1220,8 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         ],
         "consistency_map": consistency_map,
         "mapped_target_context": mapped_target_context,
+        "structural_locator_git_match_method": git_match_method,
+        "structural_locator_git_match_reason": git_match_reason,
         "token_usage": {
             "input_tokens": 0,
             "output_tokens": 0,
