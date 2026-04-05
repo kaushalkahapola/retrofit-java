@@ -4,177 +4,99 @@
 - **Root Cause**: Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.
 
 ## Hunk Segregation
-- Code files: 14
+- Code files: 7
 - Test files: 0
 
 ## Code File Mappings
 
-### `extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java`
-
-**Hunks in this file**: 7
-
-**Git Resolution**: Found `extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | guard | `hunk_1` | `None` | 189–189 |
-| 2 | core_fix | `hunk_2` | `None` | 200–200 |
-| 3 | core_fix | `hunk_3` | `None` | 200–200 |
-| 4 | core_fix | `hunk_4` | `None` | 200–200 |
-| 5 | guard | `hunk_5` | `None` | 246–246 |
-| 6 | guard | `hunk_6` | `None` | 246–246 |
-| 7 | core_fix | `partialResult` | `partialResult` | 123–123 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java`
+### `server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java`
 
 **Hunks in this file**: 2
 
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java`
+**Git Resolution**: Found `server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 34–34 |
-| 2 | guard | `getAggReference` | `getAggReference` | 137–137 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/impl/ArbitraryAggregation.java`
+| 1 | declaration | `<import>` | `<import>` | 52–52 |
+| 2 | guard | `hunk_2` | `None` | 267–267 |
+### `server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java`
 
 **Hunks in this file**: 2
 
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/impl/ArbitraryAggregation.java`
+**Git Resolution**: Found `server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | guard | `hunk_1` | `None` | 164–164 |
-| 2 | guard | `hunk_2` | `None` | 180–180 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/impl/CmpByAggregation.java`
+| 1 | core_fix | `hunk_1` | `None` | 92–92 |
+| 2 | propagation | `hunk_2` | `None` | 149–149 |
+### `server/src/main/java/io/crate/replication/logical/MetadataTracker.java`
+
+**Hunks in this file**: 3
+
+**Git Resolution**: Found `server/src/main/java/io/crate/replication/logical/MetadataTracker.java`
+
+**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
+
+| Hunk Idx | Role | Mainline Method | Target Method | Lines |
+|---|---|---|---|---|
+| 1 | declaration | `<import>` | `<import>` | 24–24 |
+| 2 | core_fix | `hunk_2` | `None` | 405–405 |
+| 3 | guard | `hunk_3` | `None` | 440–440 |
+### `server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java`
 
 **Hunks in this file**: 2
 
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/impl/CmpByAggregation.java`
+**Git Resolution**: Found `server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 48–48 |
-| 2 | guard | `hunk_2` | `None` | 168–168 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java`
+| 1 | declaration | `<import>` | `<import>` | 39–39 |
+| 2 | core_fix | `concreteIndices` | `concreteIndices` | 221–221 |
+### `server/src/main/java/io/crate/replication/logical/metadata/Publication.java`
 
-**Hunks in this file**: 4
+**Hunks in this file**: 3
 
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 48–48 |
-| 2 | guard | `getDocValueAggregator` | `getDocValueAggregator` | 260–260 |
-| 3 | guard | `hunk_3` | `None` | 307–307 |
-| 4 | core_fix | `hunk_4` | `None` | 329–329 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/impl/GeometricMeanAggregation.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/impl/GeometricMeanAggregation.java`
+**Git Resolution**: Found `server/src/main/java/io/crate/replication/logical/metadata/Publication.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 311–311 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/impl/MaximumAggregation.java`
+| 1 | declaration | `<import>` | `<import>` | 30–30 |
+| 2 | core_fix | `hunk_2` | `None` | 124–124 |
+| 3 | guard | `subscriberCanRead` | `subscriberCanRead` | 172–172 |
+### `server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java`
 
-**Hunks in this file**: 1
+**Hunks in this file**: 3
 
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/impl/MaximumAggregation.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | guard | `hunk_1` | `None` | 225–225 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/impl/MinimumAggregation.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/impl/MinimumAggregation.java`
+**Git Resolution**: Found `server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | guard | `hunk_1` | `None` | 259–259 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/impl/NumericSumAggregation.java`
+| 1 | declaration | `<import>` | `<import>` | 27–27 |
+| 2 | core_fix | `fromMetadata` | `fromMetadata` | 61–61 |
+| 3 | guard | `hunk_3` | `None` | 74–74 |
+### `server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java`
 
-**Hunks in this file**: 1
+**Hunks in this file**: 3
 
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/impl/NumericSumAggregation.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 186–186 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java`
+**Git Resolution**: Found `server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 234–234 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/impl/SumAggregation.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/impl/SumAggregation.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 199–199 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/impl/TopKAggregation.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/impl/TopKAggregation.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 225–225 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/impl/VarianceAggregation.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/impl/VarianceAggregation.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 233–233 |
-### `server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 315–315 |
+| 1 | declaration | `<import>` | `<import>` | 22–22 |
+| 2 | core_fix | `hunk_2` | `None` | 152–152 |
+| 3 | core_fix | `hunk_3` | `None` | 199–199 |
 ## Test File Mappings
 
 
