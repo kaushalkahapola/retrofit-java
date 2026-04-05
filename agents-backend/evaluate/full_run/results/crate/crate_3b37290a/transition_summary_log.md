@@ -1,0 +1,102 @@
+# Transition Summary
+
+- Source: phase_outputs
+- Valid backport signal: True
+- Reason: Valid: Observed fail-to-pass and/or newly passing relevant tests with no regressions.
+- fail->pass (0): []
+- newly passing (91): ['io.crate.auth.AccessControlMayExecuteTest#testAddColumn', 'io.crate.auth.AccessControlMayExecuteTest#testAlterBlobTable', 'io.crate.auth.AccessControlMayExecuteTest#testAlterOtherUsersNotAllowedAsNormalUser', 'io.crate.auth.AccessControlMayExecuteTest#testAlterOwnUserIsAllowed', 'io.crate.auth.AccessControlMayExecuteTest#testAlterTable', 'io.crate.auth.AccessControlMayExecuteTest#testBeginRequiresNoPermission', 'io.crate.auth.AccessControlMayExecuteTest#testCopyFrom', 'io.crate.auth.AccessControlMayExecuteTest#testCopyTo', 'io.crate.auth.AccessControlMayExecuteTest#testCreateAnalyzer', 'io.crate.auth.AccessControlMayExecuteTest#testCreateBlobTable', 'io.crate.auth.AccessControlMayExecuteTest#testCreateFunction', 'io.crate.auth.AccessControlMayExecuteTest#testCreateRepository', 'io.crate.auth.AccessControlMayExecuteTest#testCreateSnapshot', 'io.crate.auth.AccessControlMayExecuteTest#testCreateTable', 'io.crate.auth.AccessControlMayExecuteTest#testDecommissionRequiresSuperUserPrivileges', 'io.crate.auth.AccessControlMayExecuteTest#testDelete', 'io.crate.auth.AccessControlMayExecuteTest#testDropBlobTable', 'io.crate.auth.AccessControlMayExecuteTest#testDropFunction', 'io.crate.auth.AccessControlMayExecuteTest#testDropRepository', 'io.crate.auth.AccessControlMayExecuteTest#testDropSnapshot', 'io.crate.auth.AccessControlMayExecuteTest#testDropTable', 'io.crate.auth.AccessControlMayExecuteTest#testDroppingAViewRequiresDDLPermissionOnView', 'io.crate.auth.AccessControlMayExecuteTest#testExplainCopyFrom', 'io.crate.auth.AccessControlMayExecuteTest#testExplainSelect', 'io.crate.auth.AccessControlMayExecuteTest#testFunctionsBoundToSchemaRequirePermissions', 'io.crate.auth.AccessControlMayExecuteTest#testFunctionsUnboundToSchemaDoNotRequireAnyPermissions', 'io.crate.auth.AccessControlMayExecuteTest#testInsertFromSubquery', 'io.crate.auth.AccessControlMayExecuteTest#testInsertFromValues', 'io.crate.auth.AccessControlMayExecuteTest#testOpenCloseTable', 'io.crate.auth.AccessControlMayExecuteTest#testPermissionCheckIsDoneOnSchemaAndTableNotOnTableAlias', 'io.crate.auth.AccessControlMayExecuteTest#testQueryOnViewRequiresOwnerToHavePrivilegesOnInvolvedRelations', 'io.crate.auth.AccessControlMayExecuteTest#testRefresh', 'io.crate.auth.AccessControlMayExecuteTest#testRenameTable', 'io.crate.auth.AccessControlMayExecuteTest#testRestoreSnapshot', 'io.crate.auth.AccessControlMayExecuteTest#testSelectMultiRelation', 'io.crate.auth.AccessControlMayExecuteTest#testSelectSingleRelation', 'io.crate.auth.AccessControlMayExecuteTest#testSelectUnion', 'io.crate.auth.AccessControlMayExecuteTest#testSelectUnionWithOrderBy', 'io.crate.auth.AccessControlMayExecuteTest#testSelectWithSubSelect', 'io.crate.auth.AccessControlMayExecuteTest#testSetSessionRequiresNoPermissions', 'io.crate.auth.AccessControlMayExecuteTest#testShowTable', 'io.crate.auth.AccessControlMayExecuteTest#testSuperUserByPassesValidation', 'io.crate.auth.AccessControlMayExecuteTest#testUpdate', 'io.crate.auth.AccessControlMayExecuteTest#testUserWithDDLCanCreateViewOnTablesWhereDQLPermissionsAreAvailable', 'io.crate.auth.AccessControlMayExecuteTest#test_a_user_with_al_can_revoke_privileges_from_users', 'io.crate.auth.AccessControlMayExecuteTest#test_a_user_with_al_on_cluster_can_delete_users', 'io.crate.auth.AccessControlMayExecuteTest#test_a_user_with_al_on_cluster_can_grant_privileges_he_has_to_other_users', 'io.crate.auth.AccessControlMayExecuteTest#test_a_user_with_al_on_cluster_privileges_can_create_other_users', 'io.crate.auth.AccessControlMayExecuteTest#test_alter_cluster_gc_dangling_artifacts_works_for_normal_user_with_AL_privileges', 'io.crate.auth.AccessControlMayExecuteTest#test_alter_cluster_reroute_retry_works_for_normal_user_with_AL_privileges', 'io.crate.auth.AccessControlMayExecuteTest#test_alter_cluster_swap_table_works_for_normal_user_with_AL_privileges', 'io.crate.auth.AccessControlMayExecuteTest#test_alter_cluster_swap_table_works_for_normal_user_with_no_AI_with_DDL_on_both_tables', 'io.crate.auth.AccessControlMayExecuteTest#test_alter_publication_asks_cluster_AL', 'io.crate.auth.AccessControlMayExecuteTest#test_alter_subscription_asks_cluster_AL', 'io.crate.auth.AccessControlMayExecuteTest#test_alter_table_reroute', 'io.crate.auth.AccessControlMayExecuteTest#test_anaylze_works_for_normal_user_with_AL_privileges', 'io.crate.auth.AccessControlMayExecuteTest#test_any_user_can_execute_discard', 'io.crate.auth.AccessControlMayExecuteTest#test_any_user_can_execute_set_transaction', 'io.crate.auth.AccessControlMayExecuteTest#test_checks_user_existence', 'io.crate.auth.AccessControlMayExecuteTest#test_close_cursor_is_allowed_if_user_could_declare_it', 'io.crate.auth.AccessControlMayExecuteTest#test_create_foreign_table_requires_al_permission', 'io.crate.auth.AccessControlMayExecuteTest#test_create_publication_asks_cluster_AL_and_all_for_each_table', 'io.crate.auth.AccessControlMayExecuteTest#test_create_server_requires_al', 'io.crate.auth.AccessControlMayExecuteTest#test_create_subscription_asks_cluster_AL', 'io.crate.auth.AccessControlMayExecuteTest#test_create_table_as_requires_DDL_on_target_and_DQL_on_source', 'io.crate.auth.AccessControlMayExecuteTest#test_create_user_mapping_requires_al_permission', 'io.crate.auth.AccessControlMayExecuteTest#test_declare_cursor_for_non_super_users', 'io.crate.auth.AccessControlMayExecuteTest#test_drop_column', 'io.crate.auth.AccessControlMayExecuteTest#test_drop_foreign_table_requires_al', 'io.crate.auth.AccessControlMayExecuteTest#test_drop_publication_asks_cluster_AL', 'io.crate.auth.AccessControlMayExecuteTest#test_drop_server_requires_al', 'io.crate.auth.AccessControlMayExecuteTest#test_drop_subscription_asks_cluster_AL', 'io.crate.auth.AccessControlMayExecuteTest#test_drop_user_mapping_requires_al', 'io.crate.auth.AccessControlMayExecuteTest#test_fetch_from_cursor_is_allowed_if_user_could_declare_it', 'io.crate.auth.AccessControlMayExecuteTest#test_kill_is_allowed_for_any_user', 'io.crate.auth.AccessControlMayExecuteTest#test_optimize_table_is_allowed_with_ddl_privileges_on_table', 'io.crate.auth.AccessControlMayExecuteTest#test_rename_column', 'io.crate.auth.AccessControlMayExecuteTest#test_reset_requires_AL_privileges', 'io.crate.auth.AccessControlMayExecuteTest#test_reset_session_authorization_from_normal_user_succeeds', 'io.crate.auth.AccessControlMayExecuteTest#test_select_with_scalar_subselect_in_group_by', 'io.crate.auth.AccessControlMayExecuteTest#test_select_with_scalar_subselect_in_having', 'io.crate.auth.AccessControlMayExecuteTest#test_select_with_scalar_subselect_in_order_by', 'io.crate.auth.AccessControlMayExecuteTest#test_select_with_scalar_subselect_in_select', 'io.crate.auth.AccessControlMayExecuteTest#test_select_with_scalar_subselect_in_where', 'io.crate.auth.AccessControlMayExecuteTest#test_set_global_statements_can_be_executed_with_al_cluster_privileges', 'io.crate.auth.AccessControlMayExecuteTest#test_set_session_user_from_normal_to_originally_authenticated_user_succeeds', 'io.crate.auth.AccessControlMayExecuteTest#test_set_session_user_from_normal_user_fails', 'io.crate.auth.AccessControlMayExecuteTest#test_set_session_user_from_normal_user_to_default_succeeds', 'io.crate.auth.AccessControlMayExecuteTest#test_set_session_user_from_normal_user_to_superuser_fails', 'io.crate.auth.AccessControlMayExecuteTest#test_set_session_user_from_superuser_to_normal_user_succeeds', 'io.crate.auth.AccessControlMayExecuteTest#test_show_transaction_isolation_does_not_require_privileges']
+- pass->fail (0): []
+
+## Touched Test States
+- Touched tests (from patch): ['io.crate.auth.AccessControlMayExecuteTest']
+  - io.crate.auth.AccessControlMayExecuteTest#testAddColumn: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testAlterBlobTable: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testAlterOtherUsersNotAllowedAsNormalUser: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testAlterOwnUserIsAllowed: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testAlterTable: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testBeginRequiresNoPermission: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testCopyFrom: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testCopyTo: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testCreateAnalyzer: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testCreateBlobTable: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testCreateFunction: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testCreateRepository: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testCreateSnapshot: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testCreateTable: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testDecommissionRequiresSuperUserPrivileges: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testDelete: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testDropBlobTable: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testDropFunction: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testDropRepository: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testDropSnapshot: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testDropTable: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testDroppingAViewRequiresDDLPermissionOnView: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testExplainCopyFrom: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testExplainSelect: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testFunctionsBoundToSchemaRequirePermissions: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testFunctionsUnboundToSchemaDoNotRequireAnyPermissions: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testInsertFromSubquery: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testInsertFromValues: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testOpenCloseTable: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testPermissionCheckIsDoneOnSchemaAndTableNotOnTableAlias: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testQueryOnViewRequiresOwnerToHavePrivilegesOnInvolvedRelations: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testRefresh: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testRenameTable: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testRestoreSnapshot: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testSelectMultiRelation: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testSelectSingleRelation: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testSelectUnion: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testSelectUnionWithOrderBy: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testSelectWithSubSelect: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testSetSessionRequiresNoPermissions: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testShowTable: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testSuperUserByPassesValidation: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testUpdate: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#testUserWithDDLCanCreateViewOnTablesWhereDQLPermissionsAreAvailable: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_a_user_with_al_can_revoke_privileges_from_users: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_a_user_with_al_on_cluster_can_delete_users: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_a_user_with_al_on_cluster_can_grant_privileges_he_has_to_other_users: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_a_user_with_al_on_cluster_privileges_can_create_other_users: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_alter_cluster_gc_dangling_artifacts_works_for_normal_user_with_AL_privileges: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_alter_cluster_reroute_retry_works_for_normal_user_with_AL_privileges: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_alter_cluster_swap_table_works_for_normal_user_with_AL_privileges: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_alter_cluster_swap_table_works_for_normal_user_with_no_AI_with_DDL_on_both_tables: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_alter_publication_asks_cluster_AL: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_alter_subscription_asks_cluster_AL: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_alter_table_reroute: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_anaylze_works_for_normal_user_with_AL_privileges: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_any_user_can_execute_discard: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_any_user_can_execute_set_transaction: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_checks_user_existence: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_close_cursor_is_allowed_if_user_could_declare_it: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_create_foreign_table_requires_al_permission: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_create_publication_asks_cluster_AL_and_all_for_each_table: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_create_server_requires_al: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_create_subscription_asks_cluster_AL: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_create_table_as_requires_DDL_on_target_and_DQL_on_source: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_create_user_mapping_requires_al_permission: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_declare_cursor_for_non_super_users: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_drop_column: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_drop_foreign_table_requires_al: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_drop_publication_asks_cluster_AL: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_drop_server_requires_al: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_drop_subscription_asks_cluster_AL: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_drop_user_mapping_requires_al: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_fetch_from_cursor_is_allowed_if_user_could_declare_it: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_kill_is_allowed_for_any_user: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_optimize_table_is_allowed_with_ddl_privileges_on_table: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_rename_column: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_reset_requires_AL_privileges: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_reset_session_authorization_from_normal_user_succeeds: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_select_with_scalar_subselect_in_group_by: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_select_with_scalar_subselect_in_having: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_select_with_scalar_subselect_in_order_by: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_select_with_scalar_subselect_in_select: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_select_with_scalar_subselect_in_where: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_set_global_statements_can_be_executed_with_al_cluster_privileges: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_set_session_user_from_normal_to_originally_authenticated_user_succeeds: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_set_session_user_from_normal_user_fails: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_set_session_user_from_normal_user_to_default_succeeds: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_set_session_user_from_normal_user_to_superuser_fails: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_set_session_user_from_superuser_to_normal_user_succeeds: baseline=absent, patched=passed
+  - io.crate.auth.AccessControlMayExecuteTest#test_show_transaction_isolation_does_not_require_privileges: baseline=absent, patched=passed

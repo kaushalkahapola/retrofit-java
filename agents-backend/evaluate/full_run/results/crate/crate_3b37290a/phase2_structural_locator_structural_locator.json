@@ -1,0 +1,124 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "server/src/main/java/io/crate/auth/AccessControlImpl.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<import>",
+        "target_file": "server/src/main/java/io/crate/auth/AccessControlImpl.java",
+        "target_method": "<import>",
+        "start_line": 70,
+        "end_line": 70,
+        "code_snippet": "import io.crate.analyze.AnalyzedCreateSnapshot;\nimport io.crate.analyze.AnalyzedCreateTable;\nimport io.crate.analyze.AnalyzedCreateTableAs;\nimport io.crate.analyze.AnalyzedCreateUserMapping;\nimport io.crate.analyze.AnalyzedDeallocate;\nimport io.crate.analyze.AnalyzedDeclare;\nimport io.crate.analyze.AnalyzedDeleteStatement;\nimport io.crate.analyze.AnalyzedDiscard;\nimport io.crate.analyze.AnalyzedDropForeignTable;\nimport io.crate.analyze.AnalyzedDropFunction;\nimport io.crate.analyze.AnalyzedDropRepository;\nimport io.crate.analyze.AnalyzedDropRole;\nimport io.crate.analyze.AnalyzedDropServer;\nimport io.crate.analyze.AnalyzedDropSnapshot;\nimport io.crate.analyze.AnalyzedDropTable;\nimport io.crate.analyze.AnalyzedDropUserMapping;\nimport io.crate.analyze.AnalyzedDropView;\nimport io.crate.analyze.AnalyzedFetch;\nimport io.crate.analyze.AnalyzedGCDanglingArtifacts;\nimport io.crate.analyze.AnalyzedInsertStatement;\nimport io.crate.analyze.AnalyzedKill;\nimport io.crate.analyze.AnalyzedOptimizeTable;\nimport io.crate.analyze.AnalyzedPrivileges;\nimport io.crate.analyze.AnalyzedRefreshTable;\nimport io.crate.analyze.AnalyzedRerouteRetryFailed;\nimport io.crate.analyze.AnalyzedResetStatement;\nimport io.crate.analyze.AnalyzedRestoreSnapshot;\nimport io.crate.analyze.AnalyzedSetSessionAuthorizationStatement;\nimport io.crate.analyze.AnalyzedSetStatement;\nimport io.crate.analyze.AnalyzedSetTransaction;\nimport io.crate.analyze.AnalyzedShowCreateTable;\nimport io.crate.analyze.AnalyzedStatement;\nimport io.crate.analyze.AnalyzedStatementVisitor;\nimport io.crate.analyze.AnalyzedSwapTable;\nimport io.crate.analyze.AnalyzedUpdateStatement;\nimport io.crate.analyze.CreateViewStmt;\nimport io.crate.analyze.ExplainAnalyzedStatement;\nimport io.crate.analyze.QueriedSelectRelation;\nimport io.crate.analyze.relations.AnalyzedRelation;\nimport io.crate.analyze.relations.AnalyzedRelationVisitor;\nimport io.crate.analyze.relations.AnalyzedView;",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "visitAlterTable",
+        "target_file": "server/src/main/java/io/crate/auth/AccessControlImpl.java",
+        "target_method": "visitAlterTable",
+        "start_line": 210,
+        "end_line": 210,
+        "code_snippet": "        private final Roles roles;\n\n        public RelationVisitor(Roles roles) {\n            this.roles = roles;\n        }\n\n        @Override\n        protected Void visitAnalyzedRelation(AnalyzedRelation relation, RelationContext context) {\n            throw new UnsupportedOperationException(String.format(Locale.ENGLISH, \"Can't handle \\\"%s\\\"\", relation));\n        }\n\n        @Override\n        public Void visitUnionSelect(UnionSelect unionSelect, RelationContext context) {\n            unionSelect.left().accept(this, context);\n            unionSelect.right().accept(this, context);\n            return null;\n        }\n\n        @Override\n        public Void visitTableRelation(TableRelation tableRelation, RelationContext context) {\n            Privileges.ensureUserHasPrivilege(\n                roles,\n                context.user,\n                context.permission,\n                Securable.TABLE,\n                tableRelation.tableInfo().ident().fqn()\n            );\n            return null;\n        }\n\n        @Override\n        public Void visitDocTableRelation(DocTableRelation relation, RelationContext context) {\n            Privileges.ensureUserHasPrivilege(\n                roles,\n                context.user,\n                context.permission,\n                Securable.TABLE,\n                relation.tableInfo().ident().fqn()\n            );\n            return null;\n        }",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "visitDropTable",
+        "target_file": "server/src/main/java/io/crate/auth/AccessControlImpl.java",
+        "target_method": "visitDropTable",
+        "start_line": 210,
+        "end_line": 210,
+        "code_snippet": "        private final Roles roles;\n\n        public RelationVisitor(Roles roles) {\n            this.roles = roles;\n        }\n\n        @Override\n        protected Void visitAnalyzedRelation(AnalyzedRelation relation, RelationContext context) {\n            throw new UnsupportedOperationException(String.format(Locale.ENGLISH, \"Can't handle \\\"%s\\\"\", relation));\n        }\n\n        @Override\n        public Void visitUnionSelect(UnionSelect unionSelect, RelationContext context) {\n            unionSelect.left().accept(this, context);\n            unionSelect.right().accept(this, context);\n            return null;\n        }\n\n        @Override\n        public Void visitTableRelation(TableRelation tableRelation, RelationContext context) {\n            Privileges.ensureUserHasPrivilege(\n                roles,\n                context.user,\n                context.permission,\n                Securable.TABLE,\n                tableRelation.tableInfo().ident().fqn()\n            );\n            return null;\n        }\n\n        @Override\n        public Void visitDocTableRelation(DocTableRelation relation, RelationContext context) {\n            Privileges.ensureUserHasPrivilege(\n                roles,\n                context.user,\n                context.permission,\n                Securable.TABLE,\n                relation.tableInfo().ident().fqn()\n            );\n            return null;\n        }",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "visitAnalyzedAlterTableRenameTable",
+        "target_file": "server/src/main/java/io/crate/auth/AccessControlImpl.java",
+        "target_method": "visitAnalyzedAlterTableRenameTable",
+        "start_line": 210,
+        "end_line": 210,
+        "code_snippet": "        private final Roles roles;\n\n        public RelationVisitor(Roles roles) {\n            this.roles = roles;\n        }\n\n        @Override\n        protected Void visitAnalyzedRelation(AnalyzedRelation relation, RelationContext context) {\n            throw new UnsupportedOperationException(String.format(Locale.ENGLISH, \"Can't handle \\\"%s\\\"\", relation));\n        }\n\n        @Override\n        public Void visitUnionSelect(UnionSelect unionSelect, RelationContext context) {\n            unionSelect.left().accept(this, context);\n            unionSelect.right().accept(this, context);\n            return null;\n        }\n\n        @Override\n        public Void visitTableRelation(TableRelation tableRelation, RelationContext context) {\n            Privileges.ensureUserHasPrivilege(\n                roles,\n                context.user,\n                context.permission,\n                Securable.TABLE,\n                tableRelation.tableInfo().ident().fqn()\n            );\n            return null;\n        }\n\n        @Override\n        public Void visitDocTableRelation(DocTableRelation relation, RelationContext context) {\n            Privileges.ensureUserHasPrivilege(\n                roles,\n                context.user,\n                context.permission,\n                Securable.TABLE,\n                relation.tableInfo().ident().fqn()\n            );\n            return null;\n        }",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 5,
+        "mainline_method": "visitAlterTableAddColumn",
+        "target_file": "server/src/main/java/io/crate/auth/AccessControlImpl.java",
+        "target_method": "visitAlterTableAddColumn",
+        "start_line": 210,
+        "end_line": 210,
+        "code_snippet": "        private final Roles roles;\n\n        public RelationVisitor(Roles roles) {\n            this.roles = roles;\n        }\n\n        @Override\n        protected Void visitAnalyzedRelation(AnalyzedRelation relation, RelationContext context) {\n            throw new UnsupportedOperationException(String.format(Locale.ENGLISH, \"Can't handle \\\"%s\\\"\", relation));\n        }\n\n        @Override\n        public Void visitUnionSelect(UnionSelect unionSelect, RelationContext context) {\n            unionSelect.left().accept(this, context);\n            unionSelect.right().accept(this, context);\n            return null;\n        }\n\n        @Override\n        public Void visitTableRelation(TableRelation tableRelation, RelationContext context) {\n            Privileges.ensureUserHasPrivilege(\n                roles,\n                context.user,\n                context.permission,\n                Securable.TABLE,\n                tableRelation.tableInfo().ident().fqn()\n            );\n            return null;\n        }\n\n        @Override\n        public Void visitDocTableRelation(DocTableRelation relation, RelationContext context) {\n            Privileges.ensureUserHasPrivilege(\n                roles,\n                context.user,\n                context.permission,\n                Securable.TABLE,\n                relation.tableInfo().ident().fqn()\n            );\n            return null;\n        }",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 6,
+        "mainline_method": "visitDropView",
+        "target_file": "server/src/main/java/io/crate/auth/AccessControlImpl.java",
+        "target_method": "visitDropView",
+        "start_line": 205,
+        "end_line": 205,
+        "code_snippet": "        }\n    }\n\n    private static final class RelationVisitor extends AnalyzedRelationVisitor<RelationContext, Void> {\n\n        private final Roles roles;\n\n        public RelationVisitor(Roles roles) {\n            this.roles = roles;\n        }\n\n        @Override\n        protected Void visitAnalyzedRelation(AnalyzedRelation relation, RelationContext context) {\n            throw new UnsupportedOperationException(String.format(Locale.ENGLISH, \"Can't handle \\\"%s\\\"\", relation));\n        }\n\n        @Override\n        public Void visitUnionSelect(UnionSelect unionSelect, RelationContext context) {\n            unionSelect.left().accept(this, context);\n            unionSelect.right().accept(this, context);\n            return null;\n        }\n\n        @Override\n        public Void visitTableRelation(TableRelation tableRelation, RelationContext context) {\n            Privileges.ensureUserHasPrivilege(\n                roles,\n                context.user,\n                context.permission,\n                Securable.TABLE,\n                tableRelation.tableInfo().ident().fqn()\n            );\n            return null;\n        }\n\n        @Override\n        public Void visitDocTableRelation(DocTableRelation relation, RelationContext context) {\n            Privileges.ensureUserHasPrivilege(\n                roles,\n                context.user,\n                context.permission,",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 7,
+        "mainline_method": "visitOptimizeTableStatement",
+        "target_file": "server/src/main/java/io/crate/auth/AccessControlImpl.java",
+        "target_method": "visitOptimizeTableStatement",
+        "start_line": 210,
+        "end_line": 210,
+        "code_snippet": "        private final Roles roles;\n\n        public RelationVisitor(Roles roles) {\n            this.roles = roles;\n        }\n\n        @Override\n        protected Void visitAnalyzedRelation(AnalyzedRelation relation, RelationContext context) {\n            throw new UnsupportedOperationException(String.format(Locale.ENGLISH, \"Can't handle \\\"%s\\\"\", relation));\n        }\n\n        @Override\n        public Void visitUnionSelect(UnionSelect unionSelect, RelationContext context) {\n            unionSelect.left().accept(this, context);\n            unionSelect.right().accept(this, context);\n            return null;\n        }\n\n        @Override\n        public Void visitTableRelation(TableRelation tableRelation, RelationContext context) {\n            Privileges.ensureUserHasPrivilege(\n                roles,\n                context.user,\n                context.permission,\n                Securable.TABLE,\n                tableRelation.tableInfo().ident().fqn()\n            );\n            return null;\n        }\n\n        @Override\n        public Void visitDocTableRelation(DocTableRelation relation, RelationContext context) {\n            Privileges.ensureUserHasPrivilege(\n                roles,\n                context.user,\n                context.permission,\n                Securable.TABLE,\n                relation.tableInfo().ident().fqn()\n            );\n            return null;\n        }",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 8,
+        "mainline_method": "ensureDDLOnTable",
+        "target_file": "server/src/main/java/io/crate/auth/AccessControlImpl.java",
+        "target_method": "ensureDDLOnTable",
+        "start_line": 1117,
+        "end_line": 1117,
+        "code_snippet": "\n        @Override\n        protected Void visitUnsupportedFunctionException(UnsupportedFunctionException e, Role user) {\n            if (e.getSchemaName() != null) {\n                visitSchemaScopeException(e, user);\n            }\n            return null;\n        }\n\n        @Override\n        protected Void visitClusterScopeException(ClusterScopeException e, Role user) {\n            Privileges.ensureUserHasPrivilege(roles, user, Securable.CLUSTER, null);\n            return null;\n        }\n\n        @Override\n        protected Void visitUnscopedException(UnscopedException e, Role user) {\n            return null;\n        }\n    }\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/metadata/table/ShardedTable.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<class_declaration>",
+        "target_file": "server/src/main/java/io/crate/metadata/table/ShardedTable.java",
+        "target_method": "<class_declaration>",
+        "start_line": 24,
+        "end_line": 24,
+        "code_snippet": " * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *   http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.metadata.table;\n\nimport org.elasticsearch.cluster.metadata.Metadata;\n\nimport io.crate.metadata.ColumnIdent;\n\npublic interface ShardedTable {\n\n    int numberOfShards();\n\n    String numberOfReplicas();\n\n    ColumnIdent clusteredBy();\n\n    boolean isClosed();\n\n    String[] concreteIndices(Metadata metadata);\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
+  }
+}

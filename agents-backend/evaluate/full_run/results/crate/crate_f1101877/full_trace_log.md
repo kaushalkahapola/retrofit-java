@@ -1,0 +1,32 @@
+# Full Trace of Agentic File Edits
+
+## Attempt #1
+
+### Final Output Diff
+**server/src/main/java/io/crate/planner/operators/InsertFromValues.java** [replace]
+```java
+// --- OLD ---
+<developer patch fast path>
+// --- NEW ---
+diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
+index 4aac71b026..7a4aee6f4c 100644
+--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
++++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
+@@ -131,11 +131,11 @@ public class InsertFromValues implements LogicalPlan {
+     }
+ 
+     @Override
+-    public void execute(DependencyCarrier dependencies,
+-                        PlannerContext plannerContext,
+-                        RowConsumer consumer,
+-                        Row params,
+-                        SubQueryResults subQueryResults) {
++    public void executeOrFail(DependencyCarrier dependencies,
++                              PlannerContext plannerContext,
++                              RowConsumer consumer,
++                              Row params,
++                              SubQueryResults subQueryResults) {
+         DocTableInfo tableInfo = dependencies
+             .schemas()
+             .getTableInfo(writerProjection.tableIdent());
+```
