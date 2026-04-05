@@ -1,0 +1,104 @@
+# Transition Summary
+
+- Source: phase_outputs
+- Valid backport signal: True
+- Reason: Valid: Observed fail-to-pass and/or newly passing relevant tests with no regressions.
+- fail->pass (0): []
+- newly passing (93): ['io.crate.execution.engine.distribution.DistributingConsumerTest#testDistributingConsumerForwardsFailure', 'io.crate.execution.engine.distribution.DistributingConsumerTest#testFailureOnAllLoadedIsForwarded', 'io.crate.execution.engine.distribution.DistributingConsumerTest#testSendUsingDistributingConsumerAndReceiveWithDistResultRXTask', 'io.crate.execution.engine.distribution.DistributingConsumerTest#test_exception_on_loadNextBatch_is_forwarded', 'io.crate.integrationtests.GroupByAggregateTest#groupByAggregateStdDevByte', 'io.crate.integrationtests.GroupByAggregateTest#groupByAggregateStdDevDouble', 'io.crate.integrationtests.GroupByAggregateTest#groupByAggregateVarianceByte', 'io.crate.integrationtests.GroupByAggregateTest#groupByStatsAggregatesGlobal', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxDate', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxDouble', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxFloat', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxInteger', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxLong', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxOrderByMax', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxString', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinDate', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinDouble', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinFloat', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinInteger', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinLong', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinOrderByMin', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinString', 'io.crate.integrationtests.GroupByAggregateTest#selectGroupByMixedCaseAggregateMaxString', 'io.crate.integrationtests.GroupByAggregateTest#testAggregateArbitraryOnBoolean', 'io.crate.integrationtests.GroupByAggregateTest#testAggregateNonExistingColumn', 'io.crate.integrationtests.GroupByAggregateTest#testAggregateOnIndexOff', 'io.crate.integrationtests.GroupByAggregateTest#testAggregateTwiceOnRoutingColumn', 'io.crate.integrationtests.GroupByAggregateTest#testCompareCountOnObjectHavingNotNullSubcolumnAndCountDirectlyOnNotNullSubcolumn', 'io.crate.integrationtests.GroupByAggregateTest#testCountDistinctGlobal', 'io.crate.integrationtests.GroupByAggregateTest#testCountDistinctGroupBy', 'io.crate.integrationtests.GroupByAggregateTest#testCountDistinctGroupByOrderByCountDistinct', 'io.crate.integrationtests.GroupByAggregateTest#testCountDistinctManyDifferent', 'io.crate.integrationtests.GroupByAggregateTest#testCountDistinctManySame', 'io.crate.integrationtests.GroupByAggregateTest#testDistinctOnJoinWithGroupBy', 'io.crate.integrationtests.GroupByAggregateTest#testDistinctOnSubselectWithGroupBy', 'io.crate.integrationtests.GroupByAggregateTest#testDistinctWithGroupBy', 'io.crate.integrationtests.GroupByAggregateTest#testDistinctWithGroupByLimitAndOffset', 'io.crate.integrationtests.GroupByAggregateTest#testFilterByScore', 'io.crate.integrationtests.GroupByAggregateTest#testGlobalAggregateArbitrary', 'io.crate.integrationtests.GroupByAggregateTest#testGlobalAggregateOnNestedColumn', 'io.crate.integrationtests.GroupByAggregateTest#testGlobalAggregateUnknownWhere', 'io.crate.integrationtests.GroupByAggregateTest#testGlobalCountDistinct', 'io.crate.integrationtests.GroupByAggregateTest#testGlobalCountDistinctColumnReuse', 'io.crate.integrationtests.GroupByAggregateTest#testGlobalCountOnColumn', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByAggSumDouble', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByAggSumShort', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByAggregateOnNestedColumn', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByAggregateOnNestedColumnOrderBy', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByAggregateOnNestedColumnOrderByAlias', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByArbitrary', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByAvgDouble', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByAvgMany', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByCountOnColumn', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByCountString', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByCountStringGroupByPrimaryKey', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByEmpty', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByHavingInsertInto', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByHavingWithAggregate', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByOnAllPrimaryKeys', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByOnClusteredByColumn', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByOnClusteredByColumnPartOfPrimaryKey', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByOnClusteredByColumnPartitioned', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByOnComplexLiterals', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByOnIndexOff', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByOnScalarOnArray', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByOnSysNodes', 'io.crate.integrationtests.GroupByAggregateTest#testGroupBySingleNumberWithNullValues', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByUnknownResultColumn', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByUnknownWhere', 'io.crate.integrationtests.GroupByAggregateTest#testGroupByWithHavingAndLimit', 'io.crate.integrationtests.GroupByAggregateTest#testHavingGlobalAggregation', 'io.crate.integrationtests.GroupByAggregateTest#testHavingGroupBy', 'io.crate.integrationtests.GroupByAggregateTest#testHavingGroupByNonDistributed', 'io.crate.integrationtests.GroupByAggregateTest#testHavingGroupByOnScalar', 'io.crate.integrationtests.GroupByAggregateTest#testHavingGroupByWithAggSelected', 'io.crate.integrationtests.GroupByAggregateTest#testHavingOnOtherAggregate', 'io.crate.integrationtests.GroupByAggregateTest#testHavingOnSameAggregate', 'io.crate.integrationtests.GroupByAggregateTest#testNonDistributedGroupByNoMatch', 'io.crate.integrationtests.GroupByAggregateTest#testNonDistributedGroupByWithHavingAndLimit', 'io.crate.integrationtests.GroupByAggregateTest#testNonDistributedGroupByWithManyKeysNoOrderByAndLimit', 'io.crate.integrationtests.GroupByAggregateTest#testSelectAndGroupBySingleStringKeyForLowCardinalityField', 'io.crate.integrationtests.GroupByAggregateTest#testSelectCollectSetAndGroupBy', 'io.crate.integrationtests.GroupByAggregateTest#testSelectDistinctWithPaging', 'io.crate.integrationtests.GroupByAggregateTest#test_dist_result_request_tripped_by_cb_no_stuck_jobs', 'io.crate.integrationtests.GroupByAggregateTest#test_group_by_array_type', 'io.crate.integrationtests.GroupByAggregateTest#test_group_by_on_duplicate_keys', 'io.crate.integrationtests.GroupByAggregateTest#test_group_by_on_ignored_column', 'io.crate.integrationtests.GroupByAggregateTest#test_group_by_on_subscript_on_object_of_sub_relation', 'io.crate.integrationtests.GroupByAggregateTest#test_group_by_undefined_column_casted', 'io.crate.integrationtests.GroupByAggregateTest#test_group_on_null_literal', 'io.crate.integrationtests.GroupByAggregateTest#test_optimized_limit_distinct_returns_2_unique_items', 'io.crate.integrationtests.GroupByAggregateTest#test_select_distinct_with_limit_and_offset_applies_limit_and_offset_on_distinct_resultset', 'io.crate.integrationtests.GroupByAggregateTest#test_select_same_aggregate_multiple_times']
+- pass->fail (0): []
+
+## Touched Test States
+- Touched tests (from patch): ['io.crate.execution.engine.distribution.DistributingConsumerTest', 'io.crate.integrationtests.GroupByAggregateTest']
+  - io.crate.execution.engine.distribution.DistributingConsumerTest#testDistributingConsumerForwardsFailure: baseline=absent, patched=passed
+  - io.crate.execution.engine.distribution.DistributingConsumerTest#testFailureOnAllLoadedIsForwarded: baseline=absent, patched=passed
+  - io.crate.execution.engine.distribution.DistributingConsumerTest#testSendUsingDistributingConsumerAndReceiveWithDistResultRXTask: baseline=absent, patched=passed
+  - io.crate.execution.engine.distribution.DistributingConsumerTest#test_exception_on_loadNextBatch_is_forwarded: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#groupByAggregateStdDevByte: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#groupByAggregateStdDevDouble: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#groupByAggregateVarianceByte: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#groupByStatsAggregatesGlobal: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxDate: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxDouble: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxFloat: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxInteger: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxLong: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxOrderByMax: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMaxString: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinDate: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinDouble: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinFloat: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinInteger: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinLong: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinOrderByMin: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByAggregateMinString: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#selectGroupByMixedCaseAggregateMaxString: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testAggregateArbitraryOnBoolean: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testAggregateNonExistingColumn: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testAggregateOnIndexOff: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testAggregateTwiceOnRoutingColumn: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testCompareCountOnObjectHavingNotNullSubcolumnAndCountDirectlyOnNotNullSubcolumn: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testCountDistinctGlobal: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testCountDistinctGroupBy: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testCountDistinctGroupByOrderByCountDistinct: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testCountDistinctManyDifferent: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testCountDistinctManySame: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testDistinctOnJoinWithGroupBy: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testDistinctOnSubselectWithGroupBy: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testDistinctWithGroupBy: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testDistinctWithGroupByLimitAndOffset: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testFilterByScore: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGlobalAggregateArbitrary: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGlobalAggregateOnNestedColumn: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGlobalAggregateUnknownWhere: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGlobalCountDistinct: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGlobalCountDistinctColumnReuse: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGlobalCountOnColumn: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByAggSumDouble: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByAggSumShort: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByAggregateOnNestedColumn: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByAggregateOnNestedColumnOrderBy: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByAggregateOnNestedColumnOrderByAlias: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByArbitrary: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByAvgDouble: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByAvgMany: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByCountOnColumn: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByCountString: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByCountStringGroupByPrimaryKey: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByEmpty: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByHavingInsertInto: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByHavingWithAggregate: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByOnAllPrimaryKeys: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByOnClusteredByColumn: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByOnClusteredByColumnPartOfPrimaryKey: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByOnClusteredByColumnPartitioned: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByOnComplexLiterals: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByOnIndexOff: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByOnScalarOnArray: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByOnSysNodes: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupBySingleNumberWithNullValues: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByUnknownResultColumn: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByUnknownWhere: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testGroupByWithHavingAndLimit: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testHavingGlobalAggregation: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testHavingGroupBy: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testHavingGroupByNonDistributed: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testHavingGroupByOnScalar: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testHavingGroupByWithAggSelected: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testHavingOnOtherAggregate: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testHavingOnSameAggregate: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testNonDistributedGroupByNoMatch: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testNonDistributedGroupByWithHavingAndLimit: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testNonDistributedGroupByWithManyKeysNoOrderByAndLimit: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testSelectAndGroupBySingleStringKeyForLowCardinalityField: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testSelectCollectSetAndGroupBy: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#testSelectDistinctWithPaging: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#test_dist_result_request_tripped_by_cb_no_stuck_jobs: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#test_group_by_array_type: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#test_group_by_on_duplicate_keys: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#test_group_by_on_ignored_column: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#test_group_by_on_subscript_on_object_of_sub_relation: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#test_group_by_undefined_column_casted: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#test_group_on_null_literal: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#test_optimized_limit_distinct_returns_2_unique_items: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#test_select_distinct_with_limit_and_offset_applies_limit_and_offset_on_distinct_resultset: baseline=absent, patched=passed
+  - io.crate.integrationtests.GroupByAggregateTest#test_select_same_aggregate_multiple_times: baseline=absent, patched=passed

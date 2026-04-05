@@ -4,81 +4,54 @@
 - **Root Cause**: Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.
 
 ## Hunk Segregation
-- Code files: 6
+- Code files: 3
 - Test files: 0
 
 ## Code File Mappings
 
-### `server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java`
+### `server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java`
+
+**Hunks in this file**: 6
+
+**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java`
+
+**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
+
+| Hunk Idx | Role | Mainline Method | Target Method | Lines |
+|---|---|---|---|---|
+| 1 | declaration | `<import>` | `<import>` | 22–22 |
+| 2 | declaration | `<import>` | `<import>` | 40–40 |
+| 3 | declaration | `<class_declaration>` | `<class_declaration>` | 76–76 |
+| 4 | propagation | `hunk_4` | `None` | 83–83 |
+| 5 | propagation | `hunk_5` | `None` | 92–92 |
+| 6 | core_fix | `hunk_6` | `None` | 222–222 |
+### `server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java`
 
 **Hunks in this file**: 4
 
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java`
+**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 35–35 |
-| 2 | guard | `hunk_2` | `None` | 196–196 |
-| 3 | guard | `hunk_3` | `None` | 211–211 |
-| 4 | core_fix | `deleteTempIndices` | `deleteTempIndices` | 283–283 |
-### `server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java`
+| 1 | declaration | `<import>` | `<import>` | 37–37 |
+| 2 | declaration | `<class_declaration>` | `<class_declaration>` | 49–49 |
+| 3 | core_fix | `hunk_3` | `None` | 57–57 |
+| 4 | core_fix | `hunk_4` | `None` | 110–110 |
+### `server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java`
 
-**Hunks in this file**: 1
+**Hunks in this file**: 3
 
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | declaration | `<class_declaration>` | `<class_declaration>` | 31–31 |
-### `server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java`
+**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | guard | `hunk_1` | `None` | 95–95 |
-### `server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 45–45 |
-### `server/src/main/java/org/elasticsearch/Version.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/org/elasticsearch/Version.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 206–206 |
-### `server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java`
-
-**Hunks in this file**: 2
-
-**Git Resolution**: Found `server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 19–19 |
-| 2 | guard | `hunk_2` | `None` | 123–123 |
+| 1 | declaration | `<import>` | `<import>` | 25–25 |
+| 2 | core_fix | `hunk_2` | `None` | 113–113 |
+| 3 | guard | `hunk_3` | `None` | 207–207 |
 ## Test File Mappings
 
 
