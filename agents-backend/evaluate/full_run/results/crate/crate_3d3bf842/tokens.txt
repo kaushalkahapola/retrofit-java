@@ -1,25 +1,15 @@
 {
-  "input_tokens": 129,
-  "output_tokens": 0,
-  "total_tokens": 129,
-  "messages_with_usage": 0,
-  "estimated_messages": 5,
+  "input_tokens": 751411,
+  "output_tokens": 18128,
+  "total_tokens": 769539,
+  "messages_with_usage": 8,
+  "estimated_messages": 4,
   "tokenizer": {
     "model": "gpt-4.1-mini",
     "library": "tiktoken",
     "available": true
   },
   "by_node": {
-    "phase_0_optimistic": {
-      "input_tokens": 56,
-      "output_tokens": 0,
-      "total_tokens": 56,
-      "estimated_events": 1,
-      "exact_events": 0,
-      "sources": [
-        "estimated_from_message_chars"
-      ]
-    },
     "context_analyzer": {
       "input_tokens": 14,
       "output_tokens": 0,
@@ -40,17 +30,52 @@
         "estimated_from_message_chars"
       ]
     },
-    "hunk_generator": {
-      "input_tokens": 40,
-      "output_tokens": 0,
-      "total_tokens": 40,
-      "estimated_events": 2,
-      "exact_events": 0,
+    "planning_agent": {
+      "input_tokens": 16369,
+      "output_tokens": 3407,
+      "total_tokens": 19776,
+      "estimated_events": 1,
+      "exact_events": 2,
       "sources": [
         "estimated_from_message_chars",
-        "estimated_from_message_chars"
+        "node.token_usage",
+        "node.token_usage"
+      ]
+    },
+    "hunk_generator": {
+      "input_tokens": 359337,
+      "output_tokens": 5657,
+      "total_tokens": 364994,
+      "estimated_events": 1,
+      "exact_events": 2,
+      "sources": [
+        "estimated_from_message_chars",
+        "node.token_usage",
+        "node.token_usage"
+      ]
+    },
+    "planning_agent:planning_agent": {
+      "input_tokens": 16355,
+      "output_tokens": 3407,
+      "total_tokens": 19762,
+      "estimated_events": 0,
+      "exact_events": 2,
+      "sources": [
+        "node.agent_token_usage",
+        "node.agent_token_usage"
+      ]
+    },
+    "hunk_generator:file_editor": {
+      "input_tokens": 359317,
+      "output_tokens": 5657,
+      "total_tokens": 364974,
+      "estimated_events": 0,
+      "exact_events": 2,
+      "sources": [
+        "node.agent_token_usage",
+        "node.agent_token_usage"
       ]
     }
   },
-  "finished_at": "2026-04-05T06:36:35.110074"
+  "finished_at": "2026-04-05T07:37:43.412775"
 }

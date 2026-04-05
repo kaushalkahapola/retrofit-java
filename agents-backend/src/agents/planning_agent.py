@@ -2576,10 +2576,17 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     total_entries = sum(len(v) for v in plan.values())
     print(f"Planning Agent: Complete. Planned {total_entries} adapted edit(s).")
 
+    # Merge with previous plan so partial retries (subset of validation_retry_files)
+    # do not drop entries for files the file editor still must process.
+    prev_hgp: dict[str, list[dict[str, Any]]] = dict(
+        state.get("hunk_generation_plan") or {}
+    )
+    merged_plan: dict[str, list[dict[str, Any]]] = {**prev_hgp, **dict(plan)}
+
     # Generate plan signature for retry loop dedup
     import hashlib
 
-    plan_json = json.dumps(dict(plan), sort_keys=True)
+    plan_json = json.dumps(merged_plan, sort_keys=True)
     plan_sig = hashlib.sha256(plan_json.encode("utf-8")).hexdigest()
     repeated_plan_detected = bool(
         validation_attempts > 0
@@ -2607,7 +2614,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 content=f"Planning Agent complete. Planned {total_entries} str_replace edit(s)."
             )
         ],
-        "hunk_generation_plan": dict(plan),
+        "hunk_generation_plan": merged_plan,
         "last_plan_signature": plan_sig,
         "validation_repeated_plan_detected": repeated_plan_detected,
         "force_type_v_until_success": bool(force_type_v),

@@ -222,13 +222,14 @@ def _is_auto_generated_java_file(file_path: str) -> bool:
 
     # ANTLR-generated file patterns (lexer and parser)
     # Patterns must be lowercase since normalized is lowercase
+    # NOTE: Do not use broad "listener.java$" / "visitor.java$" suffixes — they match
+    # hand-written classes (e.g. ProjectionToProjectorVisitor.java) and drop real code
+    # from agent_eligible_patch / hunk_chain. Keep only typical ANTLR-generated shapes.
     antlr_patterns = [
         r"lexer\.java$",  # *Lexer.java (ANTLR lexer)
         r"parser\.java$",  # *Parser.java (ANTLR parser)
         r"baselistener\.java$",  # *BaseListener.java (ANTLR listener base)
-        r"listener\.java$",  # *Listener.java (ANTLR listener interface, but be careful)
         r"basevisitor\.java$",  # *BaseVisitor.java (ANTLR visitor base)
-        r"visitor\.java$",  # *Visitor.java (ANTLR visitor interface, but be careful)
     ]
 
     # Protobuf-generated file patterns

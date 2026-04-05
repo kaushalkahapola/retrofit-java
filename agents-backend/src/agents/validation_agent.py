@@ -156,6 +156,57 @@ def _extract_missing_symbols(raw_output: str, max_items: int = 24) -> list[str]:
     return out
 
 
+def _production_java_paths_from_patch_analysis(state: AgentState) -> list[str]:
+    """Repo-relative paths for production Java files in patch_analysis (excludes tests)."""
+    out: set[str] = set()
+    for change in state.get("patch_analysis") or []:
+        p = (
+            change.file_path
+            if hasattr(change, "file_path")
+            else (change.get("file_path", "") if isinstance(change, dict) else "")
+        )
+        p = str(p or "").strip().replace("\\", "/")
+        if not p.endswith(".java"):
+            continue
+        low = p.lower()
+        if "test" in low or low.endswith("test.java"):
+            continue
+        out.add(p)
+    return sorted(out)
+
+
+def _diagnostics_include_api_or_signature_mismatch(diagnostics: list[dict]) -> bool:
+    for d in diagnostics or []:
+        if str((d or {}).get("error_type") or "") == "api_or_signature_mismatch":
+            return True
+    return False
+
+
+def _expand_retry_for_cross_cutting_api_failure(
+    state: AgentState,
+    retry_files: list[str],
+    diagnostics: list[dict],
+    force_type_v_retry_files_in: list[str],
+    type_v_files: list[str],
+) -> tuple[list[str], list[str]]:
+    """
+    Signature/API errors often need coordinated edits across many files. Widen retry
+    and TYPE_V scope to all production Java files from patch_analysis so planning and
+    file editor do not spin on a single latched file.
+    """
+    sticky = sorted(set(force_type_v_retry_files_in or []) | set(type_v_files or []))
+    if not _diagnostics_include_api_or_signature_mismatch(diagnostics):
+        return retry_files, sticky
+
+    scope = _production_java_paths_from_patch_analysis(state)
+    if not scope:
+        return retry_files, sticky
+
+    merged_retry = sorted(set(retry_files or []) | set(scope))
+    merged_force = sorted(set(sticky) | set(scope))
+    return merged_retry, merged_force
+
+
 def _collect_known_java_files_for_build_scope(
     state: AgentState,
     effective_code_hunks: list[AdaptedHunk],
@@ -864,6 +915,15 @@ async def validation_agent(state: AgentState, config) -> dict:
                 set(force_type_v_retry_files) | set(type_v_files)
             )
             retry_files = sorted(set(retry_files) | set(sticky_scope_files))
+            retry_files, sticky_scope_files = (
+                _expand_retry_for_cross_cutting_api_failure(
+                    state,
+                    retry_files,
+                    diagnostics,
+                    list(force_type_v_retry_files),
+                    list(type_v_files),
+                )
+            )
             sticky_reason = (
                 force_type_v_reason or "build_context_mismatch_type_v"
                 if sticky_type_v

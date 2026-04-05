@@ -1,0 +1,1358 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "operation_index": 0,
+        "edit_type": "delete",
+        "old_string": "import io.crate.metadata.table.TableInfo;\nimport io.crate.statistics.Stats;",
+        "new_string": "",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "Removed unused imports as in mainline patch|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "import io.crate.expression.symbol.Symbols;",
+          "import io.crate.metadata.Reference;",
+          "import io.crate.metadata.settings.SessionSettings;"
+        ],
+        "surround_after_3": [
+          "import io.crate.types.DataType;",
+          "",
+          "public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, ShardUpsertRequest.Item> {"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 21,
+          "target_declared_methods_count": 21,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_1"
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "        public static Item forUpdate(String id,",
+        "new_string": "        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forUpdate(String id,",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "         */",
+          "        private transient long usedBytes = -1L;",
+          ""
+        ],
+        "surround_after_3": [
+          "                                     Symbol[] assignments,",
+          "                                     long requiredVersion,",
+          "                                     long seqNo,"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          "long fullDocSizeEstimate) {",
+          "usedBytes += fullDocSizeEstimate;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 21,
+          "target_declared_methods_count": 21,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_2"
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "                                     long seqNo,\n                                     long primaryTerm,\n                                     long sizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;",
+        "new_string": "                                     long seqNo,\n                                     long primaryTerm,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "        public static Item forUpdate(String id,",
+          "                                     Symbol[] assignments,",
+          "                                     long requiredVersion,"
+        ],
+        "surround_after_3": [
+          "            usedBytes += sizeEstimate;",
+          "            usedBytes += RamUsageEstimator.sizeOf(id);",
+          "            for (var assignment : assignments) {"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          "long fullDocSizeEstimate) {",
+          "usedBytes += fullDocSizeEstimate;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 21,
+          "target_declared_methods_count": 21,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_2"
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "operation_index": 2,
+        "edit_type": "replace",
+        "old_string": "            long usedBytes = SHALLOW_SIZE;\n            usedBytes += sizeEstimate;\n            usedBytes += RamUsageEstimator.sizeOf(id);",
+        "new_string": "            long usedBytes = SHALLOW_SIZE;\n            usedBytes += fullDocSizeEstimate;\n            usedBytes += RamUsageEstimator.sizeOf(id);",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "                                     long seqNo,",
+          "                                     long primaryTerm,",
+          "                                     long sizeEstimate) {"
+        ],
+        "surround_after_3": [
+          "            for (var assignment : assignments) {",
+          "                usedBytes += assignment.ramBytesUsed();",
+          "            }"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          "long fullDocSizeEstimate) {",
+          "usedBytes += fullDocSizeEstimate;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 21,
+          "target_declared_methods_count": 21,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_2"
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "        }\n\n        public static long sizeEstimateForUpdate(Stats stats, TableInfo tableInfo) {\n            // if stats are not available we fall back to estimate the size based on\n            // column types. Therefore we need to get the column information.\n            if (stats.isEmpty()) {\n                Collection<Reference> ramAccountedColumns = tableInfo.allColumns();\n                return stats.estimateSizeForColumns(ramAccountedColumns);\n            } else {\n                return stats.averageSizePerRowInBytes();\n            }",
+        "new_string": "        }\n\n        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:multiline_anchor_reconstructed",
+        "notes": "location offset by 3 lines, but surrounding context matches, so TYPE_II adaptation|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "                Translog.UNSET_AUTO_GENERATED_TIMESTAMP,",
+          "                usedBytes",
+          "            );"
+        ],
+        "surround_after_3": [
+          "        }",
+          "",
+          "        public static Item forInsert(String id,"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          "@Nullable Symbol[] onConflictAssignments,",
+          "long fullDocSizeEstimate) {"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 21,
+          "target_declared_methods_count": 21,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "sizeEstimateForUpdate"
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "                for (var assignment : onConflictAssignments) {",
+        "new_string": "                usedBytes += fullDocSizeEstimate;\n                for (var assignment : onConflictAssignments) {\n                for (var assignment : onConflictAssignments) {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "Cannot verify insertion due to missing matching surrounding context in target; location differs|type_v_subagent_repaired|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "                }",
+          "            }",
+          "            if (onConflictAssignments != null) {"
+        ],
+        "surround_after_3": [
+          "                    usedBytes += assignment.ramBytesUsed();",
+          "                }",
+          "            }"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": true,
+        "blockers": [
+          "Detected target surrounding context is empty or does not match mainline pre-patch surrounding context",
+          "Target location line 587 differs significantly from mainline location line 363"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "usedBytes += fullDocSizeEstimate;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 21,
+          "target_declared_methods_count": 21,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_4"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "     * List of values or expressions used to be retrieved from the inserted/updated rows,",
+        "new_string": "    private final long fullDocSizeEstimate;\n\n     * List of values or expressions used to be retrieved from the inserted/updated rows,",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "    private final List<? extends Symbol> outputs;",
+          "",
+          "    /**"
+        ],
+        "surround_after_3": [
+          "     * empty if no values should be returned. The types of the returnValues need",
+          "     * to match with outputs.",
+          "     */"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private final long fullDocSizeEstimate;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 11,
+          "target_declared_methods_count": 11,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "<class_declaration>"
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "                                       boolean autoCreateIndices,\n                                       List<? extends Symbol> outputs,\n                                       List<Symbol> returnValues) {\n",
+        "new_string": "                                       boolean autoCreateIndices,\n                                       List<? extends Symbol> outputs,\n                                       List<Symbol> returnValues,\n                                       long fullDocSizeEstimate) {\n",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "                                       @Nullable ColumnIdent clusteredByColumn,",
+          "                                       @Nullable Symbol clusteredBySymbol,",
+          "                                       Settings settings,"
+        ],
+        "surround_after_3": [
+          "        super(relationName, partitionIdent, primaryKeys, clusteredByColumn, settings, primaryKeySymbols, autoCreateIndices);",
+          "        assert partitionedBySymbols.stream().noneMatch(s -> s.any(Symbol.IS_COLUMN))",
+          "            : \"All references and fields in partitionedBySymbols must be resolved to inputColumns, got: \" + partitionedBySymbols;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "List<Symbol> returnValues,",
+          "long fullDocSizeEstimate) {"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 11,
+          "target_declared_methods_count": 11,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_2"
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "    ColumnIndexWriterProjection(StreamInput in) throws IOException {",
+        "new_string": "        this.fullDocSizeEstimate = fullDocSizeEstimate;\n    ColumnIndexWriterProjection(StreamInput in) throws IOException {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        this.returnValues = returnValues;",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "        super(in);",
+          "",
+          ""
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "this.fullDocSizeEstimate = fullDocSizeEstimate;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 11,
+          "target_declared_methods_count": 11,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_3"
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "    public List<? extends Symbol> outputs() {",
+        "new_string": "        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n            fullDocSizeEstimate = in.readLong();\n        } else {\n            fullDocSizeEstimate = 0;\n        }\n    }\n    public List<? extends Symbol> outputs() {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "        return outputs;",
+          "    }",
+          ""
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "if (in.getVersion().onOrAfter(Version.V_5_10_5)) {",
+          "fullDocSizeEstimate = in.readLong();",
+          "fullDocSizeEstimate = 0;",
+          "public long fullDocSizeEstimate() {",
+          "return fullDocSizeEstimate;"
+        ],
+        "required_symbols": [
+          "fullDocSizeEstimate"
+        ],
+        "protected_symbols": [
+          "fullDocSizeEstimate"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 11,
+          "target_declared_methods_count": 11,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "fullDocSizeEstimate"
+          ]
+        },
+        "target_method_hint": "outputs"
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "operation_index": 1,
+        "edit_type": "insert_before",
+        "old_string": "    public List<? extends Symbol> outputs() {",
+        "new_string": "    public long fullDocSizeEstimate() {\n        return fullDocSizeEstimate;\n    public List<? extends Symbol> outputs() {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "        return outputs;",
+          "    }",
+          ""
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "if (in.getVersion().onOrAfter(Version.V_5_10_5)) {",
+          "fullDocSizeEstimate = in.readLong();",
+          "fullDocSizeEstimate = 0;",
+          "public long fullDocSizeEstimate() {",
+          "return fullDocSizeEstimate;"
+        ],
+        "required_symbols": [
+          "fullDocSizeEstimate"
+        ],
+        "protected_symbols": [
+          "fullDocSizeEstimate"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 11,
+          "target_declared_methods_count": 11,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "fullDocSizeEstimate"
+          ]
+        },
+        "target_method_hint": "outputs"
+      },
+      {
+        "hunk_index": 4,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "               allTargetColumns.equals(that.allTargetColumns) &&\n               Objects.equals(outputs, that.outputs) &&\n               Objects.equals(returnValues, that.returnValues);\n    }",
+        "new_string": "               allTargetColumns.equals(that.allTargetColumns) &&\n               Objects.equals(outputs, that.outputs) &&\n               Objects.equals(returnValues, that.returnValues) &&\n               Objects.equals(fullDocSizeEstimate, that.fullDocSizeEstimate);\n    }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "",
+          "        ColumnIndexWriterProjection that = (ColumnIndexWriterProjection) o;",
+          "        return onDuplicateKeyAssignments.equals(that.onDuplicateKeyAssignments) &&"
+        ],
+        "surround_after_3": [
+          "",
+          "    @Override",
+          "    public int hashCode() {"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "Objects.equals(returnValues, that.returnValues) &&",
+          "Objects.equals(fullDocSizeEstimate, that.fullDocSizeEstimate);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 11,
+          "target_declared_methods_count": 11,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_5"
+      },
+      {
+        "hunk_index": 5,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "                            allTargetColumns,\n                            outputs,\n                            returnValues);\n    }",
+        "new_string": "                            allTargetColumns,\n                            outputs,\n                            returnValues,\n                            fullDocSizeEstimate);\n    }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "    public int hashCode() {",
+          "        return Objects.hash(super.hashCode(),",
+          "                            onDuplicateKeyAssignments,"
+        ],
+        "surround_after_3": [
+          "",
+          "    @Override",
+          "    public void writeTo(StreamOutput out) throws IOException {"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "fullDocSizeEstimate);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 11,
+          "target_declared_methods_count": 11,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_6"
+      },
+      {
+        "hunk_index": 6,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "    public ColumnIndexWriterProjection bind(Function<? super Symbol, Symbol> binder) {",
+        "new_string": "        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {\n            out.writeLong(fullDocSizeEstimate);\n        }\n    public ColumnIndexWriterProjection bind(Function<? super Symbol, Symbol> binder) {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        }",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "        HashMap<Reference, Symbol> boundOnDuplicateKeyAssignments =",
+          "            new HashMap<>(onDuplicateKeyAssignments.size());",
+          "        for (var assignment : onDuplicateKeyAssignments.entrySet()) {"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "if (out.getVersion().onOrAfter(Version.V_5_10_5)) {",
+          "out.writeLong(fullDocSizeEstimate);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 11,
+          "target_declared_methods_count": 11,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "bind"
+      },
+      {
+        "hunk_index": 7,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "            autoCreateIndices(),\n            outputs,\n            returnValues\n            );",
+        "new_string": "            autoCreateIndices(),\n            outputs,\n            returnValues,\n            fullDocSizeEstimate\n            );",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "            clusteredByIdent(),",
+          "            clusteredBySymbol,",
+          "            Settings.EMPTY,"
+        ],
+        "surround_after_3": [
+          "    }",
+          "}"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "fullDocSizeEstimate"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 11,
+          "target_declared_methods_count": 11,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_8"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "    public UpdateProjection(Symbol uidSymbol,",
+        "new_string": "    private final long fullDocSizeEstimate;\n\n    public UpdateProjection(Symbol uidSymbol,",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "    @Nullable",
+          "    private Long requiredVersion;",
+          ""
+        ],
+        "surround_after_3": [
+          "                            String[] assignmentsColumns,",
+          "                            Symbol[] assignments,",
+          "                            Symbol[] outputs,"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private final long fullDocSizeEstimate;",
+          "@Nullable Long requiredVersion,",
+          "long fullDocSizeEstimate) {"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 12,
+          "target_declared_methods_count": 12,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "<class_declaration>"
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "                            Symbol[] outputs,\n                            @Nullable Symbol[] returnValues,\n                            @Nullable Long requiredVersion) {\n        this.uidSymbol = uidSymbol;",
+        "new_string": "                            Symbol[] outputs,\n                            @Nullable Symbol[] returnValues,\n                            @Nullable Long requiredVersion,\n                            long fullDocSizeEstimate) {\n        this.uidSymbol = uidSymbol;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "    public UpdateProjection(Symbol uidSymbol,",
+          "                            String[] assignmentsColumns,",
+          "                            Symbol[] assignments,"
+        ],
+        "surround_after_3": [
+          "        this.assignmentsColumns = assignmentsColumns;",
+          "        this.assignments = assignments;",
+          "        this.returnValues = returnValues;"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private final long fullDocSizeEstimate;",
+          "@Nullable Long requiredVersion,",
+          "long fullDocSizeEstimate) {"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 12,
+          "target_declared_methods_count": 12,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "<class_declaration>"
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "    public UpdateProjection(StreamInput in) throws IOException {",
+        "new_string": "        this.fullDocSizeEstimate = fullDocSizeEstimate;\n    public UpdateProjection(StreamInput in) throws IOException {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        this.requiredVersion = requiredVersion;",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "        uidSymbol = Symbol.fromStream(in);",
+          "        int assignmentColumnsSize = in.readVInt();",
+          "        assignmentsColumns = new String[assignmentColumnsSize];"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "this.fullDocSizeEstimate = fullDocSizeEstimate;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 12,
+          "target_declared_methods_count": 12,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_2"
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "    public Symbol uidSymbol() {",
+        "new_string": "        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n            this.fullDocSizeEstimate = in.readLong();\n        } else {\n            this.fullDocSizeEstimate = 0;\n        }\n    }\n\n    public long fullDocSizeEstimate() {\n        return fullDocSizeEstimate;\n    public Symbol uidSymbol() {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        }",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "        return uidSymbol;",
+          "    }",
+          ""
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "if (in.getVersion().onOrAfter(Version.V_5_10_5)) {",
+          "this.fullDocSizeEstimate = in.readLong();",
+          "this.fullDocSizeEstimate = 0;",
+          "public long fullDocSizeEstimate() {",
+          "return fullDocSizeEstimate;"
+        ],
+        "required_symbols": [
+          "fullDocSizeEstimate"
+        ],
+        "protected_symbols": [
+          "fullDocSizeEstimate"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 12,
+          "target_declared_methods_count": 12,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "fullDocSizeEstimate"
+          ]
+        },
+        "target_method_hint": "uidSymbol"
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "operation_index": 0,
+        "edit_type": "insert_after",
+        "old_string": "                out.writeVInt(0);",
+        "new_string": "                out.writeVInt(0);\n        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {\n            out.writeLong(fullDocSizeEstimate);\n        }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_after",
+        "surround_before_3": [
+          "                    Symbol.toStream(returnValues[i], out);",
+          "                }",
+          "            } else {"
+        ],
+        "surround_after_3": [
+          "            }",
+          "        }",
+          "    }"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "if (out.getVersion().onOrAfter(Version.V_5_10_5)) {",
+          "out.writeLong(fullDocSizeEstimate);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 12,
+          "target_declared_methods_count": 12,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_4"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "                                      boolean autoCreateIndices,\n                                      List<Symbol> returnValues,\n                                      UUID jobId\n                                      ) {",
+        "new_string": "                                      boolean autoCreateIndices,\n                                      List<Symbol> returnValues,\n                                      UUID jobId,\n                                      long fullDocSizeEstimate\n                                      ) {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "                                      boolean ignoreDuplicateKeys,",
+          "                                      @Nullable Map<Reference, Symbol> onConflictAssignmentsByRef,",
+          "                                      int bulkActions,"
+        ],
+        "surround_after_3": [
+          "        RowShardResolver rowShardResolver = new RowShardResolver(",
+          "            txnCtx, nodeCtx, primaryKeyIdents, primaryKeySymbols, clusteredByColumn, routingSymbol);",
+          "        assert columnReferences.size() == insertInputs.size()"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "long fullDocSizeEstimate"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 2,
+          "target_declared_methods_count": 2,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_1"
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "\n        InputRow insertValues = new InputRow(insertInputs);\n        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(\n            id,\n            pkValues,\n            autoGeneratedTimestamp,\n            insertColumns,\n            insertValues.materialize(),\n            onConflictAssignments\n        );\n",
+        "new_string": "\n        InputRow insertValues = new InputRow(insertInputs);\n        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {\n            return ShardUpsertRequest.Item.forInsert(\n                id,\n                pkValues,\n                autoGeneratedTimestamp,\n                insertColumns,\n                insertValues.materialize(),\n                onConflictAssignments,\n                fullDocSizeEstimate\n            );\n        };\n",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "            returnValues.isEmpty() ? null : returnValues.toArray(new Symbol[0]),",
+          "            jobId",
+          "        );"
+        ],
+        "surround_after_3": [
+          "        var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();",
+          "",
+          "        shardingUpsertExecutor = new ShardingUpsertExecutor("
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {",
+          "return ShardUpsertRequest.Item.forInsert(",
+          "autoGeneratedTimestamp,",
+          "insertValues.materialize(),",
+          "onConflictAssignments,",
+          "fullDocSizeEstimate"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 2,
+          "target_declared_methods_count": 2,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_2"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "            missingAssignmentsColumns,\n            new Object[]{source.value()},\n            null\n        );",
+        "new_string": "            missingAssignmentsColumns,\n            new Object[]{source.value()},\n            null,\n            0\n        );",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "            id,",
+          "            pkValues,",
+          "            autoGeneratedTimestamp,"
+        ],
+        "surround_after_3": [
+          "",
+          "        Predicate<UpsertResults> earlyTerminationCondition = results -> failFast && results.containsErrors();",
+          "        Function<UpsertResults, Throwable> earlyTerminationExceptionGenerator = UpsertResults::resultsToFailure;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 3,
+          "target_declared_methods_count": 3,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_1"
+      }
+    ],
+    "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "            statement.tableInfo().isPartitioned(),\n            outputs,\n            statement.outputs() == null ? List.of() : statement.outputs()\n        );",
+        "new_string": "            statement.tableInfo().isPartitioned(),\n            outputs,\n            statement.outputs() == null ? List.of() : statement.outputs(),\n            plannerContext.nodeContext().tableStats().estimatedSizePerRow(statement.tableInfo())\n        );",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "            statement.tableInfo().clusteredBy(),",
+          "            statement.clusteredBySymbol(),",
+          "            Settings.EMPTY,"
+        ],
+        "surround_after_3": [
+          "        LogicalPlan plannedSubQuery = logicalPlanner.plan(",
+          "            statement.subQueryRelation(),",
+          "            plannerContext,"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "statement.outputs() == null ? List.of() : statement.outputs(),",
+          "plannerContext.nodeContext().tableStats().estimatedSizePerRow(statement.tableInfo())"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 1,
+          "target_declared_methods_count": 1,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_1"
+      }
+    ],
+    "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "        UpdateProjection updateProjection = new UpdateProjection(",
+        "new_string": "\n        UpdateProjection updateProjection = new UpdateProjection(",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "                outputSymbols[i] = new InputColumn(i, returnValues.get(i).valueType());",
+          "            }",
+          "        }"
+        ],
+        "surround_after_3": [
+          "            new InputColumn(0, idReference.valueType()),",
+          "            assignments.targetNames(),",
+          "            assignmentSources,"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 7,
+          "target_declared_methods_count": 7,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_1"
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "            outputSymbols,\n            returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n            null);\n",
+        "new_string": "            outputSymbols,\n            returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n            null,\n            plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)\n        );\n",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "            new InputColumn(0, idReference.valueType()),",
+          "            assignments.targetNames(),",
+          "            assignmentSources,"
+        ],
+        "surround_after_3": [
+          "        WhereClause where = detailedQuery.toBoundWhereClause(",
+          "            tableInfo, params, subQueryResults, plannerCtx.transactionContext(), plannerCtx.nodeContext(), plannerCtx.clusterState().metadata());",
+          "        if (where.hasVersions()) {"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 7,
+          "target_declared_methods_count": 7,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_1"
+      }
+    ],
+    "server/src/main/java/io/crate/planner/operators/InsertFromValues.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "                writerProjection.allTargetColumns().toArray(Reference[]::new),\n                insertValues.materialize(),\n                onConflictAssignments\n            );",
+        "new_string": "                writerProjection.allTargetColumns().toArray(Reference[]::new),\n                insertValues.materialize(),\n                onConflictAssignments,\n                0\n            );",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "                id,",
+          "                pkValues,",
+          "                autoGeneratedTimestamp,"
+        ],
+        "surround_after_3": [
+          "",
+          "        var rowShardResolver = new RowShardResolver(",
+          "            plannerContext.transactionContext(),"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "onConflictAssignments,"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 21,
+          "target_declared_methods_count": 21,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "hunk_1"
+      }
+    ],
+    "server/src/main/java/io/crate/statistics/TableStats.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/statistics/TableStats.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import java.util.HashMap;",
+        "new_string": "import io.crate.metadata.table.TableInfo;\nimport java.util.HashMap;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "",
+          "import io.crate.metadata.RelationName;",
+          ""
+        ],
+        "surround_after_3": [
+          "import java.util.Map;",
+          "import java.util.Set;",
+          ""
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 5,
+          "target_declared_methods_count": 5,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "<import>"
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/statistics/TableStats.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "    public Iterable<ColumnStatsEntry> statsEntries() {",
+        "new_string": "    /**\n     * Returns an estimation (avg) size of each row of the table in bytes or if no stats are available\n     * for the given table an estimate (avg) based on the column types of the table.\n     */\n    public long estimatedSizePerRow(TableInfo tableInfo) {\n        Stats stats = tableStats.get(tableInfo.ident());\n        if (stats == null) {\n            // if stats are not available we fall back to estimate the size based on\n            // column types. Therefore we need to get the column information.\n            return Stats.EMPTY.estimateSizeForColumns(tableInfo);\n        } else {\n            return stats.averageSizePerRowInBytes();\n        }\n    }\n\n    public Iterable<ColumnStatsEntry> statsEntries() {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        return tableStats.getOrDefault(relationName, Stats.EMPTY).averageSizePerRowInBytes();",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "        Set<Map.Entry<RelationName, Stats>> entries = tableStats.entrySet();",
+          "        return () -> entries.stream()",
+          "            .flatMap(tableEntry -> {"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "public long estimatedSizePerRow(TableInfo tableInfo) {",
+          "Stats stats = tableStats.get(tableInfo.ident());",
+          "if (stats == null) {",
+          "return Stats.EMPTY.estimateSizeForColumns(tableInfo);",
+          "return stats.averageSizePerRowInBytes();"
+        ],
+        "required_symbols": [
+          "estimatedSizePerRow"
+        ],
+        "protected_symbols": [
+          "estimatedSizePerRow"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 5,
+          "target_declared_methods_count": 5,
+          "matched_symbols_before": [
+            "estimatedSizePerRow"
+          ],
+          "missing_symbols_before": []
+        },
+        "target_method_hint": "statsEntries"
+      }
+    ]
+  },
+  "last_plan_signature": "ff97e8e76b8ff8eb5e66e545c20d580d9a58723e62d232ed972965481bfb5b2d",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": true,
+  "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
+  "force_type_v_retry_files": [
+    "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java"
+  ],
+  "agent_token_usage": {
+    "planning_agent": {
+      "input_tokens": 8145,
+      "output_tokens": 1623,
+      "total_tokens": 9768,
+      "estimated": true,
+      "sources": [
+        "planning_agent.provider_usage",
+        "planning_agent.provider_usage",
+        "planning_agent.provider_usage",
+        "planning_agent.provider_usage",
+        "planning_agent.type_v_subagent.tiktoken"
+      ]
+    }
+  },
+  "token_usage": {
+    "input_tokens": 8145,
+    "output_tokens": 1623,
+    "total_tokens": 9768,
+    "estimated": true,
+    "sources": [
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken"
+    ]
+  }
+}

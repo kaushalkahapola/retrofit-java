@@ -187,6 +187,12 @@ The structural locator has provided hints about where these hunks might belong i
 ## Consistency Map
 {consistency_map}
 
+## str_replace Edit Plan (Planning Agent — this file only)
+The planner produced these operations for `{target_file}`. If an entry has `"verified": true`, try `edit_file` with the exact `old_string` / `new_string` first. Adapt if the target file has drifted.
+```json
+{hunk_generation_plan}
+```
+
 ## Target File
 `{target_file}` (Mapped from `{mainline_file}`)
 
@@ -1913,9 +1919,17 @@ async def _run_react_edit_pass(
             + patch_diff_for_prompt[-3000:]
         )
 
+    plan_json_for_prompt = json.dumps(plan_entries, indent=2)
+    if len(plan_json_for_prompt) > 12000:
+        plan_json_for_prompt = (
+            plan_json_for_prompt[:5500]
+            + "\n\n... [TRUNCATED EDIT PLAN] ...\n\n"
+            + plan_json_for_prompt[-5500:]
+        )
+
     system_prompt = _FILE_EDITOR_AGENT_SYSTEM.format(
         patch_diff=patch_diff_for_prompt,
-        hunk_generation_plan=json.dumps(plan_entries, indent=2),
+        hunk_generation_plan=plan_json_for_prompt,
         mapping_hints="\n---\n".join(mapping_hints)
         if mapping_hints
         else "No structural mapping hints available.",
@@ -1953,7 +1967,13 @@ async def _run_react_edit_pass(
 
     tool_budget = _react_tool_budget_for_complexity(patch_complexity)
     if validation_attempts > 0:
-        tool_budget = max(6, min(tool_budget, 10))
+        # Never cap retries at 10: TYPE_V / multi-entry plans routinely need many
+        # read/edit/syntax-check steps (logs show 16–25+ tool calls on real patches).
+        tool_budget = max(tool_budget, 20)
+    n_plan = len(plan_entries or [])
+    if n_plan >= 3:
+        tool_budget = max(tool_budget, 10 + 3 * n_plan)
+    tool_budget = max(4, min(100, tool_budget))
     editor_agent = create_react_agent(llm, toolkit.get_tools())
     try:
         react_recursion = int(os.getenv("FILE_EDITOR_REACT_RECURSION_LIMIT", "40"))
@@ -2323,7 +2343,6 @@ async def file_editor_node(state: AgentState, config) -> dict:
         "deterministic_apply_failures": 0,
         "plan_preflight_failures": 0,
         "react_escalations": 0,
-        "react_skipped_statement_outside_block": 0,
         "developer_fast_path_hits": 0,
     }
 
@@ -2711,22 +2730,9 @@ async def file_editor_node(state: AgentState, config) -> dict:
             if not ok:
                 agent_metrics["deterministic_apply_failures"] += 1
                 fail_bucket = classify_syntax_failure_message(apply_reason)
-                skip_react = fail_bucket == "statement_outside_block"
-                if skip_react:
-                    agent_metrics["react_skipped_statement_outside_block"] += 1
-                    print(
-                        f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}. "
-                        "ESCALATION_SKIP_REACT: statement_outside_block (avoid token burn)."
-                    )
-                    _git_reset_file(target_repo_path, target_file)
-                    task_entry["status"] = "failed"
-                    task_entry["reason"] = "deterministic_syntax_failed_no_react"
-                    task_entry["error"] = str(apply_reason)[:800]
-                    continue
-
                 print(
                     f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}. "
-                    "Escalating to smart ReAct refinement."
+                    f"(syntax_class={fail_bucket}) Escalating to smart ReAct refinement."
                 )
                 _git_reset_file(target_repo_path, target_file)
                 used_react = True
