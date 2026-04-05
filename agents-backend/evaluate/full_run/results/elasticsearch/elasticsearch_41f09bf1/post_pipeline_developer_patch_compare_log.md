@@ -1,6 +1,6 @@
 # Post-Pipeline Developer Patch Comparison
 
-**Exact Developer Patch (code-only)**: False
+**Exact Developer Patch (code-only)**: True
 
 **Comparison Method**: file_state
 
@@ -15,7 +15,7 @@
 
 ## File State Comparison
 - Compared files: ['server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java', 'server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java']
-- Mismatched files: ['server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java', 'server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java']
+- Mismatched files: []
 - Error: None
 
 ## Comparison Scope
@@ -27,7 +27,7 @@
 ### server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
 
 - Developer hunks: 5
-- Generated hunks: 8
+- Generated hunks: 5
 
 #### Hunk 1
 
@@ -170,7 +170,7 @@ Developer
 
 Generated
 ```diff
-@@ -70,14 +74,19 @@
+@@ -70,9 +74,15 @@
              TransportGetAllocationStatsAction.Request::new,
              indexNameExpressionResolver,
              TransportGetAllocationStatsAction.Response::new,
@@ -188,29 +188,12 @@ Generated
          this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());
          this.featureService = featureService;
      }
- 
--    @Override
-     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
-         if (clusterService.state().getMinTransportVersion().before(TransportVersions.V_8_14_0)) {
-             // The action is not available before ALLOCATION_STATS
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,4 +1,4 @@-@@ -70,9 +74,15 @@
-+@@ -70,14 +74,19 @@
-              TransportGetAllocationStatsAction.Request::new,
-              indexNameExpressionResolver,
-              TransportGetAllocationStatsAction.Response::new,
-@@ -16,3 +16,8 @@          this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());
-          this.featureService = featureService;
-      }
-+ 
-+-    @Override
-+     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
-+         if (clusterService.state().getMinTransportVersion().before(TransportVersions.V_8_14_0)) {
-+             // The action is not available before ALLOCATION_STATS
+(No textual difference)
 
 ```
 
@@ -249,11 +232,9 @@ Developer
 
 Generated
 ```diff
-@@ -87,20 +96,24 @@
-         super.doExecute(task, request, listener);
-     }
+@@ -89,15 +99,21 @@
  
--    @Override
+     @Override
      protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {
 -        listener.onResponse(
 -            new Response(
@@ -276,132 +257,13 @@ Generated
 +        ).addListener(listener);
      }
  
--    @Override
-     protected ClusterBlockException checkBlock(Request request, ClusterState state) {
-         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
-     }
+     @Override
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,6 +1,8 @@-@@ -89,15 +99,21 @@
-+@@ -87,20 +96,24 @@
-+         super.doExecute(task, request, listener);
-+     }
-  
--     @Override
-+-    @Override
-      protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {
- -        listener.onResponse(
- -            new Response(
-@@ -23,4 +25,7 @@ +        ).addListener(listener);
-      }
-  
--     @Override
-+-    @Override
-+     protected ClusterBlockException checkBlock(Request request, ClusterState state) {
-+         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
-+     }
-
-```
-
-#### Hunk 6
-
-Developer
-```diff
-*No hunk*
-```
-
-Generated
-```diff
-@@ -123,7 +136,6 @@
-                 : EnumSet.of(Metric.ALLOCATIONS, Metric.FS);
-         }
- 
--        @Override
-         public void writeTo(StreamOutput out) throws IOException {
-             assert out.getTransportVersion().onOrAfter(TransportVersions.V_8_14_0);
-             super.writeTo(out);
-
-```
-
-Developer -> Generated (Unified Diff)
-```diff
---- developer+++ generated@@ -1 +1,8 @@-*No hunk*+@@ -123,7 +136,6 @@
-+                 : EnumSet.of(Metric.ALLOCATIONS, Metric.FS);
-+         }
-+ 
-+-        @Override
-+         public void writeTo(StreamOutput out) throws IOException {
-+             assert out.getTransportVersion().onOrAfter(TransportVersions.V_8_14_0);
-+             super.writeTo(out);
-
-```
-
-#### Hunk 7
-
-Developer
-```diff
-*No hunk*
-```
-
-Generated
-```diff
-@@ -136,7 +148,6 @@
-             return metrics;
-         }
- 
--        @Override
-         public ActionRequestValidationException validate() {
-             return null;
-         }
-
-```
-
-Developer -> Generated (Unified Diff)
-```diff
---- developer+++ generated@@ -1 +1,8 @@-*No hunk*+@@ -136,7 +148,6 @@
-+             return metrics;
-+         }
-+ 
-+-        @Override
-+         public ActionRequestValidationException validate() {
-+             return null;
-+         }
-
-```
-
-#### Hunk 8
-
-Developer
-```diff
-*No hunk*
-```
-
-Generated
-```diff
-@@ -163,7 +174,6 @@
-             }
-         }
- 
--        @Override
-         public void writeTo(StreamOutput out) throws IOException {
-             out.writeMap(nodeAllocationStats, StreamOutput::writeString, StreamOutput::writeWriteable);
-             if (out.getTransportVersion().onOrAfter(TransportVersions.WATERMARK_THRESHOLDS_STATS)) {
-
-```
-
-Developer -> Generated (Unified Diff)
-```diff
---- developer+++ generated@@ -1 +1,8 @@-*No hunk*+@@ -163,7 +174,6 @@
-+             }
-+         }
-+ 
-+-        @Override
-+         public void writeTo(StreamOutput out) throws IOException {
-+             out.writeMap(nodeAllocationStats, StreamOutput::writeString, StreamOutput::writeWriteable);
-+             if (out.getTransportVersion().onOrAfter(TransportVersions.WATERMARK_THRESHOLDS_STATS)) {
+(No textual difference)
 
 ```
 
@@ -428,30 +290,20 @@ Developer
 
 Generated
 ```diff
-@@ -19,6 +19,7 @@
+@@ -18,6 +18,7 @@
+ import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
  import org.elasticsearch.cluster.service.ClusterService;
  import org.elasticsearch.common.util.Maps;
- 
 +import org.elasticsearch.transport.Transports;
+ 
  import java.util.Map;
  
- public class AllocationStatsService {
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,8 +1,8 @@-@@ -18,6 +18,7 @@
-- import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
-+@@ -19,6 +19,7 @@
-  import org.elasticsearch.cluster.service.ClusterService;
-  import org.elasticsearch.common.util.Maps;
-+ 
- +import org.elasticsearch.transport.Transports;
-- 
-  import java.util.Map;
-  
-+ public class AllocationStatsService {
+(No textual difference)
 
 ```
 
@@ -496,7 +348,7 @@ Developer -> Generated (Unified Diff)
 ## Full Generated Patch (Agent-Only, code-only)
 ```diff
 diff --git a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
-index 259a244bff9..1dd2d60d6cc 100644
+index 259a244bff9..a22173a4c5b 100644
 --- a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
 +++ b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
 @@ -13,9 +13,12 @@ import org.elasticsearch.TransportVersions;
@@ -529,7 +381,7 @@ index 259a244bff9..1dd2d60d6cc 100644
      private final DiskThresholdSettings diskThresholdSettings;
      private final FeatureService featureService;
  
-@@ -70,14 +74,19 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+@@ -70,9 +74,15 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
              TransportGetAllocationStatsAction.Request::new,
              indexNameExpressionResolver,
              TransportGetAllocationStatsAction.Response::new,
@@ -547,16 +399,9 @@ index 259a244bff9..1dd2d60d6cc 100644
          this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());
          this.featureService = featureService;
      }
+@@ -89,15 +99,21 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
  
--    @Override
-     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
-         if (clusterService.state().getMinTransportVersion().before(TransportVersions.V_8_14_0)) {
-             // The action is not available before ALLOCATION_STATS
-@@ -87,20 +96,24 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
-         super.doExecute(task, request, listener);
-     }
- 
--    @Override
+     @Override
      protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {
 -        listener.onResponse(
 -            new Response(
@@ -579,46 +424,19 @@ index 259a244bff9..1dd2d60d6cc 100644
 +        ).addListener(listener);
      }
  
--    @Override
-     protected ClusterBlockException checkBlock(Request request, ClusterState state) {
-         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
-     }
-@@ -123,7 +136,6 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
-                 : EnumSet.of(Metric.ALLOCATIONS, Metric.FS);
-         }
- 
--        @Override
-         public void writeTo(StreamOutput out) throws IOException {
-             assert out.getTransportVersion().onOrAfter(TransportVersions.V_8_14_0);
-             super.writeTo(out);
-@@ -136,7 +148,6 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
-             return metrics;
-         }
- 
--        @Override
-         public ActionRequestValidationException validate() {
-             return null;
-         }
-@@ -163,7 +174,6 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
-             }
-         }
- 
--        @Override
-         public void writeTo(StreamOutput out) throws IOException {
-             out.writeMap(nodeAllocationStats, StreamOutput::writeString, StreamOutput::writeWriteable);
-             if (out.getTransportVersion().onOrAfter(TransportVersions.WATERMARK_THRESHOLDS_STATS)) {
+     @Override
 diff --git a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
-index 3651f560e6d..65cd6af379d 100644
+index 3651f560e6d..fa4d60c83e5 100644
 --- a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
 +++ b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
-@@ -19,6 +19,7 @@ import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
+@@ -18,6 +18,7 @@ import org.elasticsearch.cluster.routing.allocation.allocator.DesiredBalanceShar
+ import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
  import org.elasticsearch.cluster.service.ClusterService;
  import org.elasticsearch.common.util.Maps;
- 
 +import org.elasticsearch.transport.Transports;
+ 
  import java.util.Map;
  
- public class AllocationStatsService {
 @@ -41,6 +42,8 @@ public class AllocationStatsService {
      }
  
@@ -634,7 +452,7 @@ index 3651f560e6d..65cd6af379d 100644
 ## Full Generated Patch (Final Effective, code-only)
 ```diff
 diff --git a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
-index 259a244bff9..1dd2d60d6cc 100644
+index 259a244bff9..a22173a4c5b 100644
 --- a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
 +++ b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
 @@ -13,9 +13,12 @@ import org.elasticsearch.TransportVersions;
@@ -667,7 +485,7 @@ index 259a244bff9..1dd2d60d6cc 100644
      private final DiskThresholdSettings diskThresholdSettings;
      private final FeatureService featureService;
  
-@@ -70,14 +74,19 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
+@@ -70,9 +74,15 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
              TransportGetAllocationStatsAction.Request::new,
              indexNameExpressionResolver,
              TransportGetAllocationStatsAction.Response::new,
@@ -685,16 +503,9 @@ index 259a244bff9..1dd2d60d6cc 100644
          this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());
          this.featureService = featureService;
      }
+@@ -89,15 +99,21 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
  
--    @Override
-     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
-         if (clusterService.state().getMinTransportVersion().before(TransportVersions.V_8_14_0)) {
-             // The action is not available before ALLOCATION_STATS
-@@ -87,20 +96,24 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
-         super.doExecute(task, request, listener);
-     }
- 
--    @Override
+     @Override
      protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {
 -        listener.onResponse(
 -            new Response(
@@ -717,46 +528,19 @@ index 259a244bff9..1dd2d60d6cc 100644
 +        ).addListener(listener);
      }
  
--    @Override
-     protected ClusterBlockException checkBlock(Request request, ClusterState state) {
-         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
-     }
-@@ -123,7 +136,6 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
-                 : EnumSet.of(Metric.ALLOCATIONS, Metric.FS);
-         }
- 
--        @Override
-         public void writeTo(StreamOutput out) throws IOException {
-             assert out.getTransportVersion().onOrAfter(TransportVersions.V_8_14_0);
-             super.writeTo(out);
-@@ -136,7 +148,6 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
-             return metrics;
-         }
- 
--        @Override
-         public ActionRequestValidationException validate() {
-             return null;
-         }
-@@ -163,7 +174,6 @@ public class TransportGetAllocationStatsAction extends TransportMasterNodeReadAc
-             }
-         }
- 
--        @Override
-         public void writeTo(StreamOutput out) throws IOException {
-             out.writeMap(nodeAllocationStats, StreamOutput::writeString, StreamOutput::writeWriteable);
-             if (out.getTransportVersion().onOrAfter(TransportVersions.WATERMARK_THRESHOLDS_STATS)) {
+     @Override
 diff --git a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
-index 3651f560e6d..65cd6af379d 100644
+index 3651f560e6d..fa4d60c83e5 100644
 --- a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
 +++ b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
-@@ -19,6 +19,7 @@ import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
+@@ -18,6 +18,7 @@ import org.elasticsearch.cluster.routing.allocation.allocator.DesiredBalanceShar
+ import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
  import org.elasticsearch.cluster.service.ClusterService;
  import org.elasticsearch.common.util.Maps;
- 
 +import org.elasticsearch.transport.Transports;
+ 
  import java.util.Map;
  
- public class AllocationStatsService {
 @@ -41,6 +42,8 @@ public class AllocationStatsService {
      }
  
