@@ -4,52 +4,42 @@
 - **Root Cause**: Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.
 
 ## Hunk Segregation
-- Code files: 3
+- Code files: 1
 - Test files: 0
 
 ## Code File Mappings
 
-### `server/src/main/java/io/crate/protocols/postgres/Portal.java`
-
-**Hunks in this file**: 2
-
-**Git Resolution**: Found `server/src/main/java/io/crate/protocols/postgres/Portal.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 30–30 |
-| 2 | propagation | `hunk_2` | `None` | 91–91 |
-### `server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java`
-
-**Hunks in this file**: 6
-
-**Git Resolution**: Found `server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 48–48 |
-| 2 | guard | `hunk_2` | `None` | 84–84 |
-| 3 | core_fix | `hunk_3` | `None` | 112–112 |
-| 4 | guard | `closeAndFinishIfSuspended` | `closeAndFinishIfSuspended` | 138–138 |
-| 5 | guard | `resume` | `resume` | 162–162 |
-| 6 | propagation | `hunk_6` | `None` | 174–174 |
-### `server/src/main/java/io/crate/session/Session.java`
+### `server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java`
 
 **Hunks in this file**: 3
 
-**Git Resolution**: Found `server/src/main/java/io/crate/session/Session.java`
+**Agent Tool Steps:**
 
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
+  - `Agent calls get_class_context` with `{"file_path": "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java"}`
+  - `Agent calls grep_repo` with `{"search_text": "ConcurrentRamAccounting.forCircuitBreaker", "is_regex": false}`
+  - `Tool: get_class_context` -> {"error": "File not found: server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java"}...
+  - `Tool: grep_repo` -> Found 18 match(es):
+  server/src/main/java/io/crate/execution/MultiPhaseExecutor.java:55 :: var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
+  server/src/main/java/io/crate/execution/eng...
+  - `Agent calls grep_repo` with `{"search_text": "executePlan", "is_regex": false}`
+  - `Tool: grep_repo` -> Found 12 match(es):
+  server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:144 :: executePlan(
+  server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:231 :: private...
+  - `Agent calls read_file` with `{"file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java"}`
+  - `Tool: read_file` -> package io.crate.planner.node.management;
+import static io.crate.data.SentinelRow.SENTINEL;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Hash...
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 585–585 |
-| 2 | core_fix | `triggerDeferredExecutions` | `triggerDeferredExecutions` | 663–663 |
-| 3 | propagation | `hunk_3` | `None` | 673–673 |
+  - Realigned hunk 1 lines: 74-113 -> 138-177
+| 1 | core_fix | `executeOrFail` | `executeOrFail` | 138–177 |
+  - Realigned hunk 2 lines: 231-292 -> 153-214
+| 2 | propagation | `executePlan` | `executePlan` | 153–214 |
+| 3 | core_fix | `hunk_3` | `None` | None–None |
 ## Test File Mappings
 
 

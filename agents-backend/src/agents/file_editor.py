@@ -31,19 +31,30 @@ Key outputs to state:
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
 import os
 import re
-import asyncio
 import subprocess
-import hashlib
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.prebuilt import create_react_agent
 
-from state import AgentState, AdaptedHunk, FileEdit, SemanticBlueprint
+from agents.hunk_generator_tools import HunkGeneratorToolkit
+from state import AdaptedHunk, AgentState, FileEdit, SemanticBlueprint
+from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_line
+from utils.java_ts_invocation_names import callee_names_from_java_snippet_lines
 from utils.llm_provider import get_llm
 from utils.patch_analyzer import PatchAnalyzer
+from utils.patch_apply_strategy import try_developer_fast_path
+from utils.plan_validator import (
+    classify_syntax_failure_message,
+    validate_plan_before_apply,
+)
+from utils.retrieval.ensemble_retriever import EnsembleRetriever
+from utils.semantic_adaptation_helper import analyze_anchor_failure_quick
 from utils.token_counter import (
     add_usage,
     aggregate_usage_from_messages,
@@ -52,18 +63,6 @@ from utils.token_counter import (
     extract_usage_from_response,
     resolve_model_name,
 )
-from langgraph.prebuilt import create_react_agent
-from utils.retrieval.ensemble_retriever import EnsembleRetriever
-from agents.hunk_generator_tools import HunkGeneratorToolkit
-from utils.semantic_adaptation_helper import analyze_anchor_failure_quick
-from utils.plan_validator import (
-    classify_syntax_failure_message,
-    validate_plan_before_apply,
-)
-from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_line
-from utils.patch_apply_strategy import try_developer_fast_path
-from utils.java_ts_invocation_names import callee_names_from_java_snippet_lines
-
 
 _FRAMEWORK_CHAIN_SYMBOLS = {
     "newForked",
@@ -2080,6 +2079,31 @@ async def file_editor_node(state: AgentState, config) -> dict:
             original_commit=original_commit,
         )
         target_file = _normalize_rel_path(op_plan.get("target_file") or mainline_file)
+
+        # Pair-mismatch override: if Agent 2 (structural locator) identified a different
+        # target file that actually exists on disk (e.g. class renamed between branches),
+        # prefer it over the retriever-resolved path, which may have found the mainline
+        # file only in git history (not at HEAD) and returned it as the "best" candidate.
+        # This is the critical fix for cross-file backport scenarios.
+        _ctx_list_override = (mapped_target_context or {}).get(mainline_file, [])
+        if _ctx_list_override:
+            _ctx_target = _normalize_rel_path(
+                ((_ctx_list_override[0]) or {}).get("target_file") or ""
+            )
+            if (
+                _ctx_target
+                and _ctx_target != _normalize_rel_path(mainline_file)
+                and _exists_file(target_repo_path, _ctx_target)
+                and not _exists_file(target_repo_path, target_file)
+            ):
+                print(
+                    f"    Agent 3: Pair-mismatch redirect: `{target_file}` → "
+                    f"`{_ctx_target}` (mapped_target_context override — "
+                    "mainline file absent from target HEAD, mapped file exists on disk)."
+                )
+                target_file = _ctx_target
+                op_plan["target_file"] = _ctx_target
+                op_plan["reason"] = "mapped_target_context_pair_mismatch"
 
         # Skip files not in retry scope (on retries)
         if retry_files and not coupled_retry_lock:

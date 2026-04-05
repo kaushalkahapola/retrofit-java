@@ -20,16 +20,17 @@ The node name is kept identical so all routing logic and result-file naming
 (phase3_hunk_generator) remains unchanged.
 """
 
-from langgraph.graph import StateGraph, START, END
-from state import AgentState
+from langgraph.graph import END, START, StateGraph
+
 from agents import (
-    phase_0_optimistic,
     context_analyzer_node,
-    structural_locator_node,
-    planning_agent_node,
     file_editor_node,
+    phase_0_optimistic,
+    planning_agent_node,
+    structural_locator_node,
     validation_agent,
 )
+from state import AgentState
 
 # Maximum number of "Prove Red, Make Green" retry loops before giving up.
 MAX_VALIDATION_ATTEMPTS = 3
@@ -140,6 +141,16 @@ def route_validation(state: AgentState) -> str:
             "Router: Validation reported infrastructure failure. "
             "Not retrying generation."
         )
+        return "END"
+
+    if failure_category == "target_file_missing":
+        if attempts < MAX_VALIDATION_ATTEMPTS:
+            print(
+                f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) — "
+                "target file missing. Re-routing to structural_locator for fresh file search."
+            )
+            return "structural_locator"
+        print("Router: Target file missing but max retries reached. Exiting.")
         return "END"
 
     if attempts < MAX_VALIDATION_ATTEMPTS:

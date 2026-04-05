@@ -29,19 +29,19 @@ from typing import Any, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.prebuilt import create_react_agent
+
+from agents.hunk_generator_tools import HunkGeneratorToolkit
+from agents.semantic_hunk_adapter import SemanticHunkAdapter
 from state import AgentState
 from utils.llm_provider import get_llm
 from utils.patch_analyzer import PatchAnalyzer
+from utils.plan_validator import consolidate_plan_entries_java
 from utils.token_counter import (
     add_usage,
     count_text_tokens,
     extract_usage_from_response,
     resolve_model_name,
 )
-from agents.hunk_generator_tools import HunkGeneratorToolkit
-from agents.semantic_hunk_adapter import SemanticHunkAdapter
-from utils.plan_validator import consolidate_plan_entries_java
-
 
 # ---------------------------------------------------------------------------
 # Planner system prompt
@@ -2244,6 +2244,31 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         msg = "Planning Agent Error: missing patch_diff"
         print(msg)
         return {"messages": [HumanMessage(content=msg)]}
+
+    # Gate: abort planning if ALL mapped contexts are flagged as file-missing.
+    # This means structural locator found no valid target files — planning
+    # would produce a stagnant plan targeting non-existent files. Signal
+    # the router to re-run structural locator instead.
+    all_mapped_ctxs = [
+        ctx for ctxs in (mapped_target_context or {}).values() for ctx in (ctxs or [])
+    ]
+    if all_mapped_ctxs and all(
+        (ctx or {}).get("anchor_reason") == "target_file_missing_or_unreadable"
+        for ctx in all_mapped_ctxs
+    ):
+        msg = (
+            "Planning Agent: All mapped contexts have anchor_reason='target_file_missing_or_unreadable'. "
+            "No valid target file found. Aborting plan — routing back to structural locator."
+        )
+        print(msg)
+        return {
+            "messages": [HumanMessage(content=msg)],
+            "hunk_generation_plan": {},
+            "validation_failure_category": "target_file_missing",
+            "validation_failed_stage": "planning_aborted_file_missing",
+            "last_plan_signature": "",
+            "validation_repeated_plan_detected": False,
+        }
 
     analyzer = PatchAnalyzer()
     raw_hunks_by_file = analyzer.extract_raw_hunks(

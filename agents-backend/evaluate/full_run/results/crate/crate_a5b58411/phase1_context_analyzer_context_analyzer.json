@@ -1,0 +1,42 @@
+{
+  "semantic_blueprint": {
+    "root_cause_hypothesis": "Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.",
+    "fix_logic": "Apply each source hunk with target-verified context and symbol consistency while preserving behavior.",
+    "dependent_apis": [],
+    "patch_intent_summary": "Backport patch behavior to target branch with minimal, context-correct edits.",
+    "hunk_chain": [
+      {
+        "hunk_index": 1,
+        "file": "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java",
+        "summary": "Adds logic (+6 lines).",
+        "role": "core_fix",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 1
+      },
+      {
+        "hunk_index": 2,
+        "file": "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java",
+        "summary": "Modifies logic (+1/-1 lines).",
+        "role": "propagation",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 2
+      },
+      {
+        "hunk_index": 3,
+        "file": "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java",
+        "summary": "Modifies logic (+1/-16 lines).",
+        "role": "core_fix",
+        "connects_to_next": "",
+        "global_index": 3
+      }
+    ]
+  },
+  "patch_diff": "diff --git a/a/server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java b/b/server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java\nindex 0000000..0000000 100644\n--- a/a/server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java\n+++ b/b/server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java\n@@ -91,6 +91,12 @@\n                               RowConsumer consumer,\n                               Row params,\n                               SubQueryResults subQueryResults) throws Exception {\n+        var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n+            \"multi-phase\",\n+            dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n+            plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n+        );\n+        consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n         executePlan(\n             plan,\n             dependencies,\n@@ -100,7 +106,7 @@\n             subQueryResults,\n             new IdentityHashMap<>(),\n             new ArrayList<>(plan.dependencies().size()),\n-            null,\n+            ramAccounting,\n             null\n         );\n     }\n@@ -113,24 +119,9 @@\n                                              SubQueryResults subQueryResults,\n                                              Map<SelectSymbol, Object> valuesBySubQuery,\n                                              List<Map<String, Object>> explainResults,\n-                                             @Nullable RamAccounting ramAccounting,\n+                                             RamAccounting ramAccounting,\n                                              @Nullable SelectSymbol selectSymbol) {\n         boolean isTopLevel = selectSymbol == null;\n-\n-        assert ramAccounting != null || isTopLevel : \"ramAccounting must NOT be null for subPlans\";\n-\n-        if (ramAccounting == null) {\n-            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n-                \"multi-phase\",\n-                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n-                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n-            );\n-        }\n-\n-        if (isTopLevel == false) {\n-            plannerContext = PlannerContext.forSubPlan(plannerContext);\n-        }\n-\n         IdentityHashMap<SelectSymbol, Object> subPlanValueBySubQuery = new IdentityHashMap<>();\n         ArrayList<Map<String, Object>> subPlansExplainResults = new ArrayList<>(plan.dependencies().size());\n         List<CompletableFuture<?>> subPlansFutures = new ArrayList<>(plan.dependencies().size());\n",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "deterministic_no_llm"
+  }
+}
