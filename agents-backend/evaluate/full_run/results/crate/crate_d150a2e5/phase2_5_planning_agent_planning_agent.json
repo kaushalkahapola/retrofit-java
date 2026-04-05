@@ -1,0 +1,190 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import io.crate.metadata.RelationName;",
+        "new_string": "import io.crate.metadata.Reference;\nimport io.crate.metadata.RelationName;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import io.crate.execution.support.ChainableActions;",
+          "import io.crate.metadata.GeneratedReference;",
+          "import io.crate.metadata.PartitionName;"
+        ],
+        "surround_after_3": [
+          "import io.crate.metadata.table.TableInfo;",
+          "import io.crate.replication.logical.LogicalReplicationService;",
+          "import io.crate.replication.logical.metadata.Publication;"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 14,
+          "target_declared_methods_count": 14,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "operation_index": 1,
+        "edit_type": "insert_before",
+        "old_string": "@Singleton",
+        "new_string": "import io.crate.sql.tree.ColumnPolicy;\n@Singleton",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import io.crate.replication.logical.LogicalReplicationService;",
+          "import io.crate.replication.logical.metadata.Publication;",
+          ""
+        ],
+        "surround_after_3": [
+          "public class AlterTableOperation {",
+          "",
+          "    public static final String RESIZE_PREFIX = \".resized.\";"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 14,
+          "target_declared_methods_count": 14,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "        String subject = null;",
+        "new_string": "        var newReferences = addColumnRequest.references();\n        String subject = null;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "    }",
+          "",
+          "    public CompletableFuture<Long> addColumn(AddColumnRequest addColumnRequest) {"
+        ],
+        "surround_after_3": [
+          "        if (addColumnRequest.pKeyIndices().isEmpty() == false) {",
+          "            subject = \"primary key\";",
+          "        } else if (addColumnRequest.references().stream().anyMatch(ref -> ref instanceof GeneratedReference)) {"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "var newReferences = addColumnRequest.references();",
+          "for (Reference newRef : newReferences) {",
+          "if (newReferences.stream().anyMatch(r -> r.column().isChildOf(newRef.column()))",
+          "&& newRef.columnPolicy().equals(ColumnPolicy.IGNORED)) {",
+          "subject = \"sub column to an OBJECT(IGNORED) parent\";"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 14,
+          "target_declared_methods_count": 14,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "operation_index": 1,
+        "edit_type": "insert_before",
+        "old_string": "        if (subject != null) {",
+        "new_string": "        } else {\n            for (Reference newRef : newReferences) {\n                if (newReferences.stream().anyMatch(r -> r.column().isChildOf(newRef.column()))\n                    && newRef.columnPolicy().equals(ColumnPolicy.IGNORED)) {\n                    subject = \"sub column to an OBJECT(IGNORED) parent\";\n                    break;\n                }\n            }\n        if (subject != null) {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        } else if (addColumnRequest.references().stream().anyMatch(ref -> ref instanceof GeneratedReference)) {",
+          "            subject = \"generated\";",
+          "        }"
+        ],
+        "surround_after_3": [
+          "            String finalSubject = subject;",
+          "            return getRowCount(addColumnRequest.relationName()).thenCompose(rowCount -> {",
+          "                if (rowCount > 0) {"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "var newReferences = addColumnRequest.references();",
+          "for (Reference newRef : newReferences) {",
+          "if (newReferences.stream().anyMatch(r -> r.column().isChildOf(newRef.column()))",
+          "&& newRef.columnPolicy().equals(ColumnPolicy.IGNORED)) {",
+          "subject = \"sub column to an OBJECT(IGNORED) parent\";"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 14,
+          "target_declared_methods_count": 14,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ]
+  },
+  "last_plan_signature": "dd5206e3e17aed496ad81390fceba49e0ef17a63a60eca8cb63480749fc0734b",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

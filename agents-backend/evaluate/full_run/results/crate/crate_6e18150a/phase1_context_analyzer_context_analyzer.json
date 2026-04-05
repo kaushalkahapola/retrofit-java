@@ -1,0 +1,28 @@
+{
+  "semantic_blueprint": {
+    "root_cause_hypothesis": "Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.",
+    "fix_logic": "Apply each source hunk with target-verified context and symbol consistency while preserving behavior.",
+    "dependent_apis": [
+      "isNarrowingConversionPossible"
+    ],
+    "patch_intent_summary": "Backport patch behavior to target branch with minimal, context-correct edits.",
+    "hunk_chain": [
+      {
+        "hunk_index": 1,
+        "file": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+        "summary": "Modifies logic (+3/-2 lines).",
+        "role": "guard",
+        "connects_to_next": "",
+        "global_index": 1
+      }
+    ]
+  },
+  "patch_diff": "From 6e18150a3937176f863d24c4449a8f7c95e84331 Mon Sep 17 00:00:00 2001\nFrom: baur <baurzhansahariev@gmail.com>\nDate: Thu, 20 Feb 2025 16:55:31 +0100\nSubject: [PATCH] Allow comparing a non-boolean column to a boolean literal in\n WHERE clause\n\nFollow up to https://github.com/crate/crate/commit/77caeaf06fa6b211f18995099e99c0ab74c0a267\n---\n docs/appendices/release-notes/5.10.2.rst                   | 5 +++++\n .../symbol/rule/SwapCastsInComparisonOperators.java        | 5 +++--\n .../test/java/io/crate/lucene/CommonQueryBuilderTest.java  | 7 +++++++\n 3 files changed, 15 insertions(+), 2 deletions(-)\n\ndiff --git a/docs/appendices/release-notes/5.10.2.rst b/docs/appendices/release-notes/5.10.2.rst\nindex a57deb0641..d9132347b3 100644\n--- a/docs/appendices/release-notes/5.10.2.rst\n+++ b/docs/appendices/release-notes/5.10.2.rst\n@@ -62,3 +62,8 @@ Fixes\n \n - Fixed an issue that caused a ``NullPointerException`` when binding to a\n   non-existing prepared statement via PostgreSQL wire protocol.\n+\n+- Fixed an issue that caused a ``SELECT`` query to fail if a ``WHERE`` clause\n+  had a comparison of a non-boolean column with a boolean literal, e.g.::\n+\n+    SELECT int_col FROM t where int_col = true;\ndiff --git a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\nindex 13d2b87e42..9714089cba 100644\n--- a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\n+++ b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\n@@ -60,10 +60,11 @@ public class SwapCastsInComparisonOperators implements Rule<Function> {\n             Reference ref = (Reference) cast.arguments().getFirst();\n             DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n             DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\n+            var value = literal.value();\n             if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n-                return true;\n+                return literalInnerType.isConvertableTo(refInnerType, false);\n             }\n-            return isNarrowingConversionPossible(literal.value(), ref.valueType());\n+            return isNarrowingConversionPossible(value, ref.valueType());\n         }\n         return true;\n     }\ndiff --git a/server/src/test/java/io/crate/lucene/CommonQueryBuilderTest.java b/server/src/test/java/io/crate/lucene/CommonQueryBuilderTest.java\nindex 240e24042f..8297fadcb6 100644\n--- a/server/src/test/java/io/crate/lucene/CommonQueryBuilderTest.java\n+++ b/server/src/test/java/io/crate/lucene/CommonQueryBuilderTest.java\n@@ -833,6 +833,13 @@ public class CommonQueryBuilderTest extends LuceneQueryBuilderTest {\n         assertThat(query).hasToString(\"(f = 0.99999999)\");\n     }\n \n+    @Test\n+    public void test_can_compare_any_type_with_boolean() {\n+        Query query = convert(\"x = true\");\n+        assertThat(query).isExactlyInstanceOf(GenericFunctionQuery.class);\n+        assertThat(query).hasToString(\"(x = true)\");\n+    }\n+\n     public void test_all_eq_on_empty_array_literal() {\n         Query query = convert(\"y = all([])\");\n         assertThat(query).hasToString(\"*:*\");\n-- \n2.53.0\n\n",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "deterministic_no_llm"
+  }
+}

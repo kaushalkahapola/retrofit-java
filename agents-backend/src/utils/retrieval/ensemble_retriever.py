@@ -1,16 +1,16 @@
-import os
-import re
 import concurrent.futures
 import hashlib
-from typing import List, Dict, Set, Optional
+import os
 import pickle
+import re
+from typing import Dict, List, Optional, Set
+
+import numpy as np
+import tree_sitter_java
 from git import Repo
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from tree_sitter import Language, Parser, Query, QueryCursor
-import numpy as np
-
-import tree_sitter_java
 
 
 class EnsembleRetriever:
@@ -94,13 +94,23 @@ class EnsembleRetriever:
         Builds the index for the target repository at the given commit.
         Checks for cached index first.
         """
+        # Resolve "HEAD" to the actual commit SHA so that different checkouts
+        # (e.g. experiment mode checking out backport_commit^) each get their
+        # own cache entry instead of sharing a stale one.
+        resolved_sha = commit_sha
+        if commit_sha == "HEAD":
+            try:
+                resolved_sha = self.target_repo.git.rev_parse("HEAD").strip()[:16]
+            except Exception:
+                resolved_sha = "HEAD"
+
         # Move cache out of the repo for security (avoid executable code injection from untrusted repos)
         repo_hash = hashlib.sha256(self.target_repo.working_dir.encode()).hexdigest()[
             :12
         ]
         cache_dir = os.path.expanduser("~/.cache/agents-backend/retrieval")
         os.makedirs(cache_dir, exist_ok=True)
-        cache_file = os.path.join(cache_dir, f"index_{repo_hash}_{commit_sha}.pkl")
+        cache_file = os.path.join(cache_dir, f"index_{repo_hash}_{resolved_sha}.pkl")
         if os.path.exists(cache_file):
             print(f"Loading index from cache: {cache_file}")
             try:
@@ -119,7 +129,7 @@ class EnsembleRetriever:
         print(f"Building index for {commit_sha}...")
 
         # Optimization: If commit is HEAD, read from disk directly (much faster than git show)
-        read_from_disk = commit_sha == "HEAD"
+        read_from_disk = commit_sha in ("HEAD", resolved_sha)
 
         if read_from_disk:
             java_files = []
@@ -255,7 +265,13 @@ class EnsembleRetriever:
         for f, raw_score in sorted_files[:top_k]:
             norm_score = raw_score / max_score
             if norm_score > 0.1:
-                results.append({"file": f, "score": norm_score, "method": "SYMBOL"})
+                results.append(
+                    {
+                        "file": self.target_files[f],
+                        "score": norm_score,
+                        "method": "SYMBOL",
+                    }
+                )
 
         return results
 
@@ -390,19 +406,25 @@ class EnsembleRetriever:
                     old_path = log_out.strip().splitlines()[0]
                     print(f"Blob Hunting: Found match in history at {old_path}")
 
-                    # Now we need to see where 'old_path' is NOW.
-                    # It might be the same, or renamed.
-                    # We can recurse or just return it as a strong candidate.
-                    # Let's check if it exists in target files
-                    if old_path in self.target_files:
-                        return old_path
-                    else:
-                        # Try to trace it forward from the HEAD?
-                        # Or just return it and hope the standard rename logic caught it?
-                        # Actually, if we found it in history, we should probably run the Rename Tracer on THIS path in the TARGET repo.
-                        # But simpler: just return it. The user might have deleted it, but if it was renamed, 'old_path' might be the old name.
-                        # Let's attempt to resolve it in target if possible.
-                        return old_path
+                    # Only return history result when it exists at current target HEAD.
+                    # Returning a non-HEAD path causes downstream file-open failures.
+                    try:
+                        ls_tree_head = self.target_repo.git.ls_tree(
+                            "-r", "--name-only", "HEAD"
+                        )
+                        head_paths = set(p.strip() for p in ls_tree_head.splitlines())
+                        if old_path in head_paths:
+                            return old_path
+                        print(
+                            "Blob Hunting: History match is not present at target HEAD; "
+                            f"ignoring stale path {old_path}"
+                        )
+                        return None
+                    except Exception as e:
+                        print(
+                            f"Blob Hunting: Could not validate history path at HEAD: {e}"
+                        )
+                        return None
 
             except Exception as e:
                 # --find-object might not be supported in older git versions, or other errors
@@ -423,16 +445,35 @@ class EnsembleRetriever:
         2. The file was renamed but we can trace it to a file that exists in the target.
         3. [NEW] The file's CONTENT exists (Blob Match) even if history is broken.
         """
-        # 1. Exact Match Check
-        if file_path in self.target_files:
-            return [
-                {
-                    "file": file_path,
-                    "score": 1.0,
-                    "method": "GIT_EXACT",
-                    "reason": "Exact path match",
-                }
-            ]
+        # 1. Exact Match Check (against target HEAD tree, independent of lazy index)
+        try:
+            head_tree_paths = set(
+                p.strip()
+                for p in self.target_repo.git.ls_tree(
+                    "-r", "--name-only", "HEAD"
+                ).splitlines()
+                if p.strip()
+            )
+            if file_path in head_tree_paths:
+                return [
+                    {
+                        "file": file_path,
+                        "score": 1.0,
+                        "method": "GIT_EXACT",
+                        "reason": "Exact path match",
+                    }
+                ]
+        except Exception:
+            # Fall back to indexed list when direct git tree query is unavailable
+            if file_path in self.target_files:
+                return [
+                    {
+                        "file": file_path,
+                        "score": 1.0,
+                        "method": "GIT_EXACT",
+                        "reason": "Exact path match",
+                    }
+                ]
 
         # 2. Rename Tracing (Mainline)
         try:
@@ -564,7 +605,24 @@ class EnsembleRetriever:
         tfidf_cands = self.get_tfidf_candidates(file_path, original_commit)
 
         pool = sym_cands + tfidf_cands
-        return self.decide_candidate_list(pool)
+        candidates = self.decide_candidate_list(pool)
+
+        # Guard: filter out candidates whose file does not actually exist in the
+        # target working tree.  The index may be stale (built at a different
+        # HEAD) and could reference files that have since been renamed/removed.
+        working_dir = self.target_repo.working_dir
+        valid_candidates = [
+            c
+            for c in candidates
+            if isinstance(c.get("file"), str)
+            and os.path.exists(os.path.join(working_dir, c["file"]))
+        ]
+        if not valid_candidates and candidates:
+            print(
+                f"Ensemble Search: all {len(candidates)} candidate(s) are absent from "
+                "the target working tree — discarding stale results."
+            )
+        return valid_candidates
 
     def find_symbol_locations(self, symbol_name: str) -> List[str]:
         """Returns all Java files in the target repo where symbol_name is declared."""

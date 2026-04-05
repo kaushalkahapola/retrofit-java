@@ -23,13 +23,15 @@ Pipeline:
 """
 
 import json
-import time
+import logging
 import os
 import re
-import logging
+import time
+
 from langchain_core.messages import HumanMessage
-from state import AgentState
 from langgraph.prebuilt import create_react_agent
+
+from state import AgentState
 from utils.patch_analyzer import PatchAnalyzer
 
 try:
@@ -40,10 +42,9 @@ except ImportError:  # Compatibility fallback for older langgraph versions
         pass
 
 
-from utils.retrieval.ensemble_retriever import EnsembleRetriever
-from utils.llm_provider import get_llm
 from agents.reasoning_tools import ReasoningToolkit
-
+from utils.llm_provider import get_llm
+from utils.retrieval.ensemble_retriever import EnsembleRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -331,7 +332,9 @@ def _realign_mapping_to_target(
     """
     target_lines = _load_target_file_lines(target_repo_path, target_file)
     if not target_lines:
-        return current_start, current_end, snippet
+        # File does not exist on disk — return None so callers trigger LLM fallback
+        # instead of silently anchoring to hunk-header line offsets for a ghost file.
+        return None, None, snippet
 
     candidates: list[str] = []
 
@@ -527,6 +530,13 @@ def _deterministic_map_hunks_for_file(
     return deterministic
 
 
+def _normalize_rel_path(path: str) -> str:
+    p = (path or "").strip().replace("\\", "/").lstrip("/")
+    if p.startswith("a/") or p.startswith("b/"):
+        p = p[2:]
+    return p
+
+
 # ---------------------------------------------------------------------------
 # Core Agent Node
 # ---------------------------------------------------------------------------
@@ -630,7 +640,11 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         # is actually needed (i.e., when Phase 1 git-based retrieval fails)
 
         toolkit = ReasoningToolkit(
-            retriever, target_repo_path, mainline_repo_path, patch_analysis
+            retriever,
+            target_repo_path,
+            mainline_repo_path,
+            patch_analysis,
+            state.get("original_commit", "HEAD"),
         )
         logger.debug("Retriever/toolkit initialized successfully")
     except Exception as e:
@@ -701,7 +715,9 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         git_candidates = None
         if toolkit:
             try:
-                git_candidates = toolkit.search_candidates(mainline_file)
+                git_candidates = toolkit.search_candidates(
+                    mainline_file, state.get("original_commit", "HEAD")
+                )
                 logger.debug(
                     "Git candidate search returned %d candidate(s) for %s",
                     len(git_candidates or []),
@@ -731,6 +747,27 @@ async def structural_locator_node(state: AgentState, config) -> dict:
         target_file = mainline_file
         if git_candidates:
             target_file = git_candidates[0]["file"]
+            # If the resolved file does not actually exist on disk at the
+            # checked-out target HEAD, discard the git candidates entirely.
+            # This forces the LLM agent to search for the real equivalent
+            # (e.g. AlterTableClient → AlterTableOperation rename).
+            _candidate_full_path = (
+                os.path.join(target_repo_path, _normalize_rel_path(target_file))
+                if target_repo_path
+                else None
+            )
+            if _candidate_full_path and not os.path.exists(_candidate_full_path):
+                print(
+                    f"  Agent 2: Git candidate `{target_file}` is absent from "
+                    "target working tree — discarding to trigger LLM search."
+                )
+                logger.warning(
+                    "Git candidate absent from disk: file=%s candidate=%s; forcing LLM search",
+                    mainline_file,
+                    target_file,
+                )
+                git_candidates = None
+                target_file = mainline_file
 
         mapping_result = None
         used_deterministic = False
@@ -786,8 +823,27 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 "dependent_apis": semantic_blueprint.get("dependent_apis", []),
             }
 
+            # If the mainline file does not exist at HEAD in the target repo, tell the
+            # LLM explicitly so it skips the pointless "verify at same path" step and
+            # goes straight to searching.  This is derived entirely from an on-disk
+            # existence check — no reliance on the developer's backport answer.
+            file_missing_hint = ""
+            if not _load_target_file_lines(target_repo_path, mainline_file):
+                file_missing_hint = (
+                    f"\n⚠️ FILE NOT FOUND AT HEAD: `{mainline_file}` does NOT exist on the target branch.\n"
+                    f"  The class was likely renamed, split, or refactored between branches.\n"
+                    f"  You MUST search for the equivalent logic — do NOT anchor to this path:\n"
+                    f"  1. `grep_repo` — search for unique method/class names or code snippets from the diff\n"
+                    f"  2. `git_pickaxe` — trace history of a specific code snippet from the mainline hunks\n"
+                    f"  3. `find_symbol_locations` — locate key method or field names from the diff\n"
+                    f"  4. `git_log_follow` — check whether the file was renamed in git history\n"
+                    f"  5. `get_dependency_graph` — find classes related to `{mainline_file.split('/')[-1]}`\n"
+                    f"  DO NOT output a mapping until you have confirmed the target logic exists there.\n\n"
+                )
+
             input_msg = (
                 f"Mainline File: {mainline_file}\n"
+                f"{file_missing_hint}"
                 f"Target File (path-match hypothesis): {target_file}\n"
                 f"{hunk_details}\n"
                 f"Semantic Blueprint:\n{json.dumps(simple_blueprint, indent=2)}\n\n"

@@ -1,0 +1,26 @@
+{
+  "semantic_blueprint": {
+    "root_cause_hypothesis": "Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.",
+    "fix_logic": "Apply each source hunk with target-verified context and symbol consistency while preserving behavior.",
+    "dependent_apis": [],
+    "patch_intent_summary": "Backport patch behavior to target branch with minimal, context-correct edits.",
+    "hunk_chain": [
+      {
+        "hunk_index": 1,
+        "file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+        "summary": "Modifies logic (+5/-5 lines).",
+        "role": "propagation",
+        "connects_to_next": "",
+        "global_index": 1
+      }
+    ]
+  },
+  "patch_diff": "From f110187717d7d702d7f16abdf9bced3a62a5d90e Mon Sep 17 00:00:00 2001\nFrom: Sebastian Utz <su@rtme.net>\nDate: Tue, 28 Oct 2025 13:55:00 +0100\nSubject: [PATCH] Fix error handling on insert-from-values statements\n\nThe InsertFromValues logical plan must implement `executeOrFail` for\nsafe error handling instead of `execute` which does not catch and\npropagate exceptions in the expected way.\nThis results in stuck `sys.jobs` entries as the related components\nto remove the entries in error cases aren't called.\n---\n docs/appendices/release-notes/6.0.4.rst              |  4 ++++\n docs/appendices/release-notes/6.1.1.rst              |  4 ++++\n .../io/crate/planner/operators/InsertFromValues.java | 10 +++++-----\n .../integrationtests/InsertIntoIntegrationTest.java  | 12 ++++++++++++\n 4 files changed, 25 insertions(+), 5 deletions(-)\n\ndiff --git a/docs/appendices/release-notes/6.0.4.rst b/docs/appendices/release-notes/6.0.4.rst\nindex 5fb3177437..b3fa940318 100644\n--- a/docs/appendices/release-notes/6.0.4.rst\n+++ b/docs/appendices/release-notes/6.0.4.rst\n@@ -90,3 +90,7 @@ Fixes\n - Fixed an issue with ``atttypid`` column of the ``pg_attribute`` table not\n   being reset to ``0`` for dropped columns, which contradicts with the\n   PostgreSQL behavior.\n+\n+- Fixed an issue resulting in stuck :ref:`sys-jobs` entries when an\n+  :ref:`sql-insert` statement using :ref:`ref-values` results in an execution\n+  error, e.g. due to implicit cast or parsing issues.\ndiff --git a/docs/appendices/release-notes/6.1.1.rst b/docs/appendices/release-notes/6.1.1.rst\nindex ddc9abe335..31d700e4a9 100644\n--- a/docs/appendices/release-notes/6.1.1.rst\n+++ b/docs/appendices/release-notes/6.1.1.rst\n@@ -65,3 +65,7 @@ Fixes\n - Fixed an issue with ``atttypid`` column of the ``pg_attribute`` table not\n   being reset to ``0`` for dropped columns, which contradicts with the\n   PostgreSQL behavior.\n+\n+- Fixed an issue resulting in stuck :ref:`sys-jobs` entries when an\n+  :ref:`sql-insert` statement using :ref:`ref-values` results in an execution\n+  error, e.g. due to implicit cast or parsing issues.\ndiff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\nindex 86aa4619bc..55c316b8da 100644\n--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n+++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n@@ -132,11 +132,11 @@ public class InsertFromValues implements LogicalPlan {\n     }\n \n     @Override\n-    public void execute(DependencyCarrier dependencies,\n-                        PlannerContext plannerContext,\n-                        RowConsumer consumer,\n-                        Row params,\n-                        SubQueryResults subQueryResults) {\n+    public void executeOrFail(DependencyCarrier dependencies,\n+                              PlannerContext plannerContext,\n+                              RowConsumer consumer,\n+                              Row params,\n+                              SubQueryResults subQueryResults) {\n         DocTableInfo tableInfo = dependencies\n             .schemas()\n             .getTableInfo(writerProjection.tableIdent());\ndiff --git a/server/src/test/java/io/crate/integrationtests/InsertIntoIntegrationTest.java b/server/src/test/java/io/crate/integrationtests/InsertIntoIntegrationTest.java\nindex f8c2621e01..3bd93447e1 100644\n--- a/server/src/test/java/io/crate/integrationtests/InsertIntoIntegrationTest.java\n+++ b/server/src/test/java/io/crate/integrationtests/InsertIntoIntegrationTest.java\n@@ -2839,4 +2839,16 @@ public class InsertIntoIntegrationTest extends IntegTestCase {\n         assertThat(response.cols()).containsExactly(\"a\", \"b\", \"c\", \"d\", \"e\");\n         assertThat(response).hasRows(\"1| 2| 3| NULL| 5\", \"2| NULL| NULL| 4| NULL\");\n     }\n+\n+    @Test\n+    public void test_insert_from_values_with_execution_error_gets_removed_from_sys_jobs() {\n+        execute(\"CREATE TABLE doc.ti1 (\\\"a\\\" OBJECT(DYNAMIC))\");\n+        try {\n+            execute(\"INSERT INTO doc.ti1 VALUES (?)\", new Object[] {\"{\\\"a\\\" 1}\"});\n+        } catch (Exception e) {\n+            // ignore\n+        }\n+        execute(\"SELECT count(*) FROM sys.jobs WHERE stmt like 'INSERT%'\");\n+        assertThat(response).hasRows(\"0\");\n+    }\n }\n-- \n2.53.0\n\n",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "deterministic_no_llm"
+  }
+}

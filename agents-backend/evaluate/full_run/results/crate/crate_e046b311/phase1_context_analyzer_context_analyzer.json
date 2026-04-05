@@ -1,0 +1,44 @@
+{
+  "semantic_blueprint": {
+    "root_cause_hypothesis": "Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.",
+    "fix_logic": "Apply each source hunk with target-verified context and symbol consistency while preserving behavior.",
+    "dependent_apis": [
+      "if"
+    ],
+    "patch_intent_summary": "Backport patch behavior to target branch with minimal, context-correct edits.",
+    "hunk_chain": [
+      {
+        "hunk_index": 1,
+        "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+        "summary": "Adds logic (+1 lines).",
+        "role": "declaration",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 1
+      },
+      {
+        "hunk_index": 2,
+        "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+        "summary": "Modifies logic (+1/-1 lines).",
+        "role": "core_fix",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 2
+      },
+      {
+        "hunk_index": 3,
+        "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+        "summary": "Modifies logic (+12/-20 lines).",
+        "role": "guard",
+        "connects_to_next": "",
+        "global_index": 3
+      }
+    ]
+  },
+  "patch_diff": "From e046b311fc71b35e8a1c52f53eabd35af3d09e24 Mon Sep 17 00:00:00 2001\nFrom: jeeminso <jeeminso@gmail.com>\nDate: Mon, 10 Mar 2025 22:04:00 +0900\nSubject: [PATCH] Fix misbehaving columns with oids in partitioned tables <\n COLUMN_OID_VERSION\n\nPreviously there was an issue with partitioned tables' created version\nbeing falsely updated(#17178). The initial mitigation(#17228) was only\nabout the created version settings not oids. Now there are partitioned\ntables < COLUMN_OID_VERSION but with columns with oids assigned resulting\nin #17574.\n\nFixes #17574, #17575\n---\n docs/appendices/release-notes/5.10.3.rst      |  6 +++\n .../io/crate/metadata/doc/DocTableInfo.java   | 35 +++++-------\n .../crate/metadata/doc/DocTableInfoTest.java  | 54 +++++++++++++++++++\n 3 files changed, 74 insertions(+), 21 deletions(-)\n\ndiff --git a/docs/appendices/release-notes/5.10.3.rst b/docs/appendices/release-notes/5.10.3.rst\nindex 4a63e49f4b..1de1941ff9 100644\n--- a/docs/appendices/release-notes/5.10.3.rst\n+++ b/docs/appendices/release-notes/5.10.3.rst\n@@ -67,3 +67,9 @@ Fixes\n - Fixed a regression introduced in :ref:`version_5.10.0` that\n   caused settings set by the ``SET GLOBAL TRANSIENT`` statement be persisted\n   and survive cluster restart.\n+\n+- Fixed an issue that caused selecting from partitioned tables created before\n+  :ref:`version_5.5.0` to falsely return `NULL` values.\n+\n+- Fixed an issue that caused selecting from partitioned tables created before\n+  :ref:`version_5.5.0` to return ``oids`` as column names of the result set.\ndiff --git a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\nindex 76754d2f09..29a6aae028 100644\n--- a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\n+++ b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\n@@ -22,6 +22,7 @@\n package io.crate.metadata.doc;\n \n import static io.crate.expression.reference.doc.lucene.SourceParser.UNKNOWN_COLUMN_PREFIX;\n+import static org.elasticsearch.cluster.metadata.Metadata.COLUMN_OID_UNASSIGNED;\n \n import java.io.IOException;\n import java.util.ArrayList;\n@@ -249,7 +250,7 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {\n         this.indexColumns = indexColumns;\n         leafByOid = new HashMap<>();\n         Stream.concat(Stream.concat(this.references.values().stream(), indexColumns.values().stream()), droppedColumns.stream())\n-            .filter(r -> r.oid() != Metadata.COLUMN_OID_UNASSIGNED)\n+            .filter(r -> r.oid() != COLUMN_OID_UNASSIGNED)\n             .forEach(r -> leafByOid.put(Long.toString(r.oid()), r));\n         this.ident = ident;\n         this.pkConstraintName = pkConstraintName;\n@@ -708,28 +709,20 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {\n         return notNullColumns;\n     }\n \n-    /**\n-     * For tables >= 5.5 this returns a function that takes a oid and returns the corresponding column name or null if dropped.\n-     * For tables < 5.5 this returns a identity function.\n-     */\n     public UnaryOperator<String> lookupNameBySourceKey() {\n-        if (versionCreated.onOrAfter(Version.V_5_5_0)) {\n-            return oidOrName -> {\n-                Reference ref = leafByOid.get(oidOrName);\n-                if (ref == null) {\n-                    if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n-                        assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n-                        return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n-                    }\n-                    return oidOrName;\n-                } else if (ref.isDropped()) {\n-                    return null;\n+        return oidOrName -> {\n+            Reference ref = leafByOid.get(oidOrName);\n+            if (ref == null) {\n+                if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n+                    assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n+                    return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                 }\n-                return ref.column().leafName();\n-            };\n-        } else {\n-            return UnaryOperator.identity();\n-        }\n+                return oidOrName;\n+            } else if (ref.isDropped()) {\n+                return null;\n+            }\n+            return ref.column().leafName();\n+        };\n     }\n \n \ndiff --git a/server/src/test/java/io/crate/metadata/doc/DocTableInfoTest.java b/server/src/test/java/io/crate/metadata/doc/DocTableInfoTest.java\nindex c71b44ee90..1a88075d7a 100644\n--- a/server/src/test/java/io/crate/metadata/doc/DocTableInfoTest.java\n+++ b/server/src/test/java/io/crate/metadata/doc/DocTableInfoTest.java\n@@ -249,6 +249,60 @@ public class DocTableInfoTest extends CrateDummyClusterServiceUnitTest {\n         assertThat(IndexMetadata.SETTING_INDEX_VERSION_CREATED.get(tableInfo.parameters())).isEqualTo(Version.CURRENT);\n     }\n \n+    @Test\n+    public void test_lookup_name_by_source_with_columns_with_and_without_oids_added_to_table_created_before_5_5_0() {\n+        RelationName relationName = new RelationName(Schemas.DOC_SCHEMA_NAME, \"dummy\");\n+        SimpleReference withoutOid = new SimpleReference(\n+            new ReferenceIdent(relationName, ColumnIdent.of(\"withoutOid\", List.of())),\n+            RowGranularity.DOC,\n+            DataTypes.INTEGER,\n+            IndexType.PLAIN,\n+            true,\n+            false,\n+            1,\n+            COLUMN_OID_UNASSIGNED,\n+            false,\n+            null\n+        );\n+        SimpleReference withOid = new SimpleReference(\n+            new ReferenceIdent(relationName, ColumnIdent.of(\"withOid\", List.of())),\n+            RowGranularity.DOC,\n+            DataTypes.INTEGER,\n+            IndexType.PLAIN,\n+            true,\n+            false,\n+            1,\n+            1, // oid\n+            false,\n+            null\n+        );\n+        DocTableInfo docTableInfo = new DocTableInfo(\n+            relationName,\n+            Map.of(\n+                withoutOid.column(), withoutOid,\n+                withOid.column(), withOid\n+            ),\n+            Map.of(),\n+            Set.of(),\n+            null,\n+            List.of(),\n+            List.of(),\n+            null,\n+            Settings.builder()\n+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 5)\n+                .build(),\n+            List.of(),\n+            ColumnPolicy.DYNAMIC,\n+            Version.V_5_4_0,\n+            null,\n+            false,\n+            Operation.ALL,\n+            0\n+        );\n+        assertThat(docTableInfo.lookupNameBySourceKey().apply(\"withoutOid\")).isEqualTo(\"withoutOid\");\n+        assertThat(docTableInfo.lookupNameBySourceKey().apply(\"1\")).isEqualTo(\"withOid\");\n+    }\n+\n     @Test\n     public void test_lookup_name_by_source_returns_null_for_deleted_columns() throws Exception {\n         RelationName relationName = new RelationName(Schemas.DOC_SCHEMA_NAME, \"dummy\");\n-- \n2.53.0\n\n",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "deterministic_no_llm"
+  }
+}

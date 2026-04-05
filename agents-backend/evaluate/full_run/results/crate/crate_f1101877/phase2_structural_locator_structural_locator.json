@@ -1,0 +1,26 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "server/src/main/java/io/crate/planner/operators/InsertFromValues.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+        "target_method": null,
+        "start_line": 134,
+        "end_line": 134,
+        "code_snippet": "import io.crate.types.DataType;\n\n\npublic class InsertFromValues implements LogicalPlan {\n\n    private final TableFunctionRelation tableFunctionRelation;\n    private final ColumnIndexWriterProjection writerProjection;\n\n    InsertFromValues(TableFunctionRelation tableFunctionRelation,\n                     ColumnIndexWriterProjection writerProjection) {\n        this.tableFunctionRelation = tableFunctionRelation;\n        this.writerProjection = writerProjection;\n    }\n\n    @Override\n    public StatementType type() {\n        return StatementType.INSERT;\n    }\n\n    @Override\n    public void execute(DependencyCarrier dependencies,\n                        PlannerContext plannerContext,\n                        RowConsumer consumer,\n                        Row params,\n                        SubQueryResults subQueryResults) {\n        DocTableInfo tableInfo = dependencies\n            .schemas()\n            .getTableInfo(writerProjection.tableIdent());\n\n        // For instance, the target table of the insert from values\n        // statement is the table with the following schema:\n        //\n        // CREATE TABLE users (\n        //      dep_id TEXT,\n        //      name TEXT,\n        //      id INT,\n        //      country_id INT,\n        //      PRIMARY KEY (dep_id, id, country_id))\n        // CLUSTERED BY (dep_id)\n        // PARTITIONED BY (country_id)\n        //",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
+  }
+}

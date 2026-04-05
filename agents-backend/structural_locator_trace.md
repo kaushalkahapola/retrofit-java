@@ -4,52 +4,23 @@
 - **Root Cause**: Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.
 
 ## Hunk Segregation
-- Code files: 3
+- Code files: 1
 - Test files: 0
 
 ## Code File Mappings
 
-### `server/src/main/java/io/crate/protocols/postgres/Portal.java`
+### `server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java`
 
 **Hunks in this file**: 2
 
-**Git Resolution**: Found `server/src/main/java/io/crate/protocols/postgres/Portal.java`
+**Git Resolution**: Found `server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 30–30 |
-| 2 | propagation | `hunk_2` | `None` | 91–91 |
-### `server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java`
-
-**Hunks in this file**: 6
-
-**Git Resolution**: Found `server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 48–48 |
-| 2 | guard | `hunk_2` | `None` | 84–84 |
-| 3 | core_fix | `hunk_3` | `None` | 112–112 |
-| 4 | guard | `closeAndFinishIfSuspended` | `closeAndFinishIfSuspended` | 138–138 |
-| 5 | guard | `resume` | `resume` | 162–162 |
-| 6 | propagation | `hunk_6` | `None` | 174–174 |
-### `server/src/main/java/io/crate/session/Session.java`
-
-**Hunks in this file**: 3
-
-**Git Resolution**: Found `server/src/main/java/io/crate/session/Session.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | core_fix | `hunk_1` | `None` | 585–585 |
-| 2 | core_fix | `triggerDeferredExecutions` | `triggerDeferredExecutions` | 663–663 |
-| 3 | propagation | `hunk_3` | `None` | 673–673 |
+| 1 | declaration | `<import>` | `<import>` | 64–64 |
+| 2 | guard | `addColumn` | `addColumn` | 395–395 |
 ## Test File Mappings
 
 

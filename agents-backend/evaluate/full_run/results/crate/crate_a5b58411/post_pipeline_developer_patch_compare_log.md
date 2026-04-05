@@ -1,0 +1,370 @@
+# Post-Pipeline Developer Patch Comparison
+
+**Exact Developer Patch (code-only)**: True
+
+**Comparison Method**: file_state
+
+## Commit Pair Consistency
+- Pair mismatch: True
+- Reason: mainline_backport_scope_mismatch
+- Mainline Java files: ['server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java']
+- Developer Java files: ['server/src/main/java/io/crate/planner/node/management/ExplainPlan.java']
+- Overlap Java files: []
+- Overlap ratio (mainline): 0.0
+- Compare files scope used: ['server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java']
+
+## File State Comparison
+- Compared files: ['server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java']
+- Mismatched files: []
+- Error: None
+
+## Comparison Scope
+- Agent-only patch: code hunks produced by Agent 3
+- Final effective patch: agent code hunks + developer auxiliary hunks (still code-only for this report)
+
+## Agent-Only Hunk Comparison (code files)
+
+### server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
+
+- Developer hunks: 3
+- Generated hunks: 3
+
+#### Hunk 1
+
+Developer
+```diff
+@@ -141,6 +141,12 @@
+         if (context != null) {
+             assert subPlan instanceof LogicalPlan : "subPlan must be a LogicalPlan";
+             LogicalPlan plan = (LogicalPlan) subPlan;
++            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
++                "multi-phase",
++                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
++                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
++            );
++            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());
+             executePlan(
+                 plan,
+                 dependencies,
+
+```
+
+Generated
+```diff
+@@ -141,6 +141,12 @@
+         if (context != null) {
+             assert subPlan instanceof LogicalPlan : "subPlan must be a LogicalPlan";
+             LogicalPlan plan = (LogicalPlan) subPlan;
++            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
++                "multi-phase",
++                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
++                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
++            );
++            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());
+             executePlan(
+                 plan,
+                 dependencies,
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+(No textual difference)
+
+```
+
+#### Hunk 2
+
+Developer
+```diff
+@@ -150,7 +156,7 @@
+                 subQueryResults,
+                 new IdentityHashMap<>(),
+                 new ArrayList<>(plan.dependencies().size()),
+-                null,
++                ramAccounting,
+                 null
+             );
+         } else {
+
+```
+
+Generated
+```diff
+@@ -150,7 +156,7 @@
+                 subQueryResults,
+                 new IdentityHashMap<>(),
+                 new ArrayList<>(plan.dependencies().size()),
+-                null,
++                ramAccounting,
+                 null
+             );
+         } else {
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+(No textual difference)
+
+```
+
+#### Hunk 3
+
+Developer
+```diff
+@@ -236,20 +242,10 @@
+                                              SubQueryResults subQueryResults,
+                                              Map<SelectSymbol, Object> valuesBySubQuery,
+                                              List<Map<String, Object>> explainResults,
+-                                             @Nullable RamAccounting ramAccounting,
++                                             RamAccounting ramAccounting,
+                                              @Nullable SelectSymbol selectSymbol) {
+         boolean isTopLevel = selectSymbol == null;
+ 
+-        assert ramAccounting != null || isTopLevel : "ramAccounting must NOT be null for subPlans";
+-
+-        if (ramAccounting == null) {
+-            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
+-                "multi-phase",
+-                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
+-                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
+-            );
+-        }
+-
+         if (isTopLevel == false) {
+             plannerContext = PlannerContext.forSubPlan(plannerContext);
+         }
+
+```
+
+Generated
+```diff
+@@ -236,20 +242,10 @@
+                                              SubQueryResults subQueryResults,
+                                              Map<SelectSymbol, Object> valuesBySubQuery,
+                                              List<Map<String, Object>> explainResults,
+-                                             @Nullable RamAccounting ramAccounting,
++                                             RamAccounting ramAccounting,
+                                              @Nullable SelectSymbol selectSymbol) {
+         boolean isTopLevel = selectSymbol == null;
+ 
+-        assert ramAccounting != null || isTopLevel : "ramAccounting must NOT be null for subPlans";
+-
+-        if (ramAccounting == null) {
+-            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
+-                "multi-phase",
+-                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
+-                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
+-            );
+-        }
+-
+         if (isTopLevel == false) {
+             plannerContext = PlannerContext.forSubPlan(plannerContext);
+         }
+
+```
+
+Developer -> Generated (Unified Diff)
+```diff
+(No textual difference)
+
+```
+
+
+
+## Full Generated Patch (Agent-Only, code-only)
+```diff
+diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
+index fe20bbb9bb..b3085d0d98 100644
+--- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
++++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
+@@ -141,6 +141,12 @@ public class ExplainPlan implements Plan {
+         if (context != null) {
+             assert subPlan instanceof LogicalPlan : "subPlan must be a LogicalPlan";
+             LogicalPlan plan = (LogicalPlan) subPlan;
++            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
++                "multi-phase",
++                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
++                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
++            );
++            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());
+             executePlan(
+                 plan,
+                 dependencies,
+@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {
+                 subQueryResults,
+                 new IdentityHashMap<>(),
+                 new ArrayList<>(plan.dependencies().size()),
+-                null,
++                ramAccounting,
+                 null
+             );
+         } else {
+@@ -236,20 +242,10 @@ public class ExplainPlan implements Plan {
+                                              SubQueryResults subQueryResults,
+                                              Map<SelectSymbol, Object> valuesBySubQuery,
+                                              List<Map<String, Object>> explainResults,
+-                                             @Nullable RamAccounting ramAccounting,
++                                             RamAccounting ramAccounting,
+                                              @Nullable SelectSymbol selectSymbol) {
+         boolean isTopLevel = selectSymbol == null;
+ 
+-        assert ramAccounting != null || isTopLevel : "ramAccounting must NOT be null for subPlans";
+-
+-        if (ramAccounting == null) {
+-            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
+-                "multi-phase",
+-                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
+-                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
+-            );
+-        }
+-
+         if (isTopLevel == false) {
+             plannerContext = PlannerContext.forSubPlan(plannerContext);
+         }
+
+```
+
+## Full Generated Patch (Final Effective, code-only)
+```diff
+diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
+index fe20bbb9bb..b3085d0d98 100644
+--- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
++++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
+@@ -141,6 +141,12 @@ public class ExplainPlan implements Plan {
+         if (context != null) {
+             assert subPlan instanceof LogicalPlan : "subPlan must be a LogicalPlan";
+             LogicalPlan plan = (LogicalPlan) subPlan;
++            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
++                "multi-phase",
++                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
++                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
++            );
++            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());
+             executePlan(
+                 plan,
+                 dependencies,
+@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {
+                 subQueryResults,
+                 new IdentityHashMap<>(),
+                 new ArrayList<>(plan.dependencies().size()),
+-                null,
++                ramAccounting,
+                 null
+             );
+         } else {
+@@ -236,20 +242,10 @@ public class ExplainPlan implements Plan {
+                                              SubQueryResults subQueryResults,
+                                              Map<SelectSymbol, Object> valuesBySubQuery,
+                                              List<Map<String, Object>> explainResults,
+-                                             @Nullable RamAccounting ramAccounting,
++                                             RamAccounting ramAccounting,
+                                              @Nullable SelectSymbol selectSymbol) {
+         boolean isTopLevel = selectSymbol == null;
+ 
+-        assert ramAccounting != null || isTopLevel : "ramAccounting must NOT be null for subPlans";
+-
+-        if (ramAccounting == null) {
+-            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
+-                "multi-phase",
+-                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
+-                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
+-            );
+-        }
+-
+         if (isTopLevel == false) {
+             plannerContext = PlannerContext.forSubPlan(plannerContext);
+         }
+
+```
+## Full Developer Backport Patch (full commit diff)
+```diff
+diff --git a/docs/appendices/release-notes/6.0.4.rst b/docs/appendices/release-notes/6.0.4.rst
+index 2886dce414..6aa354a175 100644
+--- a/docs/appendices/release-notes/6.0.4.rst
++++ b/docs/appendices/release-notes/6.0.4.rst
+@@ -46,6 +46,12 @@ series.
+ Fixes
+ =====
+ 
++- Fixed an issue that caused ``EXPLAIN ANALYZE`` on queries using a sub-query
++  returning multiple-rows (like with ``WHERE x IN (SELECT ...)``) to not release
++  the memory accounted within the query circuit breaker. This could later on
++  result in queries getting rejected with a circuit breaker exception, despite
++  having memory available.
++
+ - Improved ``WHERE`` clause analysis for queries on tables with both ``PARTITION
+   BY`` and ``CLUSTERED BY`` clause to narrow the partitions and shards that are
+   hit if the query filters on the ``PARTITIONED BY`` and ``CLUSTERED BY``
+diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
+index fe20bbb9bb..b3085d0d98 100644
+--- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
++++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
+@@ -141,6 +141,12 @@ public class ExplainPlan implements Plan {
+         if (context != null) {
+             assert subPlan instanceof LogicalPlan : "subPlan must be a LogicalPlan";
+             LogicalPlan plan = (LogicalPlan) subPlan;
++            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
++                "multi-phase",
++                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
++                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
++            );
++            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());
+             executePlan(
+                 plan,
+                 dependencies,
+@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {
+                 subQueryResults,
+                 new IdentityHashMap<>(),
+                 new ArrayList<>(plan.dependencies().size()),
+-                null,
++                ramAccounting,
+                 null
+             );
+         } else {
+@@ -236,20 +242,10 @@ public class ExplainPlan implements Plan {
+                                              SubQueryResults subQueryResults,
+                                              Map<SelectSymbol, Object> valuesBySubQuery,
+                                              List<Map<String, Object>> explainResults,
+-                                             @Nullable RamAccounting ramAccounting,
++                                             RamAccounting ramAccounting,
+                                              @Nullable SelectSymbol selectSymbol) {
+         boolean isTopLevel = selectSymbol == null;
+ 
+-        assert ramAccounting != null || isTopLevel : "ramAccounting must NOT be null for subPlans";
+-
+-        if (ramAccounting == null) {
+-            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
+-                "multi-phase",
+-                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
+-                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
+-            );
+-        }
+-
+         if (isTopLevel == false) {
+             plannerContext = PlannerContext.forSubPlan(plannerContext);
+         }
+diff --git a/server/src/test/java/io/crate/integrationtests/ExplainAnalyzeIntegrationTest.java b/server/src/test/java/io/crate/integrationtests/ExplainAnalyzeIntegrationTest.java
+index 0b9d1d6143..26a9e2e6e9 100644
+--- a/server/src/test/java/io/crate/integrationtests/ExplainAnalyzeIntegrationTest.java
++++ b/server/src/test/java/io/crate/integrationtests/ExplainAnalyzeIntegrationTest.java
+@@ -195,4 +195,16 @@ public class ExplainAnalyzeIntegrationTest extends IntegTestCase {
+             }
+         }
+     }
++
++    @Test
++    public void test_explain_analyze_with_all_values_sub_query_does_not_leak_memory() throws Exception {
++        // Used to fail with something like:
++        //
++        //      [Query breaker not reset to 0 on node: node_s0]
++        //      expected: 0L
++        //      but was: 2097152L
++        //
++        // Because RamAccounting instance wasn't closed
++        execute("explain analyze select * from sys.summits where height in (select x from unnest([1, 2, 3, 4]) t (x))");
++    }
+ }
+
+```

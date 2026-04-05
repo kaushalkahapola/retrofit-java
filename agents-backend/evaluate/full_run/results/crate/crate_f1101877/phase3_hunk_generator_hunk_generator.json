@@ -1,0 +1,100 @@
+{
+  "adapted_file_edits": [
+    {
+      "target_file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+      "mainline_file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+      "old_string": "<developer patch fast path>",
+      "new_string": "diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\nindex 4aac71b026..7a4aee6f4c 100644\n--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n+++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n@@ -131,11 +131,11 @@ public class InsertFromValues implements LogicalPlan {\n     }\n \n     @Override\n-    public void execute(DependencyCarrier dependencies,\n-                        PlannerContext plannerContext,\n-                        RowConsumer consumer,\n-                        Row params,\n-                        SubQueryResults subQueryResults) {\n+    public void executeOrFail(DependencyCarrier dependencies,\n+                              PlannerContext plannerContext,\n+                              RowConsumer consumer,\n+                              Row params,\n+                              SubQueryResults subQueryResults) {\n         DocTableInfo tableInfo = dependencies\n             .schemas()\n             .getTableInfo(writerProjection.tableIdent());",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "developer_fast_path_ok",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    }
+  ],
+  "all_adapted_file_edits": [
+    [
+      {
+        "target_file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+        "mainline_file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\nindex 4aac71b026..7a4aee6f4c 100644\n--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n+++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n@@ -131,11 +131,11 @@ public class InsertFromValues implements LogicalPlan {\n     }\n \n     @Override\n-    public void execute(DependencyCarrier dependencies,\n-                        PlannerContext plannerContext,\n-                        RowConsumer consumer,\n-                        Row params,\n-                        SubQueryResults subQueryResults) {\n+    public void executeOrFail(DependencyCarrier dependencies,\n+                              PlannerContext plannerContext,\n+                              RowConsumer consumer,\n+                              Row params,\n+                              SubQueryResults subQueryResults) {\n         DocTableInfo tableInfo = dependencies\n             .schemas()\n             .getTableInfo(writerProjection.tableIdent());",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      }
+    ]
+  ],
+  "agent_trajectory_edits": [
+    []
+  ],
+  "adapted_code_hunks": [
+    {
+      "target_file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+      "mainline_file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\nindex 4aac71b026..7a4aee6f4c 100644\n--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n+++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n@@ -131,11 +131,11 @@ public class InsertFromValues implements LogicalPlan {\n     }\n \n     @Override\n-    public void execute(DependencyCarrier dependencies,\n-                        PlannerContext plannerContext,\n-                        RowConsumer consumer,\n-                        Row params,\n-                        SubQueryResults subQueryResults) {\n+    public void executeOrFail(DependencyCarrier dependencies,\n+                              PlannerContext plannerContext,\n+                              RowConsumer consumer,\n+                              Row params,\n+                              SubQueryResults subQueryResults) {\n         DocTableInfo tableInfo = dependencies\n             .schemas()\n             .getTableInfo(writerProjection.tableIdent());\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "validation_repeated_patch_detected": false,
+  "validation_repeated_plan_detected": false,
+  "best_effort_adapted_code_hunks": [
+    {
+      "target_file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+      "mainline_file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\nindex 4aac71b026..7a4aee6f4c 100644\n--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n+++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n@@ -131,11 +131,11 @@ public class InsertFromValues implements LogicalPlan {\n     }\n \n     @Override\n-    public void execute(DependencyCarrier dependencies,\n-                        PlannerContext plannerContext,\n-                        RowConsumer consumer,\n-                        Row params,\n-                        SubQueryResults subQueryResults) {\n+    public void executeOrFail(DependencyCarrier dependencies,\n+                              PlannerContext plannerContext,\n+                              RowConsumer consumer,\n+                              Row params,\n+                              SubQueryResults subQueryResults) {\n         DocTableInfo tableInfo = dependencies\n             .schemas()\n             .getTableInfo(writerProjection.tableIdent());\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+      "target_file": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "developer_fast_path",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    }
+  ],
+  "generated_patch_hash": "f50c80da18fbb6da57aba6d5294ecc57c9cef7288f817f25f2af2d37a24f6468",
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

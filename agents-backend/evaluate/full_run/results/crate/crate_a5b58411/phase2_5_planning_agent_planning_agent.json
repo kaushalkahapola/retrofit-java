@@ -1,0 +1,171 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "        executePlan(",
+        "new_string": "        var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n            \"multi-phase\",\n            dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n            plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n        );\n        consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n        executePlan(",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        if (context != null) {",
+          "            assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";",
+          "            LogicalPlan plan = (LogicalPlan) subPlan;"
+        ],
+        "surround_after_3": [
+          "                plan,",
+          "                dependencies,",
+          "                plannerContext,"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(",
+          "dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),",
+          "plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()",
+          "consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 12,
+          "target_declared_methods_count": 22,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "                new IdentityHashMap<>(),\n                new ArrayList<>(plan.dependencies().size()),\n                null,\n                null",
+        "new_string": "            new IdentityHashMap<>(),\n            new ArrayList<>(plan.dependencies().size()),\n            ramAccounting,\n            null",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "                consumer,",
+          "                params,",
+          "                subQueryResults,"
+        ],
+        "surround_after_3": [
+          "            );",
+          "        } else {",
+          "            if (subPlan instanceof LogicalPlan logicalPlan) {"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 12,
+          "target_declared_methods_count": 22,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "                                             Map<SelectSymbol, Object> valuesBySubQuery,\n                                             List<Map<String, Object>> explainResults,\n                                             @Nullable RamAccounting ramAccounting,\n                                             @Nullable SelectSymbol selectSymbol) {",
+        "new_string": "                                             Map<SelectSymbol, Object> valuesBySubQuery,\n                                             List<Map<String, Object>> explainResults,\n                                             RamAccounting ramAccounting,\n                                             @Nullable SelectSymbol selectSymbol) {",
+        "verified": false,
+        "verification_result": "deterministic_required_replace",
+        "notes": "required_op_replace",
+        "surround_before_3": [],
+        "surround_after_3": [],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "RamAccounting ramAccounting,"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 12,
+          "target_declared_methods_count": 0,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java",
+        "operation_index": 1,
+        "edit_type": "delete",
+        "old_string": "\n        assert ramAccounting != null || isTopLevel : \"ramAccounting must NOT be null for subPlans\";\n\n        if (ramAccounting == null) {\n            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n                \"multi-phase\",\n                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n            );\n        }\n\n        if (isTopLevel == false) {\n            plannerContext = PlannerContext.forSubPlan(plannerContext);\n        }\n",
+        "new_string": "",
+        "verified": false,
+        "verification_result": "deterministic_required_delete",
+        "notes": "required_op_delete",
+        "surround_before_3": [],
+        "surround_after_3": [],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "RamAccounting ramAccounting,"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 12,
+          "target_declared_methods_count": 0,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ]
+  },
+  "last_plan_signature": "ed6e8afe3821444ddf54e30389151be6b3409403894e2461b7def779585f6528",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

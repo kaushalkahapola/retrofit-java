@@ -8,8 +8,8 @@ This evaluator differs from evaluate/pipeline/evaluate_full_pipeline.py:
 - Merges developer backport non-Java + test hunks during validation (phase 4).
 """
 
-import asyncio
 import argparse
+import asyncio
 import csv
 import difflib
 import io
@@ -31,9 +31,11 @@ sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 )
 
-from graph import app
+from dotenv import load_dotenv
+
 from agents.context_analyzer import context_analyzer_node
 from agents.structural_locator import structural_locator_node
+from graph import app
 from utils.patch_analyzer import PatchAnalyzer
 from utils.patch_complexity import classify_patch_complexity
 from utils.token_counter import (
@@ -41,7 +43,6 @@ from utils.token_counter import (
     has_tiktoken,
     resolve_model_name,
 )
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -1732,6 +1733,7 @@ async def run_full_pipeline(
             "with_test_changes": False,
             "developer_auxiliary_hunks": developer_aux_hunks,
             "developer_patch_diff": developer_patch_diff,
+            "pair_consistency": pair_consistency,
             "use_phase_0_cache": True,
         }
 

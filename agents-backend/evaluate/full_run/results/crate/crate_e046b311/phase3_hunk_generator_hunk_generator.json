@@ -1,0 +1,100 @@
+{
+  "adapted_file_edits": [
+    {
+      "target_file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+      "mainline_file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+      "old_string": "<developer patch fast path>",
+      "new_string": "diff --git a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\nindex fcd37cbd7c..4533b3a18a 100644\n--- a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\n+++ b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\n@@ -736,30 +736,18 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {\n         return notNullColumns;\n     }\n \n-    /**\n-     * Starting from 5.5 column OID-s are used as source keys.\n-     * Even of 5.5, there are no OIDs (and thus no source key rewrite happening) for:\n-     * <ul>\n-     *  <li>OBJECT (IGNORED) sub-columns</li>\n-     *  <li>Internal object keys of the geo shape column, such as \"coordinates\", \"type\"</li>\n-     * </ul>\n-     */\n     public UnaryOperator<String> lookupNameBySourceKey() {\n-        if (versionCreated.onOrAfter(Version.V_5_5_0)) {\n-            return oidOrName -> {\n-                String name = leafNamesByOid.get(oidOrName);\n-                if (name == null) {\n-                    if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n-                        assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n-                        return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n-                    }\n-                    return oidOrName;\n+        return oidOrName -> {\n+            String name = leafNamesByOid.get(oidOrName);\n+            if (name == null) {\n+                if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n+                    assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n+                    return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                 }\n-                return name;\n-            };\n-        } else {\n-            return UnaryOperator.identity();\n-        }\n+                return oidOrName;\n+            }\n+            return name;\n+        };\n     }",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "developer_fast_path_ok",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    }
+  ],
+  "all_adapted_file_edits": [
+    [
+      {
+        "target_file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+        "mainline_file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\nindex fcd37cbd7c..4533b3a18a 100644\n--- a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\n+++ b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\n@@ -736,30 +736,18 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {\n         return notNullColumns;\n     }\n \n-    /**\n-     * Starting from 5.5 column OID-s are used as source keys.\n-     * Even of 5.5, there are no OIDs (and thus no source key rewrite happening) for:\n-     * <ul>\n-     *  <li>OBJECT (IGNORED) sub-columns</li>\n-     *  <li>Internal object keys of the geo shape column, such as \"coordinates\", \"type\"</li>\n-     * </ul>\n-     */\n     public UnaryOperator<String> lookupNameBySourceKey() {\n-        if (versionCreated.onOrAfter(Version.V_5_5_0)) {\n-            return oidOrName -> {\n-                String name = leafNamesByOid.get(oidOrName);\n-                if (name == null) {\n-                    if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n-                        assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n-                        return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n-                    }\n-                    return oidOrName;\n+        return oidOrName -> {\n+            String name = leafNamesByOid.get(oidOrName);\n+            if (name == null) {\n+                if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n+                    assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n+                    return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                 }\n-                return name;\n-            };\n-        } else {\n-            return UnaryOperator.identity();\n-        }\n+                return oidOrName;\n+            }\n+            return name;\n+        };\n     }",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      }
+    ]
+  ],
+  "agent_trajectory_edits": [
+    []
+  ],
+  "adapted_code_hunks": [
+    {
+      "target_file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+      "mainline_file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\nindex fcd37cbd7c..4533b3a18a 100644\n--- a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\n+++ b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\n@@ -736,30 +736,18 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {\n         return notNullColumns;\n     }\n \n-    /**\n-     * Starting from 5.5 column OID-s are used as source keys.\n-     * Even of 5.5, there are no OIDs (and thus no source key rewrite happening) for:\n-     * <ul>\n-     *  <li>OBJECT (IGNORED) sub-columns</li>\n-     *  <li>Internal object keys of the geo shape column, such as \"coordinates\", \"type\"</li>\n-     * </ul>\n-     */\n     public UnaryOperator<String> lookupNameBySourceKey() {\n-        if (versionCreated.onOrAfter(Version.V_5_5_0)) {\n-            return oidOrName -> {\n-                String name = leafNamesByOid.get(oidOrName);\n-                if (name == null) {\n-                    if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n-                        assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n-                        return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n-                    }\n-                    return oidOrName;\n+        return oidOrName -> {\n+            String name = leafNamesByOid.get(oidOrName);\n+            if (name == null) {\n+                if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n+                    assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n+                    return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                 }\n-                return name;\n-            };\n-        } else {\n-            return UnaryOperator.identity();\n-        }\n+                return oidOrName;\n+            }\n+            return name;\n+        };\n     }\n \n \n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "validation_repeated_patch_detected": false,
+  "validation_repeated_plan_detected": false,
+  "best_effort_adapted_code_hunks": [
+    {
+      "target_file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+      "mainline_file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\nindex fcd37cbd7c..4533b3a18a 100644\n--- a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\n+++ b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java\n@@ -736,30 +736,18 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {\n         return notNullColumns;\n     }\n \n-    /**\n-     * Starting from 5.5 column OID-s are used as source keys.\n-     * Even of 5.5, there are no OIDs (and thus no source key rewrite happening) for:\n-     * <ul>\n-     *  <li>OBJECT (IGNORED) sub-columns</li>\n-     *  <li>Internal object keys of the geo shape column, such as \"coordinates\", \"type\"</li>\n-     * </ul>\n-     */\n     public UnaryOperator<String> lookupNameBySourceKey() {\n-        if (versionCreated.onOrAfter(Version.V_5_5_0)) {\n-            return oidOrName -> {\n-                String name = leafNamesByOid.get(oidOrName);\n-                if (name == null) {\n-                    if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n-                        assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n-                        return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n-                    }\n-                    return oidOrName;\n+        return oidOrName -> {\n+            String name = leafNamesByOid.get(oidOrName);\n+            if (name == null) {\n+                if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n+                    assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n+                    return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                 }\n-                return name;\n-            };\n-        } else {\n-            return UnaryOperator.identity();\n-        }\n+                return oidOrName;\n+            }\n+            return name;\n+        };\n     }\n \n \n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+      "target_file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "developer_fast_path",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    }
+  ],
+  "generated_patch_hash": "e10bbcfa3c64d734c5f088925e89fde96c49d4549e972e9dfe8940238882ea18",
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

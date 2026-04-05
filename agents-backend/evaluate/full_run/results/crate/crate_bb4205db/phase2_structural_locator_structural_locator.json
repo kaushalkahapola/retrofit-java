@@ -1,0 +1,352 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+        "target_method": null,
+        "start_line": 189,
+        "end_line": 189,
+        "code_snippet": "\n\n    @Nullable\n    @Override\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        if (aggregationReferences.stream().anyMatch(x -> x != null && !x.hasDocValues())) {\n            return null;\n        }\n\n        final int precision;\n        if (optionalParams.isEmpty()) {\n            precision = HyperLogLogPlusPlus.DEFAULT_PRECISION;\n        } else {\n            Literal<?> value = optionalParams.getLast();\n            precision = value == null ? HyperLogLogPlusPlus.DEFAULT_PRECISION : (int) value.value();\n        }\n        Reference reference = aggregationReferences.get(0);\n        var dataType = reference.valueType();\n        switch (dataType.id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        var hash = BitMixer.mix64(values.nextValue());\n                        state.addHash(hash);\n                    }\n                );\n            case DoubleType.ID:",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+        "target_method": null,
+        "start_line": 200,
+        "end_line": 200,
+        "code_snippet": "        }\n\n        final int precision;\n        if (optionalParams.isEmpty()) {\n            precision = HyperLogLogPlusPlus.DEFAULT_PRECISION;\n        } else {\n            Literal<?> value = optionalParams.getLast();\n            precision = value == null ? HyperLogLogPlusPlus.DEFAULT_PRECISION : (int) value.value();\n        }\n        Reference reference = aggregationReferences.get(0);\n        var dataType = reference.valueType();\n        switch (dataType.id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        var hash = BitMixer.mix64(values.nextValue());\n                        state.addHash(hash);\n                    }\n                );\n            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Double in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of double DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableLongToDouble(values.nextValue())))",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "hunk_3",
+        "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+        "target_method": null,
+        "start_line": 200,
+        "end_line": 200,
+        "code_snippet": "        }\n\n        final int precision;\n        if (optionalParams.isEmpty()) {\n            precision = HyperLogLogPlusPlus.DEFAULT_PRECISION;\n        } else {\n            Literal<?> value = optionalParams.getLast();\n            precision = value == null ? HyperLogLogPlusPlus.DEFAULT_PRECISION : (int) value.value();\n        }\n        Reference reference = aggregationReferences.get(0);\n        var dataType = reference.valueType();\n        switch (dataType.id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        var hash = BitMixer.mix64(values.nextValue());\n                        state.addHash(hash);\n                    }\n                );\n            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Double in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of double DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableLongToDouble(values.nextValue())))",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "hunk_4",
+        "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+        "target_method": null,
+        "start_line": 200,
+        "end_line": 200,
+        "code_snippet": "        }\n\n        final int precision;\n        if (optionalParams.isEmpty()) {\n            precision = HyperLogLogPlusPlus.DEFAULT_PRECISION;\n        } else {\n            Literal<?> value = optionalParams.getLast();\n            precision = value == null ? HyperLogLogPlusPlus.DEFAULT_PRECISION : (int) value.value();\n        }\n        Reference reference = aggregationReferences.get(0);\n        var dataType = reference.valueType();\n        switch (dataType.id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        var hash = BitMixer.mix64(values.nextValue());\n                        state.addHash(hash);\n                    }\n                );\n            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Double in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of double DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableLongToDouble(values.nextValue())))",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 5,
+        "mainline_method": "hunk_5",
+        "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+        "target_method": null,
+        "start_line": 246,
+        "end_line": 246,
+        "code_snippet": "                );\n            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Float in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of float DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits((double)NumericUtils.sortableIntToFloat((int)values.nextValue())))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int)values.nextValue()))) - no need to double cast, auto widening\n                        var hash = BitMixer.mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int) values.nextValue())));\n                        state.addHash(hash);\n                    }\n                );\n            case StringType.ID:\n            case CharacterType.ID:\n                return new HllAggregator(reference.storageIdent(), dataType, precision) {\n                    @Override\n                    public void apply(RamAccounting ramAccounting, int doc, HllState state) throws IOException {\n                        if (super.values.advanceExact(doc) && super.values.docValueCount() == 1) {\n                            BytesRef ref = super.values.lookupOrd(super.values.nextOrd());\n                            var hash = state.isAllOn4_1() ?\n                                MurmurHash3.hash64(ref.bytes, ref.offset, ref.length)\n                                : MurmurHash3.hash128(ref.bytes, ref.offset, ref.length, 0, super.hash128).h1;\n\n                            state.addHash(hash);\n                        }\n                    }\n                };\n            case IpType.ID:\n                return new HllAggregator(reference.storageIdent(), dataType, precision) {\n                    @Override\n                    public void apply(RamAccounting ramAccounting, int doc, HllState state) throws IOException {\n                        if (super.values.advanceExact(doc) && super.values.docValueCount() == 1) {\n                            BytesRef ref = super.values.lookupOrd(super.values.nextOrd());\n                            byte[] bytes = NetworkUtils.formatIPBytes(ref).getBytes(StandardCharsets.UTF_8);\n",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 6,
+        "mainline_method": "hunk_6",
+        "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+        "target_method": null,
+        "start_line": 246,
+        "end_line": 246,
+        "code_snippet": "                );\n            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Float in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of float DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits((double)NumericUtils.sortableIntToFloat((int)values.nextValue())))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int)values.nextValue()))) - no need to double cast, auto widening\n                        var hash = BitMixer.mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int) values.nextValue())));\n                        state.addHash(hash);\n                    }\n                );\n            case StringType.ID:\n            case CharacterType.ID:\n                return new HllAggregator(reference.storageIdent(), dataType, precision) {\n                    @Override\n                    public void apply(RamAccounting ramAccounting, int doc, HllState state) throws IOException {\n                        if (super.values.advanceExact(doc) && super.values.docValueCount() == 1) {\n                            BytesRef ref = super.values.lookupOrd(super.values.nextOrd());\n                            var hash = state.isAllOn4_1() ?\n                                MurmurHash3.hash64(ref.bytes, ref.offset, ref.length)\n                                : MurmurHash3.hash128(ref.bytes, ref.offset, ref.length, 0, super.hash128).h1;\n\n                            state.addHash(hash);\n                        }\n                    }\n                };\n            case IpType.ID:\n                return new HllAggregator(reference.storageIdent(), dataType, precision) {\n                    @Override\n                    public void apply(RamAccounting ramAccounting, int doc, HllState state) throws IOException {\n                        if (super.values.advanceExact(doc) && super.values.docValueCount() == 1) {\n                            BytesRef ref = super.values.lookupOrd(super.values.nextOrd());\n                            byte[] bytes = NetworkUtils.formatIPBytes(ref).getBytes(StandardCharsets.UTF_8);\n",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 7,
+        "mainline_method": "partialResult",
+        "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+        "target_method": "partialResult",
+        "start_line": 123,
+        "end_line": 123,
+        "code_snippet": "                    .build(),\n                (signature, boundSignature) ->\n                    new HyperLogLogDistinctAggregation(signature, boundSignature, supportedType)\n            );\n        }\n    }\n\n    private final Signature signature;\n    private final BoundSignature boundSignature;\n    private final DataType<?> dataType;\n\n    private HyperLogLogDistinctAggregation(Signature signature,\n                                           BoundSignature boundSignature,\n                                           DataType<?> dataType) {\n        this.signature = signature;\n        this.boundSignature = boundSignature;\n        this.dataType = dataType;\n    }\n\n    @Nullable\n    @Override\n    public HllState newState(RamAccounting ramAccounting,\n                             Version indexVersionCreated,\n                             Version minNodeInCluster,\n                             MemoryManager memoryManager) {\n        return new HllState(dataType, minNodeInCluster.onOrAfter(Version.V_4_1_0));\n    }\n\n    @Override\n    public HllState iterate(RamAccounting ramAccounting,\n                            MemoryManager memoryManager,\n                            HllState state,\n                            Input<?> ... args) throws CircuitBreakingException {\n        if (state.isInitialized() == false) {\n            int precision = HyperLogLogPlusPlus.DEFAULT_PRECISION;\n            if (args.length > 1) {\n                precision = DataTypes.INTEGER.sanitizeValue(args[1].value());\n            }\n            state.init(memoryManager, precision);\n        }\n        Object value = args[0].value();",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<import>",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java",
+        "target_method": "<import>",
+        "start_line": 34,
+        "end_line": 34,
+        "code_snippet": " * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.execution.engine.aggregation;\n\nimport java.util.List;\n\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.breaker.CircuitBreakingException;\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\nimport io.crate.data.breaker.RamAccounting;\nimport io.crate.expression.reference.doc.lucene.LuceneReferenceResolver;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.memory.MemoryManager;\nimport io.crate.metadata.FunctionImplementation;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.doc.DocTableInfo;\nimport io.crate.types.DataType;\n\n/**\n * A special FunctionImplementation that compute a single result from a set of input values\n *\n * @param <TPartial> the intermediate type of the value used during aggregation\n * @param <TFinal>   the final type of the value after the aggregation is finished\n */\npublic abstract class AggregationFunction<TPartial, TFinal> implements FunctionImplementation {\n\n    /**\n     * Called once per \"aggregation cycle\" to create an initial partial-state-value.\n     *\n     * @param ramAccounting used to account the memory used for the state.\n     * @param indexVersionCreated the version the current index was created on, this is useful for BWC\n     * @return a new state instance or null\n     */",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "getAggReference",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java",
+        "target_method": "getAggReference",
+        "start_line": 137,
+        "end_line": 137,
+        "code_snippet": "                                                \"not removable cumulative\");\n    }\n\n    /**\n     * @param referenceResolver A LuceneReferenceResolver to resolve references.\n     * @param aggregationReferences contains a list of references of the size of the input values of the function.\n     *                              If the value at the position is not a reference in the inputs the value in\n     *                              the list is null.\n     * @param table DocTableInfo for the underlying table which is the source of the doc-values.\n     * @param optionalParams contains a list of literals of the size of the input values of the function.\n     *                       If the value at the position is not a literal in the inputs the value in the list is\n     *                       null.\n     * @return A DocValueAggregator or null if there is no doc-value support for the given input parameters.\n     */\n    @Nullable\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        return null;\n    }\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/impl/ArbitraryAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/ArbitraryAggregation.java",
+        "target_method": null,
+        "start_line": 164,
+        "end_line": 164,
+        "code_snippet": "                // this case happens only once per aggregation so ram usage is only estimated once\n                ramAccounting.addBytes(partialType.valueBytes(state2));\n            }\n            return state2;\n        }\n        return state1;\n    }\n\n    @Override\n    public Object terminatePartial(RamAccounting ramAccounting, Object state) {\n        return state;\n    }\n\n    @Nullable\n    @Override\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        Reference arg = aggregationReferences.get(0);\n        if (arg == null) {\n            return null;\n        }\n        if (!arg.hasDocValues()) {\n            return null;\n        }\n        var dataType = arg.valueType();\n        switch (dataType.id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                return new LongArbitraryDocValueAggregator<>(\n                    arg.storageIdent(),\n                    dataType\n                );\n            case FloatType.ID:\n                return new FloatArbitraryDocValueAggregator(arg.storageIdent());",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/ArbitraryAggregation.java",
+        "target_method": null,
+        "start_line": 180,
+        "end_line": 180,
+        "code_snippet": "                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        Reference arg = aggregationReferences.get(0);\n        if (arg == null) {\n            return null;\n        }\n        if (!arg.hasDocValues()) {\n            return null;\n        }\n        var dataType = arg.valueType();\n        switch (dataType.id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                return new LongArbitraryDocValueAggregator<>(\n                    arg.storageIdent(),\n                    dataType\n                );\n            case FloatType.ID:\n                return new FloatArbitraryDocValueAggregator(arg.storageIdent());\n            case DoubleType.ID:\n                return new DoubleArbitraryDocValueAggregator(arg.storageIdent());\n            case IpType.ID:\n                return new ArbitraryIPDocValueAggregator(arg.storageIdent());\n            case StringType.ID:\n                return new ArbitraryBinaryDocValueAggregator<>(\n                    arg.storageIdent(),\n                    dataType\n                );\n            default:\n                return null;\n        }\n    }\n\n    private static class LongArbitraryDocValueAggregator<T> extends ArbitraryNumericDocValueAggregator {\n",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/impl/CmpByAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<import>",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CmpByAggregation.java",
+        "target_method": "<import>",
+        "start_line": 48,
+        "end_line": 48,
+        "code_snippet": "\nimport org.apache.lucene.index.DocValues;\nimport org.apache.lucene.index.LeafReaderContext;\nimport org.apache.lucene.index.SortedNumericDocValues;\nimport org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.breaker.CircuitBreakingException;\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\nimport io.crate.data.breaker.RamAccounting;\nimport io.crate.execution.engine.aggregation.AggregationFunction;\nimport io.crate.execution.engine.aggregation.DocValueAggregator;\nimport io.crate.execution.engine.fetch.ReaderContext;\nimport io.crate.expression.reference.doc.lucene.CollectorContext;\nimport io.crate.expression.reference.doc.lucene.LuceneCollectorExpression;\nimport io.crate.expression.reference.doc.lucene.LuceneReferenceResolver;\nimport io.crate.expression.reference.doc.lucene.StoredRowLookup;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.memory.MemoryManager;\nimport io.crate.metadata.FunctionType;\nimport io.crate.metadata.Functions;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.Scalar;\nimport io.crate.metadata.doc.DocTableInfo;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.metadata.functions.TypeVariableConstraint;\nimport io.crate.types.ByteType;\nimport io.crate.types.DataType;\nimport io.crate.types.DataTypes;\nimport io.crate.types.IntegerType;\nimport io.crate.types.LongType;\nimport io.crate.types.ShortType;\nimport io.crate.types.TimestampType;\nimport io.crate.types.TypeSignature;\n\npublic final class CmpByAggregation extends AggregationFunction<CmpByAggregation.CompareBy, Object> {\n\n    public static final String MAX_BY = \"max_by\";\n    public static final String MIN_BY = \"min_by\";",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CmpByAggregation.java",
+        "target_method": null,
+        "start_line": 168,
+        "end_line": 168,
+        "code_snippet": "                boundSignature.argTypes().get(0),\n                boundSignature.argTypes().get(1)\n            );\n        }\n    }\n\n    @Override\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        Reference returnField = aggregationReferences.getFirst();\n        Reference searchField = aggregationReferences.getLast();\n        if (returnField == null) {\n            return null;\n        }\n        if (searchField == null) {\n            return null;\n        }\n        if (!searchField.hasDocValues()) {\n            return null;\n        }\n\n        DataType<?> searchType = searchField.valueType();\n        switch (searchType.id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                var resultExpression = referenceResolver.getImplementation(returnField);\n                if (signature.getName().name().equalsIgnoreCase(\"min_by\")) {\n                    return new MinByLong(\n                        searchField.storageIdent(),\n                        searchType,\n                        resultExpression,\n                        new CollectorContext(() -> StoredRowLookup.create(shardCreatedVersion, table, referenceResolver.getIndexName()))\n                    );\n                } else {",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<import>",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
+        "target_method": "<import>",
+        "start_line": 48,
+        "end_line": 48,
+        "code_snippet": "\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.Streamer;\nimport io.crate.common.MutableLong;\nimport io.crate.data.Input;\nimport io.crate.data.breaker.RamAccounting;\nimport io.crate.execution.engine.aggregation.AggregationFunction;\nimport io.crate.execution.engine.aggregation.DocValueAggregator;\nimport io.crate.execution.engine.aggregation.impl.templates.BinaryDocValueAggregator;\nimport io.crate.execution.engine.aggregation.impl.templates.SortedNumericDocValueAggregator;\nimport io.crate.expression.reference.doc.lucene.LuceneReferenceResolver;\nimport io.crate.expression.symbol.Function;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.expression.symbol.Symbol;\nimport io.crate.memory.MemoryManager;\nimport io.crate.metadata.FunctionType;\nimport io.crate.metadata.Functions;\nimport io.crate.metadata.NodeContext;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.Scalar;\nimport io.crate.metadata.TransactionContext;\nimport io.crate.metadata.doc.DocTableInfo;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.types.BitStringType;\nimport io.crate.types.ByteType;\nimport io.crate.types.DataType;\nimport io.crate.types.DataTypes;\nimport io.crate.types.DoubleType;\nimport io.crate.types.FixedWidthType;\nimport io.crate.types.FloatType;\nimport io.crate.types.GeoPointType;\nimport io.crate.types.IntegerType;\nimport io.crate.types.IpType;\nimport io.crate.types.LongType;\nimport io.crate.types.ObjectType;\nimport io.crate.types.ShortType;",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "getDocValueAggregator",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
+        "target_method": "getDocValueAggregator",
+        "start_line": 260,
+        "end_line": 260,
+        "code_snippet": "            return DataTypes.LONG.fixedSize();\n        }\n    }\n\n    @Override\n    public boolean isRemovableCumulative() {\n        return true;\n    }\n\n    @Override\n    public MutableLong removeFromAggregatedState(RamAccounting ramAccounting,\n                                                 MutableLong previousAggState,\n                                                 Input<?>[]stateToRemove) {\n        if (!hasArgs || stateToRemove[0].value() != null) {\n            return previousAggState.sub(1L);\n        }\n        return previousAggState;\n    }\n\n    private DocValueAggregator<?> getDocValueAggregator(Reference ref) {\n        if (!ref.hasDocValues()) {\n            return null;\n        }\n        switch (ref.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n            case FloatType.ID:\n            case DoubleType.ID:\n            case GeoPointType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    ref.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(LongStateType.INSTANCE.fixedSize());\n                        return new MutableLong(0L);\n                    },\n                    (values, state) -> state.add(1L)\n                );",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "hunk_3",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
+        "target_method": null,
+        "start_line": 307,
+        "end_line": 307,
+        "code_snippet": "                        ramAccounting.addBytes(LongStateType.INSTANCE.fixedSize());\n                        return new MutableLong(0L);\n                    },\n                    (values, state) -> state.add(1L)\n                );\n            default:\n                return null;\n        }\n    }\n\n    @Nullable\n    @Override\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        if (aggregationReferences.size() != 1) {\n            return null;\n        }\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (reference.valueType().id() == ObjectType.ID) {\n            // Count on object would require loading the source just to check if there is a value.\n            // Try to count on a non-null sub-column to be able to utilize doc-values.\n            var aggregationRef = (Reference) aggregationReferences.get(0);\n            for (var notNullCol : table.notNullColumns()) {\n                // the first seen not-null sub-column will be used\n                if (notNullCol.isChildOf(aggregationRef.column())) {\n                    var notNullColRef = table.getReference(notNullCol);\n                    if (notNullColRef == null) {\n                        continue;\n                    }\n                    var subColDocValAggregator = getDocValueAggregator(notNullColRef);\n                    if (subColDocValAggregator != null) {\n                        return subColDocValAggregator;\n                    }\n                }\n            }",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "hunk_4",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
+        "target_method": null,
+        "start_line": 329,
+        "end_line": 329,
+        "code_snippet": "            return null;\n        }\n        if (reference.valueType().id() == ObjectType.ID) {\n            // Count on object would require loading the source just to check if there is a value.\n            // Try to count on a non-null sub-column to be able to utilize doc-values.\n            var aggregationRef = (Reference) aggregationReferences.get(0);\n            for (var notNullCol : table.notNullColumns()) {\n                // the first seen not-null sub-column will be used\n                if (notNullCol.isChildOf(aggregationRef.column())) {\n                    var notNullColRef = table.getReference(notNullCol);\n                    if (notNullColRef == null) {\n                        continue;\n                    }\n                    var subColDocValAggregator = getDocValueAggregator(notNullColRef);\n                    if (subColDocValAggregator != null) {\n                        return subColDocValAggregator;\n                    }\n                }\n            }\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        return getDocValueAggregator(reference);\n    }\n}",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/impl/GeometricMeanAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/GeometricMeanAggregation.java",
+        "target_method": null,
+        "start_line": 311,
+        "end_line": 311,
+        "code_snippet": "        return GeometricMeanStateType.INSTANCE;\n    }\n\n    @Override\n    public Signature signature() {\n        return signature;\n    }\n\n    @Override\n    public BoundSignature boundSignature() {\n        return boundSignature;\n    }\n\n    @Nullable\n    @Override\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(GeometricMeanStateType.INSTANCE.fixedSize());\n                        return new GeometricMeanState();\n                    },\n                    (values, state) -> state.addValue(values.nextValue())",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/impl/MaximumAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/MaximumAggregation.java",
+        "target_method": null,
+        "start_line": 225,
+        "end_line": 225,
+        "code_snippet": "            }\n        }\n    }\n\n    private static class FixedMaximumAggregation extends MaximumAggregation {\n\n        private final int size;\n\n        public FixedMaximumAggregation(Signature signature, BoundSignature boundSignature) {\n            super(signature, boundSignature);\n            size = ((FixedWidthType) partialType()).fixedSize();\n        }\n\n        @Nullable\n        @Override\n        public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                           List<Reference> aggregationReferences,\n                                                           DocTableInfo table,\n                                                           Version shardCreatedVersion,\n                                                           List<Literal<?>> optionalParams) {\n            Reference reference = aggregationReferences.get(0);\n\n            if (reference == null) {\n                return null;\n            }\n\n            if (!reference.hasDocValues()) {\n                return null;\n            }\n            DataType<?> arg = reference.valueType();\n            switch (arg.id()) {\n                case ByteType.ID:\n                case ShortType.ID:\n                case IntegerType.ID:\n                case LongType.ID:\n                case TimestampType.ID_WITH_TZ:\n                case TimestampType.ID_WITHOUT_TZ:\n                    return new LongMax(reference.storageIdent(), arg);\n\n                case FloatType.ID:\n                    return new FloatMax(reference.storageIdent());",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/impl/MinimumAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/MinimumAggregation.java",
+        "target_method": null,
+        "start_line": 259,
+        "end_line": 259,
+        "code_snippet": "            return state1;\n        }\n    }\n\n    private static class FixedMinimumAggregation extends MinimumAggregation {\n\n        private final int size;\n\n        FixedMinimumAggregation(Signature signature, BoundSignature boundSignature) {\n            super(signature, boundSignature);\n            size = ((FixedWidthType) partialType()).fixedSize();\n        }\n\n        @Nullable\n        @Override\n        public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                           List<Reference> aggregationReferences,\n                                                           DocTableInfo table,\n                                                           Version shardCreatedVersion,\n                                                           List<Literal<?>> optionalParams) {\n            Reference reference = aggregationReferences.get(0);\n            if (reference == null) {\n                return null;\n            }\n            if (!reference.hasDocValues()) {\n                return null;\n            }\n            DataType<?> arg = reference.valueType();\n            switch (arg.id()) {\n                case ByteType.ID:\n                case ShortType.ID:\n                case IntegerType.ID:\n                case LongType.ID:\n                case TimestampType.ID_WITH_TZ:\n                case TimestampType.ID_WITHOUT_TZ:\n                    return new LongMin(reference.storageIdent(), arg);\n\n                case FloatType.ID:\n                    return new FloatMin(reference.storageIdent());\n                case DoubleType.ID:\n                    return new DoubleMin(reference.storageIdent());",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/impl/NumericSumAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/NumericSumAggregation.java",
+        "target_method": null,
+        "start_line": 186,
+        "end_line": 186,
+        "code_snippet": "    @Override\n    public BigDecimal removeFromAggregatedState(RamAccounting ramAccounting,\n                                                BigDecimal previousAggState,\n                                                Input<?>[]stateToRemove) {\n        BigDecimal value = returnType.implicitCast(stateToRemove[0].value());\n        if (value != null) {\n            if (previousAggState != null) {\n                return previousAggState.subtract(value);\n            }\n        }\n        return previousAggState;\n    }\n\n    @Nullable\n    @Override\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        return switch (reference.valueType().id()) {\n            case ByteType.ID, ShortType.ID, IntegerType.ID, LongType.ID ->\n                new SumLong(returnType, reference.storageIdent());\n            case FloatType.ID -> new SumFloat(returnType, reference.storageIdent());\n            case DoubleType.ID -> new SumDouble(returnType, reference.storageIdent());\n            default -> null;\n        };\n    }\n\n    static class SumLong implements DocValueAggregator<OverflowAwareMutableLong> {\n\n        private final DataType<BigDecimal> returnType;\n        private final String columnName;\n        private SortedNumericDocValues values;",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java",
+        "target_method": null,
+        "start_line": 234,
+        "end_line": 234,
+        "code_snippet": "    }\n\n    @Override\n    public Double terminatePartial(RamAccounting ramAccounting, StandardDeviation state) {\n        double result = state.result();\n        return Double.isNaN(result) ? null : result;\n    }\n\n    @Override\n    public DataType<?> partialType() {\n        return StdDevStateType.INSTANCE;\n    }\n\n    @Nullable\n    @Override\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(StdDevStateType.INSTANCE.fixedSize());\n                        return new StandardDeviation();\n                    },\n                    (values, state) -> state.increment(values.nextValue())",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/impl/SumAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/SumAggregation.java",
+        "target_method": null,
+        "start_line": 199,
+        "end_line": 199,
+        "code_snippet": "        return boundSignature;\n    }\n\n    @Override\n    public boolean isRemovableCumulative() {\n        return true;\n    }\n\n    @Override\n    public T removeFromAggregatedState(RamAccounting ramAccounting, T previousAggState, Input<?>[] stateToRemove) {\n        return subtraction.apply(previousAggState, returnType.sanitizeValue(stateToRemove[0].value()));\n    }\n\n    @Nullable\n    @Override\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        Reference reference = aggregationReferences.get(0);\n\n        if (reference == null) {\n            return null;\n        }\n\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n                return new SumLong(reference.storageIdent());\n\n            case FloatType.ID:\n                return new SumFloat(reference.storageIdent());\n            case DoubleType.ID:\n                return new SumDouble(reference.storageIdent());",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/impl/TopKAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/TopKAggregation.java",
+        "target_method": null,
+        "start_line": 225,
+        "end_line": 225,
+        "code_snippet": "    public State reduce(RamAccounting ramAccounting, State state1, State state2) {\n        return state1.merge(state2);\n    }\n\n    @Override\n    public Map<String, Object> terminatePartial(RamAccounting ramAccounting, State state) {\n        return state.result(argumentType);\n    }\n\n    public DataType<?> partialType() {\n        return new StateType(argumentType);\n    }\n\n    @Nullable\n    @Override\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        if (aggregationReferences.isEmpty()) {\n            return null;\n        }\n\n        Reference reference = aggregationReferences.getFirst();\n        if (reference == null) {\n            return null;\n        }\n\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n\n        if (optionalParams.isEmpty()) {\n            return getDocValueAggregator(reference, DEFAULT_LIMIT, DEFAULT_MAX_CAPACITY);\n        }\n\n        // topk(ref) -> aggregationReferences[ref] optionalParams[null]\n        if (optionalParams.size() == 1 && optionalParams.getFirst() == null) {\n            return getDocValueAggregator(reference, DEFAULT_LIMIT, DEFAULT_MAX_CAPACITY);\n        }",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/impl/VarianceAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/VarianceAggregation.java",
+        "target_method": null,
+        "start_line": 233,
+        "end_line": 233,
+        "code_snippet": "        return VarianceStateType.INSTANCE;\n    }\n\n    @Override\n    public Signature signature() {\n        return signature;\n    }\n\n    @Override\n    public BoundSignature boundSignature() {\n        return boundSignature;\n    }\n\n    @Nullable\n    @Override\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(VarianceStateType.INSTANCE.fixedSize());\n                        return new Variance();\n                    },\n                    (values, state) -> state.increment(values.nextValue())",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java",
+        "target_method": null,
+        "start_line": 315,
+        "end_line": 315,
+        "code_snippet": "        return AverageStateType.INSTANCE;\n    }\n\n    @Override\n    public Signature signature() {\n        return signature;\n    }\n\n    @Override\n    public BoundSignature boundSignature() {\n        return boundSignature;\n    }\n\n    @Nullable\n    @Override\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(AverageStateType.INSTANCE.fixedSize());\n                        return new AverageState();\n                    },\n                    (values, state) -> {\n                        state.addNumber(values.nextValue(), true); // Mutates state.\n                    }",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
+  }
+}

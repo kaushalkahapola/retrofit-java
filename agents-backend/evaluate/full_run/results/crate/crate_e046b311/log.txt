@@ -1,0 +1,66 @@
+patch_id=crate_e046b311
+project=crate
+mainline_commit=e046b311fc71b35e8a1c52f53eabd35af3d09e24
+backport_commit=c9177d67b9b875475a7e1e6af204ab21385d4c6c
+mode=full
+started_at=2026-04-05T13:11:03.851282
+----------------------------------------
+Running full workflow graph
+Completed node=phase_0_optimistic
+Completed node=context_analyzer
+Completed node=structural_locator
+Completed node=hunk_generator
+Completed node=validation
+Workflow completed successfully
+
+[crate/crate_e046b311] Setting up repositories for mode=full...
+[crate/crate_e046b311] Running full workflow graph...
+Router: Running Phase 0.
+Phase 0 (Optimistic): Checking direct patch applicability...
+Phase 0: Experiment mode — checking out parent of c9177d67b9b875475a7e1e6af204ab21385d4c6c...
+Phase 0: Building baseline by applying developer backport test hunks only...
+  Validation: server/src/test/java/io/crate/metadata/doc/DocTableInfoTest.java - applying 1 hunk(s) one by one in bottom-to-top order: [249]
+    Agent 4: Executing crate helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/crate/run_tests.sh
+Phase 0: git apply --check FAILED. Escalating to full pipeline.
+  Hint: error: docs/appendices/release-notes/5.10.3.rst: No such file or directory
+error: patch failed: server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:249
+error: server/src/main/java/io/crate/me
+Router: Phase 0 failed - entering full 4-agent pipeline.
+  Completed: phase_0_optimistic
+Agent 1 (Context Analyzer): Deterministic blueprint generation...
+Agent 1: Complete. Files=1 hunks=3 (deterministic).
+Agent 1: Detected 2 hunk(s) with variants.
+  Completed: context_analyzer
+Agent 2 (Structural Locator): Starting target location mapping...
+  Agent 2: 1 code file(s), 0 test file(s)
+LLM Provider: azure, Model: gpt-4.1-mini, Temperature: 0
+  Agent 2: Found 3 hunk(s) in hunk_chain
+  Agent 2: Locating target for server/src/main/java/io/crate/metadata/doc/DocTableInfo.java (3 hunk(s))...
+Phase 1 (Git) Match Found: server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
+  Agent 2: Git resolution found target: server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
+  Agent 2: Mapped hunk 1 (<import>) to <import> at lines 22-22
+  Agent 2: Mapped hunk 2 (hunk_2) to None at lines 263-263
+  Agent 2: Mapped hunk 3 (lookupNameBySourceKey) to lookupNameBySourceKey at lines 120-120
+  Agent 2: Trace written to structural_locator_trace.md
+Agent 2: Complete. Mapped 1 file(s). Total hunk mappings: 3. ConsistencyMap has 0 rename(s).
+Router: complexity=STRUCTURAL -> skip planning, go hunk_generator.
+  Completed: structural_locator
+Agent 3 (File Editor): Starting direct file-edit workflow...
+LLM Provider: azure, Model: gpt-4.1-mini, Temperature: 0
+  Agent 3: Built 3 deterministic fallback edit(s) for server/src/main/java/io/crate/metadata/doc/DocTableInfo.java.
+  Agent 3: Processing 3 edit(s) for server/src/main/java/io/crate/metadata/doc/DocTableInfo.java (op=MODIFIED)
+    Agent 3: Classified server/src/main/java/io/crate/metadata/doc/DocTableInfo.java as TYPE_II (deterministic path)
+    Agent 3: base_types=['TYPE_II'] execution_types=['TYPE_II']
+    Agent 3: Developer patch fast path for server/src/main/java/io/crate/metadata/doc/DocTableInfo.java (developer_fast_path_ok)
+  Agent 3 (File Editor): Done. 1 file(s) adapted, 1 edit record(s).
+  Completed: hunk_generator
+Agent 4 (Validation): Starting 'Prove Red, Make Green' loop...
+  Agent 4: Evaluation full-workflow mode (apply -> build -> relevant tests)...
+  Validation: server/src/main/java/io/crate/metadata/doc/DocTableInfo.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: server/src/test/java/io/crate/metadata/doc/DocTableInfoTest.java - applying 1 hunk(s) one by one in bottom-to-top order: [249]
+    Agent 4: Executing crate helper build script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/crate/run_build.sh
+    Agent 4: Executing crate helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/crate/run_tests.sh
+Trace saved to validation_trace.md
+Router: Validation PASSED after 1 attempt(s). Done.
+  Completed: validation
+[crate/crate_e046b311] Full workflow completed!
