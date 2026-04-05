@@ -31,6 +31,7 @@ Key outputs to state:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import asyncio

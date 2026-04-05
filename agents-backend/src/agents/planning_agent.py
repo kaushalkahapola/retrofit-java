@@ -647,16 +647,26 @@ def _ensure_required_coverage(
         req_new = str(req.get("new_string") or "")
         matched = False
         for got in out:
-            # First, check if there's a directed match on operation_index
-            if req_idx is not None and got.get("operation_index") == req_idx:
-                matched = True
-                break
+            # operation_index is a hint, not a proof of semantic equivalence.
+            same_op_index = (
+                req_idx is not None and got.get("operation_index") == req_idx
+            )
 
             got_type = str(got.get("edit_type") or "").strip().lower()
             if got_type != req_type:
                 continue
             got_old = str(got.get("old_string") or "")
             got_new = str(got.get("new_string") or "")
+
+            if same_op_index:
+                # Accept same-index only if payload is materially equivalent.
+                if req_old and got_old == req_old:
+                    matched = True
+                    break
+                if req_marker and req_marker in got_new:
+                    matched = True
+                    break
+
             if req_old and got_old == req_old:
                 if (
                     req_type.startswith("insert")
