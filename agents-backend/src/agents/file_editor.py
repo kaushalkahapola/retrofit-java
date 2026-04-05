@@ -60,6 +60,7 @@ from utils.plan_validator import (
     classify_syntax_failure_message,
     validate_plan_before_apply,
 )
+from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_line
 from utils.patch_apply_strategy import try_developer_fast_path
 
 
@@ -831,7 +832,7 @@ def _looks_structurally_truncated(diff_text: str) -> tuple[bool, str]:
             )
         if re.match(r"^(private|public|protected)\s+(static\s+)?(final\s+)?$", s):
             return True, f"syntax_guard_failed: truncated declaration '{s}'"
-        if s.endswith("=") and not s.endswith("=="):
+        if should_flag_dangling_equals_on_added_line(s):
             return True, f"syntax_guard_failed: dangling assignment in added line '{s}'"
     return False, ""
 

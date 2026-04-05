@@ -25,6 +25,7 @@ from typing import Any, Optional
 
 from langchain_core.tools import StructuredTool
 from agents.claw_file_editor import edit_file as claw_edit_file, verify_edit_output
+from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_line
 
 
 MAX_READ_FILE_WINDOW_RADIUS = 50
@@ -658,7 +659,7 @@ class HunkGeneratorToolkit:
                 )
             elif re.match(r"^(private|public|protected)\s+(static\s+)?(final\s+)?$", s):
                 issues.append(f"syntax_guard_failed: truncated declaration '{s}'")
-            elif s.endswith("=") and not s.endswith("=="):
+            elif should_flag_dangling_equals_on_added_line(s):
                 issues.append(
                     f"syntax_guard_failed: dangling assignment in added line '{s}'"
                 )
