@@ -3,7 +3,7 @@ project=crate
 mainline_commit=a9b402ecedd96c3db5a4945937b7d90ae03457a3
 backport_commit=f87b356d106bbe897b577dfabc996bf8821d7c46
 mode=full
-started_at=2026-04-04T23:44:52.421778
+started_at=2026-04-04T23:54:42.768372
 ----------------------------------------
 Running full workflow graph
 Completed node=context_analyzer
@@ -20,7 +20,7 @@ Agent 1: Detected 1 hunk(s) with variants.
   Completed: context_analyzer
 Agent 2 (Structural Locator): Starting target location mapping...
   Agent 2: 1 code file(s), 0 test file(s)
-LLM Provider: azure, Model: gpt-5-mini, Temperature: 0
+LLM Provider: azure, Model: gpt-4.1-mini, Temperature: 0
   Agent 2: Found 6 hunk(s) in hunk_chain
   Agent 2: Locating target for server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java (6 hunk(s))...
 Blob Hunting: Searching for SHA e4348bc0f0b92cb1a7d95cef02cae7afac5bc878 (server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java)
@@ -38,11 +38,11 @@ Agent 2: Complete. Mapped 1 file(s). Total hunk mappings: 6. ConsistencyMap has 
 Router: complexity=REWRITE -> planning_agent.
   Completed: structural_locator
 Planning Agent: Building per-hunk str_replace edit plans...
-LLM Provider: azure, Model: gpt-5-mini, Temperature: 0
+LLM Provider: azure, Model: gpt-4.1-mini, Temperature: 0
 Planning Agent: Complete. Planned 10 adapted edit(s).
   Completed: planning_agent
 Agent 3 (File Editor): Starting direct file-edit workflow...
-LLM Provider: azure, Model: gpt-5-mini, Temperature: 0
+LLM Provider: azure, Model: gpt-4.1-mini, Temperature: 0
   Agent 3: Processing 10 edit(s) for server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java (op=MODIFIED)
     Agent 3: Classified server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java as TYPE_II (deterministic path)
     Agent 3: base_types=['TYPE_I', 'TYPE_II'] execution_types=['TYPE_I', 'TYPE_II']

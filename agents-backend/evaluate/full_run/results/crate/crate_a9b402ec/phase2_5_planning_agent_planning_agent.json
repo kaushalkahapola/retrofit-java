@@ -28,23 +28,7 @@
         "surrounding_match": true,
         "blockers": [],
         "namespace_only_possible": true,
-        "namespace_changes": [
-          {
-            "from": "",
-            "to": "org.elasticsearch.cluster.SnapshotsInProgress",
-            "reason": "New class referenced by mainline change; requires adding import."
-          },
-          {
-            "from": "",
-            "to": "org.elasticsearch.cluster.service.ClusterService",
-            "reason": "New class referenced by mainline change; requires adding import."
-          },
-          {
-            "from": "",
-            "to": "org.elasticsearch.repositories.IndexId",
-            "reason": "New class referenced by mainline change; requires adding import."
-          }
-        ],
+        "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
         "protected_symbols": [],
@@ -84,23 +68,7 @@
         "surrounding_match": true,
         "blockers": [],
         "namespace_only_possible": true,
-        "namespace_changes": [
-          {
-            "from": "",
-            "to": "org.elasticsearch.cluster.SnapshotsInProgress",
-            "reason": "New class referenced by mainline change; requires adding import."
-          },
-          {
-            "from": "",
-            "to": "org.elasticsearch.cluster.service.ClusterService",
-            "reason": "New class referenced by mainline change; requires adding import."
-          },
-          {
-            "from": "",
-            "to": "org.elasticsearch.repositories.IndexId",
-            "reason": "New class referenced by mainline change; requires adding import."
-          }
-        ],
+        "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
         "protected_symbols": [],
@@ -162,7 +130,7 @@
         "new_string": "    private final ClusterService clusterService;\n    @Inject",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Insert new field before existing @Inject annotation to match mainline constructor changes",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "    private static final Logger LOGGER = LogManager.getLogger(SysSnapshots.class);",
           "    private final Supplier<Collection<Repository>> getRepositories;",
@@ -178,11 +146,8 @@
         "execution_type": "TYPE_II",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [
-          "Mainline old-start line (53) differs from detected target start line (58) -> location offset",
-          "Pre-patch surrounding context differs: mainline context shows '@Singleton' and 'public class SysSnapshots {' while target context shows 'private final Supplier<Collection<Repository>> getRepositories;' and '@Inject' at the change site"
-        ],
-        "namespace_only_possible": false,
+        "blockers": [],
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [
           "private final ClusterService clusterService;",
@@ -211,7 +176,7 @@
         "new_string": "\n    @Inject\n    public SysSnapshots(RepositoriesService repositoriesService, ClusterService clusterService) {\n        this(repositoriesService::getRepositoriesList, clusterService);\n    }",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Update constructor signature to accept ClusterService and delegate to the expanded visible-for-testing constructor",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "",
           "    private static final Logger LOGGER = LogManager.getLogger(SysSnapshots.class);",
@@ -227,11 +192,8 @@
         "execution_type": "TYPE_II",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [
-          "Mainline old-start line (53) differs from detected target start line (58) -> location offset",
-          "Pre-patch surrounding context differs: mainline context shows '@Singleton' and 'public class SysSnapshots {' while target context shows 'private final Supplier<Collection<Repository>> getRepositories;' and '@Inject' at the change site"
-        ],
-        "namespace_only_possible": false,
+        "blockers": [],
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [
           "private final ClusterService clusterService;",
@@ -260,7 +222,7 @@
         "new_string": "\n    @VisibleForTesting\n    SysSnapshots(Supplier<Collection<Repository>> getRepositories, ClusterService clusterService) {\n        this.getRepositories = getRepositories;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Extend the package-visible constructor to accept ClusterService for assignment",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "    public SysSnapshots(RepositoriesService repositoriesService) {",
           "        this(repositoriesService::getRepositoriesList);",
@@ -276,11 +238,8 @@
         "execution_type": "TYPE_II",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [
-          "Mainline old-start line (53) differs from detected target start line (58) -> location offset",
-          "Pre-patch surrounding context differs: mainline context shows '@Singleton' and 'public class SysSnapshots {' while target context shows 'private final Supplier<Collection<Repository>> getRepositories;' and '@Inject' at the change site"
-        ],
-        "namespace_only_possible": false,
+        "blockers": [],
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [
           "private final ClusterService clusterService;",
@@ -309,7 +268,7 @@
         "new_string": "        this.clusterService = clusterService;\n     }",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Assign injected ClusterService to the new field in the package-visible constructor",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "                    ArrayList<CompletableFuture<SysSnapshot>> snapshots = new ArrayList<>(snapshotIds.size());",
           "                    for (SnapshotId snapshotId : snapshotIds) {",
@@ -325,11 +284,8 @@
         "execution_type": "TYPE_II",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [
-          "Mainline old-start line (53) differs from detected target start line (58) -> location offset",
-          "Pre-patch surrounding context differs: mainline context shows '@Singleton' and 'public class SysSnapshots {' while target context shows 'private final Supplier<Collection<Repository>> getRepositories;' and '@Inject' at the change site"
-        ],
-        "namespace_only_possible": false,
+        "blockers": [],
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [
           "private final ClusterService clusterService;",
@@ -399,10 +355,10 @@
         "operation_index": 0,
         "edit_type": "insert_before",
         "old_string": "    private static CompletableFuture<SysSnapshot> createSysSnapshot(Repository repository, SnapshotId snapshotId) {",
-        "new_string": "    private static SysSnapshot toSysSnapshot(String repositoryName,\n                                             SnapshotsInProgress.Entry entry,\n                                             List<String> partedTables) {\n        return new SysSnapshot(\n            entry.snapshot().getSnapshotId().getName(),\n            repositoryName,\n            entry.indices().stream().map(IndexId::getName).toList(),\n            partedTables,\n            entry.startTime(),\n            0L,\n            Version.CURRENT.toString(),\n            SnapshotState.IN_PROGRESS.name(),\n            Collections.emptyList()\n        );\n    }\n\n    private static CompletableFuture<SysSnapshot> createSysSnapshot(Repository repository, SnapshotId snapshotId) {",
-        "verified": true,
-        "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before",
+        "new_string": "    private static SysSnapshot toSysSnapshot(String repositoryName,\n                                             SnapshotsInProgress.Entry entry,\n                                             List<String> partedTables) {\n        return new SysSnapshot(\n            entry.snapshot().getSnapshotId().getName(),\n            repositoryName,\n            entry.indices().stream().map(IndexId::getName).toList(),\n            partedTables,\n            entry.startTime(),\n            0L,\n            Version.CURRENT.toString(),\n            SnapshotState.IN_PROGRESS.name(),\n            Collections.emptyList()\n        );\n    }\n\n    ",
+        "verified": false,
+        "verification_result": "sanitize_payload_missing",
+        "notes": "required_op_insert_before|sanitize_payload_missing",
         "surround_before_3": [
           "        );",
           "    }",
@@ -505,13 +461,13 @@
       }
     ]
   },
-  "last_plan_signature": "25c8921a7441dc3347435bd4b41cd42406a8dedaf9c6e17e1631226ef33ef9f3",
+  "last_plan_signature": "f7e2e29f2ac14f05c28ffa09585643716e38778022eb15c0f3a8db3843a3f49e",
   "force_type_v_until_success": false,
   "force_type_v_reason": "",
   "token_usage": {
-    "input_tokens": 8234,
-    "output_tokens": 7841,
-    "total_tokens": 16075,
+    "input_tokens": 8240,
+    "output_tokens": 2535,
+    "total_tokens": 10775,
     "estimated": false,
     "sources": [
       "planning_agent.provider_usage",
