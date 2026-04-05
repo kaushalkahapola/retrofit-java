@@ -36,7 +36,11 @@ from agents.context_analyzer import context_analyzer_node
 from agents.structural_locator import structural_locator_node
 from utils.patch_analyzer import PatchAnalyzer
 from utils.patch_complexity import classify_patch_complexity
-from utils.token_counter import has_tiktoken, resolve_model_name
+from utils.token_counter import (
+    aggregate_usage_from_messages,
+    has_tiktoken,
+    resolve_model_name,
+)
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -1548,31 +1552,44 @@ async def run_full_pipeline(
     ) -> None:
         exact_hit = False
 
-        if _consume_usage(
+        msgs = node_output.get("messages", []) if isinstance(node_output, dict) else []
+        agg = aggregate_usage_from_messages(msgs)
+        if agg.get("input_tokens") or agg.get("output_tokens"):
+            if _consume_usage(
+                node_name,
+                {
+                    "input_tokens": agg.get("input_tokens", 0),
+                    "output_tokens": agg.get("output_tokens", 0),
+                    "total_tokens": agg.get("total_tokens", 0),
+                },
+                "msg.aggregate_usage_from_messages",
+            ):
+                exact_hit = True
+        elif _consume_usage(
             node_name, node_output.get("token_usage"), "node.token_usage"
         ):
             exact_hit = True
 
-        msgs = node_output.get("messages", []) if isinstance(node_output, dict) else []
-        for m in msgs:
-            md = getattr(m, "response_metadata", {}) or {}
-            if isinstance(md, dict):
-                if _consume_usage(
-                    node_name,
-                    md.get("token_usage"),
-                    "msg.response_metadata.token_usage",
-                ):
-                    exact_hit = True
-                if _consume_usage(
-                    node_name,
-                    md.get("usage"),
-                    "msg.response_metadata.usage",
-                ):
-                    exact_hit = True
+        if not exact_hit:
+            for m in msgs:
+                md = getattr(m, "response_metadata", {}) or {}
+                if isinstance(md, dict):
+                    if _consume_usage(
+                        node_name,
+                        md.get("token_usage"),
+                        "msg.response_metadata.token_usage",
+                    ):
+                        exact_hit = True
+                    if _consume_usage(
+                        node_name,
+                        md.get("usage"),
+                        "msg.response_metadata.usage",
+                    ):
+                        exact_hit = True
 
-            um = getattr(m, "usage_metadata", {}) or {}
-            if _consume_usage(node_name, um, "msg.usage_metadata"):
-                exact_hit = True
+                um = getattr(m, "usage_metadata", {}) or {}
+                if _consume_usage(node_name, um, "msg.usage_metadata"):
+                    exact_hit = True
 
         if not exact_hit and msgs:
             in_chars = 0
@@ -1682,6 +1699,7 @@ async def run_full_pipeline(
             "evaluation_full_workflow": True,
             "with_test_changes": False,
             "developer_auxiliary_hunks": developer_aux_hunks,
+            "developer_patch_diff": developer_patch_diff,
             "use_phase_0_cache": True,
         }
 

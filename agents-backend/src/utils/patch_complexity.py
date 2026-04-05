@@ -142,7 +142,15 @@ def classify_patch_complexity(
 
     avg_ratio = sum(ratios) / max(1, len(ratios))
 
-    if files_exist and not structural_ops and avg_ratio >= 0.45:
+    # Prefer STRUCTURAL over REWRITE when overlap is decent but git apply still fails
+    # (whitespace/path drift). Single-file backports often sit in the 0.38–0.44 band.
+    eligible_structural = files_exist and not structural_ops and (
+        avg_ratio >= 0.45
+        or (len(code_changes) == 1 and avg_ratio >= 0.38)
+        or (len(code_changes) <= 3 and avg_ratio >= 0.40)
+    )
+
+    if eligible_structural:
         return {
             "complexity": "STRUCTURAL",
             "reason": "files_present_with_anchor_overlap",

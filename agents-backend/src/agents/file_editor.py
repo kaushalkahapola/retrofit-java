@@ -46,6 +46,7 @@ from utils.llm_provider import get_llm
 from utils.patch_analyzer import PatchAnalyzer
 from utils.token_counter import (
     add_usage,
+    aggregate_usage_from_messages,
     count_messages_tokens,
     count_text_tokens,
     extract_usage_from_response,
@@ -55,6 +56,11 @@ from langgraph.prebuilt import create_react_agent
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 from agents.hunk_generator_tools import HunkGeneratorToolkit
 from utils.semantic_adaptation_helper import analyze_anchor_failure_quick
+from utils.plan_validator import (
+    classify_syntax_failure_message,
+    validate_plan_before_apply,
+)
+from utils.patch_apply_strategy import try_developer_fast_path
 
 
 _FRAMEWORK_CHAIN_SYMBOLS = {
@@ -1485,11 +1491,13 @@ async def _invoke_react_with_backoff(
     payload: dict[str, Any],
     target_file: str,
     max_attempts: int = 4,
+    invoke_config: dict[str, Any] | None = None,
 ):
     last_error: Exception | None = None
+    cfg = dict(invoke_config or {})
     for attempt in range(max_attempts):
         try:
-            return await editor_agent.ainvoke(payload)
+            return await editor_agent.ainvoke(payload, config=cfg)
         except Exception as e:
             last_error = e
             err = str(e)
@@ -1512,12 +1520,15 @@ async def _invoke_react_with_backoff(
 
 
 def _react_tool_budget_for_complexity(complexity: str) -> int:
+    env_cap = os.getenv("FILE_EDITOR_REACT_TOOL_BUDGET", "").strip()
+    if env_cap.isdigit():
+        return max(4, min(120, int(env_cap)))
     c = str(complexity or "").strip().upper()
     if c == "TRIVIAL":
         return 4
     if c == "STRUCTURAL":
-        return 8
-    return 15
+        return 12
+    return 40
 
 
 def _trajectory_has_surrounding_code_read(
@@ -1617,14 +1628,28 @@ async def _run_react_edit_pass(
             "using read_file_window/read_full_file/get_exact_lines before applying fixes."
         )
 
+    eval_mode = bool(state.get("evaluation_full_workflow"))
+    if eval_mode:
+        system_prompt += (
+            "\n\n## Evaluation mode\n"
+            "Stay close to the mainline patch diff above: do not invent alternate APIs, "
+            "constructors, or helper methods unless required by the target file's symbols."
+        )
+
     tool_budget = _react_tool_budget_for_complexity(patch_complexity)
     editor_agent = create_react_agent(llm, toolkit.get_tools())
+    try:
+        react_recursion = int(os.getenv("FILE_EDITOR_REACT_RECURSION_LIMIT", "40"))
+    except ValueError:
+        react_recursion = 40
+    react_recursion = max(10, min(200, react_recursion))
 
     try:
         print(f"    Agent 3: Invoking ReAct agent for {target_file}")
         response = await _invoke_react_with_backoff(
             editor_agent=editor_agent,
             target_file=target_file,
+            invoke_config={"recursion_limit": react_recursion},
             payload={
                 "messages": [
                     SystemMessage(content=system_prompt),
@@ -1648,13 +1673,23 @@ async def _run_react_edit_pass(
 
         # Capture provider token usage from returned AI messages if available.
         if token_usage is not None:
-            for m in response.get("messages", []):
-                usage = extract_usage_from_response(m)
-                _merge_token_usage(
+            _msgs = response.get("messages", []) or []
+            agg = aggregate_usage_from_messages(_msgs)
+            if agg.get("input_tokens") or agg.get("output_tokens"):
+                add_usage(
                     token_usage,
-                    usage,
-                    source="file_editor.react.provider_usage",
+                    int(agg.get("input_tokens", 0) or 0),
+                    int(agg.get("output_tokens", 0) or 0),
+                    "file_editor.react.aggregate_usage",
                 )
+            else:
+                for m in _msgs:
+                    usage = extract_usage_from_response(m)
+                    _merge_token_usage(
+                        token_usage,
+                        usage,
+                        source="file_editor.react.provider_usage",
+                    )
 
         last_msg = response["messages"][-1]
         print(f"    Agent 3: Agent finished. Last msg: {str(last_msg.content)[:100]}")
@@ -1842,6 +1877,15 @@ async def file_editor_node(state: AgentState, config) -> dict:
         state.get("best_effort_adapted_code_hunks") or []
     )
     generation_checklist: list[dict[str, Any]] = []
+    plan_preflight_results: list[dict[str, Any]] = []
+    agent_metrics = {
+        "deterministic_apply_attempts": 0,
+        "deterministic_apply_failures": 0,
+        "plan_preflight_failures": 0,
+        "react_escalations": 0,
+        "react_skipped_statement_outside_block": 0,
+        "developer_fast_path_hits": 0,
+    }
 
     # ------------------------------------------------------------------
     # Per-file processing
@@ -1994,6 +2038,105 @@ async def file_editor_node(state: AgentState, config) -> dict:
             task_entry["reason"] = "toolkit_unavailable"
             continue
 
+        _dfp = try_developer_fast_path(
+            target_repo_path=target_repo_path or "",
+            target_file=target_file,
+            developer_patch_diff=str(state.get("developer_patch_diff") or ""),
+            agent_eligible_patch=str(state.get("patch_diff") or ""),
+            evaluation_full_workflow=bool(state.get("evaluation_full_workflow")),
+            backport_commit=str(state.get("backport_commit") or ""),
+        )
+        if _dfp.get("applied"):
+            agent_metrics["developer_fast_path_hits"] += 1
+            print(
+                f"    Agent 3: Developer patch fast path for {target_file} "
+                f"({_dfp.get('reason', '')})"
+            )
+            checks_ok, checks_reason, diff_text_fp = _run_mandatory_file_checks(
+                toolkit=toolkit,
+                target_repo_path=target_repo_path,
+                target_file=target_file,
+                run_guideline=True,
+            )
+            if not checks_ok:
+                print(
+                    f"    Agent 3: Developer fast path failed checks: {checks_reason}"
+                )
+                _git_reset_file(target_repo_path, target_file)
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "developer_fast_path_checks_failed"
+                task_entry["error"] = str(checks_reason)[:800]
+                continue
+
+            task_entry["completed_steps"].extend(
+                ["apply_edits", "capture_diff", "intent_check"]
+            )
+            fe_fp: FileEdit = {
+                "target_file": target_file,
+                "mainline_file": mainline_file,
+                "old_string": "<developer patch fast path>",
+                "new_string": (diff_text_fp or "").strip(),
+                "edit_type": "replace",
+                "verified": True,
+                "verification_result": str(_dfp.get("reason") or "developer_fast_path"),
+                "applied": True,
+                "apply_result": "SUCCESS",
+            }
+            adapted_file_edits.append(fe_fp)
+            hunk_fp: AdaptedHunk = {
+                "target_file": target_file,
+                "mainline_file": mainline_file,
+                "hunk_text": diff_text_fp,
+                "insertion_line": 1,
+                "intent_verified": True,
+                "file_operation": op_plan.get("effective_operation", change_type),
+                "old_target_file": op_plan.get("old_target_file"),
+                "file_operation_required": op_plan.get("operation_required", True),
+                "path_resolution_reason": op_plan.get("reason", "unknown"),
+            }
+            adapted_code_hunks.append(hunk_fp)
+            best_effort_adapted_code_hunks.append(hunk_fp)
+            if toolkit and target_repo_path:
+                _git_reset_file(target_repo_path, target_file)
+            task_entry["completed_steps"].append("restore_file")
+            task_entry["status"] = "success"
+            task_entry["reason"] = "developer_fast_path"
+            continue
+
+        if deterministic_only and target_file.lower().endswith(".java"):
+            try:
+                fp = os.path.normpath(
+                    os.path.join(target_repo_path, _normalize_rel_path(target_file))
+                )
+                with open(fp, encoding="utf-8", errors="replace") as _pf:
+                    _head_content = _pf.read()
+                _pr = validate_plan_before_apply(
+                    plan_entries=plan_entries,
+                    file_content=_head_content,
+                    target_file=target_file,
+                )
+                plan_preflight_results.append(
+                    {
+                        "target_file": target_file,
+                        "ok": _pr.ok,
+                        "reason": _pr.reason,
+                    }
+                )
+                if not _pr.ok:
+                    agent_metrics["plan_preflight_failures"] += 1
+                    print(
+                        f"    Agent 3: PLAN_PREFLIGHT_FAILED {target_file}: {_pr.reason} "
+                        "(skipping deterministic apply and ReAct; fix planning decomposition)"
+                    )
+                    task_entry["status"] = "failed"
+                    task_entry["reason"] = "plan_preflight_failed"
+                    task_entry["error"] = str(_pr.reason)[:800]
+                    task_entry["completed_steps"].append("plan_preflight_failed")
+                    _git_reset_file(target_repo_path, target_file)
+                    continue
+            except Exception as _pex:
+                print(f"    Agent 3: Plan preflight read error for {target_file}: {_pex}")
+
         # Step B: Apply edits via deterministic or ReAct path.
         used_react = False
         if "TYPE_V" in execution_types:
@@ -2005,6 +2148,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 )
 
         if deterministic_only:
+            agent_metrics["deterministic_apply_attempts"] += 1
             ok, apply_reason = _apply_plan_entries_deterministically(
                 toolkit=toolkit,
                 target_repo_path=target_repo_path,
@@ -2013,12 +2157,28 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 current_attempt_trajectory=current_attempt_trajectory,
             )
             if not ok:
+                agent_metrics["deterministic_apply_failures"] += 1
+                fail_bucket = classify_syntax_failure_message(apply_reason)
+                skip_react = fail_bucket == "statement_outside_block"
+                if skip_react:
+                    agent_metrics["react_skipped_statement_outside_block"] += 1
+                    print(
+                        f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}. "
+                        "ESCALATION_SKIP_REACT: statement_outside_block (avoid token burn)."
+                    )
+                    _git_reset_file(target_repo_path, target_file)
+                    task_entry["status"] = "failed"
+                    task_entry["reason"] = "deterministic_syntax_failed_no_react"
+                    task_entry["error"] = str(apply_reason)[:800]
+                    continue
+
                 print(
                     f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}. "
                     "Escalating to smart ReAct refinement."
                 )
                 _git_reset_file(target_repo_path, target_file)
                 used_react = True
+                agent_metrics["react_escalations"] += 1
                 react_ok, react_reason = await _run_react_edit_pass(
                     llm=llm,
                     toolkit=toolkit,
@@ -2043,6 +2203,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     continue
         else:
             used_react = True
+            agent_metrics["react_escalations"] += 1
             react_ok, react_reason = await _run_react_edit_pass(
                 llm=llm,
                 toolkit=toolkit,
@@ -2569,6 +2730,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
             "force_type_v_until_success": force_type_v_latch,
             "force_type_v_reason": force_type_v_reason,
             "token_usage": token_usage,
+            "plan_preflight_results": plan_preflight_results,
+            "agent_metrics": agent_metrics,
         }
 
     return {
@@ -2595,4 +2758,6 @@ async def file_editor_node(state: AgentState, config) -> dict:
         "force_type_v_until_success": force_type_v_latch,
         "force_type_v_reason": force_type_v_reason,
         "token_usage": token_usage,
+        "plan_preflight_results": plan_preflight_results,
+        "agent_metrics": agent_metrics,
     }

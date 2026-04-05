@@ -40,6 +40,7 @@ from utils.token_counter import (
 )
 from agents.hunk_generator_tools import HunkGeneratorToolkit
 from agents.semantic_hunk_adapter import SemanticHunkAdapter
+from utils.plan_validator import consolidate_plan_entries_java
 
 
 # ---------------------------------------------------------------------------
@@ -2532,6 +2533,9 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 normalized_entries.append(entry)
 
             plan[mainline_file].extend(normalized_entries)
+
+    for _mf in list(plan.keys()):
+        plan[_mf] = consolidate_plan_entries_java(list(plan.get(_mf) or []))
 
     total_entries = sum(len(v) for v in plan.values())
     print(f"Planning Agent: Complete. Planned {total_entries} adapted edit(s).")

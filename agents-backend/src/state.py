@@ -163,6 +163,9 @@ class AgentState(TypedDict):
     evaluation_full_workflow: (
         bool  # If True, run full eval flow in validation (apply+build+tests)
     )
+    developer_patch_diff: NotRequired[
+        str
+    ]  # Full developer backport diff (eval harness); enables developer fast path in Agent 3
 
     # --- Phase 0: Pre-computed analysis ---
     patch_analysis: list  # List[FileChange] - from PatchAnalyzer

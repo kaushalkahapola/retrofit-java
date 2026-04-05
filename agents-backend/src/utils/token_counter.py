@@ -118,3 +118,36 @@ def add_usage(
         total.get("output_tokens", 0)
     )
     total.setdefault("sources", []).append(source)
+
+
+def aggregate_usage_from_messages(messages: list[Any]) -> dict[str, int]:
+    """
+    Sum provider token usage across every message in a ReAct / multi-turn trace.
+    LangGraph often attaches usage on intermediate AIMessages, not only the last.
+    """
+    total_in = 0
+    total_out = 0
+    for m in messages or []:
+        u = extract_usage_from_response(m)
+        if not u:
+            ak = getattr(m, "additional_kwargs", None) or {}
+            if isinstance(ak, dict):
+                u2 = ak.get("usage") or ak.get("token_usage")
+                if isinstance(u2, dict):
+                    u = {
+                        "input_tokens": int(
+                            u2.get("prompt_tokens", u2.get("input_tokens", 0)) or 0
+                        ),
+                        "output_tokens": int(
+                            u2.get("completion_tokens", u2.get("output_tokens", 0))
+                            or 0
+                        ),
+                    }
+        if u:
+            total_in += int(u.get("input_tokens", 0) or 0)
+            total_out += int(u.get("output_tokens", 0) or 0)
+    return {
+        "input_tokens": total_in,
+        "output_tokens": total_out,
+        "total_tokens": total_in + total_out,
+    }

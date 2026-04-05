@@ -139,3 +139,23 @@ This document captures a roadmap to make the agents-backend backport pipeline ro
 ## Design principle
 
 Treat the stack as **defense in depth**: validate plans → prefer monolithic safe applies → short bounded repair → fail with a clear code. Robustness comes from **constraints, fallbacks, and budgets**, not from a single larger model.
+
+---
+
+## Implementation status (2026)
+
+| Item | Location / behavior |
+|------|---------------------|
+| Plan preflight (static + dry apply + optional tree-sitter) | `agents-backend/src/utils/plan_validator.py` — `validate_plan_before_apply()` |
+| Agent 3 integration | `agents-backend/src/agents/file_editor.py` — runs preflight for deterministic TYPE_I/II/III `.java` files before on-disk apply; returns `plan_preflight_results` and `agent_metrics` |
+| Skip ReAct on `statement_outside_block` | Same file — after deterministic failure, if `classify_syntax_failure_message` is `statement_outside_block`, do not invoke ReAct |
+| ReAct budgets | `FILE_EDITOR_REACT_RECURSION_LIMIT` (default 40), `FILE_EDITOR_REACT_TOOL_BUDGET` (optional cap); default tool budget raised (STRUCTURAL 12, else 40) |
+| Eval-mode prompt | When `evaluation_full_workflow` is set, ReAct system prompt reminds to stay close to the mainline patch |
+| Complexity routing | `agents-backend/src/utils/patch_complexity.py` — single-file / small multi-file overlap can classify as STRUCTURAL at lower anchor ratios (0.38 / 0.40) |
+| Locator line recovery | `agents-backend/src/agents/structural_locator.py` — second pass uses longer hunk anchor candidates when `start_line` is still `None` |
+| Tests | `agents-backend/tests/test_plan_validator.py` (requires deps from `requirements.txt`; `PYTHONPATH=src pytest`) |
+| Tree-sitter opt-out | `PLAN_VALIDATOR_SKIP_TREE_SITTER=1` if parse gate is too strict for a project |
+| Phase C: developer fast path | `utils/patch_apply_strategy.py` — `try_developer_fast_path()`; `evaluate_full_workflow` passes `developer_patch_diff` in graph state; Agent 3 applies developer slice when `git apply --check` passes (opt-out: `EVAL_DISABLE_DEVELOPER_FAST_PATH=1`; similarity floor: `EVAL_DEVELOPER_FAST_PATH_MIN_SIMILARITY`, default 0.55 vs agent-eligible mainline slice) |
+| Idempotency | `file_already_matches_developer_commit()` — if working tree already matches `backport_commit` blob, reuse `git diff` without applying |
+| Planner consolidation | `consolidate_plan_entries_java()` — drops redundant `this.field =` inserts already covered by replace hunks; planning agent runs it before emitting `hunk_generation_plan` |
+| Token aggregation (eval + ReAct) | `aggregate_usage_from_messages()` in `token_counter.py`; evaluator prefers aggregate over `node.token_usage` to avoid double-count; file editor ReAct uses aggregate first |

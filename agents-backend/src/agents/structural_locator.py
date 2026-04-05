@@ -988,6 +988,27 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 if new_snippet:
                     m["code_snippet"] = new_snippet
 
+                # Second-chance line recovery when realignment left no anchor (short hunks / drift).
+                if m.get("start_line") is None and raw_hunk:
+                    _tl = _load_target_file_lines(
+                        target_repo_path, str(m.get("target_file") or target_file)
+                    )
+                    if _tl:
+                        for _cand in _extract_hunk_anchor_candidates(raw_hunk):
+                            _s = (_cand or "").strip()
+                            if len(_s) < 16:
+                                continue
+                            _hit = _find_line_in_target(_tl, _s)
+                            if _hit is not None:
+                                m["start_line"] = _hit
+                                m["end_line"] = _hit
+                                m["code_snippet"] = _build_window_snippet(_tl, _hit)
+                                trace += (
+                                    f"  - Recovered start_line for hunk {hunk_idx} via "
+                                    f"context anchor (len={len(_s)})\n"
+                                )
+                                break
+
                 # CRITICAL: For import hunks, we need to ensure proper line numbers
                 # Without proper start_line/end_line, hunk_generator will fall back to original mainline line numbers,
                 # which won't match the target file. The sorting in apply_adapted_hunks depends on correct insertion_line values.
