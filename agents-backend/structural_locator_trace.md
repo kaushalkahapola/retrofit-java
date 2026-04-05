@@ -23,7 +23,7 @@
 | 2 | propagation | `hunk_2` | `None` | 91–91 |
 ### `server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java`
 
-**Hunks in this file**: 5
+**Hunks in this file**: 6
 
 **Git Resolution**: Found `server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java`
 
@@ -35,10 +35,11 @@
 | 2 | guard | `hunk_2` | `None` | 84–84 |
 | 3 | core_fix | `hunk_3` | `None` | 112–112 |
 | 4 | guard | `closeAndFinishIfSuspended` | `closeAndFinishIfSuspended` | 138–138 |
-| 5 | propagation | `hunk_5` | `None` | 174–174 |
+| 5 | guard | `resume` | `resume` | 162–162 |
+| 6 | propagation | `hunk_6` | `None` | 174–174 |
 ### `server/src/main/java/io/crate/session/Session.java`
 
-**Hunks in this file**: 2
+**Hunks in this file**: 3
 
 **Git Resolution**: Found `server/src/main/java/io/crate/session/Session.java`
 
@@ -48,6 +49,7 @@
 |---|---|---|---|---|
 | 1 | core_fix | `hunk_1` | `None` | 585–585 |
 | 2 | core_fix | `triggerDeferredExecutions` | `triggerDeferredExecutions` | 663–663 |
+| 3 | propagation | `hunk_3` | `None` | 673–673 |
 ## Test File Mappings
 
 

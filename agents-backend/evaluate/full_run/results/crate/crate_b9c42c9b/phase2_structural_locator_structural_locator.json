@@ -78,7 +78,19 @@
       },
       {
         "hunk_index": 5,
-        "mainline_method": "hunk_5",
+        "mainline_method": "resume",
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "target_method": "resume",
+        "start_line": 162,
+        "end_line": 162,
+        "code_snippet": "            // - A previous .batchCompleted() call already flushed out pending messages\n            // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.\n        }\n    }\n\n    public boolean suspended() {\n        return activeIt != null;\n    }\n\n    public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {\n        if (!this.resultReceiver.completionFuture().isDone()) {\n            // finish previous resultReceiver before replacing it, to ensure future triggers\n            this.resultReceiver.allFinished();\n        }\n        this.rowCount = 0;\n        this.resultReceiver = resultReceiver;\n        this.maxRows = maxRows;\n    }\n\n    public void resume() {\n        assert activeIt != null : \"resume must only be called if suspended() returned true and activeIt is not null\";\n        BatchIterator<Row> iterator = this.activeIt;\n        this.activeIt = null;\n        consumeIt(iterator);\n    }\n\n    @Override\n    public String toString() {\n        return \"RowConsumerToResultReceiver{\" +\n               \"resultReceiver=\" + resultReceiver +\n               \", maxRows=\" + maxRows +\n               \", rowCount=\" + rowCount +\n               \", activeIt=\" + activeIt +\n               '}';\n    }\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 6,
+        "mainline_method": "hunk_6",
         "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
         "target_method": null,
         "start_line": 174,
@@ -112,6 +124,18 @@
         "code_snippet": "        long remainingTimeoutMs = (long) ((timeoutNanos - durationNs) * 0.000001);\n        assert remainingTimeoutMs > 0 : \"Execute must have positive timeout if timeout was not exceeded on previous phases.\";\n        Runnable kill = () -> {\n            if (result.isDone()) {\n                return;\n            }\n            KillJobsNodeRequest request = new KillJobsNodeRequest(\n                List.of(),\n                List.of(jobId),\n                sessionSettings.userName(),\n                \"statement_timeout (\" + timeout.toString() + \")\"\n            );\n            executor.client().execute(KillJobsNodeAction.INSTANCE, request);\n        };\n        ScheduledExecutorService scheduler = executor.scheduler();\n        ScheduledFuture<?> schedule = scheduler.schedule(kill, remainingTimeoutMs, TimeUnit.MILLISECONDS);\n        result.whenComplete((_, _) -> schedule.cancel(false));\n    }\n\n    private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n        switch (deferredExecutionsByStmt.size()) {\n            case 0:\n                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                return CompletableFuture.completedFuture(null);\n            case 1: {\n                var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n                deferredExecutionsByStmt.clear();\n                return exec(deferredExecutions, forceBulk);\n            }\n            default: {\n                // Mix of different defered execution is PG specific.\n                // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.\n                // sequentiallize execution to ensure client receives row counts in correct order\n                CompletableFuture<?> allCompleted = null;\n                for (var entry : deferredExecutionsByStmt.entrySet()) {\n                    var deferredExecutions = entry.getValue();\n                    if (allCompleted == null) {\n                        allCompleted = exec(deferredExecutions, forceBulk);\n                    } else {\n                        allCompleted = allCompleted\n                            // individual rowReceiver will receive failure; must not break execution chain due to failures.",
         "anchor_confidence": "high",
         "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "hunk_3",
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "target_method": null,
+        "start_line": 673,
+        "end_line": 673,
+        "code_snippet": "                \"statement_timeout (\" + timeout.toString() + \")\"\n            );\n            executor.client().execute(KillJobsNodeAction.INSTANCE, request);\n        };\n        ScheduledExecutorService scheduler = executor.scheduler();\n        ScheduledFuture<?> schedule = scheduler.schedule(kill, remainingTimeoutMs, TimeUnit.MILLISECONDS);\n        result.whenComplete((_, _) -> schedule.cancel(false));\n    }\n\n    private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n        switch (deferredExecutionsByStmt.size()) {\n            case 0:\n                LOGGER.debug(\"method=sync deferredExecutions=0\");\n                return CompletableFuture.completedFuture(null);\n            case 1: {\n                var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();\n                deferredExecutionsByStmt.clear();\n                return exec(deferredExecutions, forceBulk);\n            }\n            default: {\n                // Mix of different defered execution is PG specific.\n                // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.\n                // sequentiallize execution to ensure client receives row counts in correct order\n                CompletableFuture<?> allCompleted = null;\n                for (var entry : deferredExecutionsByStmt.entrySet()) {\n                    var deferredExecutions = entry.getValue();\n                    if (allCompleted == null) {\n                        allCompleted = exec(deferredExecutions, forceBulk);\n                    } else {\n                        allCompleted = allCompleted\n                            // individual rowReceiver will receive failure; must not break execution chain due to failures.\n                            // No need to log execution and as it's handled in the exec() call.\n                            .exceptionally(_ -> null)\n                            .thenCompose(_ -> exec(deferredExecutions, forceBulk));\n                    }\n                }\n                deferredExecutionsByStmt.clear();\n                return allCompleted;\n            }\n        }\n    }",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
         "anchor_strategy": "deterministic_realign"
       }
     ]
