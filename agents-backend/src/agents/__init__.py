@@ -4,6 +4,7 @@ from .structural_locator import structural_locator_node
 from .planning_agent import planning_agent_node
 from .file_editor import file_editor_node
 from .validation_agent import validation_agent
+from .dependency_analyzer import dependency_analyzer_node
 
 # Legacy agents preserved for reference / gradual migration.
 # They are NO LONGER registered in graph.py.

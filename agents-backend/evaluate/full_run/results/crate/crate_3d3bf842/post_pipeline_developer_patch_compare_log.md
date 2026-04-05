@@ -15,7 +15,7 @@
 
 ## File State Comparison
 - Compared files: ['server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java', 'server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java', 'server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java', 'server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java', 'server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java', 'server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java', 'server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java', 'server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java', 'server/src/main/java/io/crate/planner/operators/InsertFromValues.java', 'server/src/main/java/io/crate/statistics/TableStats.java']
-- Mismatched files: ['server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java']
+- Mismatched files: ['server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java', 'server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java', 'server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java', 'server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java', 'server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java', 'server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java', 'server/src/main/java/io/crate/statistics/TableStats.java']
 - Error: None
 
 ## Comparison Scope
@@ -265,29 +265,29 @@ Developer
 
 Generated
 ```diff
-@@ -582,6 +587,8 @@
-                 returnValues
-             ).timeout(timeout);
-         }
-+
-+        // Add fullDocSizeEstimate to newRequest if needed in future
-     }
- 
- }
+@@ -371,7 +376,7 @@
+             return new Item(
+                 id,
+                 onConflictAssignments,
+-                values,
++                values, 
+                 Versions.MATCH_ANY,
+                 SequenceNumbers.UNASSIGNED_SEQ_NO,
+                 SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1 +1,9 @@-*No hunk*+@@ -582,6 +587,8 @@
-+                 returnValues
-+             ).timeout(timeout);
-+         }
-++
-++        // Add fullDocSizeEstimate to newRequest if needed in future
-+     }
-+ 
-+ }
+--- developer+++ generated@@ -1 +1,9 @@-*No hunk*+@@ -371,7 +376,7 @@
++             return new Item(
++                 id,
++                 onConflictAssignments,
++-                values,
+++                values, 
++                 Versions.MATCH_ANY,
++                 SequenceNumbers.UNASSIGNED_SEQ_NO,
++                 SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
 
 ```
 
@@ -295,7 +295,7 @@ Developer -> Generated (Unified Diff)
 ### server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
 
 - Developer hunks: 8
-- Generated hunks: 8
+- Generated hunks: 2
 
 #### Hunk 1
 
@@ -388,21 +388,20 @@ Developer
 
 Generated
 ```diff
-@@ -89,6 +92,7 @@
-         this.clusteredBySymbol = clusteredBySymbol;
-         this.outputs = outputs;
-         this.returnValues = returnValues;
-+        this.fullDocSizeEstimate = fullDocSizeEstimate;
-     }
- 
-     ColumnIndexWriterProjection(StreamInput in) throws IOException {
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,8 +1 @@-@@ -89,6 +92,7 @@
+-         this.clusteredBySymbol = clusteredBySymbol;
+-         this.outputs = outputs;
+-         this.returnValues = returnValues;
+-+        this.fullDocSizeEstimate = fullDocSizeEstimate;
+-     }
+- 
+-     ColumnIndexWriterProjection(StreamInput in) throws IOException {
++*No hunk*
 ```
 
 #### Hunk 4
@@ -430,29 +429,28 @@ Developer
 
 Generated
 ```diff
-@@ -153,7 +157,15 @@
-             outputs = List.of();
-             allTargetColumns = List.of();
-         }
-+        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {
-+            fullDocSizeEstimate = in.readLong();
-+        } else {
-+            fullDocSizeEstimate = 0;
-+        }
-+    }
- 
-+    public long fullDocSizeEstimate() {
-+        return fullDocSizeEstimate;
-     }
- 
-     public List<? extends Symbol> outputs() {
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,16 +1 @@-@@ -153,7 +157,15 @@
+-             outputs = List.of();
+-             allTargetColumns = List.of();
+-         }
+-+        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {
+-+            fullDocSizeEstimate = in.readLong();
+-+        } else {
+-+            fullDocSizeEstimate = 0;
+-+        }
+-+    }
+- 
+-+    public long fullDocSizeEstimate() {
+-+        return fullDocSizeEstimate;
+-     }
+- 
+-     public List<? extends Symbol> outputs() {
++*No hunk*
 ```
 
 #### Hunk 5
@@ -474,23 +472,22 @@ Developer
 
 Generated
 ```diff
-@@ -198,7 +210,8 @@
-         return onDuplicateKeyAssignments.equals(that.onDuplicateKeyAssignments) &&
-                allTargetColumns.equals(that.allTargetColumns) &&
-                Objects.equals(outputs, that.outputs) &&
--               Objects.equals(returnValues, that.returnValues);
-+               Objects.equals(returnValues, that.returnValues) &&
-+               Objects.equals(fullDocSizeEstimate, that.fullDocSizeEstimate);
-     }
- 
-     @Override
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,10 +1 @@-@@ -198,7 +210,8 @@
+-         return onDuplicateKeyAssignments.equals(that.onDuplicateKeyAssignments) &&
+-                allTargetColumns.equals(that.allTargetColumns) &&
+-                Objects.equals(outputs, that.outputs) &&
+--               Objects.equals(returnValues, that.returnValues);
+-+               Objects.equals(returnValues, that.returnValues) &&
+-+               Objects.equals(fullDocSizeEstimate, that.fullDocSizeEstimate);
+-     }
+- 
+-     @Override
++*No hunk*
 ```
 
 #### Hunk 6
@@ -512,23 +509,22 @@ Developer
 
 Generated
 ```diff
-@@ -207,7 +220,8 @@
-                             onDuplicateKeyAssignments,
-                             allTargetColumns,
-                             outputs,
--                            returnValues);
-+                            returnValues,
-+                            fullDocSizeEstimate);
-     }
- 
-     @Override
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,10 +1 @@-@@ -207,7 +220,8 @@
+-                             onDuplicateKeyAssignments,
+-                             allTargetColumns,
+-                             outputs,
+--                            returnValues);
+-+                            returnValues,
+-+                            fullDocSizeEstimate);
+-     }
+- 
+-     @Override
++*No hunk*
 ```
 
 #### Hunk 7
@@ -550,23 +546,22 @@ Developer
 
 Generated
 ```diff
-@@ -251,6 +265,9 @@
-                 Symbol.toStream(returnValue, out);
-             }
-         }
-+        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
-+            out.writeLong(fullDocSizeEstimate);
-+        }
-     }
- 
-     public ColumnIndexWriterProjection bind(Function<? super Symbol, Symbol> binder) {
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,10 +1 @@-@@ -251,6 +265,9 @@
+-                 Symbol.toStream(returnValue, out);
+-             }
+-         }
+-+        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
+-+            out.writeLong(fullDocSizeEstimate);
+-+        }
+-     }
+- 
+-     public ColumnIndexWriterProjection bind(Function<? super Symbol, Symbol> binder) {
++*No hunk*
 ```
 
 #### Hunk 8
@@ -588,23 +583,22 @@ Developer
 
 Generated
 ```diff
-@@ -276,7 +293,8 @@
-             Settings.EMPTY,
-             autoCreateIndices(),
-             outputs,
--            returnValues
-+            returnValues,
-+            fullDocSizeEstimate
-             );
-     }
- }
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,10 +1 @@-@@ -276,7 +293,8 @@
+-             Settings.EMPTY,
+-             autoCreateIndices(),
+-             outputs,
+--            returnValues
+-+            returnValues,
+-+            fullDocSizeEstimate
+-             );
+-     }
+- }
++*No hunk*
 ```
 
 
@@ -767,21 +761,35 @@ Developer
 
 Generated
 ```diff
-@@ -207,5 +220,8 @@
+@@ -205,6 +218,9 @@
+                 }
+             } else {
                  out.writeVInt(0);
-             }
-         }
 +        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
 +            out.writeLong(fullDocSizeEstimate);
 +        }
+             }
+         }
      }
- }
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,9 +1,10 @@-@@ -207,5 +220,8 @@
++@@ -205,6 +218,9 @@
++                 }
++             } else {
+                  out.writeVInt(0);
+-             }
+-         }
+ +        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
+ +            out.writeLong(fullDocSizeEstimate);
+ +        }
++             }
++         }
+      }
+- }
 
 ```
 
@@ -789,7 +797,7 @@ Developer -> Generated (Unified Diff)
 ### server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
 
 - Developer hunks: 2
-- Generated hunks: 2
+- Generated hunks: 1
 
 #### Hunk 1
 
@@ -810,22 +818,41 @@ Developer
 
 Generated
 ```diff
-@@ -85,7 +85,8 @@
-                                       int bulkActions,
-                                       boolean autoCreateIndices,
-                                       List<Symbol> returnValues,
--                                      UUID jobId
-+                                      UUID jobId,
-+                                      long fullDocSizeEstimate
-                                       ) {
-         RowShardResolver rowShardResolver = new RowShardResolver(
-             txnCtx, nodeCtx, primaryKeyIdents, primaryKeySymbols, clusteredByColumn, routingSymbol);
+@@ -122,7 +122,8 @@
+             autoGeneratedTimestamp,
+             insertColumns,
+             insertValues.materialize(),
+-            onConflictAssignments
++            onConflictAssignments,
++            0
+         );
+ 
+         var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,10 +1,10 @@-@@ -85,7 +85,8 @@
+-                                       int bulkActions,
+-                                       boolean autoCreateIndices,
+-                                       List<Symbol> returnValues,
+--                                      UUID jobId
+-+                                      UUID jobId,
+-+                                      long fullDocSizeEstimate
+-                                       ) {
+-         RowShardResolver rowShardResolver = new RowShardResolver(
+-             txnCtx, nodeCtx, primaryKeyIdents, primaryKeySymbols, clusteredByColumn, routingSymbol);
++@@ -122,7 +122,8 @@
++             autoGeneratedTimestamp,
++             insertColumns,
++             insertValues.materialize(),
++-            onConflictAssignments
+++            onConflictAssignments,
+++            0
++         );
++ 
++         var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();
 
 ```
 
@@ -864,39 +891,38 @@ Developer
 
 Generated
 ```diff
-@@ -116,14 +117,17 @@
-         );
- 
-         InputRow insertValues = new InputRow(insertInputs);
--        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(
--            id,
--            pkValues,
--            autoGeneratedTimestamp,
--            insertColumns,
--            insertValues.materialize(),
--            onConflictAssignments
--        );
-+        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {
-+            return ShardUpsertRequest.Item.forInsert(
-+                id,
-+                pkValues,
-+                autoGeneratedTimestamp,
-+                insertColumns,
-+                insertValues.materialize(),
-+                onConflictAssignments,
-+                fullDocSizeEstimate
-+            );
-+        };
- 
-         var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();
- 
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,26 +1 @@-@@ -116,14 +117,17 @@
+-         );
+- 
+-         InputRow insertValues = new InputRow(insertInputs);
+--        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(
+--            id,
+--            pkValues,
+--            autoGeneratedTimestamp,
+--            insertColumns,
+--            insertValues.materialize(),
+--            onConflictAssignments
+--        );
+-+        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {
+-+            return ShardUpsertRequest.Item.forInsert(
+-+                id,
+-+                pkValues,
+-+                autoGeneratedTimestamp,
+-+                insertColumns,
+-+                insertValues.materialize(),
+-+                onConflictAssignments,
+-+                fullDocSizeEstimate
+-+            );
+-+        };
+- 
+-         var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();
+- 
++*No hunk*
 ```
 
 
@@ -947,7 +973,7 @@ Developer -> Generated (Unified Diff)
 ### server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
 
 - Developer hunks: 4
-- Generated hunks: 4
+- Generated hunks: 3
 
 #### Hunk 1
 
@@ -966,20 +992,38 @@ Developer
 
 Generated
 ```diff
-@@ -21,7 +21,6 @@
+@@ -530,7 +530,8 @@
+             projection.bulkActions(),
+             projection.autoCreateIndices(),
+             projection.returnValues(),
+-            context.jobId
++            context.jobId,
++            projection.fullDocSizeEstimate()
+         );
+     }
  
- package io.crate.execution.engine.pipeline;
- 
--import static io.crate.execution.dml.upsert.ShardUpsertRequest.Item.sizeEstimateForUpdate;
- import static io.crate.execution.engine.pipeline.LimitAndOffset.NO_LIMIT;
- import static io.crate.execution.engine.pipeline.LimitAndOffset.NO_OFFSET;
- import static io.crate.planner.operators.InsertFromValues.checkConstraints;
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,8 +1,10 @@-@@ -21,7 +21,6 @@
++@@ -530,7 +530,8 @@
++             projection.bulkActions(),
++             projection.autoCreateIndices(),
++             projection.returnValues(),
++-            context.jobId
+++            context.jobId,
+++            projection.fullDocSizeEstimate()
++         );
++     }
+  
+- package io.crate.execution.engine.pipeline;
+- 
+--import static io.crate.execution.dml.upsert.ShardUpsertRequest.Item.sizeEstimateForUpdate;
+- import static io.crate.execution.engine.pipeline.LimitAndOffset.NO_LIMIT;
+- import static io.crate.execution.engine.pipeline.LimitAndOffset.NO_OFFSET;
+- import static io.crate.planner.operators.InsertFromValues.checkConstraints;
 
 ```
 
@@ -1002,22 +1046,70 @@ Developer
 
 Generated
 ```diff
-@@ -530,7 +529,8 @@
-             projection.bulkActions(),
-             projection.autoCreateIndices(),
-             projection.returnValues(),
--            context.jobId
-+            context.jobId,
-+            projection.fullDocSizeEstimate()
-         );
-     }
+@@ -556,15 +557,15 @@
+         Context context, UpdateProjection projection,
+         Collector<ShardResponse, A, Iterable<Row>> collector) {
  
+-        // Get Stats to improve ram estimation for the update items
+-        assert shardId != null : "ShardId must be provided for updates";
+-
+-        String indexName = shardId.getIndexName();
+-        RelationName relationName = RelationName.fromIndexName(indexName);
+-
+-        long sizeEstimate = sizeEstimateForUpdate(
+-            nodeCtx.tableStats().getStats(relationName),
+-            nodeCtx.schemas().getTableInfo(relationName)
++        ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
++            context.txnCtx.sessionSettings(),
++            ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),
++            ShardUpsertRequest.DuplicateKeyAction.UPDATE_OR_FAIL,
++            true,
++            projection.assignmentsColumns(),
++            null,
++            projection.returnValues(),
++            context.jobId
+         );
+         ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
+             context.txnCtx.sessionSettings(),
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,10 +1,25 @@-@@ -530,7 +529,8 @@
+-             projection.bulkActions(),
+-             projection.autoCreateIndices(),
+-             projection.returnValues(),
+--            context.jobId
+-+            context.jobId,
+-+            projection.fullDocSizeEstimate()
++@@ -556,15 +557,15 @@
++         Context context, UpdateProjection projection,
++         Collector<ShardResponse, A, Iterable<Row>> collector) {
++ 
++-        // Get Stats to improve ram estimation for the update items
++-        assert shardId != null : "ShardId must be provided for updates";
++-
++-        String indexName = shardId.getIndexName();
++-        RelationName relationName = RelationName.fromIndexName(indexName);
++-
++-        long sizeEstimate = sizeEstimateForUpdate(
++-            nodeCtx.tableStats().getStats(relationName),
++-            nodeCtx.schemas().getTableInfo(relationName)
+++        ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
+++            context.txnCtx.sessionSettings(),
+++            ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),
+++            ShardUpsertRequest.DuplicateKeyAction.UPDATE_OR_FAIL,
+++            true,
+++            projection.assignmentsColumns(),
+++            null,
+++            projection.returnValues(),
+++            context.jobId
+          );
+-     }
+- 
++         ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
++             context.txnCtx.sessionSettings(),
 
 ```
 
@@ -1047,29 +1139,46 @@ Developer
 
 Generated
 ```diff
-@@ -556,16 +556,6 @@
-         Context context, UpdateProjection projection,
-         Collector<ShardResponse, A, Iterable<Row>> collector) {
- 
--        // Get Stats to improve ram estimation for the update items
--        assert shardId != null : "ShardId must be provided for updates";
--
--        String indexName = shardId.getIndexName();
--        RelationName relationName = RelationName.fromIndexName(indexName);
--
--        long sizeEstimate = sizeEstimateForUpdate(
--            nodeCtx.tableStats().getStats(relationName),
--            nodeCtx.schemas().getTableInfo(relationName)
--        );
-         ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
-             context.txnCtx.sessionSettings(),
-             ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),
+@@ -596,7 +597,7 @@
+                     requiredVersion == null ? Versions.MATCH_ANY : requiredVersion,
+                     SequenceNumbers.UNASSIGNED_SEQ_NO,
+                     SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
+-                    sizeEstimate
++                    projection.fullDocSizeEstimate()
+                 );
+             },
+             (req, resp) -> elasticsearchClient.execute(ShardUpsertAction.INSTANCE, req).whenComplete(resp),
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,17 +1,9 @@-@@ -556,16 +556,6 @@
+-         Context context, UpdateProjection projection,
+-         Collector<ShardResponse, A, Iterable<Row>> collector) {
+- 
+--        // Get Stats to improve ram estimation for the update items
+--        assert shardId != null : "ShardId must be provided for updates";
+--
+--        String indexName = shardId.getIndexName();
+--        RelationName relationName = RelationName.fromIndexName(indexName);
+--
+--        long sizeEstimate = sizeEstimateForUpdate(
+--            nodeCtx.tableStats().getStats(relationName),
+--            nodeCtx.schemas().getTableInfo(relationName)
+--        );
+-         ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
+-             context.txnCtx.sessionSettings(),
+-             ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),
++@@ -596,7 +597,7 @@
++                     requiredVersion == null ? Versions.MATCH_ANY : requiredVersion,
++                     SequenceNumbers.UNASSIGNED_SEQ_NO,
++                     SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
++-                    sizeEstimate
+++                    projection.fullDocSizeEstimate()
++                 );
++             },
++             (req, resp) -> elasticsearchClient.execute(ShardUpsertAction.INSTANCE, req).whenComplete(resp),
 
 ```
 
@@ -1091,22 +1200,21 @@ Developer
 
 Generated
 ```diff
-@@ -596,7 +586,7 @@
-                     requiredVersion == null ? Versions.MATCH_ANY : requiredVersion,
-                     SequenceNumbers.UNASSIGNED_SEQ_NO,
-                     SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
--                    sizeEstimate
-+                    projection.fullDocSizeEstimate()
-                 );
-             },
-             (req, resp) -> elasticsearchClient.execute(ShardUpsertAction.INSTANCE, req).whenComplete(resp),
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,9 +1 @@-@@ -596,7 +586,7 @@
+-                     requiredVersion == null ? Versions.MATCH_ANY : requiredVersion,
+-                     SequenceNumbers.UNASSIGNED_SEQ_NO,
+-                     SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
+--                    sizeEstimate
+-+                    projection.fullDocSizeEstimate()
+-                 );
+-             },
+-             (req, resp) -> elasticsearchClient.execute(ShardUpsertAction.INSTANCE, req).whenComplete(resp),
++*No hunk*
 ```
 
 
@@ -1186,14 +1294,7 @@ Developer
 
 Generated
 ```diff
-@@ -270,13 +270,16 @@
-                 outputSymbols[i] = new InputColumn(i, returnValues.get(i).valueType());
-             }
-         }
-+
-         UpdateProjection updateProjection = new UpdateProjection(
-             new InputColumn(0, idReference.valueType()),
-             assignments.targetNames(),
+@@ -276,7 +276,9 @@
              assignmentSources,
              outputSymbols,
              returnValues == null ? null : returnValues.toArray(new Symbol[0]),
@@ -1209,7 +1310,18 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,11 +1,4 @@-@@ -270,13 +270,16 @@
+-                 outputSymbols[i] = new InputColumn(i, returnValues.get(i).valueType());
+-             }
+-         }
+-+
+-         UpdateProjection updateProjection = new UpdateProjection(
+-             new InputColumn(0, idReference.valueType()),
+-             assignments.targetNames(),
++@@ -276,7 +276,9 @@
+              assignmentSources,
+              outputSymbols,
+              returnValues == null ? null : returnValues.toArray(new Symbol[0]),
 
 ```
 
@@ -1354,20 +1466,30 @@ Developer
 
 Generated
 ```diff
-@@ -22,6 +22,7 @@
- package io.crate.statistics;
+@@ -23,6 +23,7 @@
  
  import io.crate.metadata.RelationName;
-+import io.crate.metadata.table.TableInfo;
  
++import io.crate.metadata.table.TableInfo;
  import java.util.HashMap;
  import java.util.Map;
+ import java.util.Set;
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,8 +1,8 @@-@@ -22,6 +22,7 @@
+- package io.crate.statistics;
++@@ -23,6 +23,7 @@
+  
+  import io.crate.metadata.RelationName;
++ 
+ +import io.crate.metadata.table.TableInfo;
+- 
+  import java.util.HashMap;
+  import java.util.Map;
++ import java.util.Set;
 
 ```
 
@@ -1438,7 +1560,7 @@ Developer -> Generated (Unified Diff)
 ## Full Generated Patch (Agent-Only, code-only)
 ```diff
 diff --git a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
-index b4ce983f2e..2a26995026 100644
+index b4ce983f2e..ccfd011f93 100644
 --- a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
 +++ b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
 @@ -47,8 +47,7 @@ import io.crate.expression.symbol.Symbol;
@@ -1495,17 +1617,17 @@ index b4ce983f2e..2a26995026 100644
                  for (var assignment : onConflictAssignments) {
                      usedBytes += assignment.ramBytesUsed();
                  }
-@@ -582,6 +587,8 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
-                 returnValues
-             ).timeout(timeout);
-         }
-+
-+        // Add fullDocSizeEstimate to newRequest if needed in future
-     }
- 
- }
+@@ -371,7 +376,7 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
+             return new Item(
+                 id,
+                 onConflictAssignments,
+-                values,
++                values, 
+                 Versions.MATCH_ANY,
+                 SequenceNumbers.UNASSIGNED_SEQ_NO,
+                 SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
 diff --git a/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java b/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
-index 5467841b09..efb34735b4 100644
+index 5467841b09..6532848a24 100644
 --- a/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
 +++ b/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
 @@ -52,6 +52,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
@@ -1527,72 +1649,8 @@ index 5467841b09..efb34735b4 100644
  
          super(relationName, partitionIdent, primaryKeys, clusteredByColumn, settings, primaryKeySymbols, autoCreateIndices);
          assert partitionedBySymbols.stream().noneMatch(s -> s.any(Symbol.IS_COLUMN))
-@@ -89,6 +92,7 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
-         this.clusteredBySymbol = clusteredBySymbol;
-         this.outputs = outputs;
-         this.returnValues = returnValues;
-+        this.fullDocSizeEstimate = fullDocSizeEstimate;
-     }
- 
-     ColumnIndexWriterProjection(StreamInput in) throws IOException {
-@@ -153,7 +157,15 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
-             outputs = List.of();
-             allTargetColumns = List.of();
-         }
-+        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {
-+            fullDocSizeEstimate = in.readLong();
-+        } else {
-+            fullDocSizeEstimate = 0;
-+        }
-+    }
- 
-+    public long fullDocSizeEstimate() {
-+        return fullDocSizeEstimate;
-     }
- 
-     public List<? extends Symbol> outputs() {
-@@ -198,7 +210,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
-         return onDuplicateKeyAssignments.equals(that.onDuplicateKeyAssignments) &&
-                allTargetColumns.equals(that.allTargetColumns) &&
-                Objects.equals(outputs, that.outputs) &&
--               Objects.equals(returnValues, that.returnValues);
-+               Objects.equals(returnValues, that.returnValues) &&
-+               Objects.equals(fullDocSizeEstimate, that.fullDocSizeEstimate);
-     }
- 
-     @Override
-@@ -207,7 +220,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
-                             onDuplicateKeyAssignments,
-                             allTargetColumns,
-                             outputs,
--                            returnValues);
-+                            returnValues,
-+                            fullDocSizeEstimate);
-     }
- 
-     @Override
-@@ -251,6 +265,9 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
-                 Symbol.toStream(returnValue, out);
-             }
-         }
-+        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
-+            out.writeLong(fullDocSizeEstimate);
-+        }
-     }
- 
-     public ColumnIndexWriterProjection bind(Function<? super Symbol, Symbol> binder) {
-@@ -276,7 +293,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
-             Settings.EMPTY,
-             autoCreateIndices(),
-             outputs,
--            returnValues
-+            returnValues,
-+            fullDocSizeEstimate
-             );
-     }
- }
 diff --git a/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java b/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
-index aafbae9fc4..8a2405e84b 100644
+index aafbae9fc4..427abc1e7c 100644
 --- a/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
 +++ b/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
 @@ -52,12 +52,15 @@ public class UpdateProjection extends Projection {
@@ -1636,55 +1694,30 @@ index aafbae9fc4..8a2405e84b 100644
      }
  
      public Symbol uidSymbol() {
-@@ -207,5 +220,8 @@ public class UpdateProjection extends Projection {
+@@ -205,6 +218,9 @@ public class UpdateProjection extends Projection {
+                 }
+             } else {
                  out.writeVInt(0);
-             }
-         }
 +        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
 +            out.writeLong(fullDocSizeEstimate);
 +        }
+             }
+         }
      }
- }
 diff --git a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
-index 2825a9c1fe..6b8e92159a 100644
+index 2825a9c1fe..18ae293d75 100644
 --- a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
 +++ b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
-@@ -85,7 +85,8 @@ public class ColumnIndexWriterProjector implements Projector {
-                                       int bulkActions,
-                                       boolean autoCreateIndices,
-                                       List<Symbol> returnValues,
--                                      UUID jobId
-+                                      UUID jobId,
-+                                      long fullDocSizeEstimate
-                                       ) {
-         RowShardResolver rowShardResolver = new RowShardResolver(
-             txnCtx, nodeCtx, primaryKeyIdents, primaryKeySymbols, clusteredByColumn, routingSymbol);
-@@ -116,14 +117,17 @@ public class ColumnIndexWriterProjector implements Projector {
+@@ -122,7 +122,8 @@ public class ColumnIndexWriterProjector implements Projector {
+             autoGeneratedTimestamp,
+             insertColumns,
+             insertValues.materialize(),
+-            onConflictAssignments
++            onConflictAssignments,
++            0
          );
  
-         InputRow insertValues = new InputRow(insertInputs);
--        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(
--            id,
--            pkValues,
--            autoGeneratedTimestamp,
--            insertColumns,
--            insertValues.materialize(),
--            onConflictAssignments
--        );
-+        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {
-+            return ShardUpsertRequest.Item.forInsert(
-+                id,
-+                pkValues,
-+                autoGeneratedTimestamp,
-+                insertColumns,
-+                insertValues.materialize(),
-+                onConflictAssignments,
-+                fullDocSizeEstimate
-+            );
-+        };
- 
          var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();
- 
 diff --git a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
 index 24cf0ec297..3668fe0214 100644
 --- a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
@@ -1700,18 +1733,10 @@ index 24cf0ec297..3668fe0214 100644
  
          Predicate<UpsertResults> earlyTerminationCondition = results -> failFast && results.containsErrors();
 diff --git a/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java b/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
-index d610fbe3c8..fef66dc5d1 100644
+index d610fbe3c8..9e46ee1e9f 100644
 --- a/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
 +++ b/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
-@@ -21,7 +21,6 @@
- 
- package io.crate.execution.engine.pipeline;
- 
--import static io.crate.execution.dml.upsert.ShardUpsertRequest.Item.sizeEstimateForUpdate;
- import static io.crate.execution.engine.pipeline.LimitAndOffset.NO_LIMIT;
- import static io.crate.execution.engine.pipeline.LimitAndOffset.NO_OFFSET;
- import static io.crate.planner.operators.InsertFromValues.checkConstraints;
-@@ -530,7 +529,8 @@ public class ProjectionToProjectorVisitor
+@@ -530,7 +530,8 @@ public class ProjectionToProjectorVisitor
              projection.bulkActions(),
              projection.autoCreateIndices(),
              projection.returnValues(),
@@ -1721,7 +1746,7 @@ index d610fbe3c8..fef66dc5d1 100644
          );
      }
  
-@@ -556,16 +556,6 @@ public class ProjectionToProjectorVisitor
+@@ -556,15 +557,15 @@ public class ProjectionToProjectorVisitor
          Context context, UpdateProjection projection,
          Collector<ShardResponse, A, Iterable<Row>> collector) {
  
@@ -1734,11 +1759,19 @@ index d610fbe3c8..fef66dc5d1 100644
 -        long sizeEstimate = sizeEstimateForUpdate(
 -            nodeCtx.tableStats().getStats(relationName),
 -            nodeCtx.schemas().getTableInfo(relationName)
--        );
++        ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
++            context.txnCtx.sessionSettings(),
++            ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),
++            ShardUpsertRequest.DuplicateKeyAction.UPDATE_OR_FAIL,
++            true,
++            projection.assignmentsColumns(),
++            null,
++            projection.returnValues(),
++            context.jobId
+         );
          ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
              context.txnCtx.sessionSettings(),
-             ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),
-@@ -596,7 +586,7 @@ public class ProjectionToProjectorVisitor
+@@ -596,7 +597,7 @@ public class ProjectionToProjectorVisitor
                      requiredVersion == null ? Versions.MATCH_ANY : requiredVersion,
                      SequenceNumbers.UNASSIGNED_SEQ_NO,
                      SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
@@ -1762,17 +1795,10 @@ index 880bb53eee..fe02d2dc55 100644
          LogicalPlan plannedSubQuery = logicalPlanner.plan(
              statement.subQueryRelation(),
 diff --git a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
-index 14f14396d5..8c846e62dc 100644
+index 14f14396d5..4ca5c218ad 100644
 --- a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
 +++ b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
-@@ -270,13 +270,16 @@ public final class UpdatePlanner {
-                 outputSymbols[i] = new InputColumn(i, returnValues.get(i).valueType());
-             }
-         }
-+
-         UpdateProjection updateProjection = new UpdateProjection(
-             new InputColumn(0, idReference.valueType()),
-             assignments.targetNames(),
+@@ -276,7 +276,9 @@ public final class UpdatePlanner {
              assignmentSources,
              outputSymbols,
              returnValues == null ? null : returnValues.toArray(new Symbol[0]),
@@ -1798,17 +1824,17 @@ index 3204716803..284b524195 100644
  
          var rowShardResolver = new RowShardResolver(
 diff --git a/server/src/main/java/io/crate/statistics/TableStats.java b/server/src/main/java/io/crate/statistics/TableStats.java
-index b7fd9e6668..15bc7a83b1 100644
+index b7fd9e6668..1794c60c41 100644
 --- a/server/src/main/java/io/crate/statistics/TableStats.java
 +++ b/server/src/main/java/io/crate/statistics/TableStats.java
-@@ -22,6 +22,7 @@
- package io.crate.statistics;
+@@ -23,6 +23,7 @@ package io.crate.statistics;
  
  import io.crate.metadata.RelationName;
-+import io.crate.metadata.table.TableInfo;
  
++import io.crate.metadata.table.TableInfo;
  import java.util.HashMap;
  import java.util.Map;
+ import java.util.Set;
 @@ -62,6 +63,21 @@ public class TableStats {
          return tableStats.getOrDefault(relationName, Stats.EMPTY).averageSizePerRowInBytes();
      }
@@ -1837,7 +1863,7 @@ index b7fd9e6668..15bc7a83b1 100644
 ## Full Generated Patch (Final Effective, code-only)
 ```diff
 diff --git a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
-index b4ce983f2e..2a26995026 100644
+index b4ce983f2e..ccfd011f93 100644
 --- a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
 +++ b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
 @@ -47,8 +47,7 @@ import io.crate.expression.symbol.Symbol;
@@ -1894,17 +1920,17 @@ index b4ce983f2e..2a26995026 100644
                  for (var assignment : onConflictAssignments) {
                      usedBytes += assignment.ramBytesUsed();
                  }
-@@ -582,6 +587,8 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
-                 returnValues
-             ).timeout(timeout);
-         }
-+
-+        // Add fullDocSizeEstimate to newRequest if needed in future
-     }
- 
- }
+@@ -371,7 +376,7 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
+             return new Item(
+                 id,
+                 onConflictAssignments,
+-                values,
++                values, 
+                 Versions.MATCH_ANY,
+                 SequenceNumbers.UNASSIGNED_SEQ_NO,
+                 SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
 diff --git a/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java b/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
-index 5467841b09..efb34735b4 100644
+index 5467841b09..6532848a24 100644
 --- a/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
 +++ b/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
 @@ -52,6 +52,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
@@ -1926,72 +1952,8 @@ index 5467841b09..efb34735b4 100644
  
          super(relationName, partitionIdent, primaryKeys, clusteredByColumn, settings, primaryKeySymbols, autoCreateIndices);
          assert partitionedBySymbols.stream().noneMatch(s -> s.any(Symbol.IS_COLUMN))
-@@ -89,6 +92,7 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
-         this.clusteredBySymbol = clusteredBySymbol;
-         this.outputs = outputs;
-         this.returnValues = returnValues;
-+        this.fullDocSizeEstimate = fullDocSizeEstimate;
-     }
- 
-     ColumnIndexWriterProjection(StreamInput in) throws IOException {
-@@ -153,7 +157,15 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
-             outputs = List.of();
-             allTargetColumns = List.of();
-         }
-+        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {
-+            fullDocSizeEstimate = in.readLong();
-+        } else {
-+            fullDocSizeEstimate = 0;
-+        }
-+    }
- 
-+    public long fullDocSizeEstimate() {
-+        return fullDocSizeEstimate;
-     }
- 
-     public List<? extends Symbol> outputs() {
-@@ -198,7 +210,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
-         return onDuplicateKeyAssignments.equals(that.onDuplicateKeyAssignments) &&
-                allTargetColumns.equals(that.allTargetColumns) &&
-                Objects.equals(outputs, that.outputs) &&
--               Objects.equals(returnValues, that.returnValues);
-+               Objects.equals(returnValues, that.returnValues) &&
-+               Objects.equals(fullDocSizeEstimate, that.fullDocSizeEstimate);
-     }
- 
-     @Override
-@@ -207,7 +220,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
-                             onDuplicateKeyAssignments,
-                             allTargetColumns,
-                             outputs,
--                            returnValues);
-+                            returnValues,
-+                            fullDocSizeEstimate);
-     }
- 
-     @Override
-@@ -251,6 +265,9 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
-                 Symbol.toStream(returnValue, out);
-             }
-         }
-+        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
-+            out.writeLong(fullDocSizeEstimate);
-+        }
-     }
- 
-     public ColumnIndexWriterProjection bind(Function<? super Symbol, Symbol> binder) {
-@@ -276,7 +293,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
-             Settings.EMPTY,
-             autoCreateIndices(),
-             outputs,
--            returnValues
-+            returnValues,
-+            fullDocSizeEstimate
-             );
-     }
- }
 diff --git a/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java b/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
-index aafbae9fc4..8a2405e84b 100644
+index aafbae9fc4..427abc1e7c 100644
 --- a/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
 +++ b/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
 @@ -52,12 +52,15 @@ public class UpdateProjection extends Projection {
@@ -2035,55 +1997,30 @@ index aafbae9fc4..8a2405e84b 100644
      }
  
      public Symbol uidSymbol() {
-@@ -207,5 +220,8 @@ public class UpdateProjection extends Projection {
+@@ -205,6 +218,9 @@ public class UpdateProjection extends Projection {
+                 }
+             } else {
                  out.writeVInt(0);
-             }
-         }
 +        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
 +            out.writeLong(fullDocSizeEstimate);
 +        }
+             }
+         }
      }
- }
 diff --git a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
-index 2825a9c1fe..6b8e92159a 100644
+index 2825a9c1fe..18ae293d75 100644
 --- a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
 +++ b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
-@@ -85,7 +85,8 @@ public class ColumnIndexWriterProjector implements Projector {
-                                       int bulkActions,
-                                       boolean autoCreateIndices,
-                                       List<Symbol> returnValues,
--                                      UUID jobId
-+                                      UUID jobId,
-+                                      long fullDocSizeEstimate
-                                       ) {
-         RowShardResolver rowShardResolver = new RowShardResolver(
-             txnCtx, nodeCtx, primaryKeyIdents, primaryKeySymbols, clusteredByColumn, routingSymbol);
-@@ -116,14 +117,17 @@ public class ColumnIndexWriterProjector implements Projector {
+@@ -122,7 +122,8 @@ public class ColumnIndexWriterProjector implements Projector {
+             autoGeneratedTimestamp,
+             insertColumns,
+             insertValues.materialize(),
+-            onConflictAssignments
++            onConflictAssignments,
++            0
          );
  
-         InputRow insertValues = new InputRow(insertInputs);
--        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(
--            id,
--            pkValues,
--            autoGeneratedTimestamp,
--            insertColumns,
--            insertValues.materialize(),
--            onConflictAssignments
--        );
-+        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {
-+            return ShardUpsertRequest.Item.forInsert(
-+                id,
-+                pkValues,
-+                autoGeneratedTimestamp,
-+                insertColumns,
-+                insertValues.materialize(),
-+                onConflictAssignments,
-+                fullDocSizeEstimate
-+            );
-+        };
- 
          var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();
- 
 diff --git a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
 index 24cf0ec297..3668fe0214 100644
 --- a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
@@ -2099,18 +2036,10 @@ index 24cf0ec297..3668fe0214 100644
  
          Predicate<UpsertResults> earlyTerminationCondition = results -> failFast && results.containsErrors();
 diff --git a/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java b/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
-index d610fbe3c8..fef66dc5d1 100644
+index d610fbe3c8..9e46ee1e9f 100644
 --- a/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
 +++ b/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
-@@ -21,7 +21,6 @@
- 
- package io.crate.execution.engine.pipeline;
- 
--import static io.crate.execution.dml.upsert.ShardUpsertRequest.Item.sizeEstimateForUpdate;
- import static io.crate.execution.engine.pipeline.LimitAndOffset.NO_LIMIT;
- import static io.crate.execution.engine.pipeline.LimitAndOffset.NO_OFFSET;
- import static io.crate.planner.operators.InsertFromValues.checkConstraints;
-@@ -530,7 +529,8 @@ public class ProjectionToProjectorVisitor
+@@ -530,7 +530,8 @@ public class ProjectionToProjectorVisitor
              projection.bulkActions(),
              projection.autoCreateIndices(),
              projection.returnValues(),
@@ -2120,7 +2049,7 @@ index d610fbe3c8..fef66dc5d1 100644
          );
      }
  
-@@ -556,16 +556,6 @@ public class ProjectionToProjectorVisitor
+@@ -556,15 +557,15 @@ public class ProjectionToProjectorVisitor
          Context context, UpdateProjection projection,
          Collector<ShardResponse, A, Iterable<Row>> collector) {
  
@@ -2133,11 +2062,19 @@ index d610fbe3c8..fef66dc5d1 100644
 -        long sizeEstimate = sizeEstimateForUpdate(
 -            nodeCtx.tableStats().getStats(relationName),
 -            nodeCtx.schemas().getTableInfo(relationName)
--        );
++        ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
++            context.txnCtx.sessionSettings(),
++            ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),
++            ShardUpsertRequest.DuplicateKeyAction.UPDATE_OR_FAIL,
++            true,
++            projection.assignmentsColumns(),
++            null,
++            projection.returnValues(),
++            context.jobId
+         );
          ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
              context.txnCtx.sessionSettings(),
-             ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),
-@@ -596,7 +586,7 @@ public class ProjectionToProjectorVisitor
+@@ -596,7 +597,7 @@ public class ProjectionToProjectorVisitor
                      requiredVersion == null ? Versions.MATCH_ANY : requiredVersion,
                      SequenceNumbers.UNASSIGNED_SEQ_NO,
                      SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
@@ -2161,17 +2098,10 @@ index 880bb53eee..fe02d2dc55 100644
          LogicalPlan plannedSubQuery = logicalPlanner.plan(
              statement.subQueryRelation(),
 diff --git a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
-index 14f14396d5..8c846e62dc 100644
+index 14f14396d5..4ca5c218ad 100644
 --- a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
 +++ b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
-@@ -270,13 +270,16 @@ public final class UpdatePlanner {
-                 outputSymbols[i] = new InputColumn(i, returnValues.get(i).valueType());
-             }
-         }
-+
-         UpdateProjection updateProjection = new UpdateProjection(
-             new InputColumn(0, idReference.valueType()),
-             assignments.targetNames(),
+@@ -276,7 +276,9 @@ public final class UpdatePlanner {
              assignmentSources,
              outputSymbols,
              returnValues == null ? null : returnValues.toArray(new Symbol[0]),
@@ -2197,17 +2127,17 @@ index 3204716803..284b524195 100644
  
          var rowShardResolver = new RowShardResolver(
 diff --git a/server/src/main/java/io/crate/statistics/TableStats.java b/server/src/main/java/io/crate/statistics/TableStats.java
-index b7fd9e6668..15bc7a83b1 100644
+index b7fd9e6668..1794c60c41 100644
 --- a/server/src/main/java/io/crate/statistics/TableStats.java
 +++ b/server/src/main/java/io/crate/statistics/TableStats.java
-@@ -22,6 +22,7 @@
- package io.crate.statistics;
+@@ -23,6 +23,7 @@ package io.crate.statistics;
  
  import io.crate.metadata.RelationName;
-+import io.crate.metadata.table.TableInfo;
  
++import io.crate.metadata.table.TableInfo;
  import java.util.HashMap;
  import java.util.Map;
+ import java.util.Set;
 @@ -62,6 +63,21 @@ public class TableStats {
          return tableStats.getOrDefault(relationName, Stats.EMPTY).averageSizePerRowInBytes();
      }

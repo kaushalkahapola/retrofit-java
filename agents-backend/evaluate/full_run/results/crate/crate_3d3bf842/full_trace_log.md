@@ -493,12 +493,28 @@ index b7fd9e6668..15bc7a83b1 100644
   "radius": 20
 }
 ```
-- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `get_exact_lines`
+- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `read_file_window`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "start_line": 49,
-  "end_line": 52
+  "center_line": 360,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+  "center_line": 365,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+  "center_line": 580,
+  "radius": 10
 }
 ```
 - **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `edit_file`
@@ -506,15 +522,8 @@ index b7fd9e6668..15bc7a83b1 100644
 {
   "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
   "old_string": "import io.crate.metadata.table.TableInfo;\nimport io.crate.statistics.Stats;",
-  "new_string": ""
-}
-```
-- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `get_exact_lines`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "start_line": 311,
-  "end_line": 335
+  "new_string": "",
+  "replace_all": false
 }
 ```
 - **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `edit_file`
@@ -522,23 +531,60 @@ index b7fd9e6668..15bc7a83b1 100644
 {
   "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
   "old_string": "        public static Item forUpdate(String id,\n                                     Symbol[] assignments,\n                                     long requiredVersion,\n                                     long seqNo,\n                                     long primaryTerm,\n                                     long sizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += sizeEstimate;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (var assignment : assignments) {\n                usedBytes += assignment.ramBytesUsed();\n            }\n            return new Item(\n                id,\n                assignments,\n                null,\n                requiredVersion,\n                seqNo,\n                primaryTerm,\n                List.of(),\n                Translog.UNSET_AUTO_GENERATED_TIMESTAMP,\n                usedBytes\n            );\n        }",
-  "new_string": "        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forUpdate(String id,\n                                     Symbol[] assignments,\n                                     long requiredVersion,\n                                     long seqNo,\n                                     long primaryTerm,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += fullDocSizeEstimate;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (var assignment : assignments) {\n                usedBytes += assignment.ramBytesUsed();\n            }\n            return new Item(\n                id,\n                assignments,\n                null,\n                requiredVersion,\n                seqNo,\n                primaryTerm,\n                List.of(),\n                Translog.UNSET_AUTO_GENERATED_TIMESTAMP,\n                usedBytes\n            );\n        }"
-}
-```
-- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `get_exact_lines`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "start_line": 347,
-  "end_line": 370
+  "new_string": "        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forUpdate(String id,\n                                     Symbol[] assignments,\n                                     long requiredVersion,\n                                     long seqNo,\n                                     long primaryTerm,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += fullDocSizeEstimate;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (var assignment : assignments) {\n                usedBytes += assignment.ramBytesUsed();\n            }\n            return new Item(\n                id,\n                assignments,\n                null,\n                requiredVersion,\n                seqNo,\n                primaryTerm,\n                List.of(),\n                Translog.UNSET_AUTO_GENERATED_TIMESTAMP,\n                usedBytes\n            );\n        }",
+  "replace_all": false
 }
 ```
 - **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `edit_file`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "old_string": "        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n                    DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                    usedBytes += valueType.valueBytes(values[i]);\n                }\n            }\n            if (onConflictAssignments != null) {\n                for (var assignment : onConflictAssignments) {\n                    usedBytes += assignment.ramBytesUsed();\n                }\n            }",
-  "new_string": "        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n                    DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                    usedBytes += valueType.valueBytes(values[i]);\n                }\n            }\n            usedBytes += fullDocSizeEstimate;\n            if (onConflictAssignments != null) {\n                for (var assignment : onConflictAssignments) {\n                    usedBytes += assignment.ramBytesUsed();\n                }\n            }"
+  "old_string": "        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n                    DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                    usedBytes += valueType.valueBytes(values[i]);\n                }\n            }\n            if (onConflictAssignments != null) {\n                for (var assignment : onConflictAssignments) {\n                    usedBytes += assignment.ramBytesUsed();\n                }\n            }\n            return new Item(\n                id,\n                onConflictAssignments,\n                values,\n                Versions.MATCH_ANY,\n                SequenceNumbers.UNASSIGNED_SEQ_NO,\n                SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n                pkValues,\n                autoGeneratedTimestamp,\n                usedBytes\n            );\n        }",
+  "new_string": "        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n                    DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                    usedBytes += valueType.valueBytes(values[i]);\n                }\n            }\n            usedBytes += fullDocSizeEstimate;\n            if (onConflictAssignments != null) {\n                for (var assignment : onConflictAssignments) {\n                    usedBytes += assignment.ramBytesUsed();\n                }\n            }\n            return new Item(\n                id,\n                onConflictAssignments,\n                values,\n                Versions.MATCH_ANY,\n                SequenceNumbers.UNASSIGNED_SEQ_NO,\n                SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n                pkValues,\n                autoGeneratedTimestamp,\n                usedBytes\n            );\n        }",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+  "center_line": 310,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+  "old_string": "        public static Item forUpdate(String id,\n                                     Symbol[] assignments,\n                                     long requiredVersion,\n                                     long seqNo,\n                                     long primaryTerm,\n                                     long sizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += sizeEstimate;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (var assignment : assignments) {\n                usedBytes += assignment.ramBytesUsed();\n            }\n            return new Item(\n                id,\n                assignments,\n                null,\n                requiredVersion,\n                seqNo,\n                primaryTerm,\n                List.of(),\n                Translog.UNSET_AUTO_GENERATED_TIMESTAMP,\n                usedBytes\n            );\n        }",
+  "new_string": "        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forUpdate(String id,\n                                     Symbol[] assignments,\n                                     long requiredVersion,\n                                     long seqNo,\n                                     long primaryTerm,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += fullDocSizeEstimate;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (var assignment : assignments) {\n                usedBytes += assignment.ramBytesUsed();\n            }\n            return new Item(\n                id,\n                assignments,\n                null,\n                requiredVersion,\n                seqNo,\n                primaryTerm,\n                List.of(),\n                Translog.UNSET_AUTO_GENERATED_TIMESTAMP,\n                usedBytes\n            );\n        }",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+  "old_string": "        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n                    DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                    usedBytes += valueType.valueBytes(values[i]);\n                }\n            }\n            if (onConflictAssignments != null) {\n                for (var assignment : onConflictAssignments) {\n                    usedBytes += assignment.ramBytesUsed();\n                }\n            }\n            return new Item(\n                id,\n                onConflictAssignments,\n                values,\n                Versions.MATCH_ANY,\n                SequenceNumbers.UNASSIGNED_SEQ_NO,\n                SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n                pkValues,\n                autoGeneratedTimestamp,\n                usedBytes\n            );\n        }",
+  "new_string": "        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n                    DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                    usedBytes += valueType.valueBytes(values[i]);\n                }\n            }\n            usedBytes += fullDocSizeEstimate;\n            if (onConflictAssignments != null) {\n                for (var assignment : onConflictAssignments) {\n                    usedBytes += assignment.ramBytesUsed();\n                }\n            }\n            return new Item(\n                id,\n                onConflictAssignments,\n                values,\n                Versions.MATCH_ANY,\n                SequenceNumbers.UNASSIGNED_SEQ_NO,\n                SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n                pkValues,\n                autoGeneratedTimestamp,\n                usedBytes\n            );\n        }",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+  "old_string": "import io.crate.metadata.table.TableInfo;\nimport io.crate.statistics.Stats;",
+  "new_string": "",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+  "center_line": 50,
+  "radius": 20
 }
 ```
 - **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `check_java_syntax`
@@ -556,7 +602,738 @@ index b7fd9e6668..15bc7a83b1 100644
 - **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `verify_guidelines`
 ```json
 {
-  "diff_text": "diff --git a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\nindex b4ce983f2e..28cb56e076 100644\n--- a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\n+++ b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\n@@ -47,8 +47,7 @@ import io.crate.expression.symbol.Symbol;\n import io.crate.expression.symbol.Symbols;\n import io.crate.metadata.Reference;\n import io.crate.metadata.settings.SessionSettings;\n-import io.crate.metadata.table.TableInfo;\n-import io.crate.statistics.Stats;\n+\n import io.crate.types.DataType;\n \n public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, ShardUpsertRequest.Item> {\n@@ -309,14 +308,16 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S\n          */\n         private transient long usedBytes = -1L;\n \n+        /// @param fullDocSizeEstimate the expected number of bytes\n+        /// the full document has when loaded from disk\n         public static Item forUpdate(String id,\n                                      Symbol[] assignments,\n                                      long requiredVersion,\n                                      long seqNo,\n                                      long primaryTerm,\n-                                     long sizeEstimate) {\n+                                     long fullDocSizeEstimate) {\n             long usedBytes = SHALLOW_SIZE;\n-            usedBytes += sizeEstimate;\n+            usedBytes += fullDocSizeEstimate;\n             usedBytes += RamUsageEstimator.sizeOf(id);\n             for (var assignment : assignments) {\n                 usedBytes += assignment.ramBytesUsed();\n             }\n             return new Item(\n                 id,\n                 assignments,\n                 null,\n                 requiredVersion,\n                 seqNo,\n                 primaryTerm,\n                 List.of(),\n                 Translog.UNSET_AUTO_GENERATED_TIMESTAMP,\n                 usedBytes\n             );\n         }\n \n+        /// @param fullDocSizeEstimate the expected number of bytes\n+        /// the full document has when loaded from disk\n         public static Item forInsert(String id,\n                                      List<String> pkValues,\n                                      long autoGeneratedTimestamp,\n                                      @Nullable Reference[] insertColumns,\n                                      @Nullable Object[] values,\n-                                     @Nullable Symbol[] onConflictAssignments) {\n+                                     @Nullable Symbol[] onConflictAssignments,\n+                                     long fullDocSizeEstimate) {\n             long usedBytes = SHALLOW_SIZE;\n             usedBytes += RamUsageEstimator.sizeOf(id);\n             for (String pkValue : pkValues) {\n                 usedBytes += RamUsageEstimator.sizeOf(pkValue);\n             }\n             if (values != null) {\n                 assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                 for (int i = 0; i < values.length; i++) {\n                     DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                     usedBytes += valueType.valueBytes(values[i]);\n                 }\n             }\n+            usedBytes += fullDocSizeEstimate;\n             if (onConflictAssignments != null) {\n                 for (var assignment : onConflictAssignments) {\n                     usedBytes += assignment.ramBytesUsed();\n                 }\n             }"
+  "diff_text": "diff --git a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\nindex b4ce983f2e..a31b8dde60 100644\n--- a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\n+++ b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\n@@ -47,8 +47,7 @@ import io.crate.expression.symbol.Symbol;\n import io.crate.expression.symbol.Symbols;\n import io.crate.metadata.Reference;\n import io.crate.metadata.settings.SessionSettings;\n-import io.crate.metadata.table.TableInfo;\n-import io.crate.statistics.Stats;\n+\n import io.crate.types.DataType;\n \n public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, ShardUpsertRequest.Item> {\n@@ -309,14 +308,16 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S\n          */\n         private transient long usedBytes = -1L;\n \n+        /// @param fullDocSizeEstimate the expected number of bytes\n+        /// the full document has when loaded from disk\n         public static Item forUpdate(String id,\n                                      Symbol[] assignments,\n                                      long requiredVersion,\n                                      long seqNo,\n                                      long primaryTerm,\n-                                     long sizeEstimate) {\n+                                     long fullDocSizeEstimate) {\n             long usedBytes = SHALLOW_SIZE;\n-            usedBytes += sizeEstimate;\n+            usedBytes += fullDocSizeEstimate;\n             usedBytes += RamUsageEstimator.sizeOf(id);\n             for (var assignment : assignments) {\n                 usedBytes += assignment.ramBytesUsed();\n@@ -350,7 +351,8 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S\n                                      long autoGeneratedTimestamp,\n                                      @Nullable Reference[] insertColumns,\n                                      @Nullable Object[] values,\n-                                     @Nullable Symbol[] onConflictAssignments) {\n+                                     @Nullable Symbol[] onConflictAssignments,\n+                                     long fullDocSizeEstimate) {\n             long usedBytes = SHALLOW_SIZE;\n             usedBytes += RamUsageEstimator.sizeOf(id);\n             for (String pkValue : pkValues) {\n                 usedBytes += RamUsageEstimator.sizeOf(pkValue);\n             }\n             if (values != null) {\n                 assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                 for (int i = 0; i < values.length; i++) {\n                     DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                     usedBytes += valueType.valueBytes(values[i]);\n                 }\n             }\n+            usedBytes += fullDocSizeEstimate;\n             if (onConflictAssignments != null) {\n                 for (var assignment : onConflictAssignments) {\n                     usedBytes += assignment.ramBytesUsed();\n                 }\n             }\n             return new Item(\n                 id,\n                 onConflictAssignments,\n                 values,\n                 Versions.MATCH_ANY,\n                 SequenceNumbers.UNASSIGNED_SEQ_NO,\n                 SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n                 pkValues,\n                 autoGeneratedTimestamp,\n                 usedBytes\n             );\n         }"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 20,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 50,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 80,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 270,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 260,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 100,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 130,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 160,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 200,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 280,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "old_string": "    private final Map<Reference, Symbol> onDuplicateKeyAssignments;\n    private final List<Reference> allTargetColumns;\n    /**\n     * List of columns used for the result set\n     */\n    private final List<? extends Symbol> outputs;",
+  "new_string": "    private final Map<Reference, Symbol> onDuplicateKeyAssignments;\n    private final List<Reference> allTargetColumns;\n\n    private final long fullDocSizeEstimate;\n\n    /**\n     * List of columns used for the result set\n     */\n    private final List<? extends Symbol> outputs;"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "old_string": "    public ColumnIndexWriterProjection(RelationName relationName,\n                                       @Nullable String partitionIdent,\n                                       List<ColumnIdent> primaryKeys,\n                                       List<Reference> allTargetColumns,\n                                       boolean ignoreDuplicateKeys,\n                                       Map<Reference, Symbol> onDuplicateKeyAssignments,\n                                       List<Symbol> primaryKeySymbols,\n                                       List<Symbol> partitionedBySymbols,\n                                       @Nullable ColumnIdent clusteredByColumn,\n                                       @Nullable Symbol clusteredBySymbol,\n                                       Settings settings,\n                                       boolean autoCreateIndices,\n                                       List<? extends Symbol> outputs,\n                                       List<Symbol> returnValues) {\n\n        super(relationName, partitionIdent, primaryKeys, clusteredByColumn, settings, primaryKeySymbols, autoCreateIndices);\n        assert partitionedBySymbols.stream().noneMatch(s -> s.any(Symbol.IS_COLUMN))\n            : \"All references and fields in partitionedBySymbols must be resolved to inputColumns, got: \" + partitionedBySymbols;\n        this.allTargetColumns = allTargetColumns;\n        this.partitionedBySymbols = partitionedBySymbols;\n        this.ignoreDuplicateKeys = ignoreDuplicateKeys;\n        this.onDuplicateKeyAssignments = onDuplicateKeyAssignments;\n        this.clusteredBySymbol = clusteredBySymbol;\n        this.outputs = outputs;\n        this.returnValues = returnValues;\n    }",
+  "new_string": "    public ColumnIndexWriterProjection(RelationName relationName,\n                                       @Nullable String partitionIdent,\n                                       List<ColumnIdent> primaryKeys,\n                                       List<Reference> allTargetColumns,\n                                       boolean ignoreDuplicateKeys,\n                                       Map<Reference, Symbol> onDuplicateKeyAssignments,\n                                       List<Symbol> primaryKeySymbols,\n                                       List<Symbol> partitionedBySymbols,\n                                       @Nullable ColumnIdent clusteredByColumn,\n                                       @Nullable Symbol clusteredBySymbol,\n                                       Settings settings,\n                                       boolean autoCreateIndices,\n                                       List<? extends Symbol> outputs,\n                                       List<Symbol> returnValues,\n                                       long fullDocSizeEstimate) {\n\n        super(relationName, partitionIdent, primaryKeys, clusteredByColumn, settings, primaryKeySymbols, autoCreateIndices);\n        assert partitionedBySymbols.stream().noneMatch(s -> s.any(Symbol.IS_COLUMN))\n            : \"All references and fields in partitionedBySymbols must be resolved to inputColumns, got: \" + partitionedBySymbols;\n        this.allTargetColumns = allTargetColumns;\n        this.partitionedBySymbols = partitionedBySymbols;\n        this.ignoreDuplicateKeys = ignoreDuplicateKeys;\n        this.onDuplicateKeyAssignments = onDuplicateKeyAssignments;\n        this.clusteredBySymbol = clusteredBySymbol;\n        this.outputs = outputs;\n        this.returnValues = returnValues;\n        this.fullDocSizeEstimate = fullDocSizeEstimate;\n    }"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `replace_method_body`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "method_signature": "ColumnIndexWriterProjection(StreamInput) throws IOException",
+  "new_body": "        super(in);\n\n        if (in.getVersion().before(Version.V_5_5_0)) {\n            if (in.readBoolean()) {\n                // Ignore targetColsSymbolsExclPartition\n                Symbols.fromStream(in);\n            }\n\n            if (in.readBoolean()) {\n                // Ignore targetColsExclPartitionCols\n                int length = in.readVInt();\n                for (int i = 0; i < length; i++) {\n                    Reference.fromStream(in);\n                }\n            }\n        }\n\n        ignoreDuplicateKeys = in.readBoolean();\n        if (in.readBoolean()) {\n            int mapSize = in.readVInt();\n            onDuplicateKeyAssignments = new HashMap<>(mapSize);\n            for (int i = 0; i < mapSize; i++) {\n                onDuplicateKeyAssignments.put(Reference.fromStream(in), Symbol.fromStream(in));\n            }\n        } else {\n            onDuplicateKeyAssignments = Collections.emptyMap();\n        }\n\n        if (in.getVersion().onOrAfter(Version.V_4_2_0)) {\n            int mapSize = in.readVInt();\n            allTargetColumns = new ArrayList<>();\n            for (int i = 0; i < mapSize; i++) {\n                allTargetColumns.add(Reference.fromStream(in));\n            }\n\n            int outputSize = in.readVInt();\n            if (outputSize > 0) {\n                var result = new ArrayList<Symbol>(outputSize);\n                for (int i = 0; i < outputSize; i++) {\n                    result.add(Symbol.fromStream(in));\n                }\n                outputs = result;\n            } else {\n                outputs = List.of();\n            }\n\n            int returnValueSize = in.readVInt();\n            if (returnValueSize > 0) {\n                returnValues = new ArrayList<>(returnValueSize);\n                for (int i = 0; i < returnValueSize; i++) {\n                    returnValues.add(Symbol.fromStream(in));\n                }\n            } else {\n                returnValues = List.of();\n            }\n\n            if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n                fullDocSizeEstimate = in.readLong();\n            } else {\n                fullDocSizeEstimate = 0L;\n            }\n        } else {\n            returnValues = List.of();\n            outputs = List.of();\n            allTargetColumns = List.of();\n            fullDocSizeEstimate = 0L;\n        }\n    "
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "old_string": "    ColumnIndexWriterProjection(StreamInput in) throws IOException {\n        super(in);\n\n\n        if (in.getVersion().before(Version.V_5_5_0)) {\n            if (in.readBoolean()) {\n                // Ignore targetColsSymbolsExclPartition\n                Symbols.fromStream(in);\n            }\n\n            if (in.readBoolean()) {\n                // Ignore targetColsExclPartitionCols\n                int length = in.readVInt();\n                for (int i = 0; i < length; i++) {\n                    Reference.fromStream(in);\n                }\n            }\n        }\n\n        ignoreDuplicateKeys = in.readBoolean();\n        if (in.readBoolean()) {\n            int mapSize = in.readVInt();\n            onDuplicateKeyAssignments = new HashMap<>(mapSize);\n            for (int i = 0; i < mapSize; i++) {\n                onDuplicateKeyAssignments.put(Reference.fromStream(in), Symbol.fromStream(in));\n            }\n        } else {\n            onDuplicateKeyAssignments = Collections.emptyMap();\n        }\n\n        if (in.getVersion().onOrAfter(Version.V_4_2_0)) {\n            int mapSize = in.readVInt();\n            allTargetColumns = new ArrayList<>();\n            for (int i = 0; i < mapSize; i++) {\n                allTargetColumns.add(Reference.fromStream(in));\n            }\n\n            int outputSize = in.readVInt();\n            if (outputSize > 0) {\n                var result = new ArrayList<Symbol>(outputSize);\n                for (int i = 0; i < outputSize; i++) {\n                    result.add(Symbol.fromStream(in));\n                }\n                outputs = result;\n            } else {\n                outputs = List.of();\n            }\n\n            int returnValueSize = in.readVInt();\n            if (returnValueSize > 0) {\n                returnValues = new ArrayList<>(returnValueSize);\n                for (int i = 0; i < returnValueSize; i++) {\n                    returnValues.add(Symbol.fromStream(in));\n                }\n            } else {\n                returnValues = List.of();\n            }\n        } else {\n            returnValues = List.of();\n            outputs = List.of();\n            allTargetColumns = List.of();\n        }\n    }",
+  "new_string": "    ColumnIndexWriterProjection(StreamInput in) throws IOException {\n        super(in);\n\n\n        if (in.getVersion().before(Version.V_5_5_0)) {\n            if (in.readBoolean()) {\n                // Ignore targetColsSymbolsExclPartition\n                Symbols.fromStream(in);\n            }\n\n            if (in.readBoolean()) {\n                // Ignore targetColsExclPartitionCols\n                int length = in.readVInt();\n                for (int i = 0; i < length; i++) {\n                    Reference.fromStream(in);\n                }\n            }\n        }\n\n        ignoreDuplicateKeys = in.readBoolean();\n        if (in.readBoolean()) {\n            int mapSize = in.readVInt();\n            onDuplicateKeyAssignments = new HashMap<>(mapSize);\n            for (int i = 0; i < mapSize; i++) {\n                onDuplicateKeyAssignments.put(Reference.fromStream(in), Symbol.fromStream(in));\n            }\n        } else {\n            onDuplicateKeyAssignments = Collections.emptyMap();\n        }\n\n        if (in.getVersion().onOrAfter(Version.V_4_2_0)) {\n            int mapSize = in.readVInt();\n            allTargetColumns = new ArrayList<>();\n            for (int i = 0; i < mapSize; i++) {\n                allTargetColumns.add(Reference.fromStream(in));\n            }\n\n            int outputSize = in.readVInt();\n            if (outputSize > 0) {\n                var result = new ArrayList<Symbol>(outputSize);\n                for (int i = 0; i < outputSize; i++) {\n                    result.add(Symbol.fromStream(in));\n                }\n                outputs = result;\n            } else {\n                outputs = List.of();\n            }\n\n            int returnValueSize = in.readVInt();\n            if (returnValueSize > 0) {\n                returnValues = new ArrayList<>(returnValueSize);\n                for (int i = 0; i < returnValueSize; i++) {\n                    returnValues.add(Symbol.fromStream(in));\n                }\n            } else {\n                returnValues = List.of();\n            }\n\n            if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n                fullDocSizeEstimate = in.readLong();\n            } else {\n                fullDocSizeEstimate = 0L;\n            }\n        } else {\n            returnValues = List.of();\n            outputs = List.of();\n            allTargetColumns = List.of();\n            fullDocSizeEstimate = 0L;\n        }\n    }"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `find_method_definitions`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "symbol": "ColumnIndexWriterProjection(StreamInput)"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `find_method_definitions`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "symbol": "ColumnIndexWriterProjection"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 90,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 120,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 150,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 60,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 70,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 200,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "old_string": "    public UpdateProjection(Symbol uidSymbol,\n                            String[] assignmentsColumns,\n                            Symbol[] assignments,\n                            Symbol[] outputs,\n                            @Nullable Symbol[] returnValues,\n                            @Nullable Long requiredVersion) {\n        this.uidSymbol = uidSymbol;\n        this.assignmentsColumns = assignmentsColumns;\n        this.assignments = assignments;",
+  "new_string": "    private final long fullDocSizeEstimate;\n\n    public UpdateProjection(Symbol uidSymbol,\n                            String[] assignmentsColumns,\n                            Symbol[] assignments,\n                            Symbol[] outputs,\n                            @Nullable Symbol[] returnValues,\n                            @Nullable Long requiredVersion,\n                            long fullDocSizeEstimate) {\n        this.uidSymbol = uidSymbol;\n        this.assignmentsColumns = assignmentsColumns;\n        this.assignments = assignments;",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "old_string": "    public UpdateProjection(StreamInput in) throws IOException {\n        uidSymbol = Symbol.fromStream(in);\n        int assignmentColumnsSize = in.readVInt();\n        assignmentsColumns = new String[assignmentColumnsSize];\n        for (int i = 0; i < assignmentColumnsSize; i++) {\n            assignmentsColumns[i] = in.readString();\n        }\n        int assignmentsSize = in.readVInt();\n        assignments = new Symbol[assignmentsSize];\n        for (int i = 0; i < assignmentsSize; i++) {\n            assignments[i] = Symbol.fromStream(in);\n        }\n        requiredVersion = in.readVLong();\n        if (requiredVersion == 0) {\n            requiredVersion = null;\n        }",
+  "new_string": "    public UpdateProjection(StreamInput in) throws IOException {\n        uidSymbol = Symbol.fromStream(in);\n        int assignmentColumnsSize = in.readVInt();\n        assignmentsColumns = new String[assignmentColumnsSize];\n        for (int i = 0; i < assignmentColumnsSize; i++) {\n            assignmentsColumns[i] = in.readString();\n        }\n        int assignmentsSize = in.readVInt();\n        assignments = new Symbol[assignmentsSize];\n        for (int i = 0; i < assignmentsSize; i++) {\n            assignments[i] = Symbol.fromStream(in);\n        }\n        requiredVersion = in.readVLong();\n        if (requiredVersion == 0) {\n            requiredVersion = null;\n        }\n        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n            this.fullDocSizeEstimate = in.readLong();\n        } else {\n            this.fullDocSizeEstimate = 0;\n        }",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "old_string": "    public Symbol uidSymbol() {\n        return uidSymbol;\n    }\n\n    public String[] assignmentsColumns() {\n        return assignmentsColumns;\n    }\n\n    public Symbol[] assignments() {\n        return assignments;\n    }\n\n    public Symbol[] outputs() {\n        return outputs;\n    }\n\n    @Nullable\n    public Symbol[] returnValues() {\n        return returnValues;\n    }\n\n    @Nullable\n    public Long requiredVersion() {\n        return requiredVersion;\n    }\n",
+  "new_string": "    public Symbol uidSymbol() {\n        return uidSymbol;\n    }\n\n    public String[] assignmentsColumns() {\n        return assignmentsColumns;\n    }\n\n    public Symbol[] assignments() {\n        return assignments;\n    }\n\n    public long fullDocSizeEstimate() {\n        return fullDocSizeEstimate;\n    }\n\n    public Symbol[] outputs() {\n        return outputs;\n    }\n\n    @Nullable\n    public Symbol[] returnValues() {\n        return returnValues;\n    }\n\n    @Nullable\n    public Long requiredVersion() {\n        return requiredVersion;\n    }\n"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 90,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 180,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "old_string": "    @Nullable\n    public Long requiredVersion() {\n        return requiredVersion;\n    }\n\n    @Override\n    public boolean equals(Object o) {\n        if (this == o) return true;\n        if (o == null || getClass() != o.getClass()) return false;\n        if (!super.equals(o)) return false;\n\n        UpdateProjection that = (UpdateProjection) o;\n\n        if (!Arrays.equals(assignments, that.assignments)) return false;\n        if (!Arrays.equals(assignmentsColumns, that.assignmentsColumns)) return false;\n        if (requiredVersion != null ? !requiredVersion.equals(that.requiredVersion) : that.requiredVersion != null)\n            return false;\n        if (!uidSymbol.equals(that.uidSymbol)) return false;\n        if (!Arrays.equals(returnValues, that.returnValues)) return false;\n        if (!Arrays.equals(outputs, that.outputs)) return false;\n\n        return true;\n    }\n\n    @Override\n    public int hashCode() {\n        int result = super.hashCode();\n        result = 31 * result + Arrays.hashCode(assignments);\n        result = 31 * result + Arrays.hashCode(assignmentsColumns);\n        result = 31 * result + (requiredVersion != null ? requiredVersion.hashCode() : 0);\n        result = 31 * result + uidSymbol.hashCode();\n        result = 31 * result + Arrays.hashCode(returnValues);\n        result = 31 * result + Arrays.hashCode(outputs);\n\n        return result;\n    }\n\n    @Override\n    public void writeTo(StreamOutput out) throws IOException {\n        Symbol.toStream(uidSymbol, out);\n        out.writeVInt(assignmentsColumns.length);\n        for (int i = 0; i < assignmentsColumns.length; i++) {\n            out.writeString(assignmentsColumns[i]);\n        }\n        out.writeVInt(assignments.length);\n        for (int i = 0; i < assignments.length; i++) {\n            Symbol.toStream(assignments[i], out);\n        }\n        if (requiredVersion == null) {\n            out.writeVLong(0);\n        } else {\n            out.writeVLong(requiredVersion);\n        }\n        if (out.getVersion().onOrAfter(Version.V_4_2_0)) {\n            out.writeVInt(outputs.length);\n            for (int i = 0; i < outputs.length; i++) {\n                Symbol.toStream(outputs[i], out);\n            }\n            if (returnValues != null) {\n                out.writeVInt(returnValues.length);\n                for (int i = 0; i < returnValues.length; i++) {\n                    Symbol.toStream(returnValues[i], out);\n                }\n            } else {\n                out.writeVInt(0);\n            }\n        }\n    }",
+  "new_string": "    @Nullable\n    public Long requiredVersion() {\n        return requiredVersion;\n    }\n\n    @Override\n    public boolean equals(Object o) {\n        if (this == o) return true;\n        if (o == null || getClass() != o.getClass()) return false;\n        if (!super.equals(o)) return false;\n\n        UpdateProjection that = (UpdateProjection) o;\n\n        if (!Arrays.equals(assignments, that.assignments)) return false;\n        if (!Arrays.equals(assignmentsColumns, that.assignmentsColumns)) return false;\n        if (requiredVersion != null ? !requiredVersion.equals(that.requiredVersion) : that.requiredVersion != null)\n            return false;\n        if (uidSymbol != null ? uidSymbol.equals(that.uidSymbol) : that.uidSymbol == null) return false;\n        if (!Arrays.equals(returnValues, that.returnValues)) return false;\n        if (!Arrays.equals(outputs, that.outputs)) return false;\n        if (fullDocSizeEstimate != that.fullDocSizeEstimate) return false;\n\n        return true;\n    }\n\n    @Override\n    public int hashCode() {\n        int result = super.hashCode();\n        result = 31 * result + Arrays.hashCode(assignments);\n        result = 31 * result + Arrays.hashCode(assignmentsColumns);\n        result = 31 * result + (requiredVersion != null ? requiredVersion.hashCode() : 0);\n        result = 31 * result + (uidSymbol != null ? uidSymbol.hashCode() : 0);\n        result = 31 * result + Arrays.hashCode(returnValues);\n        result = 31 * result + Arrays.hashCode(outputs);\n        result = 31 * result + (int) (fullDocSizeEstimate ^ (fullDocSizeEstimate >>> 32));\n\n        return result;\n    }\n\n    @Override\n    public void writeTo(StreamOutput out) throws IOException {\n        Symbol.toStream(uidSymbol, out);\n        out.writeVInt(assignmentsColumns.length);\n        for (int i = 0; i < assignmentsColumns.length; i++) {\n            out.writeString(assignmentsColumns[i]);\n        }\n        out.writeVInt(assignments.length);\n        for (int i = 0; i < assignments.length; i++) {\n            Symbol.toStream(assignments[i], out);\n        }\n        if (requiredVersion == null) {\n            out.writeVLong(0);\n        } else {\n            out.writeVLong(requiredVersion);\n        }\n        if (out.getVersion().onOrAfter(Version.V_4_2_0)) {\n            out.writeVInt(outputs.length);\n            for (int i = 0; i < outputs.length; i++) {\n                Symbol.toStream(outputs[i], out);\n            }\n            if (returnValues != null) {\n                out.writeVInt(returnValues.length);\n                for (int i = 0; i < returnValues.length; i++) {\n                    Symbol.toStream(returnValues[i], out);\n                }\n            } else {\n                out.writeVInt(0);\n            }\n        }\n        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {\n            out.writeLong(fullDocSizeEstimate);\n        }\n    }"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 160,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "old_string": "    @Override\n    public boolean equals(Object o) {\n        if (this == o) return true;\n        if (o == null || getClass() != o.getClass()) return false;\n\n        UpdateProjection that = (UpdateProjection) o;\n\n        if (!Arrays.equals(assignments, that.assignments)) return false;\n        if (!Arrays.equals(assignmentsColumns, that.assignmentsColumns)) return false;\n        if (requiredVersion != null ? !requiredVersion.equals(that.requiredVersion) : that.requiredVersion != null)\n            return false;\n        if (!uidSymbol.equals(that.uidSymbol)) return false;\n        if (!Arrays.equals(returnValues, that.returnValues)) return false;\n        if (!Arrays.equals(outputs, that.outputs)) return false;\n\n        return true;\n    }\n\n    @Override\n    public int hashCode() {\n        int result = super.hashCode();\n        result = 31 * result + Arrays.hashCode(assignments);\n        result = 31 * result + Arrays.hashCode(assignmentsColumns);\n        result = 31 * result + (requiredVersion != null ? requiredVersion.hashCode() : 0);\n        result = 31 * result + uidSymbol.hashCode();\n        result = 31 * result + Arrays.hashCode(returnValues);\n        result = 31 * result + Arrays.hashCode(outputs);\n\n        return result;\n    }",
+  "new_string": "    @Override\n    public boolean equals(Object o) {\n        if (this == o) return true;\n        if (o == null || getClass() != o.getClass()) return false;\n\n        UpdateProjection that = (UpdateProjection) o;\n\n        if (!Arrays.equals(assignments, that.assignments)) return false;\n        if (!Arrays.equals(assignmentsColumns, that.assignmentsColumns)) return false;\n        if (requiredVersion != null ? !requiredVersion.equals(that.requiredVersion) : that.requiredVersion != null)\n            return false;\n        if (uidSymbol != null ? !uidSymbol.equals(that.uidSymbol) : that.uidSymbol != null) return false;\n        if (!Arrays.equals(returnValues, that.returnValues)) return false;\n        if (!Arrays.equals(outputs, that.outputs)) return false;\n        if (fullDocSizeEstimate != that.fullDocSizeEstimate) return false;\n\n        return true;\n    }\n\n    @Override\n    public int hashCode() {\n        int result = super.hashCode();\n        result = 31 * result + Arrays.hashCode(assignments);\n        result = 31 * result + Arrays.hashCode(assignmentsColumns);\n        result = 31 * result + (requiredVersion != null ? requiredVersion.hashCode() : 0);\n        result = 31 * result + (uidSymbol != null ? uidSymbol.hashCode() : 0);\n        result = 31 * result + Arrays.hashCode(returnValues);\n        result = 31 * result + Arrays.hashCode(outputs);\n        result = 31 * result + (int) (fullDocSizeEstimate ^ (fullDocSizeEstimate >>> 32));\n\n        return result;\n    }"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "old_string": "                out.writeVInt(0);\n            }\n        }\n    }",
+  "new_string": "                out.writeVInt(0);\n            }\n        }\n        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {\n            out.writeLong(fullDocSizeEstimate);\n        }\n    }"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java b/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java\nindex aafbae9fc4..42e23c623f 100644\n--- a/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java\n+++ b/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java\n@@ -52,12 +52,15 @@ public class UpdateProjection extends Projection {\n     @Nullable\n     private Long requiredVersion;\n \n+    private final long fullDocSizeEstimate;\n+\n     public UpdateProjection(Symbol uidSymbol,\n                             String[] assignmentsColumns,\n                             Symbol[] assignments,\n                             Symbol[] outputs,\n                             @Nullable Symbol[] returnValues,\n-                            @Nullable Long requiredVersion) {\n+                            @Nullable Long requiredVersion,\n+                            long fullDocSizeEstimate) {\n         this.uidSymbol = uidSymbol;\n         this.assignmentsColumns = assignmentsColumns;\n         this.assignments = assignments;\n@@ -84,6 +87,11 @@ public class UpdateProjection extends Projection {\n         if (requiredVersion == 0) {\n             requiredVersion = null;\n         }\n+        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n+            this.fullDocSizeEstimate = in.readLong();\n+        } else {\n+            this.fullDocSizeEstimate = 0;\n+        }\n         if (in.getVersion().onOrAfter(Version.V_4_2_0)) {\n             int outputSize = in.readVInt();\n             outputs = new Symbol[outputSize];\n@@ -157,9 +165,10 @@ public class UpdateProjection extends Projection {\n         if (!Arrays.equals(assignmentsColumns, that.assignmentsColumns)) return false;\n         if (requiredVersion != null ? !requiredVersion.equals(that.requiredVersion) : that.requiredVersion != null)\n             return false;\n-        if (!uidSymbol.equals(that.uidSymbol)) return false;\n+        if (uidSymbol != null ? !uidSymbol.equals(that.uidSymbol) : that.uidSymbol != null) return false;\n         if (!Arrays.equals(returnValues, that.returnValues)) return false;\n         if (!Arrays.equals(outputs, that.outputs)) return false;\n+        if (fullDocSizeEstimate != that.fullDocSizeEstimate) return false;\n \n         return true;\n     }\n@@ -170,9 +179,10 @@ public class UpdateProjection extends Projection {\n         result = 31 * result + Arrays.hashCode(assignments);\n         result = 31 * result + Arrays.hashCode(assignmentsColumns);\n         result = 31 * result + (requiredVersion != null ? requiredVersion.hashCode() : 0);\n-        result = 31 * result + uidSymbol.hashCode();\n+        result = 31 * result + (uidSymbol != null ? uidSymbol.hashCode() : 0);\n         result = 31 * result + Arrays.hashCode(returnValues);\n         result = 31 * result + Arrays.hashCode(outputs);\n+        result = 31 * result + (int) (fullDocSizeEstimate ^ (fullDocSizeEstimate >>> 32));\n \n         return result;\n     }\n@@ -207,5 +217,8 @@ public class UpdateProjection extends Projection {\n                 out.writeVInt(0);\n             }\n         }\n+        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {\n+            out.writeLong(fullDocSizeEstimate);\n+        }\n     }\n }"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `manage_todo`
+```json
+{
+  "action": "add",
+  "task": "Analyze the target file server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java for method signatures and context around insertions."
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "center_line": 80,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "center_line": 120,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "center_line": 130,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "center_line": 160,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "old_string": "                                       UUID jobId\n                                       ) {",
+  "new_string": "                                       UUID jobId,\n                                       long fullDocSizeEstimate\n                                       ) {"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "center_line": 88,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "old_string": "                                       UUID jobId\n                                       ) {",
+  "new_string": "                                       UUID jobId\n                                       ) {"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "old_string": "        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(\n            id,\n            pkValues,\n            autoGeneratedTimestamp,\n            insertColumns,\n            insertValues.materialize(),\n            onConflictAssignments\n        );\n",
+  "new_string": "        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {\n            return ShardUpsertRequest.Item.forInsert(\n                id,\n                pkValues,\n                autoGeneratedTimestamp,\n                insertColumns,\n                insertValues.materialize(),\n                onConflictAssignments,\n                fullDocSizeEstimate\n            );\n        };\n"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java\nindex 2825a9c1fe..48065a0372 100644\n--- a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java\n+++ b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java\n@@ -116,14 +116,17 @@ public class ColumnIndexWriterProjector implements Projector {\n         );\n \n         InputRow insertValues = new InputRow(insertInputs);\n-        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(\n-            id,\n-            pkValues,\n-            autoGeneratedTimestamp,\n-            insertColumns,\n-            insertValues.materialize(),\n-            onConflictAssignments\n-        );\n+        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {\n+            return ShardUpsertRequest.Item.forInsert(\n+                id,\n+                pkValues,\n+                autoGeneratedTimestamp,\n+                insertColumns,\n+                insertValues.materialize(),\n+                onConflictAssignments,\n+                fullDocSizeEstimate\n+            );\n+        };\n \n         var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();\n \n"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `manage_todo`
+```json
+{
+  "action": "add",
+  "task": "Analyze logic changes and structural differences in server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "center_line": 120,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "center_line": 125,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "center_line": 126,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "center_line": 126,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "center_line": 180,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "center_line": 100,
+  "radius": 40
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "center_line": 130,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "center_line": 125,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "old_string": "        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(\n            id,\n            pkValues,\n            autoGeneratedTimestamp,\n            missingAssignmentsColumns,\n            new Object[]{source.value()},\n            null\n        );",
+  "new_string": "        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(\n            id,\n            pkValues,\n            autoGeneratedTimestamp,\n            missingAssignmentsColumns,\n            new Object[]{source.value()},\n            null,\n            0\n        );",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java\nindex 24cf0ec297..3668fe0214 100644\n--- a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java\n+++ b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java\n@@ -123,7 +123,8 @@ public class IndexWriterProjector implements Projector {\n             autoGeneratedTimestamp,\n             missingAssignmentsColumns,\n             new Object[]{source.value()},\n-            null\n+            null,\n+            0\n         );\n \n         Predicate<UpsertResults> earlyTerminationCondition = results -> failFast && results.containsErrors();\n"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 590,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 580,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 560,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 550,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `grep_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "search_text": "shardId"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `grep_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "search_text": "sizeEstimateForUpdate"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "old_string": "import static io.crate.execution.dml.upsert.ShardUpsertRequest.Item.sizeEstimateForUpdate;",
+  "new_string": ""
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "old_string": "        // Get Stats to improve ram estimation for the update items\n        assert shardId != null : \"ShardId must be provided for updates\";\n\n        String indexName = shardId.getIndexName();\n        RelationName relationName = RelationName.fromIndexName(indexName);\n\n        long sizeEstimate = sizeEstimateForUpdate(\n            nodeCtx.tableStats().getStats(relationName),\n            nodeCtx.schemas().getTableInfo(relationName)\n        );\n        ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(\n            context.txnCtx.sessionSettings(),\n            ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),\n            ShardUpsertRequest.DuplicateKeyAction.UPDATE_OR_FAIL,\n            true,\n            projection.assignmentsColumns(),\n            null,\n            projection.returnValues(),\n            context.jobId\n        );",
+  "new_string": "        // Get Stats to improve ram estimation for the update items\n        assert shardId != null : \"ShardId must be provided for updates\";\n\n        String indexName = shardId.getIndexName();\n        RelationName relationName = RelationName.fromIndexName(indexName);\n\n        long sizeEstimate = nodeCtx.tableStats().estimatedSizePerRow(\n            nodeCtx.schemas().getTableInfo(relationName)\n        );\n        ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(\n            context.txnCtx.sessionSettings(),\n            ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),\n            ShardUpsertRequest.DuplicateKeyAction.UPDATE_OR_FAIL,\n            true,\n            projection.assignmentsColumns(),\n            null,\n            projection.returnValues(),\n            context.jobId\n        );"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "old_string": "            sizeEstimate\n        );",
+  "new_string": "            projection.fullDocSizeEstimate()\n        );"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 590,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 590,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "old_string": "                    sizeEstimate\n                );",
+  "new_string": "                    projection.fullDocSizeEstimate()\n                );"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java b/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java\nindex d610fbe3c8..77f9445b08 100644\n--- a/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java\n+++ b/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java\n@@ -21,7 +21,7 @@\n \n package io.crate.execution.engine.pipeline;\n \n-import static io.crate.execution.dml.upsert.ShardUpsertRequest.Item.sizeEstimateForUpdate;\n+\n import static io.crate.execution.engine.pipeline.LimitAndOffset.NO_LIMIT;\n import static io.crate.execution.engine.pipeline.LimitAndOffset.NO_OFFSET;\n import static io.crate.planner.operators.InsertFromValues.checkConstraints;\n@@ -562,8 +562,7 @@ public class ProjectionToProjectorVisitor\n         String indexName = shardId.getIndexName();\n         RelationName relationName = RelationName.fromIndexName(indexName);\n \n-        long sizeEstimate = sizeEstimateForUpdate(\n-            nodeCtx.tableStats().getStats(relationName),\n+        long sizeEstimate = nodeCtx.tableStats().estimatedSizePerRow(\n             nodeCtx.schemas().getTableInfo(relationName)\n         );\n         ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(\n@@ -596,7 +595,7 @@ public class ProjectionToProjectorVisitor.java\n                     requiredVersion == null ? Versions.MATCH_ANY : requiredVersion,\n                     SequenceNumbers.UNASSIGNED_SEQ_NO,\n                     SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n-                    sizeEstimate\n+                    projection.fullDocSizeEstimate()\n                 );\n             },\n             (req, resp) -> elasticsearchClient.execute(ShardUpsertAction.INSTANCE, req).whenComplete(resp),\n"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java",
+  "center_line": 80,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java",
+  "old_string": "            statement.tableInfo().isPartitioned(),\n            outputs,\n            statement.outputs() == null ? List.of() : statement.outputs()\n        );",
+  "new_string": "            statement.tableInfo().isPartitioned(),\n            outputs\n        );",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "center_line": 60,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "old_string": "    public long estimatedSizePerRow(RelationName relationName) {\n        return tableStats.getOrDefault(relationName, Stats.EMPTY).averageSizePerRowInBytes();\n    }",
+  "new_string": "    public long estimatedSizePerRow(RelationName relationName) {\n        return tableStats.getOrDefault(relationName, Stats.EMPTY).averageSizePerRowInBytes();\n    }\n\n    /**\n     * Returns an estimation (avg) size of each row of the table in bytes or if no stats are available\n     * for the given table an estimate (avg) based on the column types of the table.\n     */\n    public long estimatedSizePerRow(TableInfo tableInfo) {\n        Stats stats = tableStats.get(tableInfo.ident());\n        if (stats == null) {\n            // if stats are not available we fall back to estimate the size based on\n            // column types. Therefore we need to get the column information.\n            return Stats.EMPTY.estimateSizeForColumns(tableInfo);\n        } else {\n            return stats.averageSizePerRowInBytes();\n        }\n    }"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java",
+  "center_line": 279,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java",
+  "old_string": "        UpdateProjection updateProjection = new UpdateProjection(\n            new InputColumn(0, idReference.valueType()),\n            assignments.targetNames(),\n            assignmentSources,\n            outputSymbols,\n            returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n            null);",
+  "new_string": "        UpdateProjection updateProjection = new UpdateProjection(\n            new InputColumn(0, idReference.valueType()),\n            assignments.targetNames(),\n            assignmentSources,\n            outputSymbols,\n            returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n            null,\n            plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)\n        );",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java\nindex 14f14396d5..4ca5c218ad 100644\n--- a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java\n+++ b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java\n@@ -276,7 +276,9 @@ public final class UpdatePlanner {\n             assignmentSources,\n             outputSymbols,\n             returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n-            null);\n+            null,\n+            plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)\n+        );\n \n         WhereClause where = detailedQuery.toBoundWhereClause(\n             tableInfo, params, subQueryResults, plannerCtx.transactionContext(), plannerCtx.nodeContext(), plannerCtx.clusterState().metadata());"
+}
+```
+- **server/src/main/java/io/crate/planner/operators/InsertFromValues.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+  "center_line": 475,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/planner/operators/InsertFromValues.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+  "old_string": "                writerProjection.allTargetColumns().toArray(Reference[]::new),\n                insertValues.materialize(),\n                onConflictAssignments\n            );",
+  "new_string": "                writerProjection.allTargetColumns().toArray(Reference[]::new),\n                insertValues.materialize(),\n                onConflictAssignments,\n                0\n            );",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/planner/operators/InsertFromValues.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java"
+}
+```
+- **server/src/main/java/io/crate/planner/operators/InsertFromValues.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java"
+}
+```
+- **server/src/main/java/io/crate/planner/operators/InsertFromValues.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner.operators/InsertFromValues.java\nindex 3204716803..284b524195 100644\n--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n+++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n@@ -477,7 +477,8 @@ public class InsertFromValues implements LogicalPlan {\n                 autoGeneratedTimestamp,\n                 writerProjection.allTargetColumns().toArray(Reference[]::new),\n                 insertValues.materialize(),\n-                onConflictAssignments\n+                onConflictAssignments,\n+                0\n             );\n \n         var rowShardResolver = new RowShardResolver(\n"
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "center_line": 60,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `insert_import`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "import_statement": "io.crate.metadata.table.TableInfo"
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "old_string": "import java.util.HashMap;",
+  "new_string": "import io.crate.metadata.table.TableInfo;\nimport java.util.HashMap;",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "old_string": "    public Iterable<ColumnStatsEntry> statsEntries() {",
+  "new_string": "    /**\n     * Returns an estimation (avg) size of each row of the table in bytes or if no stats are available\n     * for the given table an estimate (avg) based on the column types of the table.\n     */\n    public long estimatedSizePerRow(TableInfo tableInfo) {\n        Stats stats = tableStats.get(tableInfo.ident());\n        if (stats == null) {\n            // if stats are not available we fall back to estimate the size based on\n            // column types. Therefore we need to get the column information.\n            return Stats.EMPTY.estimateSizeForColumns(tableInfo.columns());\n        } else {\n            return stats.averageSizePerRowInBytes();\n        }\n    }\n\n    public Iterable<ColumnStatsEntry> statsEntries() {",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java"
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java"
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/statistics/TableStats.java b/server/src/main/java/io/crate/statistics/TableStats.java\nindex b7fd9e6668..d513669380 100644\n--- a/server/src/main/java/io/crate/statistics/TableStats.java\n+++ b/server/src/main/java/io/crate/statistics/TableStats.java\n@@ -23,6 +23,7 @@ package io.crate.statistics;\n \n import io.crate.metadata.RelationName;\n \n+import io.crate.metadata.table.TableInfo;\n import java.util.HashMap;\n import java.util.Map;\n import java.util.Set;\n@@ -62,6 +63,21 @@ public class TableStats {\n         return tableStats.getOrDefault(relationName, Stats.EMPTY).averageSizePerRowInBytes();\n     }\n \n+    /**\n+     * Returns an estimation (avg) size of each row of the table in bytes or if no stats are available\n+     * for the given table an estimate (avg) based on the column types of the table.\n+     */\n+    public long estimatedSizePerRow(TableInfo tableInfo) {\n+        Stats stats = tableStats.get(tableInfo.ident());\n+        if (stats == null) {\n+            // if stats are not available we fall back to estimate the size based on\n+            // column types. Therefore we need to get the column information.\n+            return Stats.EMPTY.estimateSizeForColumns(tableInfo.columns());\n+        } else {\n+            return stats.averageSizePerRowInBytes();\n+        }\n+    }\n+\n     public Iterable<ColumnStatsEntry> statsEntries() {\n         Set<Map.Entry<RelationName, Stats>> entries = tableStats.entrySet();\n         return () -> entries.stream()\n             .flatMap(tableEntry -> {\n                 Stats stats = tableEntry.getValue();\n                 return stats.statsByColumn().entrySet().stream()\n                     .map(columnEntry ->\n                         new ColumnStatsEntry(tableEntry.getKey(), columnEntry.getKey(), columnEntry.getValue()));\n             }).iterator();\n     }\n"
 }
 ```
 
@@ -564,7 +1341,7 @@ index b7fd9e6668..15bc7a83b1 100644
 **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java** [replace]
 ```diff
 diff --git a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
-index b4ce983f2e..28cb56e076 100644
+index b4ce983f2e..a31b8dde60 100644
 --- a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
 +++ b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
 @@ -47,8 +47,7 @@ import io.crate.expression.symbol.Symbol;
@@ -596,14 +1373,7 @@ index b4ce983f2e..28cb56e076 100644
              usedBytes += RamUsageEstimator.sizeOf(id);
              for (var assignment : assignments) {
                  usedBytes += assignment.ramBytesUsed();
-@@ -345,12 +346,15 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
-             }
-         }
- 
-+        /// @param fullDocSizeEstimate the expected number of bytes
-+        /// the full document has when loaded from disk
-         public static Item forInsert(String id,
-                                      List<String> pkValues,
+@@ -350,7 +351,8 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
                                       long autoGeneratedTimestamp,
                                       @Nullable Reference[] insertColumns,
                                       @Nullable Object[] values,
@@ -613,7 +1383,7 @@ index b4ce983f2e..28cb56e076 100644
              long usedBytes = SHALLOW_SIZE;
              usedBytes += RamUsageEstimator.sizeOf(id);
              for (String pkValue : pkValues) {
-@@ -363,6 +367,7 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
+@@ -363,6 +365,7 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
                      usedBytes += valueType.valueBytes(values[i]);
                  }
              }
@@ -622,16 +1392,300 @@ index b4ce983f2e..28cb56e076 100644
                  for (var assignment : onConflictAssignments) {
                      usedBytes += assignment.ramBytesUsed();
 ```
+**server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java b/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
+index 5467841b09..2e88d82a2a 100644
+--- a/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
++++ b/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
+@@ -47,6 +47,9 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+     private final boolean ignoreDuplicateKeys;
+     private final Map<Reference, Symbol> onDuplicateKeyAssignments;
+     private final List<Reference> allTargetColumns;
++
++    private final long fullDocSizeEstimate;
++
+     /**
+      * List of columns used for the result set
+      */
+@@ -77,7 +80,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+                                        Settings settings,
+                                        boolean autoCreateIndices,
+                                        List<? extends Symbol> outputs,
+-                                       List<Symbol> returnValues) {
++                                       List<Symbol> returnValues,
++                                       long fullDocSizeEstimate) {
+ 
+         super(relationName, partitionIdent, primaryKeys, clusteredByColumn, settings, primaryKeySymbols, autoCreateIndices);
+         assert partitionedBySymbols.stream().noneMatch(s -> s.any(Symbol.IS_COLUMN))
+@@ -89,6 +93,7 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+         this.clusteredBySymbol = clusteredBySymbol;
+         this.outputs = outputs;
+         this.returnValues = returnValues;
++        this.fullDocSizeEstimate = fullDocSizeEstimate;
+     }
+ 
+     ColumnIndexWriterProjection(StreamInput in) throws IOException {
+```
+**server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java b/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
+index aafbae9fc4..42e23c623f 100644
+--- a/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
++++ b/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
+@@ -52,12 +52,15 @@ public class UpdateProjection extends Projection {
+     @Nullable
+     private Long requiredVersion;
+ 
++    private final long fullDocSizeEstimate;
++
+     public UpdateProjection(Symbol uidSymbol,
+                             String[] assignmentsColumns,
+                             Symbol[] assignments,
+                             Symbol[] outputs,
+                             @Nullable Symbol[] returnValues,
+-                            @Nullable Long requiredVersion) {
++                            @Nullable Long requiredVersion,
++                            long fullDocSizeEstimate) {
+         this.uidSymbol = uidSymbol;
+         this.assignmentsColumns = assignmentsColumns;
+         this.assignments = assignments;
+@@ -84,6 +87,11 @@ public class UpdateProjection extends Projection {
+         if (requiredVersion == 0) {
+             requiredVersion = null;
+         }
++        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {
++            this.fullDocSizeEstimate = in.readLong();
++        } else {
++            this.fullDocSizeEstimate = 0;
++        }
+         if (in.getVersion().onOrAfter(Version.V_4_2_0)) {
+             int outputSize = in.readVInt();
+             outputs = new Symbol[outputSize];
+@@ -157,9 +165,10 @@ public class UpdateProjection extends Projection {
+         if (!Arrays.equals(assignmentsColumns, that.assignmentsColumns)) return false;
+         if (requiredVersion != null ? !requiredVersion.equals(that.requiredVersion) : that.requiredVersion != null)
+             return false;
+-        if (!uidSymbol.equals(that.uidSymbol)) return false;
++        if (uidSymbol != null ? !uidSymbol.equals(that.uidSymbol) : that.uidSymbol != null) return false;
+         if (!Arrays.equals(returnValues, that.returnValues)) return false;
+         if (!Arrays.equals(outputs, that.outputs)) return false;
++        if (fullDocSizeEstimate != that.fullDocSizeEstimate) return false;
+ 
+         return true;
+     }
+@@ -170,9 +179,10 @@ public class UpdateProjection extends Projection {
+         result = 31 * result + Arrays.hashCode(assignments);
+         result = 31 * result + Arrays.hashCode(assignmentsColumns);
+         result = 31 * result + (requiredVersion != null ? requiredVersion.hashCode() : 0);
+-        result = 31 * result + uidSymbol.hashCode();
++        result = 31 * result + (uidSymbol != null ? uidSymbol.hashCode() : 0);
+         result = 31 * result + Arrays.hashCode(returnValues);
+         result = 31 * result + Arrays.hashCode(outputs);
++        result = 31 * result + (int) (fullDocSizeEstimate ^ (fullDocSizeEstimate >>> 32));
+ 
+         return result;
+     }
+@@ -207,5 +217,8 @@ public class UpdateProjection extends Projection {
+                 out.writeVInt(0);
+             }
+         }
++        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
++            out.writeLong(fullDocSizeEstimate);
++        }
+     }
+ }
+```
+**server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
+index 2825a9c1fe..48065a0372 100644
+--- a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
++++ b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
+@@ -116,14 +116,17 @@ public class ColumnIndexWriterProjector implements Projector {
+         );
+ 
+         InputRow insertValues = new InputRow(insertInputs);
+-        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(
+-            id,
+-            pkValues,
+-            autoGeneratedTimestamp,
+-            insertColumns,
+-            insertValues.materialize(),
+-            onConflictAssignments
+-        );
++        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {
++            return ShardUpsertRequest.Item.forInsert(
++                id,
++                pkValues,
++                autoGeneratedTimestamp,
++                insertColumns,
++                insertValues.materialize(),
++                onConflictAssignments,
++                fullDocSizeEstimate
++            );
++        };
+ 
+         var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();
+```
+**server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
+index 24cf0ec297..3668fe0214 100644
+--- a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
++++ b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
+@@ -123,7 +123,8 @@ public class IndexWriterProjector implements Projector {
+             autoGeneratedTimestamp,
+             missingAssignmentsColumns,
+             new Object[]{source.value()},
+-            null
++            null,
++            0
+         );
+ 
+         Predicate<UpsertResults> earlyTerminationCondition = results -> failFast && results.containsErrors();
+```
+**server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java b/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
+index d610fbe3c8..77f9445b08 100644
+--- a/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
++++ b/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
+@@ -21,7 +21,7 @@
+ 
+ package io.crate.execution.engine.pipeline;
+ 
+-import static io.crate.execution.dml.upsert.ShardUpsertRequest.Item.sizeEstimateForUpdate;
++
+ import static io.crate.execution.engine.pipeline.LimitAndOffset.NO_LIMIT;
+ import static io.crate.execution.engine.pipeline.LimitAndOffset.NO_OFFSET;
+ import static io.crate.planner.operators.InsertFromValues.checkConstraints;
+@@ -562,8 +562,7 @@ public class ProjectionToProjectorVisitor
+         String indexName = shardId.getIndexName();
+         RelationName relationName = RelationName.fromIndexName(indexName);
+ 
+-        long sizeEstimate = sizeEstimateForUpdate(
+-            nodeCtx.tableStats().getStats(relationName),
++        long sizeEstimate = nodeCtx.tableStats().estimatedSizePerRow(
+             nodeCtx.schemas().getTableInfo(relationName)
+         );
+         ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
+@@ -596,7 +595,7 @@ public class ProjectionToProjectorVisitor
+                     requiredVersion == null ? Versions.MATCH_ANY : requiredVersion,
+                     SequenceNumbers.UNASSIGNED_SEQ_NO,
+                     SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
+-                    sizeEstimate
++                    projection.fullDocSizeEstimate()
+                 );
+             },
+             (req, resp) -> elasticsearchClient.execute(ShardUpsertAction.INSTANCE, req).whenComplete(resp),
+```
+**server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java b/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java
+index 880bb53eee..609329705e 100644
+--- a/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java
++++ b/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java
+@@ -76,8 +76,7 @@ public final class InsertFromSubQueryPlanner {
+             statement.clusteredBySymbol(),
+             Settings.EMPTY,
+             statement.tableInfo().isPartitioned(),
+-            outputs,
+-            statement.outputs() == null ? List.of() : statement.outputs()
++            outputs
+         );
+         LogicalPlan plannedSubQuery = logicalPlanner.plan(
+             statement.subQueryRelation(),
+```
+**server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
+index 14f14396d5..4ca5c218ad 100644
+--- a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
++++ b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
+@@ -276,7 +276,9 @@ public final class UpdatePlanner {
+             assignmentSources,
+             outputSymbols,
+             returnValues == null ? null : returnValues.toArray(new Symbol[0]),
+-            null);
++            null,
++            plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)
++        );
+ 
+         WhereClause where = detailedQuery.toBoundWhereClause(
+             tableInfo, params, subQueryResults, plannerCtx.transactionContext(), plannerCtx.nodeContext(), plannerCtx.clusterState().metadata());
+```
+**server/src/main/java/io/crate/planner/operators/InsertFromValues.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
+index 3204716803..284b524195 100644
+--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
++++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
+@@ -477,7 +477,8 @@ public class InsertFromValues implements LogicalPlan {
+                 autoGeneratedTimestamp,
+                 writerProjection.allTargetColumns().toArray(Reference[]::new),
+                 insertValues.materialize(),
+-                onConflictAssignments
++                onConflictAssignments,
++                0
+             );
+ 
+         var rowShardResolver = new RowShardResolver(
+```
+**server/src/main/java/io/crate/statistics/TableStats.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/statistics/TableStats.java b/server/src/main/java/io/crate/statistics/TableStats.java
+index b7fd9e6668..d513669380 100644
+--- a/server/src/main/java/io/crate/statistics/TableStats.java
++++ b/server/src/main/java/io/crate/statistics/TableStats.java
+@@ -23,6 +23,7 @@ package io.crate.statistics;
+ 
+ import io.crate.metadata.RelationName;
+ 
++import io.crate.metadata.table.TableInfo;
+ import java.util.HashMap;
+ import java.util.Map;
+ import java.util.Set;
+@@ -62,6 +63,21 @@ public class TableStats {
+         return tableStats.getOrDefault(relationName, Stats.EMPTY).averageSizePerRowInBytes();
+     }
+ 
++    /**
++     * Returns an estimation (avg) size of each row of the table in bytes or if no stats are available
++     * for the given table an estimate (avg) based on the column types of the table.
++     */
++    public long estimatedSizePerRow(TableInfo tableInfo) {
++        Stats stats = tableStats.get(tableInfo.ident());
++        if (stats == null) {
++            // if stats are not available we fall back to estimate the size based on
++            // column types. Therefore we need to get the column information.
++            return Stats.EMPTY.estimateSizeForColumns(tableInfo.columns());
++        } else {
++            return stats.averageSizePerRowInBytes();
++        }
++    }
++
+     public Iterable<ColumnStatsEntry> statsEntries() {
+         Set<Map.Entry<RelationName, Stats>> entries = tableStats.entrySet();
+         return () -> entries.stream()
+```
 
 ## Attempt #3
 
 ### ReAct Agent Actions
+- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `manage_todo`
+```json
+{
+  "action": "add",
+  "task": "Read file head imports to verify removal of unused imports"
+}
+```
 - **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `read_file_window`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "center_line": 40,
-  "radius": 20
+  "center_line": 50,
+  "radius": 10
 }
 ```
 - **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `edit_file`
@@ -647,7 +1701,7 @@ index b4ce983f2e..28cb56e076 100644
 {
   "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
   "center_line": 320,
-  "radius": 20
+  "radius": 15
 }
 ```
 - **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `edit_file`
@@ -662,48 +1716,16 @@ index b4ce983f2e..28cb56e076 100644
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "center_line": 350,
-  "radius": 20
+  "center_line": 360,
+  "radius": 15
 }
 ```
 - **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `edit_file`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "old_string": "        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n                    DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                    usedBytes += valueType.valueBytes(values[i]);\n                }\n            }\n            if (onConflictAssignments != null) {\n                for (var assignment : onConflictAssignments) {\n                    usedBytes += assignment.ramBytesUsed();\n                }\n            }\n            return new Item(\n                id,\n                null,\n                pkValues,\n                Translog.UNSET_AUTO_GENERATED_TIMESTAMP,\n                usedBytes\n            );\n        }",
-  "new_string": "        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n                    DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                    usedBytes += valueType.valueBytes(values[i]);\n                }\n            }\n            if (onConflictAssignments != null) {\n                usedBytes += fullDocSizeEstimate;\n                for (var assignment : onConflictAssignments) {\n                    usedBytes += assignment.ramBytesUsed();\n                }\n            }\n            return new Item(\n                id,\n                null,\n                pkValues,\n                Translog.UNSET_AUTO_GENERATED_TIMESTAMP,\n                usedBytes\n            );\n        }"
-}
-```
-- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "center_line": 350,
-  "radius": 40
-}
-```
-- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `edit_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "old_string": "        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n                    DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                    usedBytes += valueType.valueBytes(values[i]);\n                }\n            }\n            if (onConflictAssignments != null) {\n                for (var assignment : onConflictAssignments) {\n                    usedBytes += assignment.ramBytesUsed();\n                }\n            }\n            return new Item(\n                id,\n                onConflictAssignments,\n                values,\n                Versions.MATCH_ANY,\n                SequenceNumbers.UNASSIGNED_SEQ_NO,\n                SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n                pkValues,\n                autoGeneratedTimestamp,\n                usedBytes\n            );\n        }",
-  "new_string": "        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n                    DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                    usedBytes += valueType.valueBytes(values[i]);\n                }\n            }\n            if (onConflictAssignments != null) {\n                usedBytes += fullDocSizeEstimate;\n                for (var assignment : onConflictAssignments) {\n                    usedBytes += assignment.ramBytesUsed();\n                }\n            }\n            return new Item(\n                id,\n                onConflictAssignments,\n                values,\n                Versions.MATCH_ANY,\n                SequenceNumbers.UNASSIGNED_SEQ_NO,\n                SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n                pkValues,\n                autoGeneratedTimestamp,\n                usedBytes\n            );\n        }"
-}
-```
-- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "center_line": 580,
-  "radius": 10
-}
-```
-- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `edit_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "old_string": "        public ShardUpsertRequest newRequest(ShardId shardId) {\n            return new ShardUpsertRequest(\n                shardId,\n                jobId,\n                continueOnError,\n                duplicateKeyAction,\n                sessionSettings,\n                assignmentsColumns,\n                missingAssignmentsColumns,\n                returnValues\n            ).timeout(timeout);\n        }",
-  "new_string": "        public ShardUpsertRequest newRequest(ShardId shardId) {\n            return new ShardUpsertRequest(\n                shardId,\n                jobId,\n                continueOnError,\n                duplicateKeyAction,\n                sessionSettings,\n                assignmentsColumns,\n                missingAssignmentsColumns,\n                returnValues\n            ).timeout(timeout);\n        }\n\n        // Add fullDocSizeEstimate to newRequest if needed in future"
+  "old_string": "        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n                    DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                    usedBytes += valueType.valueBytes(values[i]);\n                }\n            }\n            if (onConflictAssignments != null) {\n                for (var assignment : onConflictAssignments) {\n                    usedBytes += assignment.ramBytesUsed();\n                }\n            }\n            return new Item(\n                id,\n                onConflictAssignments,\n                values,",
+  "new_string": "        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n                    DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                    usedBytes += valueType.valueBytes(values[i]);\n                }\n            }\n            if (onConflictAssignments != null) {\n                usedBytes += fullDocSizeEstimate;\n                for (var assignment : onConflictAssignments) {\n                    usedBytes += assignment.ramBytesUsed();\n                }\n            }\n            return new Item(\n                id,\n                onConflictAssignments,\n                values, "
 }
 ```
 - **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `check_java_syntax`
@@ -721,7 +1743,810 @@ index b4ce983f2e..28cb56e076 100644
 - **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `verify_guidelines`
 ```json
 {
-  "diff_text": "diff --git a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\nindex b4ce983f2e..2a26995026 100644\n--- a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\n+++ b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\n@@ -47,8 +47,7 @@ import io.crate.expression.symbol.Symbol;\n import io.crate.expression.symbol.Symbols;\n import io.crate.metadata.Reference;\n import io.crate.metadata.settings.SessionSettings;\n-import io.crate.metadata.table.TableInfo;\n-import io.crate.statistics.Stats;\n+\n import io.crate.types.DataType;\n \n public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, ShardUpsertRequest.Item> {\n@@ -309,14 +308,16 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S\n          */\n         private transient long usedBytes = -1L;\n \n+        /// @param fullDocSizeEstimate the expected number of bytes\n+        /// the full document has when loaded from disk\n         public static Item forUpdate(String id,\n                                      Symbol[] assignments,\n                                      long requiredVersion,\n                                      long seqNo,\n                                      long primaryTerm,\n-                                     long sizeEstimate) {\n+                                     long fullDocSizeEstimate) {\n             long usedBytes = SHALLOW_SIZE;\n-            usedBytes += sizeEstimate;\n+            usedBytes += fullDocSizeEstimate;\n             usedBytes += RamUsageEstimator.sizeOf(id);\n             for (var assignment : assignments) {\n                 usedBytes += assignment.ramBytesUsed();\n             }\n             return new Item(\n                 id,\n                 assignments,\n                 null,\n                 requiredVersion,\n                 seqNo,\n                 primaryTerm,\n                 List.of(),\n                 Translog.UNSET_AUTO_GENERATED_TIMESTAMP,\n                 usedBytes\n             );\n         }\n \n+        /// @param fullDocSizeEstimate the expected number of bytes\n+        /// the full document has when loaded from disk\n         public static Item forInsert(String id,\n                                      List<String> pkValues,\n                                      long autoGeneratedTimestamp,\n                                      @Nullable Reference[] insertColumns,\n                                      @Nullable Object[] values,\n-                                     @Nullable Symbol[] onConflictAssignments) {\n+                                     @Nullable Symbol[] onConflictAssignments,\n+                                     long fullDocSizeEstimate) {\n             long usedBytes = SHALLOW_SIZE;\n             usedBytes += RamUsageEstimator.sizeOf(id);\n             for (String pkValue : pkValues) {\n                 usedBytes += RamUsageEstimator.sizeOf(pkValue);\n             }\n             if (values != null) {\n                 assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                 for (int i = 0; i < values.length; i++) {\n                     DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                     usedBytes += valueType.valueBytes(values[i]);\n                 }\n             }\n             if (onConflictAssignments != null) {\n+                usedBytes += fullDocSizeEstimate;\n                 for (var assignment : onConflictAssignments) {\n                     usedBytes += assignment.ramBytesUsed();\n                 }\n             }\n             return new Item(\n                 id,\n                 onConflictAssignments,\n                 values,\n                 Versions.MATCH_ANY,\n                 SequenceNumbers.UNASSIGNED_SEQ_NO,\n                 SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n                 pkValues,\n                 autoGeneratedTimestamp,\n                 usedBytes\n             );\n         }\n \n         // Add fullDocSizeEstimate to newRequest if needed in future\n     }\n \n }\n"
+  "diff_text": "diff --git a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\nindex b4ce983f2e..ccfd011f93 100644\n--- a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\n+++ b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\n@@ -47,8 +47,7 @@ import io.crate.expression.symbol.Symbol;\n import io.crate.expression.symbol.Symbols;\n import io.crate.metadata.Reference;\n import io.crate.metadata.settings.SessionSettings;\n-import io.crate.metadata.table.TableInfo;\n-import io.crate.statistics.Stats;\n+\n import io.crate.types.DataType;\n \n public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, ShardUpsertRequest.Item> {\n@@ -309,14 +308,16 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S\n          */\n         private transient long usedBytes = -1L;\n \n+        /// @param fullDocSizeEstimate the expected number of bytes\n+        /// the full document has when loaded from disk\n         public static Item forUpdate(String id,\n                                      Symbol[] assignments,\n                                      long requiredVersion,\n                                      long seqNo,\n                                      long primaryTerm,\n-                                     long sizeEstimate) {\n+                                     long fullDocSizeEstimate) {\n             long usedBytes = SHALLOW_SIZE;\n-            usedBytes += sizeEstimate;\n+            usedBytes += fullDocSizeEstimate;\n             usedBytes += RamUsageEstimator.sizeOf(id);\n             for (var assignment : assignments) {\n                 usedBytes += assignment.ramBytesUsed();\n             }\n             return new Item(\n                 id,\n                 assignments,\n                 null,\n                 requiredVersion,\n                 seqNo,\n                 primaryTerm,\n                 List.of(),\n                 Translog.UNSET_AUTO_GENERATED_TIMESTAMP,\n                 usedBytes\n             );\n         }\n \n+        /// @param fullDocSizeEstimate the expected number of bytes\n+        /// the full document has when loaded from disk\n         public static Item forInsert(String id,\n                                      List<String> pkValues,\n                                      long autoGeneratedTimestamp,\n                                      @Nullable Reference[] insertColumns,\n                                      @Nullable Object[] values,\n-                                     @Nullable Symbol[] onConflictAssignments) {\n+                                     @Nullable Symbol[] onConflictAssignments,\n+                                     long fullDocSizeEstimate) {\n             long usedBytes = SHALLOW_SIZE;\n             usedBytes += RamUsageEstimator.sizeOf(id);\n             for (String pkValue : pkValues) {\n                 usedBytes += RamUsageEstimator.sizeOf(pkValue);\n             }\n             if (values != null) {\n                 assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                 for (int i = 0; i < values.length; i++) {\n                     DataType<Object> valueType = (DataType<Object>) insertColumns[i].valueType();\n                     usedBytes += valueType.valueBytes(values[i]);\n                 }\n             }\n             if (onConflictAssignments != null) {\n+                usedBytes += fullDocSizeEstimate;\n                 for (var assignment : onConflictAssignments) {\n                     usedBytes += assignment.ramBytesUsed();\n                 }\n             }\n             return new Item(\n                 id,\n                 onConflictAssignments,\n-                values,\n+                values, \n                 Versions.MATCH_ANY,\n                 SequenceNumbers.UNASSIGNED_SEQ_NO,\n                 SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 20,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 80,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 90,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 270,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 260,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 250,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 94,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `find_method_definitions`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "symbol": "ColumnIndexWriterProjection(StreamInput)"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `find_method_definitions`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "symbol": "ColumnIndexWriterProjection"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `grep_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "search_text": "ColumnIndexWriterProjection"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 94,
+  "radius": 40
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 134,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 155,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 180,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 200,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 220,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "center_line": 280,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "old_string": "    private final List<? extends Symbol> outputs;",
+  "new_string": "    private final List<? extends Symbol> outputs;\n\n    private final long fullDocSizeEstimate;",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+  "old_string": "                                       boolean autoCreateIndices,\n                                       List<? extends Symbol> outputs,\n                                       List<Symbol> returnValues) {\n",
+  "new_string": "                                       boolean autoCreateIndices,\n                                       List<? extends Symbol> outputs,\n                                       List<Symbol> returnValues,\n                                       long fullDocSizeEstimate) {\n",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 60,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 70,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 200,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 50,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 10,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 100,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 150,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 170,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 195,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 65,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "old_string": "    @Nullable\n    private Long requiredVersion;\n\n    public UpdateProjection(Symbol uidSymbol,\n                            String[] assignmentsColumns,\n                            Symbol[] assignments,\n                            Symbol[] outputs,\n                            @Nullable Symbol[] returnValues,\n                            @Nullable Long requiredVersion) {\n        this.uidSymbol = uidSymbol;",
+  "new_string": "    @Nullable\n    private Long requiredVersion;\n\n    private final long fullDocSizeEstimate;\n\n    public UpdateProjection(Symbol uidSymbol,\n                            String[] assignmentsColumns,\n                            Symbol[] assignments,\n                            Symbol[] outputs,\n                            @Nullable Symbol[] returnValues,\n                            @Nullable Long requiredVersion,\n                            long fullDocSizeEstimate) {\n        this.uidSymbol = uidSymbol;",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "old_string": "    public UpdateProjection(StreamInput in) throws IOException {",
+  "new_string": "        this.fullDocSizeEstimate = fullDocSizeEstimate;\n    public UpdateProjection(StreamInput in) throws IOException {"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "old_string": "        if (requiredVersion == 0) {\n            requiredVersion = null;\n        }\n        if (in.getVersion().onOrAfter(Version.V_4_2_0)) {\n            int outputSize = in.readVInt();\n            outputs = new Symbol[outputSize];\n            for (int i = 0; i < outputSize; i++) {\n                outputs[i] = Symbol.fromStream(in);\n            }\n            int returnValuesSize = in.readVInt();\n            if (returnValuesSize > 0) {\n                returnValues = new Symbol[returnValuesSize];\n                for (int i = 0; i < returnValuesSize; i++) {\n                    returnValues[i] = Symbol.fromStream(in);\n                }\n            }\n        } else {\n            //Outputs should never be null and for BwC reasons\n            //the default value in pre 4.1 was a long for a count\n            outputs = new Symbol[]{new InputColumn(0, DataTypes.LONG)};\n        }",
+  "new_string": "        if (requiredVersion == 0) {\n            requiredVersion = null;\n        }\n        if (in.getVersion().onOrAfter(Version.V_4_2_0)) {\n            int outputSize = in.readVInt();\n            outputs = new Symbol[outputSize];\n            for (int i = 0; i < outputSize; i++) {\n                outputs[i] = Symbol.fromStream(in);\n            }\n            int returnValuesSize = in.readVInt();\n            if (returnValuesSize > 0) {\n                returnValues = new Symbol[returnValuesSize];\n                for (int i = 0; i < returnValuesSize; i++) {\n                    returnValues[i] = Symbol.fromStream(in);\n                }\n            }\n        } else {\n            //Outputs should never be null and for BwC reasons\n            //the default value in pre 4.1 was a long for a count\n            outputs = new Symbol[]{new InputColumn(0, DataTypes.LONG)};\n        }\n        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n            this.fullDocSizeEstimate = in.readLong();\n        } else {\n            this.fullDocSizeEstimate = 0;\n        }"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "old_string": "    public Symbol uidSymbol() {\n        return uidSymbol;\n    }",
+  "new_string": "    public long fullDocSizeEstimate() {\n        return fullDocSizeEstimate;\n    }\n\n    public Symbol uidSymbol() {\n        return uidSymbol;\n    }"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "old_string": "                out.writeVInt(0);",
+  "new_string": "                out.writeVInt(0);\n        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {\n            out.writeLong(fullDocSizeEstimate);\n        }"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "center_line": 70,
+  "radius": 5
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+  "old_string": "        this.requiredVersion = requiredVersion;\n    }\n\n        this.fullDocSizeEstimate = fullDocSizeEstimate;\n    public UpdateProjection(StreamInput in) throws IOException {",
+  "new_string": "        this.requiredVersion = requiredVersion;\n        this.fullDocSizeEstimate = fullDocSizeEstimate;\n    }\n\n    public UpdateProjection(StreamInput in) throws IOException {"
+}
+```
+- **server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "center_line": 110,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "center_line": 120,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "center_line": 119,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+  "center_line": 330,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+  "center_line": 320,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+  "center_line": 350,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+  "center_line": 360,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+  "center_line": 370,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "center_line": 118,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "old_string": "    InputRow insertValues = new InputRow(insertInputs);\n    ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(\n        id,\n        pkValues,\n        autoGeneratedTimestamp,\n        insertColumns,\n        insertValues.materialize(),\n        onConflictAssignments\n    );\n",
+  "new_string": "    InputRow insertValues = new InputRow(insertInputs);\n    ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(\n        id,\n        pkValues,\n        autoGeneratedTimestamp,\n        insertColumns,\n        insertValues.materialize(),\n        onConflictAssignments,\n        0\n    );\n"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "center_line": 119,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "old_string": "        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(\n            id,\n            pkValues,\n            autoGeneratedTimestamp,\n            insertColumns,\n            insertValues.materialize(),\n            onConflictAssignments\n        );",
+  "new_string": "        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(\n            id,\n            pkValues,\n            autoGeneratedTimestamp,\n            insertColumns,\n            insertValues.materialize(),\n            onConflictAssignments,\n            0\n        );"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `insert_import`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
+  "import_statement": "io.crate.execution.dml.upsert.ShardUpsertRequest"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java\nindex 2825a9c1fe..18ae293d75 100644\n--- a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java\n+++ b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java\n@@ -122,7 +122,8 @@ public class ColumnIndexWriterProjector implements Projector {\n             autoGeneratedTimestamp,\n             insertColumns,\n             insertValues.materialize(),\n-            onConflictAssignments\n+            onConflictAssignments,\n+            0\n         );\n \n         var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();\n"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "center_line": 120,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "center_line": 125,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "center_line": 126,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `get_exact_lines`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "start_line": 119,
+  "end_line": 127
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
+  "old_string": "        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(\n            id,\n            pkValues,\n            autoGeneratedTimestamp,\n            missingAssignmentsColumns,\n            new Object[]{source.value()},\n            null\n        );",
+  "new_string": "        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(\n            id,\n            pkValues,\n            autoGeneratedTimestamp,\n            missingAssignmentsColumns,\n            new Object[]{source.value()},\n            null,\n            0\n        );",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java\nindex 24cf0ec297..3668fe0214 100644\n--- a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java\n+++ b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java\n@@ -123,7 +123,8 @@ public class IndexWriterProjector implements Projector {\n             autoGeneratedTimestamp,\n             missingAssignmentsColumns,\n             new Object[]{source.value()},\n-            null\n+            null,\n+            0\n         );\n \n         Predicate<UpsertResults> earlyTerminationCondition = results -> failFast && results.containsErrors();\n"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 560,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 595,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 590,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 540,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 550,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 560,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 560,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 600,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "center_line": 590,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "old_string": "        // Get Stats to improve ram estimation for the update items\n        assert shardId != null : \"ShardId must be provided for updates\";\n\n        String indexName = shardId.getIndexName();\n        RelationName relationName = RelationName.fromIndexName(indexName);\n\n        long sizeEstimate = sizeEstimateForUpdate(\n            nodeCtx.tableStats().getStats(relationName),\n            nodeCtx.schemas().getTableInfo(relationName)\n        );",
+  "new_string": "        ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(\n            context.txnCtx.sessionSettings(),\n            ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),\n            ShardUpsertRequest.DuplicateKeyAction.UPDATE_OR_FAIL,\n            true,\n            projection.assignmentsColumns(),\n            null,\n            projection.returnValues(),\n            context.jobId\n        );"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "old_string": "                    SequenceNumbers.UNASSIGNED_SEQ_NO,\n                    SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n                    sizeEstimate\n                );",
+  "new_string": "                    SequenceNumbers.UNASSIGNED_SEQ_NO,\n                    SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n                    projection.fullDocSizeEstimate()\n                );"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+  "old_string": "            projection.returnValues(),\n            context.jobId\n        );",
+  "new_string": "            projection.returnValues(),\n            context.jobId,\n            projection.fullDocSizeEstimate()\n        );"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java b/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java\nindex d610fbe3c8..9e46ee1e9f 100644\n--- a/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java\n+++ b/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java\n@@ -530,7 +530,8 @@ public class ProjectionToProjectorVisitor\n             projection.bulkActions(),\n             projection.autoCreateIndices(),\n             projection.returnValues(),\n-            context.jobId\n+            context.jobId,\n+            projection.fullDocSizeEstimate()\n         );\n     }\n \n@@ -556,15 +557,15 @@ public class ProjectionToProjectorVisitor\n         Context context, UpdateProjection projection,\n         Collector<ShardResponse, A, Iterable<Row>> collector) {\n \n-        // Get Stats to improve ram estimation for the update items\n-        assert shardId != null : \"ShardId must be provided for updates\";\n-\n-        String indexName = shardId.getIndexName();\n-        RelationName relationName = RelationName.fromIndexName(indexName);\n-\n-        long sizeEstimate = sizeEstimateForUpdate(\n-            nodeCtx.tableStats().getStats(relationName),\n-            nodeCtx.schemas().getTableInfo(relationName)\n+        ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(\n+            context.txnCtx.sessionSettings(),\n+            ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),\n+            ShardUpsertRequest.DuplicateKeyAction.UPDATE_OR_FAIL,\n+            true,\n+            projection.assignmentsColumns(),\n+            null,\n+            projection.returnValues(),\n+            context.jobId\n         );\n-        ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(\n-            context.txnCtx.sessionSettings(),\n-            ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),\n-            ShardUpsertRequest.DuplicateKeyAction.UPDATE_OR_FAIL,\n-            true,\n-            projection.assignmentsColumns(),\n-            null,\n-            projection.returnValues(),\n-            context.jobId\n-        );\n-        \n-        return new ShardDMLExecutor<>(\n-            context.jobId,\n-            ShardDMLExecutor.DEFAULT_BULK_SIZE,\n-            threadPool.scheduler(),\n-            threadPool.executor(ThreadPool.Names.SEARCH),\n-            resolveUidCollectExpression(context.txnCtx, projection.uidSymbol()),\n-            clusterService,\n-            context.ramAccounting,\n-            circuitBreakerService.getBreaker(HierarchyCircuitBreakerService.QUERY),\n-            nodeJobsCounter,\n-            () -> builder.newRequest(shardId),\n-            id -> {\n-                Long requiredVersion = projection.requiredVersion();\n-                return ShardUpsertRequest.Item.forUpdate(\n-                    id,\n-                    projection.assignments(),\n-                    requiredVersion == null ? Versions.MATCH_ANY : requiredVersion,\n-                    SequenceNumbers.UNASSIGNED_SEQ_NO,\n-                    SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n-                    sizeEstimate\n-                );\n-            },\n-            (req, resp) -> elasticsearchClient.execute(ShardUpsertAction.INSTANCE, req).whenComplete(resp),\n-            collector);\n-    }\n+        \n+        return new ShardDMLExecutor<>(\n+            context.jobId,\n+            ShardDMLExecutor.DEFAULT_BULK_SIZE,\n+            threadPool.scheduler(),\n+            threadPool.executor(ThreadPool.Names.SEARCH),\n+            resolveUidCollectExpression(context.txnCtx, projection.uidSymbol()),\n+            clusterService,\n+            context.ramAccounting,\n+            circuitBreakerService.getBreaker(HierarchyCircuitBreakerService.QUERY),\n+            nodeJobsCounter,\n+            () -> builder.newRequest(shardId),\n+            id -> {\n+                Long requiredVersion = projection.requiredVersion();\n+                return ShardUpsertRequest.Item.forUpdate(\n+                    id,\n+                    projection.assignments(),\n+                    requiredVersion == null ? Versions.MATCH_ANY : requiredVersion,\n+                    SequenceNumbers.UNASSIGNED_SEQ_NO,\n+                    SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n+                    projection.fullDocSizeEstimate()\n+                );\n+            },\n+            (req, resp) -> elasticsearchClient.execute(ShardUpsertAction.INSTANCE, req).whenComplete(resp),\n+            collector);\n+    }\n"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java",
+  "center_line": 475,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java",
+  "center_line": 470,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java",
+  "center_line": 460,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java",
+  "center_line": 40,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java",
+  "center_line": 80,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java",
+  "old_string": "        ColumnIndexWriterProjection indexWriterProjection = new ColumnIndexWriterProjection(\n            statement.tableInfo().ident(),\n            null,\n            statement.tableInfo().primaryKey(),\n            statement.columns(),\n            statement.isIgnoreDuplicateKeys(),\n            statement.onDuplicateKeyAssignments(),\n            statement.primaryKeySymbols(),\n            statement.partitionedBySymbols(),\n            statement.tableInfo().clusteredBy(),\n            statement.clusteredBySymbol(),\n            Settings.EMPTY,\n            statement.tableInfo().isPartitioned(),\n            outputs,\n            statement.outputs() == null ? List.of() : statement.outputs()\n        );",
+  "new_string": "        ColumnIndexWriterProjection indexWriterProjection = new ColumnIndexWriterProjection(\n            statement.tableInfo().ident(),\n            null,\n            statement.tableInfo().primaryKey(),\n            statement.columns(),\n            statement.isIgnoreDuplicateKeys(),\n            statement.onDuplicateKeyAssignments(),\n            statement.primaryKeySymbols(),\n            statement.partitionedBySymbols(),\n            statement.tableInfo().clusteredBy(),\n            statement.clusteredBySymbol(),\n            Settings.EMPTY,\n            statement.tableInfo().isPartitioned(),\n            outputs,\n            statement.outputs() == null ? List.of() : statement.outputs(),\n            plannerContext.nodeContext().tableStats().estimatedSizePerRow(statement.tableInfo())\n        );",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java b/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java\nindex 880bb53eee..fe02d2dc55 100644\n--- a/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java\n+++ b/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java\n@@ -77,7 +77,8 @@ public final class InsertFromSubQueryPlanner {\n             Settings.EMPTY,\n             statement.tableInfo().isPartitioned(),\n             outputs,\n-            statement.outputs() == null ? List.of() : statement.outputs()\n+            statement.outputs() == null ? List.of() : statement.outputs(),\n+            plannerContext.nodeContext().tableStats().estimatedSizePerRow(statement.tableInfo())\n         );\n         LogicalPlan plannedSubQuery = logicalPlanner.plan(\n             statement.subQueryRelation(),\n"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `manage_todo`
+```json
+{
+  "action": "add",
+  "task": "Analyze UpdatePlanner.java around UpdateProjection constructor call"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java",
+  "center_line": 280,
+  "radius": 15
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java",
+  "old_string": "        UpdateProjection updateProjection = new UpdateProjection(\n            new InputColumn(0, idReference.valueType()),\n            assignments.targetNames(),\n            assignmentSources,\n            outputSymbols,\n            returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n            null);",
+  "new_string": "        UpdateProjection updateProjection = new UpdateProjection(\n            new InputColumn(0, idReference.valueType()),\n            assignments.targetNames(),\n            assignmentSources,\n            outputSymbols,\n            returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n            null,\n            plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)\n        );"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java"
+}
+```
+- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java\nindex 14f14396d5..4ca5c218ad 100644\n--- a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java\n+++ b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java\n@@ -276,7 +276,9 @@ public final class UpdatePlanner {\n             assignmentSources,\n             outputSymbols,\n             returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n-            null);\n+            null,\n+            plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)\n+        );\n \n         WhereClause where = detailedQuery.toBoundWhereClause(\n             tableInfo, params, subQueryResults, plannerCtx.transactionContext(), plannerCtx.nodeContext(), plannerCtx.clusterState().metadata());\n"
+}
+```
+- **server/src/main/java/io/crate/planner/operators/InsertFromValues.java**: Called `manage_todo`
+```json
+{
+  "action": "add",
+  "task": "Read file window around line 480 in InsertFromValues.java to find the exact context of the constructor call with onConflictAssignments."
+}
+```
+- **server/src/main/java/io/crate/planner/operators/InsertFromValues.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+  "center_line": 480,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/planner/operators/InsertFromValues.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
+  "old_string": "                writerProjection.allTargetColumns().toArray(Reference[]::new),\n                insertValues.materialize(),\n                onConflictAssignments\n            );",
+  "new_string": "                writerProjection.allTargetColumns().toArray(Reference[]::new),\n                insertValues.materialize(),\n                onConflictAssignments,\n                0\n            );",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/planner/operators/InsertFromValues.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java"
+}
+```
+- **server/src/main/java/io/crate/planner/operators/InsertFromValues.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java"
+}
+```
+- **server/src/main/java/io/crate/planner/operators/InsertFromValues.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner.operators/InsertFromValues.java\nindex 3204716803..284b524195 100644\n--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n+++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java\n@@ -477,7 +477,8 @@ public class InsertFromValues implements LogicalPlan {\n                 autoGeneratedTimestamp,\n                 writerProjection.allTargetColumns().toArray(Reference[]::new),\n                 insertValues.materialize(),\n-                onConflictAssignments\n+                onConflictAssignments,\n+                0\n             );\n \n         var rowShardResolver = new RowShardResolver(\n"
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `grep_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "search_text": "estimatedSizePerRow"
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "center_line": 60,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "center_line": 20,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "old_string": "import java.util.HashMap;",
+  "new_string": "import io.crate.metadata.table.TableInfo;\nimport java.util.HashMap;",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "old_string": "    public Iterable<ColumnStatsEntry> statsEntries() {",
+  "new_string": "    /**\n     * Returns an estimation (avg) size of each row of the table in bytes or if no stats are available\n     * for the given table an estimate (avg) based on the column types of the table.\n     */\n    public long estimatedSizePerRow(TableInfo tableInfo) {\n        Stats stats = tableStats.get(tableInfo.ident());\n        if (stats == null) {\n            // if stats are not available we fall back to estimate the size based on\n            // column types. Therefore we need to get the column information.\n            return Stats.EMPTY.estimateSizeForColumns(tableInfo);\n        } else {\n            return stats.averageSizePerRowInBytes();\n        }\n    }\n\n    public Iterable<ColumnStatsEntry> statsEntries() {",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `check_java_syntax`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java"
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `git_diff_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java"
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `verify_guidelines`
+```json
+{
+  "diff_text": "diff --git a/server/src/main/java/io/crate/statistics/TableStats.java b/server/src/main/java/io/crate/statistics/TableStats.java\nindex b7fd9e6668..1794c60c41 100644\n--- a/server/src/main/java/io/crate/statistics/TableStats.java\n+++ b/server/src/main/java/io/crate/statistics/TableStats.java\n@@ -23,6 +23,7 @@ package io.crate.statistics;\n \n import io.crate.metadata.RelationName;\n \n+import io.crate.metadata.table.TableInfo;\n import java.util.HashMap;\n import java.util.Map;\n import java.util.Set;\n@@ -62,6 +63,21 @@ public class TableStats {\n         return tableStats.getOrDefault(relationName, Stats.EMPTY).averageSizePerRowInBytes();\n     }\n \n+    /**\n+     * Returns an estimation (avg) size of each row of the table in bytes or if no stats are available\n+     * for the given table an estimate (avg) based on the column types of the table.\n+     */\n+    public long estimatedSizePerRow(TableInfo tableInfo) {\n+        Stats stats = tableStats.get(tableInfo.ident());\n+        if (stats == null) {\n+            // if stats are not available we fall back to estimate the size based on\n+            // column types. Therefore we need to get the column information.\n+            return Stats.EMPTY.estimateSizeForColumns(tableInfo);\n+        } else {\n+            return stats.averageSizePerRowInBytes();\n+        }\n+    }\n+\n     public Iterable<ColumnStatsEntry> statsEntries() {\n         Set<Map.Entry<RelationName, Stats>> entries = tableStats.entrySet();\n         return () -> entries.stream()\n"
 }
 ```
 
@@ -729,7 +2554,7 @@ index b4ce983f2e..28cb56e076 100644
 **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java** [replace]
 ```diff
 diff --git a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
-index b4ce983f2e..2a26995026 100644
+index b4ce983f2e..ccfd011f93 100644
 --- a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
 +++ b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
 @@ -47,8 +47,7 @@ import io.crate.expression.symbol.Symbol;
@@ -786,13 +2611,271 @@ index b4ce983f2e..2a26995026 100644
                  for (var assignment : onConflictAssignments) {
                      usedBytes += assignment.ramBytesUsed();
                  }
-@@ -582,6 +587,8 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
-                 returnValues
-             ).timeout(timeout);
-         }
+@@ -371,7 +376,7 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
+             return new Item(
+                 id,
+                 onConflictAssignments,
+-                values,
++                values, 
+                 Versions.MATCH_ANY,
+                 SequenceNumbers.UNASSIGNED_SEQ_NO,
+                 SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
+```
+**server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java b/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
+index 5467841b09..6532848a24 100644
+--- a/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
++++ b/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
+@@ -52,6 +52,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+      */
+     private final List<? extends Symbol> outputs;
+ 
++    private final long fullDocSizeEstimate;
 +
-+        // Add fullDocSizeEstimate to newRequest if needed in future
+     /**
+      * List of values or expressions used to be retrieved from the inserted/updated rows,
+      * empty if no values should be returned. The types of the returnValues need
+@@ -77,7 +79,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+                                        Settings settings,
+                                        boolean autoCreateIndices,
+                                        List<? extends Symbol> outputs,
+-                                       List<Symbol> returnValues) {
++                                       List<Symbol> returnValues,
++                                       long fullDocSizeEstimate) {
+ 
+         super(relationName, partitionIdent, primaryKeys, clusteredByColumn, settings, primaryKeySymbols, autoCreateIndices);
+         assert partitionedBySymbols.stream().noneMatch(s -> s.any(Symbol.IS_COLUMN))
+```
+**server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java b/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
+index aafbae9fc4..427abc1e7c 100644
+--- a/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
++++ b/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
+@@ -52,12 +52,15 @@ public class UpdateProjection extends Projection {
+     @Nullable
+     private Long requiredVersion;
+ 
++    private final long fullDocSizeEstimate;
++
+     public UpdateProjection(Symbol uidSymbol,
+                             String[] assignmentsColumns,
+                             Symbol[] assignments,
+                             Symbol[] outputs,
+                             @Nullable Symbol[] returnValues,
+-                            @Nullable Long requiredVersion) {
++                            @Nullable Long requiredVersion,
++                            long fullDocSizeEstimate) {
+         this.uidSymbol = uidSymbol;
+         this.assignmentsColumns = assignmentsColumns;
+         this.assignments = assignments;
+@@ -66,6 +69,7 @@ public class UpdateProjection extends Projection {
+             : "Cannot operate on Reference, Field or SelectSymbol symbols: " + outputs;
+         this.outputs = outputs;
+         this.requiredVersion = requiredVersion;
++        this.fullDocSizeEstimate = fullDocSizeEstimate;
      }
  
- }
+     public UpdateProjection(StreamInput in) throws IOException {
+@@ -102,6 +106,15 @@ public class UpdateProjection extends Projection {
+             //the default value in pre 4.1 was a long for a count
+             outputs = new Symbol[]{new InputColumn(0, DataTypes.LONG)};
+         }
++        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {
++            this.fullDocSizeEstimate = in.readLong();
++        } else {
++            this.fullDocSizeEstimate = 0;
++        }
++    }
++
++    public long fullDocSizeEstimate() {
++        return fullDocSizeEstimate;
+     }
+ 
+     public Symbol uidSymbol() {
+@@ -205,6 +218,9 @@ public class UpdateProjection extends Projection {
+                 }
+             } else {
+                 out.writeVInt(0);
++        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
++            out.writeLong(fullDocSizeEstimate);
++        }
+             }
+         }
+     }
+```
+**server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
+index 2825a9c1fe..18ae293d75 100644
+--- a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
++++ b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
+@@ -122,7 +122,8 @@ public class ColumnIndexWriterProjector implements Projector {
+             autoGeneratedTimestamp,
+             insertColumns,
+             insertValues.materialize(),
+-            onConflictAssignments
++            onConflictAssignments,
++            0
+         );
+ 
+         var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();
+```
+**server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
+index 24cf0ec297..3668fe0214 100644
+--- a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
++++ b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
+@@ -123,7 +123,8 @@ public class IndexWriterProjector implements Projector {
+             autoGeneratedTimestamp,
+             missingAssignmentsColumns,
+             new Object[]{source.value()},
+-            null
++            null,
++            0
+         );
+ 
+         Predicate<UpsertResults> earlyTerminationCondition = results -> failFast && results.containsErrors();
+```
+**server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java b/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
+index d610fbe3c8..9e46ee1e9f 100644
+--- a/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
++++ b/server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java
+@@ -530,7 +530,8 @@ public class ProjectionToProjectorVisitor
+             projection.bulkActions(),
+             projection.autoCreateIndices(),
+             projection.returnValues(),
+-            context.jobId
++            context.jobId,
++            projection.fullDocSizeEstimate()
+         );
+     }
+ 
+@@ -556,15 +557,15 @@ public class ProjectionToProjectorVisitor
+         Context context, UpdateProjection projection,
+         Collector<ShardResponse, A, Iterable<Row>> collector) {
+ 
+-        // Get Stats to improve ram estimation for the update items
+-        assert shardId != null : "ShardId must be provided for updates";
+-
+-        String indexName = shardId.getIndexName();
+-        RelationName relationName = RelationName.fromIndexName(indexName);
+-
+-        long sizeEstimate = sizeEstimateForUpdate(
+-            nodeCtx.tableStats().getStats(relationName),
+-            nodeCtx.schemas().getTableInfo(relationName)
++        ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
++            context.txnCtx.sessionSettings(),
++            ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),
++            ShardUpsertRequest.DuplicateKeyAction.UPDATE_OR_FAIL,
++            true,
++            projection.assignmentsColumns(),
++            null,
++            projection.returnValues(),
++            context.jobId
+         );
+         ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
+             context.txnCtx.sessionSettings(),
+@@ -596,7 +597,7 @@ public class ProjectionToProjectorVisitor
+                     requiredVersion == null ? Versions.MATCH_ANY : requiredVersion,
+                     SequenceNumbers.UNASSIGNED_SEQ_NO,
+                     SequenceNumbers.UNASSIGNED_PRIMARY_TERM,
+-                    sizeEstimate
++                    projection.fullDocSizeEstimate()
+                 );
+             },
+             (req, resp) -> elasticsearchClient.execute(ShardUpsertAction.INSTANCE, req).whenComplete(resp),
+```
+**server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java b/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java
+index 880bb53eee..fe02d2dc55 100644
+--- a/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java
++++ b/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java
+@@ -77,7 +77,8 @@ public final class InsertFromSubQueryPlanner {
+             Settings.EMPTY,
+             statement.tableInfo().isPartitioned(),
+             outputs,
+-            statement.outputs() == null ? List.of() : statement.outputs()
++            statement.outputs() == null ? List.of() : statement.outputs(),
++            plannerContext.nodeContext().tableStats().estimatedSizePerRow(statement.tableInfo())
+         );
+         LogicalPlan plannedSubQuery = logicalPlanner.plan(
+             statement.subQueryRelation(),
+```
+**server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
+index 14f14396d5..4ca5c218ad 100644
+--- a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
++++ b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
+@@ -276,7 +276,9 @@ public final class UpdatePlanner {
+             assignmentSources,
+             outputSymbols,
+             returnValues == null ? null : returnValues.toArray(new Symbol[0]),
+-            null);
++            null,
++            plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)
++        );
+ 
+         WhereClause where = detailedQuery.toBoundWhereClause(
+             tableInfo, params, subQueryResults, plannerCtx.transactionContext(), plannerCtx.nodeContext(), plannerCtx.clusterState().metadata());
+```
+**server/src/main/java/io/crate/planner/operators/InsertFromValues.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
+index 3204716803..284b524195 100644
+--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
++++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
+@@ -477,7 +477,8 @@ public class InsertFromValues implements LogicalPlan {
+                 autoGeneratedTimestamp,
+                 writerProjection.allTargetColumns().toArray(Reference[]::new),
+                 insertValues.materialize(),
+-                onConflictAssignments
++                onConflictAssignments,
++                0
+             );
+ 
+         var rowShardResolver = new RowShardResolver(
+```
+**server/src/main/java/io/crate/statistics/TableStats.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/statistics/TableStats.java b/server/src/main/java/io/crate/statistics/TableStats.java
+index b7fd9e6668..1794c60c41 100644
+--- a/server/src/main/java/io/crate/statistics/TableStats.java
++++ b/server/src/main/java/io/crate/statistics/TableStats.java
+@@ -23,6 +23,7 @@ package io.crate.statistics;
+ 
+ import io.crate.metadata.RelationName;
+ 
++import io.crate.metadata.table.TableInfo;
+ import java.util.HashMap;
+ import java.util.Map;
+ import java.util.Set;
+@@ -62,6 +63,21 @@ public class TableStats {
+         return tableStats.getOrDefault(relationName, Stats.EMPTY).averageSizePerRowInBytes();
+     }
+ 
++    /**
++     * Returns an estimation (avg) size of each row of the table in bytes or if no stats are available
++     * for the given table an estimate (avg) based on the column types of the table.
++     */
++    public long estimatedSizePerRow(TableInfo tableInfo) {
++        Stats stats = tableStats.get(tableInfo.ident());
++        if (stats == null) {
++            // if stats are not available we fall back to estimate the size based on
++            // column types. Therefore we need to get the column information.
++            return Stats.EMPTY.estimateSizeForColumns(tableInfo);
++        } else {
++            return stats.averageSizePerRowInBytes();
++        }
++    }
++
+     public Iterable<ColumnStatsEntry> statsEntries() {
+         Set<Map.Entry<RelationName, Stats>> entries = tableStats.entrySet();
+         return () -> entries.stream()
 ```

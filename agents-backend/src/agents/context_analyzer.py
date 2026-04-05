@@ -82,7 +82,16 @@ def _is_java_code_file(path: str) -> bool:
     return p.endswith(".java") and not _looks_like_test(p)
 
 
-async def context_analyzer_node(state: AgentState, config) -> dict:
+JAVA_KEYWORDS = {
+    "abstract", "continue", "for", "new", "switch", "assert", "default", "if", "package", "synchronized",
+    "boolean", "do", "goto", "private", "this", "break", "double", "implements", "protected", "throw",
+    "byte", "else", "import", "public", "throws", "case", "enum", "instanceof", "return", "transient",
+    "catch", "extends", "int", "short", "try", "char", "final", "interface", "static", "void",
+    "class", "finally", "long", "strictfp", "volatile", "const", "float", "native", "super", "while",
+    "true", "false", "null"
+}
+
+async def context_analyzer_node(state: AgentState, config: dict = None) -> dict:
     print("Agent 1 (Context Analyzer): Deterministic blueprint generation...")
 
     patch_diff = state.get("patch_diff", "")
@@ -178,16 +187,32 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
             global_idx += 1
 
     dependent_apis: list[str] = []
+    # Only consider symbols that look like methods or classes from the added lines.
+    # Exclude common variable names and short symbols.
+    excluded_symbols = {
+        "if", "for", "while", "return", "new", "this", "super", "try", "catch", "throw",
+        "estimate", "estimation", "value", "item", "list", "map", "set", "string", "long", "int", "boolean",
+        "size", "count", "index", "result", "obj", "object", "symbol", "true", "false", "null"
+    }
+    
     for fc in patch_analysis or []:
         for ln in getattr(fc, "added_lines", []) or []:
             s = (ln or "").strip()
+            # Look for method calls: symbol(...)
             if "(" in s and ")" in s:
                 before_paren = s.split("(", 1)[0].strip().split()
                 if before_paren:
                     token = before_paren[-1]
-                    if token.isidentifier() and token not in dependent_apis:
+                    # Filter: must be identifier, not in JAVA_KEYWORDS, not in excluded, and > 4 chars
+                    if (
+                        token.isidentifier()
+                        and token not in JAVA_KEYWORDS
+                        and token.lower() not in excluded_symbols
+                        and len(token) > 4
+                        and token not in dependent_apis
+                    ):
                         dependent_apis.append(token)
-            if len(dependent_apis) >= 20:
+            if len(dependent_apis) >= 15:
                 break
 
     consolidated: SemanticBlueprint = {

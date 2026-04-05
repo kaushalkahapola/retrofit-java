@@ -104,7 +104,7 @@ def _extract_compiler_error_lines(raw_output: str, max_items: int = 16) -> list[
     i = 0
     while i < len(lines) and len(out) < max_items:
         line = lines[i]
-        if ": error:" not in line:
+        if ": error:" not in line and "[ERROR]" not in line:
             i += 1
             continue
 
@@ -142,6 +142,9 @@ def _extract_missing_symbols(raw_output: str, max_items: int = 24) -> list[str]:
     patterns = [
         r"symbol:\s*(?:class|method|variable)\s+([A-Za-z_][A-Za-z0-9_]*)",
         r"cannot find symbol\s+symbol:\s*(?:class|method|variable)\s+([A-Za-z_][A-Za-z0-9_]*)",
+        r"cannot find symbol\s+\[ERROR\]\s+symbol:\s*(?:class|method|variable)\s+([A-Za-z_][A-Za-z0-9_]*)",
+        r"location: class\s+([A-Za-z_][A-Za-z0-9_.]*)",
+        r"error: cannot find symbol\s+([A-Za-z_][A-Za-z0-9_]*)",
     ]
     for pat in patterns:
         for m in re.findall(pat, text, flags=re.IGNORECASE):
@@ -316,7 +319,7 @@ def _classify_apply_failure(raw_output: str) -> tuple[str, list[str], list[dict]
 def _classify_build_failure(
     raw_output: str,
     known_java_files: set[str] | None = None,
-) -> tuple[str, list[str], list[dict], str, list[str], list[str]]:
+) -> tuple[str, list[str], list[dict], str, list[str], list[str], list[str]]:
     """Deterministic build failure parser for retry routing and concise diagnostics."""
     text = str(raw_output or "")
     text_lower = text.lower()
@@ -366,6 +369,7 @@ def _classify_build_failure(
             reason,
             sorted(build_error_files),
             [],
+            concrete_errors,
         )
 
     if (
@@ -395,6 +399,7 @@ def _classify_build_failure(
             reason,
             sorted(build_error_files),
             missing_symbols,
+            concrete_errors,
         )
 
     diagnostics.append(
@@ -415,6 +420,7 @@ def _classify_build_failure(
         reason,
         sorted(build_error_files),
         missing_symbols,
+        concrete_errors,
     )
 
 
@@ -898,6 +904,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 analysis,
                 build_error_files,
                 missing_symbols,
+                concrete_errors,
             ) = _classify_build_failure(
                 build_res.get("output", ""),
                 known_java_files=known_java_files,
@@ -959,6 +966,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 "validation_retry_scope_reason": retry_scope_reason,
                 "validation_build_error_files": build_error_files,
                 "validation_build_missing_symbols": missing_symbols,
+                "validation_compiler_errors": concrete_errors,
                 "force_type_v_until_success": sticky_type_v,
                 "force_type_v_reason": sticky_reason,
                 "force_type_v_retry_files": sticky_scope_files,

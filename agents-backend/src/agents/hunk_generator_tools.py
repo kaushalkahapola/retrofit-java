@@ -26,6 +26,7 @@ from typing import Any, Optional
 from langchain_core.tools import StructuredTool
 from agents.claw_file_editor import edit_file as claw_edit_file, verify_edit_output
 from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_line
+from utils.java_ast_editor import JavaASTEditor
 
 
 MAX_READ_FILE_WINDOW_RADIUS = 50
@@ -993,6 +994,29 @@ class HunkGeneratorToolkit:
             return f"ERROR: {str(e)}"
         except Exception as e:
             return f"ERROR: Unexpected failure during edit: {str(e)}"
+
+    def find_java_method_ast(self, file_path: str, method_name: str) -> str:
+        """
+        Use Tree-sitter to find the exact source code of a Java method by name.
+        Returns the full method body including annotations and signature.
+
+        Use this tool when you need to replace an entire method or understand its
+        full structure before planning a TYPE_V adaptation.
+        """
+        editor = JavaASTEditor()
+        full_path = self._full_path(file_path)
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            root = editor.parse(content)
+            if not root:
+                return f"ERROR: Could not parse file '{file_path}'"
+            node = editor.find_method_declaration(root, method_name)
+            if not node:
+                return f"ERROR: Method '{method_name}' not found in '{file_path}'"
+            return editor.get_node_text(node, content)
+        except Exception as e:
+            return f"ERROR: {str(e)}"
 
     # ------------------------------------------------------------------
     # Tool 11: git_diff_file  (mechanically correct diff after edits)

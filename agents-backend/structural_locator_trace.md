@@ -78,6 +78,20 @@
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
 | 1 | propagation | `hunk_1` | `None` | 126–126 |
+### `server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java`
+
+**Hunks in this file**: 4
+
+**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java`
+
+**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
+
+| Hunk Idx | Role | Mainline Method | Target Method | Lines |
+|---|---|---|---|---|
+| 1 | propagation | `hunk_1` | `None` | 24–24 |
+| 2 | core_fix | `hunk_2` | `None` | 533–533 |
+| 3 | core_fix | `hunk_3` | `None` | 559–559 |
+| 4 | core_fix | `hunk_4` | `None` | 599–599 |
 ### `server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java`
 
 **Hunks in this file**: 1

@@ -58,14 +58,13 @@ MANDATORY TODO WORKFLOW (do in order):
 3) If surrounding context is effectively same, prefer same mainline edit logic.
 4) If blocked, identify blockers explicitly.
 5) Determine whether blockers can be solved with namespace-only changes (variable/method/api/signature renames) based on context.
-6) If namespace-only is insufficient, plan structural rewrite.
+6) If namespace-only is insufficient, plan structural rewrite (TYPE_V).
 
-Adaptation type definitions:
-- TYPE_I: same change, same location
-- TYPE_II: same change, different location
-- TYPE_III: same location + namespace changes needed
-- TYPE_IV: different location + namespace changes needed
-- TYPE_V: structural rewrite needed
+## TYPE_V Structural Rewrite Rules:
+- If a method signature changed (e.g. new parameter), you MUST use `find_java_method_ast` to get the full target method body.
+- When replacing a block, ensure `new_string` is a CLEAN replacement. 
+- AVOID double-pasting: DO NOT include the `old_string` inside the `new_string` if you are using `edit_type: replace`.
+- If you are adding a parameter to a method, replace the ENTIRE method signature line.
 
 Output JSON only with this schema:
 {
@@ -84,7 +83,8 @@ Output JSON only with this schema:
   "verification_result": "short status",
   "notes": "short reason",
   "surround_before_3": ["line1","line2","line3"],
-  "surround_after_3": ["line1","line2","line3"]
+  "surround_after_3": ["line1","line2","line3"],
+  "target_method_hint": "methodName"
 }
 
 Rules:
@@ -103,8 +103,9 @@ Your task is to produce ONE corrected operation that preserves semantic intent a
 Rules:
 - Be conservative and minimal.
 - Reuse existing target symbols and call chains.
-- old_string MUST be verbatim from target file.
-- Prefer deterministic anchor-based edits from provided candidates.
+- old_string MUST be verbatim from target file. Use `find_java_method_ast` to get method bodies.
+- AVOID double-pasting: DO NOT include `old_string` in `new_string` if using `edit_type: replace`.
+- If you are inserting after an anchor, `new_string` MUST include the anchor line and then the new code.
 - Return JSON only.
 
 Output schema:
@@ -2187,6 +2188,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     retry_files_raw = state.get("validation_retry_files") or []
     retry_hunks_raw = state.get("validation_retry_hunks") or []
     validation_error_context = str(state.get("validation_error_context") or "")
+    validation_compiler_errors = state.get("validation_compiler_errors") or []
     validation_failure_category = str(state.get("validation_failure_category") or "")
     validation_failed_stage = str(state.get("validation_failed_stage") or "")
     sticky_force_type_v = bool(state.get("force_type_v_until_success") or False)
@@ -2265,15 +2267,31 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     forced_scope_files: set[str] = set()
 
     truncated_failure_context = validation_error_context
-    if len(truncated_failure_context) > 2000:
-        truncated_failure_context = (
-            truncated_failure_context[:1200]
-            + "\n... [TRUNCATED] ...\n"
-            + truncated_failure_context[-700:]
+    if validation_compiler_errors:
+        truncated_failure_context += (
+            "\n\nCompiler Diagnostics:\n" + "\n".join(validation_compiler_errors[:12])
         )
 
+    if len(truncated_failure_context) > 3000:
+        truncated_failure_context = (
+            truncated_failure_context[:1800]
+            + "\n... [TRUNCATED] ...\n"
+            + truncated_failure_context[-1200:]
+        )
+
+    # Track files from dependency analyzer
+    synthetic_files = {
+        _normalize_path(p)
+        for p in (state.get("validation_retry_files") or [])
+        if _is_java_code_file(str(p)) and _normalize_path(p) not in {
+            _normalize_path(f) for f in raw_hunks_by_file.keys()
+        }
+    }
+    if synthetic_files:
+        print(f"Planning Agent: Detected {len(synthetic_files)} synthetic file(s) from dependency analysis.")
+
     for mainline_file, raw_hunks in (raw_hunks_by_file or {}).items():
-        normalized_mainline = str(mainline_file).replace("\\", "/").strip().lstrip("/")
+        normalized_mainline = _normalize_path(mainline_file)
         if not _is_java_code_file(normalized_mainline):
             continue
         if validation_attempts > 0 and retry_files and "<all>" not in retry_files:
@@ -2287,6 +2305,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
 
         mapped = mapped_target_context.get(mainline_file, [])
         for hidx, raw_hunk in enumerate(raw_hunks):
+            # ... (rest of the loop)
             if validation_attempts > 0 and retry_hunks and hidx not in retry_hunks:
                 continue
 
@@ -2583,9 +2602,36 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     )
     merged_plan: dict[str, list[dict[str, Any]]] = {**prev_hgp, **dict(plan)}
 
-    # Generate plan signature for retry loop dedup
-    import hashlib
+    # Process synthetic files (files identified as call-sites but not in the patch)
+    for synth_file in sorted(synthetic_files):
+        if synth_file in merged_plan:
+            continue
+        print(f"    Planning Agent: Generating adaptation plan for synthetic file {synth_file}")
+        # For synthetic files, we don't have a mainline hunk.
+        # We just want the ReAct agent to find the call-site and fix it.
+        merged_plan[synth_file] = [{
+            "hunk_index": -1, # Sentinel for synthetic
+            "target_file": synth_file,
+            "adaptation_type": "TYPE_V",
+            "edit_type": "replace",
+            "old_string": "", # Agent must find it
+            "new_string": "", # Agent must generate it
+            "verified": False,
+            "notes": "Synthetic file added by dependency analyzer due to signature drift.",
+            "base_adaptation_type": "TYPE_V",
+            "execution_type": "TYPE_V",
+            "location_match": False,
+            "surrounding_match": False,
+            "blockers": ["synthetic_dependency"],
+            "namespace_only_possible": False,
+            "required_invariants": [],
+            "required_symbols": [],
+            "must_preserve_symbols": [],
+            "chain_constraints": [],
+            "api_inventory": {}
+        }]
 
+    # Re-generate plan signature after adding synthetic files
     plan_json = json.dumps(merged_plan, sort_keys=True)
     plan_sig = hashlib.sha256(plan_json.encode("utf-8")).hexdigest()
     repeated_plan_detected = bool(

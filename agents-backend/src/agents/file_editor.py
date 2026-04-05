@@ -171,6 +171,14 @@ Example:
 
 **Special Rule for Multiple Edits in Same File**: If you have 3+ distinct edits for a single file, PLAN THE LINE NUMBERS FIRST, then execute bottom-to-top.
 
+## Efficiency & Multi-Hunk Speed
+If a file has 5+ hunks, do NOT read and edit them one by one. 
+1. Use `read_full_file` once to get the whole state.
+2. Identify ALL locations.
+3. Apply ALL edits in a single sequence of tool calls.
+4. Call `check_java_syntax` only after you've applied a batch of 2-3 logical changes, or at the very end if you are confident. 
+5. Minimize `read_file_window` calls if you already have the `read_full_file` output in your history.
+
 ## Fix Intent (Semantic Blueprint)
 {semantic_blueprint}
 
@@ -1802,8 +1810,8 @@ def _react_tool_budget_for_complexity(complexity: str) -> int:
     if c == "TRIVIAL":
         return 4
     if c == "STRUCTURAL":
-        return 10
-    return 24
+        return 40
+    return 60
 
 
 def _tool_call_signature(name: str, args: Any) -> str:
@@ -2096,7 +2104,13 @@ async def _run_react_edit_pass(
                     token_usage["estimated"] = True
 
         last_msg = response["messages"][-1]
-        print(f"    Agent 3: Agent finished. Last msg: {str(last_msg.content)[:100]}")
+        last_content = str(last_msg.content or "").strip()
+        print(f"    Agent 3: Agent finished. Last msg: {last_content[:100]}")
+
+        if "need more steps" in last_content.lower() or "sorry" in last_content.lower():
+            # If the agent gave up or hit a limit, we treat it as a failure.
+            # This prevents the 'no diff' success scenario when the budget is hit.
+            return False, f"react_agent_gave_up: {last_content[:200]}"
 
         for m in response.get("messages", []):
             if hasattr(m, "tool_calls") and m.tool_calls:
@@ -2301,7 +2315,12 @@ async def file_editor_node(state: AgentState, config) -> dict:
         for c in (code_changes or [])
     }
     synthetic_code_changes: list[dict[str, Any]] = []
-    for rf in sorted(build_retry_files_scope):
+    # Synthetic files from either build errors OR dependency analyzer
+    combined_synthetic_paths = set(build_retry_files_scope) | {
+        _normalize_rel_path(str(p)) for p in retry_files if p and p != "<all>"
+    }
+    
+    for rf in sorted(combined_synthetic_paths):
         if not rf or not rf.endswith(".java"):
             continue
         low = rf.lower()

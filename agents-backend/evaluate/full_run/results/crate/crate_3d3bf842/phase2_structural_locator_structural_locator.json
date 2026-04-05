@@ -239,6 +239,56 @@
         "anchor_strategy": "deterministic_realign"
       }
     ],
+    "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+        "target_method": null,
+        "start_line": 24,
+        "end_line": 24,
+        "code_snippet": " * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *   http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.execution.engine.pipeline;\n\nimport static io.crate.execution.dml.upsert.ShardUpsertRequest.Item.sizeEstimateForUpdate;\nimport static io.crate.execution.engine.pipeline.LimitAndOffset.NO_LIMIT;\nimport static io.crate.execution.engine.pipeline.LimitAndOffset.NO_OFFSET;\nimport static io.crate.planner.operators.InsertFromValues.checkConstraints;\n\nimport java.util.ArrayList;\nimport java.util.HashMap;\nimport java.util.List;\nimport java.util.Locale;\nimport java.util.Map;\nimport java.util.UUID;\nimport java.util.concurrent.ThreadPoolExecutor;\nimport java.util.function.BiConsumer;\nimport java.util.function.Consumer;\nimport java.util.function.Function;\nimport java.util.function.Predicate;\nimport java.util.function.Supplier;\nimport java.util.stream.Collector;\n\nimport org.elasticsearch.Version;\nimport org.elasticsearch.client.ElasticsearchClient;",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+        "target_method": null,
+        "start_line": 533,
+        "end_line": 533,
+        "code_snippet": "            threadPool.executor(ThreadPool.Names.SEARCH),\n            context.txnCtx,\n            nodeCtx,\n            state.metadata().settings(),\n            targetTableNumShards,\n            targetTableNumReplicas,\n            IndexName.createResolver(projection.tableIdent(), projection.partitionIdent(), partitionedByInputs),\n            elasticsearchClient,\n            projection.primaryKeys(),\n            projection.ids(),\n            projection.clusteredBy(),\n            projection.clusteredByIdent(),\n            projection.allTargetColumns(),\n            insertInputs,\n            ctx.expressions(),\n            projection.isIgnoreDuplicateKeys(),\n            projection.onDuplicateKeyAssignments(),\n            projection.bulkActions(),\n            projection.autoCreateIndices(),\n            projection.returnValues(),\n            context.jobId\n        );\n    }\n\n    @Override\n    public Projector visitFilterProjection(FilterProjection projection, Context context) {\n        Predicate<Row> rowFilter = RowFilter.create(context.txnCtx, inputFactory, projection.query());\n        return new FilterProjector(rowFilter);\n    }\n\n    @Override\n    public Projector visitUpdateProjection(final UpdateProjection projection, Context context) {\n        checkShardLevel(\"Update projection can only be executed on a shard\");\n        ShardDMLExecutor<?, ?, ?, ?> shardDMLExecutor;\n        if (projection.returnValues() == null) {\n            shardDMLExecutor = buildUpdateShardDMLExecutor(context, projection, ShardDMLExecutor.ROW_COUNT_COLLECTOR);\n        } else {\n            shardDMLExecutor = buildUpdateShardDMLExecutor(context, projection, ShardDMLExecutor.RESULT_ROW_COLLECTOR);\n        }\n        return new DMLProjector(shardDMLExecutor);\n    }",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "hunk_3",
+        "target_file": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+        "target_method": null,
+        "start_line": 559,
+        "end_line": 559,
+        "code_snippet": "        Predicate<Row> rowFilter = RowFilter.create(context.txnCtx, inputFactory, projection.query());\n        return new FilterProjector(rowFilter);\n    }\n\n    @Override\n    public Projector visitUpdateProjection(final UpdateProjection projection, Context context) {\n        checkShardLevel(\"Update projection can only be executed on a shard\");\n        ShardDMLExecutor<?, ?, ?, ?> shardDMLExecutor;\n        if (projection.returnValues() == null) {\n            shardDMLExecutor = buildUpdateShardDMLExecutor(context, projection, ShardDMLExecutor.ROW_COUNT_COLLECTOR);\n        } else {\n            shardDMLExecutor = buildUpdateShardDMLExecutor(context, projection, ShardDMLExecutor.RESULT_ROW_COLLECTOR);\n        }\n        return new DMLProjector(shardDMLExecutor);\n    }\n\n    private <A> ShardDMLExecutor<?, ?, A, ?> buildUpdateShardDMLExecutor(\n        Context context, UpdateProjection projection,\n        Collector<ShardResponse, A, Iterable<Row>> collector) {\n\n        // Get Stats to improve ram estimation for the update items\n        assert shardId != null : \"ShardId must be provided for updates\";\n\n        String indexName = shardId.getIndexName();\n        RelationName relationName = RelationName.fromIndexName(indexName);\n\n        long sizeEstimate = sizeEstimateForUpdate(\n            nodeCtx.tableStats().getStats(relationName),\n            nodeCtx.schemas().getTableInfo(relationName)\n        );\n        ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(\n            context.txnCtx.sessionSettings(),\n            ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings),\n            ShardUpsertRequest.DuplicateKeyAction.UPDATE_OR_FAIL,\n            true,\n            projection.assignmentsColumns(),\n            null,\n            projection.returnValues(),\n            context.jobId\n        );\n",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "hunk_4",
+        "target_file": "server/src/main/java/io/crate/execution/engine/pipeline/ProjectionToProjectorVisitor.java",
+        "target_method": null,
+        "start_line": 599,
+        "end_line": 599,
+        "code_snippet": "\n        return new ShardDMLExecutor<>(\n            context.jobId,\n            ShardDMLExecutor.DEFAULT_BULK_SIZE,\n            threadPool.scheduler(),\n            threadPool.executor(ThreadPool.Names.SEARCH),\n            resolveUidCollectExpression(context.txnCtx, projection.uidSymbol()),\n            clusterService,\n            context.ramAccounting,\n            circuitBreakerService.getBreaker(HierarchyCircuitBreakerService.QUERY),\n            nodeJobsCounter,\n            () -> builder.newRequest(shardId),\n            id -> {\n                Long requiredVersion = projection.requiredVersion();\n                return ShardUpsertRequest.Item.forUpdate(\n                    id,\n                    projection.assignments(),\n                    requiredVersion == null ? Versions.MATCH_ANY : requiredVersion,\n                    SequenceNumbers.UNASSIGNED_SEQ_NO,\n                    SequenceNumbers.UNASSIGNED_PRIMARY_TERM,\n                    sizeEstimate\n                );\n            },\n            (req, resp) -> elasticsearchClient.execute(ShardUpsertAction.INSTANCE, req).whenComplete(resp),\n            collector);\n    }\n\n    @Override\n    public Projector visitDeleteProjection(DeleteProjection projection, Context context) {\n        checkShardLevel(\"Delete projection can only be executed on a shard\");\n        TimeValue reqTimeout = ShardingUpsertExecutor.BULK_REQUEST_TIMEOUT_SETTING.get(settings);\n\n        ShardDMLExecutor<?, ?, ?, ?> shardDMLExecutor = new ShardDMLExecutor<>(\n            context.jobId,\n            ShardDMLExecutor.DEFAULT_BULK_SIZE,\n            threadPool.scheduler(),\n            threadPool.executor(ThreadPool.Names.SEARCH),\n            resolveUidCollectExpression(context.txnCtx, projection.uidSymbol()),\n            clusterService,\n            context.ramAccounting,\n            circuitBreakerService.getBreaker(HierarchyCircuitBreakerService.QUERY),",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
     "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java": [
       {
         "hunk_index": 1,

@@ -29,6 +29,7 @@ from agents import (
     planning_agent_node,
     file_editor_node,
     validation_agent,
+    dependency_analyzer_node,
 )
 
 # Maximum number of "Prove Red, Make Green" retry loops before giving up.
@@ -249,6 +250,19 @@ def route_validation(state: AgentState) -> str:
             "api_or_signature_mismatch" in build_issue_types
             or "java_syntax_or_patch_artifact" in build_issue_types
         ):
+            # Check if there are missing symbols that trigger dependency analysis
+            missing_symbols = state.get("validation_build_missing_symbols") or []
+            blueprint = state.get("semantic_blueprint") or {}
+            dependent_apis = blueprint.get("dependent_apis") or []
+            
+            if missing_symbols or dependent_apis:
+                print(
+                    f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
+                    f"missing symbols {missing_symbols} or dependent APIs {dependent_apis}. "
+                    "Routing to dependency_analyzer."
+                )
+                return "dependency_analyzer"
+            
             print(
                 f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
                 f"build diagnostics {sorted(build_issue_types)}. Routing to planning_agent "
@@ -293,6 +307,7 @@ workflow.add_node("structural_locator", structural_locator_node)
 workflow.add_node("planning_agent", planning_agent_node)
 workflow.add_node("hunk_generator", file_editor_node)
 workflow.add_node("validation", validation_agent)
+workflow.add_node("dependency_analyzer", dependency_analyzer_node)
 
 # --- Wire edges ---
 
@@ -338,8 +353,10 @@ workflow.add_conditional_edges(
         "structural_locator": "structural_locator",
         "planning_agent": "planning_agent",
         "hunk_generator": "hunk_generator",
+        "dependency_analyzer": "dependency_analyzer",
     },
 )
+workflow.add_edge("dependency_analyzer", "planning_agent")
 
 # --- Compile ---
 app = workflow.compile()

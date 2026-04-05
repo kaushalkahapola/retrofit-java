@@ -261,6 +261,9 @@ class AgentState(TypedDict):
     validation_build_missing_symbols: NotRequired[
         list[str]
     ]  # Missing symbols (class/method) extracted from compiler output
+    validation_compiler_errors: NotRequired[
+        list[str]
+    ]  # Structured compiler error lines (e.g. "File.java:10: error: cannot find symbol")
     validation_failed_stage: NotRequired[
         str
     ]  # Stage where generation/validation failed (e.g. hunk_sanity_failed)
@@ -294,6 +297,7 @@ class AgentState(TypedDict):
     failed_locator_paths: NotRequired[
         list[str]
     ]  # Repository-relative paths already investigated and ruled out
+    notes: NotRequired[str]  # General purpose trace/debug notes
     token_usage: NotRequired[
         dict[str, Any]
     ]  # Node-local token usage payload (used by evaluator aggregation)
