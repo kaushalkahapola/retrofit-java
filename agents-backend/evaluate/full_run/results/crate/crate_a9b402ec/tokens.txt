@@ -1,9 +1,9 @@
 {
-  "input_tokens": 8272,
-  "output_tokens": 2535,
-  "total_tokens": 10807,
-  "messages_with_usage": 1,
-  "estimated_messages": 2,
+  "input_tokens": 46,
+  "output_tokens": 0,
+  "total_tokens": 46,
+  "messages_with_usage": 0,
+  "estimated_messages": 3,
   "tokenizer": {
     "model": "gpt-4.1-mini",
     "library": "tiktoken",
@@ -31,15 +31,15 @@
       ]
     },
     "planning_agent": {
-      "input_tokens": 8240,
-      "output_tokens": 2535,
-      "total_tokens": 10775,
-      "estimated_events": 0,
-      "exact_events": 1,
+      "input_tokens": 14,
+      "output_tokens": 0,
+      "total_tokens": 14,
+      "estimated_events": 1,
+      "exact_events": 0,
       "sources": [
-        "node.token_usage"
+        "estimated_from_message_chars"
       ]
     }
   },
-  "finished_at": "2026-04-05T00:01:17.243472"
+  "finished_at": "2026-04-05T01:06:45.451896"
 }
