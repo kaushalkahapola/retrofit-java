@@ -249,9 +249,18 @@ class AgentState(TypedDict):
     validation_retry_files: NotRequired[
         list[str]
     ]  # Retry scope: files implicated in last validation failure
+    validation_retry_scope_reason: NotRequired[
+        str
+    ]  # Why retry scope was expanded/selected (e.g. compiler diagnostics)
     validation_retry_hunks: NotRequired[
         list[int]
     ]  # Retry scope: hunk indices implicated in last validation failure
+    validation_build_error_files: NotRequired[
+        list[str]
+    ]  # Java files extracted from compiler/build errors
+    validation_build_missing_symbols: NotRequired[
+        list[str]
+    ]  # Missing symbols (class/method) extracted from compiler output
     validation_failed_stage: NotRequired[
         str
     ]  # Stage where generation/validation failed (e.g. hunk_sanity_failed)

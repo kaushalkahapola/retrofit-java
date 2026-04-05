@@ -1602,6 +1602,18 @@ async def run_full_pipeline(
         ):
             exact_hit = True
 
+        # Optional per-agent payload emitted by some nodes.
+        agent_usage = (
+            node_output.get("agent_token_usage")
+            if isinstance(node_output, dict)
+            else None
+        )
+        if isinstance(agent_usage, dict):
+            for agent_name, usage in agent_usage.items():
+                scoped = f"{node_name}:{agent_name}"
+                if _consume_usage(scoped, usage, "node.agent_token_usage"):
+                    exact_hit = True
+
         if not exact_hit:
             for m in msgs:
                 md = getattr(m, "response_metadata", {}) or {}

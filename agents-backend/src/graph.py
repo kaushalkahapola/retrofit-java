@@ -249,17 +249,12 @@ def route_validation(state: AgentState) -> str:
             "api_or_signature_mismatch" in build_issue_types
             or "java_syntax_or_patch_artifact" in build_issue_types
         ):
-            if complexity == "REWRITE":
-                print(
-                    f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
-                    f"build diagnostics {sorted(build_issue_types)} on REWRITE patch. Routing to planning_agent."
-                )
-                return "planning_agent"
             print(
                 f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
-                f"build diagnostics {sorted(build_issue_types)} on non-REWRITE patch. Routing to hunk_generator."
+                f"build diagnostics {sorted(build_issue_types)}. Routing to planning_agent "
+                "for targeted API/signature adaptation."
             )
-            return "hunk_generator"
+            return "planning_agent"
         if failure_category == "empty_generation":
             if complexity == "REWRITE":
                 print(

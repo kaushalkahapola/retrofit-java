@@ -2276,13 +2276,14 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         normalized_mainline = str(mainline_file).replace("\\", "/").strip().lstrip("/")
         if not _is_java_code_file(normalized_mainline):
             continue
-        if (
-            validation_attempts > 0
-            and retry_files
-            and "<all>" not in retry_files
-            and normalized_mainline not in retry_files
-        ):
-            continue
+        if validation_attempts > 0 and retry_files and "<all>" not in retry_files:
+            candidate_paths = {normalized_mainline}
+            for mctx in mapped_target_context.get(mainline_file, []) or []:
+                candidate_paths.add(
+                    _normalize_path(str((mctx or {}).get("target_file") or ""))
+                )
+            if not any(p for p in candidate_paths if p in retry_files):
+                continue
 
         mapped = mapped_target_context.get(mainline_file, [])
         for hidx, raw_hunk in enumerate(raw_hunks):
@@ -2291,6 +2292,9 @@ async def planning_agent_node(state: AgentState, config) -> dict:
 
             ctx = mapped[min(hidx, len(mapped) - 1)] if mapped else {}
             target_file = (ctx.get("target_file") or mainline_file).replace("\\", "/")
+            target_method_hint = str(
+                (ctx.get("target_method") or ctx.get("mainline_method") or "")
+            ).strip()
 
             required_entries = _decompose_hunk_to_required_entries(
                 hunk_idx=hidx,
@@ -2556,6 +2560,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 entry["must_preserve_symbols"] = must_preserve_symbols
                 entry["chain_constraints"] = chain_constraints
                 entry["api_inventory"] = api_inventory
+                entry["target_method_hint"] = target_method_hint
                 if force_type_v_for_entry:
                     entry["notes"] = (
                         str(entry.get("notes") or "")
@@ -2608,5 +2613,6 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         "force_type_v_until_success": bool(force_type_v),
         "force_type_v_reason": force_type_v_reason if force_type_v else "",
         "force_type_v_retry_files": next_force_type_v_files,
+        "agent_token_usage": {"planning_agent": dict(token_usage)},
         "token_usage": token_usage,
     }

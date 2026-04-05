@@ -807,6 +807,166 @@ def _retry_with_file_check(
     )
 
 
+def _extract_method_window_lines(
+    content: str,
+    method_name: str,
+) -> tuple[int, int, list[str]]:
+    """Best-effort method window extraction for method-bounded anchor resolution."""
+    lines = (content or "").splitlines()
+    name = str(method_name or "").strip()
+    if not lines or not name:
+        return -1, -1, []
+
+    sig_rx = re.compile(rf"\b{re.escape(name)}\s*\(")
+    start = -1
+    for i, line in enumerate(lines):
+        if not sig_rx.search(line):
+            continue
+        head = line.strip()
+        if not re.search(
+            r"\b(public|protected|private|static|final|synchronized|abstract)\b",
+            head,
+        ):
+            joined = "\n".join(lines[i : min(len(lines), i + 4)])
+            if "{" not in joined:
+                continue
+        start = i
+        break
+
+    if start < 0:
+        return -1, -1, []
+
+    depth = 0
+    began = False
+    end = start
+    for j in range(start, len(lines)):
+        text = lines[j]
+        for ch in text:
+            if ch == "{":
+                depth += 1
+                began = True
+            elif ch == "}":
+                depth -= 1
+        end = j
+        if began and depth <= 0:
+            break
+
+    return start, end, lines[start : end + 1]
+
+
+def _resolve_old_in_window_lines(
+    old_string: str, window_lines: list[str]
+) -> tuple[str, str]:
+    if not old_string or not window_lines:
+        return "", "method_window_empty"
+
+    window_text = "\n".join(window_lines)
+    candidate = old_string.replace("\r\n", "\n").replace("\r", "\n")
+    if candidate in window_text:
+        return candidate, "method_window_exact"
+
+    if "\n" not in candidate:
+        stripped = candidate.strip()
+        if not stripped:
+            return "", "method_window_empty_single"
+        line_hits = [line for line in window_lines if line.strip() == stripped]
+        if len(line_hits) == 1:
+            return line_hits[0], "method_window_line_trimmed_unique"
+        return "", "method_window_not_found_single"
+
+    cand_lines = candidate.splitlines()
+    n = len(cand_lines)
+    hits: list[str] = []
+    for i in range(0, len(window_lines) - n + 1):
+        ok = True
+        for j in range(n):
+            if window_lines[i + j].strip() != cand_lines[j].strip():
+                ok = False
+                break
+        if ok:
+            hits.append("\n".join(window_lines[i : i + n]))
+    if len(hits) == 1:
+        return hits[0], "method_window_multiline_trimmed_unique"
+    return "", "method_window_not_found_multiline"
+
+
+def _retry_with_method_window_check(
+    toolkit: HunkGeneratorToolkit,
+    target_repo_path: str,
+    plan_entry: dict[str, Any],
+    target_file: str,
+) -> tuple[bool, str, str, str, str]:
+    """
+    Retry deterministic apply by resolving anchors inside the mapped target method
+    window before doing broader file-level probing.
+    """
+    method_hint = str(plan_entry.get("target_method_hint") or "").strip()
+    old_string = str(plan_entry.get("old_string") or "")
+    if not method_hint:
+        return False, "method_window_retry_no_hint", "", "", "method_window_no_hint"
+    if not old_string:
+        return (
+            False,
+            "method_window_retry_empty_old",
+            "",
+            "",
+            "method_window_empty_old",
+        )
+
+    full_path = os.path.normpath(os.path.join(target_repo_path, target_file))
+    try:
+        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except Exception as exc:
+        return (
+            False,
+            f"method_window_read_error:{exc}",
+            "",
+            "",
+            "method_window_read_failed",
+        )
+
+    _start, _end, window_lines = _extract_method_window_lines(content, method_hint)
+    if not window_lines:
+        return (
+            False,
+            f"method_window_not_found:{method_hint}",
+            "",
+            "",
+            "method_window_not_found",
+        )
+
+    resolved_old, reason = _resolve_old_in_window_lines(old_string, window_lines)
+    if not resolved_old:
+        return (
+            False,
+            f"method_window_old_not_found:{reason}",
+            "",
+            "",
+            reason,
+        )
+
+    retry_entry = dict(plan_entry)
+    retry_entry["old_string"] = resolved_old
+    retry_entry["target_method_hint"] = ""
+    ok, msg, ro, rn, det_reason = _apply_edit_deterministically(
+        toolkit,
+        target_repo_path,
+        retry_entry,
+        target_file,
+    )
+    if ok:
+        return (
+            True,
+            f"{msg} | retried_with_method_window(method={method_hint})",
+            ro,
+            rn,
+            f"method_window_retry_success:{det_reason}",
+        )
+
+    return False, msg, ro, rn, f"method_window_retry_failed:{det_reason}"
+
+
 def _diff_introduces_call_without_definition(diff_text: str) -> tuple[bool, str]:
     """
     Detect a common semantic hole: introducing a call to a helper method without
@@ -1153,13 +1313,15 @@ def _merge_token_usage(
     usage: dict[str, int] | None,
     *,
     source: str,
-) -> None:
+) -> bool:
     if not usage:
-        return
+        return False
     in_t = int(usage.get("input_tokens", 0) or 0)
     out_t = int(usage.get("output_tokens", 0) or 0)
     if in_t or out_t:
         add_usage(total, in_t, out_t, source)
+        return True
+    return False
 
 
 def _extract_added_lines_from_unified_diff(diff_text: str) -> list[str]:
@@ -1506,6 +1668,20 @@ def _apply_plan_entries_deterministically(
             target_file,
         )
         if not ok:
+            okmw, msgmw, romw, rnmw, reasonmw = _retry_with_method_window_check(
+                toolkit,
+                target_repo_path,
+                entry,
+                target_file,
+            )
+            if okmw:
+                ok = True
+                msg = msgmw
+                resolved_old = romw
+                resolved_new = rnmw
+                reason = reasonmw
+
+        if not ok:
             ok2, msg2, resolved_old2, resolved_new2, reason2 = _retry_with_file_check(
                 toolkit,
                 target_repo_path,
@@ -1777,7 +1953,7 @@ async def _run_react_edit_pass(
 
     tool_budget = _react_tool_budget_for_complexity(patch_complexity)
     if validation_attempts > 0:
-        tool_budget = max(6, min(tool_budget, 12))
+        tool_budget = max(6, min(tool_budget, 10))
     editor_agent = create_react_agent(llm, toolkit.get_tools())
     try:
         react_recursion = int(os.getenv("FILE_EDITOR_REACT_RECURSION_LIMIT", "40"))
@@ -1815,6 +1991,20 @@ async def _run_react_edit_pass(
         if tool_calls_count > tool_budget:
             return False, f"tool_budget_exceeded:{tool_calls_count}>{tool_budget}"
 
+        if token_usage is not None:
+            add_usage(
+                token_usage,
+                0,
+                0,
+                f"file_editor.react.tool_calls:{tool_calls_count}",
+            )
+            add_usage(
+                token_usage,
+                0,
+                0,
+                f"file_editor.react.tool_budget:{tool_budget}",
+            )
+
         try:
             repeat_limit = int(os.getenv("FILE_EDITOR_REACT_REPEAT_LIMIT", "4"))
         except ValueError:
@@ -1825,6 +2015,13 @@ async def _run_react_edit_pass(
             repeat_limit=repeat_limit,
         )
         if has_loop:
+            if token_usage is not None:
+                add_usage(
+                    token_usage,
+                    0,
+                    0,
+                    f"file_editor.react.loop_prevented:{loop_reason[:120]}",
+                )
             return False, f"react_repeated_tool_loop:{loop_reason}"
 
         # Capture provider token usage from returned AI messages if available.
@@ -1839,13 +2036,44 @@ async def _run_react_edit_pass(
                     "file_editor.react.aggregate_usage",
                 )
             else:
+                usage_seen = False
                 for m in _msgs:
                     usage = extract_usage_from_response(m)
-                    _merge_token_usage(
+                    merged = _merge_token_usage(
                         token_usage,
                         usage,
                         source="file_editor.react.provider_usage",
                     )
+                    if merged:
+                        usage_seen = True
+                if not usage_seen:
+                    approx_in = count_messages_tokens(
+                        [
+                            SystemMessage(content=system_prompt),
+                            HumanMessage(
+                                content="Start your Todo list now.\n"
+                                "1. Analyze logic changes and structural differences.\n"
+                                "2. Apply changes using AST tools (Priority 1) or `edit_file` (Priority 2).\n"
+                                "3. Use `check_java_syntax` after edits to catch errors immediately.\n"
+                                "4. Use `read_file_window` to verify context and avoid duplication."
+                            ),
+                        ],
+                        resolve_model_name(),
+                    )
+                    out_chars = sum(
+                        len(str(getattr(m, "content", "") or ""))
+                        for m in _msgs
+                        if str(getattr(m, "type", "")) == "ai"
+                    )
+                    add_usage(
+                        token_usage,
+                        approx_in,
+                        count_text_tokens(
+                            "x" * max(1, out_chars), resolve_model_name()
+                        ),
+                        "file_editor.react.estimated_from_messages",
+                    )
+                    token_usage["estimated"] = True
 
         last_msg = response["messages"][-1]
         print(f"    Agent 3: Agent finished. Last msg: {str(last_msg.content)[:100]}")
@@ -1969,6 +2197,12 @@ async def file_editor_node(state: AgentState, config) -> dict:
         if str(p or "").strip()
     }
     retry_files_raw = state.get("validation_retry_files") or []
+    retry_scope_reason = str(state.get("validation_retry_scope_reason") or "").strip()
+    build_retry_files_scope = {
+        _normalize_rel_path(str(p))
+        for p in (state.get("validation_build_error_files") or [])
+        if str(p or "").strip()
+    }
     previous_patch_hash = str(state.get("generated_patch_hash") or "")
 
     agent_trajectory_edits = list(state.get("agent_trajectory_edits") or [])
@@ -1985,6 +2219,12 @@ async def file_editor_node(state: AgentState, config) -> dict:
         coupled_retry_lock = False
     if force_type_v_latch and not force_type_v_scope_files:
         coupled_retry_lock = True
+
+    if validation_attempts > 0 and build_retry_files_scope:
+        print(
+            "  Agent 3: Build-diagnostics retry scope active "
+            f"({len(build_retry_files_scope)} file(s), reason={retry_scope_reason or 'n/a'})."
+        )
 
     if not semantic_blueprint:
         msg = "Agent 3 Error: No semantic_blueprint in state."
@@ -2033,6 +2273,36 @@ async def file_editor_node(state: AgentState, config) -> dict:
             else fc.get("is_test_file", False)
         )
     ]
+
+    existing_code_paths = {
+        _normalize_rel_path(
+            c.file_path if hasattr(c, "file_path") else c.get("file_path", "")
+        )
+        for c in (code_changes or [])
+    }
+    synthetic_code_changes: list[dict[str, Any]] = []
+    for rf in sorted(build_retry_files_scope):
+        if not rf or not rf.endswith(".java"):
+            continue
+        low = rf.lower()
+        if "test" in low:
+            continue
+        if rf in existing_code_paths:
+            continue
+        synthetic_code_changes.append(
+            {
+                "file_path": rf,
+                "change_type": "MODIFIED",
+                "is_test_file": False,
+                "synthetic_build_retry": True,
+            }
+        )
+    if synthetic_code_changes:
+        print(
+            "  Agent 3: Added synthetic build-retry files: "
+            + ", ".join(sorted(c.get("file_path", "") for c in synthetic_code_changes))
+        )
+        code_changes.extend(synthetic_code_changes)
 
     adapted_file_edits: list[FileEdit] = []
     previous_adapted_code_hunks: list[AdaptedHunk] = list(
@@ -2111,7 +2381,77 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     f"  Agent 3: Built {len(plan_entries)} deterministic fallback edit(s) for {mainline_file}."
                 )
 
+        allow_retry_developer_fast_path = bool(
+            validation_attempts > 0
+            and (
+                _normalize_rel_path(target_file) in build_retry_files_scope
+                or _normalize_rel_path(mainline_file) in build_retry_files_scope
+            )
+        )
+
         if not plan_entries:
+            # Build-diagnostics scope may include target-only compatibility files not
+            # present in mainline.patch. Try developer file-slice as a deterministic
+            # compatibility bridge before skipping.
+            if toolkit and (
+                validation_attempts <= 0 or allow_retry_developer_fast_path
+            ):
+                _dfp_extra = try_developer_fast_path(
+                    target_repo_path=target_repo_path or "",
+                    target_file=target_file,
+                    developer_patch_diff=str(state.get("developer_patch_diff") or ""),
+                    agent_eligible_patch=str(state.get("patch_diff") or ""),
+                    evaluation_full_workflow=bool(
+                        state.get("evaluation_full_workflow")
+                    ),
+                    backport_commit=str(state.get("backport_commit") or ""),
+                )
+                if _dfp_extra.get("applied"):
+                    agent_metrics["developer_fast_path_hits"] += 1
+                    checks_ok, checks_reason, diff_text_fp = _run_mandatory_file_checks(
+                        toolkit=toolkit,
+                        target_repo_path=target_repo_path,
+                        target_file=target_file,
+                        run_guideline=True,
+                    )
+                    if not checks_ok:
+                        _git_reset_file(target_repo_path, target_file)
+                    else:
+                        fe_fp: FileEdit = {
+                            "target_file": target_file,
+                            "mainline_file": mainline_file,
+                            "old_string": "<developer patch fast path>",
+                            "new_string": (diff_text_fp or "").strip(),
+                            "edit_type": "replace",
+                            "verified": True,
+                            "verification_result": str(
+                                _dfp_extra.get("reason") or "developer_fast_path"
+                            ),
+                            "applied": True,
+                            "apply_result": "SUCCESS",
+                        }
+                        adapted_file_edits.append(fe_fp)
+                        hunk_fp: AdaptedHunk = {
+                            "target_file": target_file,
+                            "mainline_file": mainline_file,
+                            "hunk_text": diff_text_fp,
+                            "insertion_line": 1,
+                            "intent_verified": True,
+                            "file_operation": op_plan.get(
+                                "effective_operation", change_type
+                            ),
+                            "old_target_file": op_plan.get("old_target_file"),
+                            "file_operation_required": op_plan.get(
+                                "operation_required", True
+                            ),
+                            "path_resolution_reason": op_plan.get("reason", "unknown"),
+                        }
+                        _upsert_hunk_by_target_file(adapted_code_hunks, hunk_fp)
+                        _upsert_hunk_by_target_file(
+                            best_effort_adapted_code_hunks, hunk_fp
+                        )
+                        _git_reset_file(target_repo_path, target_file)
+                        continue
             print(f"  Agent 3: No plan entries for {mainline_file} - skipping.")
             continue
 
@@ -2232,7 +2572,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
             "applied": False,
             "reason": "not_attempted",
         }
-        if validation_attempts <= 0:
+        if validation_attempts <= 0 or allow_retry_developer_fast_path:
             _dfp = try_developer_fast_path(
                 target_repo_path=target_repo_path or "",
                 target_file=target_file,
@@ -2989,6 +3329,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
             "force_type_v_retry_files": sorted(force_type_v_scope_files)
             if force_type_v_latch
             else [],
+            "agent_token_usage": {"file_editor": dict(token_usage)},
             "token_usage": token_usage,
             "plan_preflight_results": plan_preflight_results,
             "agent_metrics": agent_metrics,
@@ -3020,6 +3361,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
         "force_type_v_retry_files": sorted(force_type_v_scope_files)
         if force_type_v_latch
         else [],
+        "agent_token_usage": {"file_editor": dict(token_usage)},
         "token_usage": token_usage,
         "plan_preflight_results": plan_preflight_results,
         "agent_metrics": agent_metrics,

@@ -48,6 +48,148 @@ Provide concise diagnosis and fix suggestion:"""
 MAX_VALIDATION_ATTEMPTS = 3
 
 
+def _normalize_build_error_file_path(path: str, known_files: set[str]) -> str:
+    p = str(path or "").strip().replace("\\", "/")
+    if not p or not p.endswith(".java"):
+        return ""
+
+    if p.startswith("/repo/"):
+        p = p[len("/repo/") :]
+
+    # Common helper workspace form: .../temp_repo_storage/<project>/<repo-relative-path>
+    m = re.search(r"/temp_repo_storage/[^/]+/(.+\.java)$", p)
+    if m:
+        p = m.group(1)
+
+    # Best-effort suffix match against known files from state.
+    for known in sorted(known_files):
+        if p == known or p.endswith("/" + known):
+            return known
+
+    # Heuristic normalization for absolute java paths: keep <module>/src/... when possible.
+    if p.startswith("/"):
+        parts = [x for x in p.split("/") if x]
+        if "src" in parts:
+            idx = parts.index("src")
+            if idx > 0:
+                return "/".join(parts[idx - 1 :])
+            return "/".join(parts[idx:])
+        return ""
+
+    return p.lstrip("./")
+
+
+def _extract_java_file_hints_from_build_output(
+    raw_output: str, known_files: set[str]
+) -> list[str]:
+    text = str(raw_output or "")
+    out: set[str] = set()
+    patterns = [
+        r"([^:\n\s]+\.java):\d+:\s*error:",
+        r"([^:\n\s]+\.java):\d+:",
+    ]
+    for pat in patterns:
+        for match in re.findall(pat, text, flags=re.IGNORECASE):
+            normalized = _normalize_build_error_file_path(match, known_files)
+            if normalized:
+                out.add(normalized)
+    return sorted(out)
+
+
+def _extract_compiler_error_lines(raw_output: str, max_items: int = 16) -> list[str]:
+    text = str(raw_output or "")
+    lines = text.splitlines()
+    out: list[str] = []
+
+    i = 0
+    while i < len(lines) and len(out) < max_items:
+        line = lines[i]
+        if ": error:" not in line:
+            i += 1
+            continue
+
+        block = [line.strip()]
+        j = i + 1
+        while j < len(lines) and len(block) < 4:
+            nxt = lines[j]
+            nxt_s = nxt.strip()
+            if not nxt_s:
+                break
+            if ": error:" in nxt:
+                break
+            if nxt_s.startswith(("symbol:", "location:", "^")):
+                block.append(nxt_s)
+                j += 1
+                continue
+            # Javac often prints source line context before the caret.
+            if nxt.startswith(" ") or nxt.startswith("\t"):
+                block.append(nxt_s)
+                j += 1
+                continue
+            break
+
+        out.append(" | ".join(block))
+        i = j
+
+    return out
+
+
+def _extract_missing_symbols(raw_output: str, max_items: int = 24) -> list[str]:
+    text = str(raw_output or "")
+    out: list[str] = []
+    seen: set[str] = set()
+
+    patterns = [
+        r"symbol:\s*(?:class|method|variable)\s+([A-Za-z_][A-Za-z0-9_]*)",
+        r"cannot find symbol\s+symbol:\s*(?:class|method|variable)\s+([A-Za-z_][A-Za-z0-9_]*)",
+    ]
+    for pat in patterns:
+        for m in re.findall(pat, text, flags=re.IGNORECASE):
+            sym = str(m or "").strip()
+            if not sym or sym in seen:
+                continue
+            seen.add(sym)
+            out.append(sym)
+            if len(out) >= max_items:
+                return out
+
+    return out
+
+
+def _collect_known_java_files_for_build_scope(
+    state: AgentState,
+    effective_code_hunks: list[AdaptedHunk],
+) -> set[str]:
+    out: set[str] = set()
+
+    for h in effective_code_hunks or []:
+        t = str((h or {}).get("target_file") or "").strip().replace("\\", "/")
+        m = str((h or {}).get("mainline_file") or "").strip().replace("\\", "/")
+        if t.endswith(".java"):
+            out.add(t)
+        if m.endswith(".java"):
+            out.add(m)
+
+    mapped = state.get("mapped_target_context") or {}
+    for entries in mapped.values() if isinstance(mapped, dict) else []:
+        for item in entries or []:
+            tf = str((item or {}).get("target_file") or "").strip().replace("\\", "/")
+            if tf.endswith(".java"):
+                out.add(tf)
+
+    for change in state.get("patch_analysis") or []:
+        p = (
+            change.file_path
+            if hasattr(change, "file_path")
+            else (change.get("file_path", "") if isinstance(change, dict) else "")
+        )
+        p = str(p or "").strip().replace("\\", "/")
+        if p.endswith(".java"):
+            out.add(p)
+
+    return out
+
+
 def _classify_apply_failure(raw_output: str) -> tuple[str, list[str], list[dict]]:
     """
     Classify patch-application failures into coarse categories and extract file hints.
@@ -120,13 +262,23 @@ def _classify_apply_failure(raw_output: str) -> tuple[str, list[str], list[dict]
     return category, sorted(retry_files), diagnostics
 
 
-def _classify_build_failure(raw_output: str) -> tuple[str, list[str], list[dict], str]:
+def _classify_build_failure(
+    raw_output: str,
+    known_java_files: set[str] | None = None,
+) -> tuple[str, list[str], list[dict], str, list[str], list[str]]:
     """Deterministic build failure parser for retry routing and concise diagnostics."""
     text = str(raw_output or "")
     text_lower = text.lower()
 
+    known_files = set(known_java_files or set())
     retry_files: set[str] = set()
     diagnostics: list[dict] = []
+    build_error_files = _extract_java_file_hints_from_build_output(text, known_files)
+    for bf in build_error_files:
+        retry_files.add(bf)
+
+    concrete_errors = _extract_compiler_error_lines(text)
+    missing_symbols = _extract_missing_symbols(text)
 
     file_hit_patterns = [
         r"(/repo/[^:\n]+\.java):\d+:",
@@ -139,7 +291,9 @@ def _classify_build_failure(raw_output: str) -> tuple[str, list[str], list[dict]
             if p.startswith("/repo/"):
                 p = p[len("/repo/") :]
             if p:
-                retry_files.add(p)
+                normalized = _normalize_build_error_file_path(p, known_files)
+                if normalized:
+                    retry_files.add(normalized)
 
     if (
         "not a statement" in text_lower
@@ -149,44 +303,68 @@ def _classify_build_failure(raw_output: str) -> tuple[str, list[str], list[dict]
             {
                 "error_type": "java_syntax_or_patch_artifact",
                 "suggested_action": "regenerate_hunk_with_structural_guardrails",
+                "compiler_errors": concrete_errors,
+                "compiler_error_files": sorted(build_error_files),
             }
         )
         reason = "Java syntax errors detected after patch application (likely malformed hunk output)."
-        return "context_mismatch", sorted(retry_files), diagnostics, reason
+        return (
+            "context_mismatch",
+            sorted(retry_files),
+            diagnostics,
+            reason,
+            sorted(build_error_files),
+            [],
+        )
 
     if (
         "cannot find symbol" in text_lower
-        or "method" in text_lower
+        or ("method" in text_lower and "cannot be applied" in text_lower)
+        or "constructor" in text_lower
         and "cannot be applied" in text_lower
+        or "no suitable method found" in text_lower
+        or "incompatible types" in text_lower
     ):
-        # Capture a few concrete javac error lines to provide grounded retry context.
-        concrete_errors = []
-        for ln in text.splitlines():
-            ll = ln.strip()
-            if ": error:" in ll and len(concrete_errors) < 8:
-                concrete_errors.append(ll)
         diagnostics.append(
             {
                 "error_type": "api_or_signature_mismatch",
                 "suggested_action": "replan_and_regenerate_with_api_compatibility",
                 "compiler_errors": concrete_errors,
+                "compiler_error_files": sorted(build_error_files),
+                "missing_symbols": missing_symbols,
             }
         )
         reason = "API/signature mismatch in generated patch against target branch."
         if concrete_errors:
             reason += " Compiler errors: " + " | ".join(concrete_errors[:3])
-        return "context_mismatch", sorted(retry_files), diagnostics, reason
+        return (
+            "context_mismatch",
+            sorted(retry_files),
+            diagnostics,
+            reason,
+            sorted(build_error_files),
+            missing_symbols,
+        )
 
     diagnostics.append(
         {
             "error_type": "unknown_build_failure",
             "suggested_action": "inspect_build_log_and_retry",
+            "compiler_errors": concrete_errors,
+            "compiler_error_files": sorted(build_error_files),
         }
     )
     reason = (
         "Build failed; deterministic parser could not identify a narrower category."
     )
-    return "unknown", sorted(retry_files), diagnostics, reason
+    return (
+        "unknown",
+        sorted(retry_files),
+        diagnostics,
+        reason,
+        sorted(build_error_files),
+        missing_symbols,
+    )
 
 
 def _format_transition_summary(transition_eval: dict) -> str:
@@ -226,6 +404,55 @@ def _detect_type_v_retry_scope(
             if target_file:
                 files.add(target_file)
     return found, sorted(files)
+
+
+def _expand_retry_files_from_missing_symbols(
+    state: AgentState,
+    missing_symbols: list[str],
+) -> list[str]:
+    symbols = {str(s).strip() for s in (missing_symbols or []) if str(s).strip()}
+    if not symbols:
+        return []
+
+    out: set[str] = set()
+
+    mapped = state.get("mapped_target_context") or {}
+    if isinstance(mapped, dict):
+        for mainline_file, entries in mapped.items():
+            mf = str(mainline_file or "").strip().replace("\\", "/")
+            for item in entries or []:
+                target_file = str((item or {}).get("target_file") or "").strip()
+                target_method = str((item or {}).get("target_method") or "").strip()
+                mainline_method = str((item or {}).get("mainline_method") or "").strip()
+                if target_method in symbols or mainline_method in symbols:
+                    if mf.endswith(".java"):
+                        out.add(mf.replace("\\", "/"))
+                    if target_file.endswith(".java"):
+                        out.add(target_file.replace("\\", "/"))
+
+    plan = state.get("hunk_generation_plan") or {}
+    if isinstance(plan, dict):
+        for mainline_file, entries in plan.items():
+            mf = str(mainline_file or "").strip().replace("\\", "/")
+            for entry in entries or []:
+                req = {
+                    str(x).strip()
+                    for x in ((entry or {}).get("required_symbols") or [])
+                    if str(x).strip()
+                }
+                preserve = {
+                    str(x).strip()
+                    for x in ((entry or {}).get("must_preserve_symbols") or [])
+                    if str(x).strip()
+                }
+                if symbols.intersection(req | preserve):
+                    tf = str((entry or {}).get("target_file") or "").strip()
+                    if tf.endswith(".java"):
+                        out.add(tf.replace("\\", "/"))
+                    if mf.endswith(".java"):
+                        out.add(mf)
+
+    return sorted(out)
 
 
 async def _analyze_failure(step_name: str, error_output: str, state: AgentState) -> str:
@@ -406,6 +633,9 @@ async def validation_agent(state: AgentState, config) -> dict:
     skip_compilation_checks = state.get("skip_compilation_checks", False)
     apply_only_validation = state.get("apply_only_validation", False)
     effective_code_hunks = list(code_hunks) + list(developer_aux_hunks)
+    known_java_files = _collect_known_java_files_for_build_scope(
+        state, effective_code_hunks
+    )
 
     # Build rename map for cross-class test transition matching
     # (e.g. SupervisorTest -> LagStatsTest when a test file is renamed in the patch)
@@ -610,9 +840,23 @@ async def validation_agent(state: AgentState, config) -> dict:
             "raw": build_res.get("output", ""),
         }
         if not build_res.get("success", False):
-            failure_category, retry_files, diagnostics, analysis = (
-                _classify_build_failure(build_res.get("output", ""))
+            (
+                failure_category,
+                retry_files,
+                diagnostics,
+                analysis,
+                build_error_files,
+                missing_symbols,
+            ) = _classify_build_failure(
+                build_res.get("output", ""),
+                known_java_files=known_java_files,
             )
+            symbol_retry_files = _expand_retry_files_from_missing_symbols(
+                state,
+                missing_symbols,
+            )
+            if symbol_retry_files:
+                retry_files = sorted(set(retry_files) | set(symbol_retry_files))
             if type_v_present and type_v_files:
                 retry_files = sorted(set(retry_files) | set(type_v_files))
             sticky_type_v = bool(force_type_v_latch or type_v_present)
@@ -625,12 +869,19 @@ async def validation_agent(state: AgentState, config) -> dict:
                 if sticky_type_v
                 else ""
             )
+            retry_scope_reason = "build_compiler_diagnostics"
+            if symbol_retry_files:
+                retry_scope_reason += "+missing_symbol_mapping"
             validation_results["build"]["agent_evaluation"] = analysis
             validation_results["build"]["error_context"] = analysis
             validation_results["build"]["diagnostics"] = {
                 "category": failure_category,
                 "retry_files": retry_files,
                 "issues": diagnostics,
+                "compiler_error_files": build_error_files,
+                "missing_symbols": missing_symbols,
+                "symbol_retry_files": symbol_retry_files,
+                "retry_scope_reason": retry_scope_reason,
             }
             trace.append(
                 f"\n**Final Status: BUILD FAILED**\n\n**Agent Analysis:**\n{analysis}"
@@ -645,6 +896,9 @@ async def validation_agent(state: AgentState, config) -> dict:
                 "regeneration_hint": analysis,
                 "validation_failure_category": failure_category,
                 "validation_retry_files": retry_files,
+                "validation_retry_scope_reason": retry_scope_reason,
+                "validation_build_error_files": build_error_files,
+                "validation_build_missing_symbols": missing_symbols,
                 "force_type_v_until_success": sticky_type_v,
                 "force_type_v_reason": sticky_reason,
                 "force_type_v_retry_files": sticky_scope_files,
