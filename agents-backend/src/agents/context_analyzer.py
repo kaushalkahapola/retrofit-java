@@ -182,9 +182,11 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
         for ln in getattr(fc, "added_lines", []) or []:
             s = (ln or "").strip()
             if "(" in s and ")" in s:
-                token = s.split("(", 1)[0].split()[-1]
-                if token.isidentifier() and token not in dependent_apis:
-                    dependent_apis.append(token)
+                before_paren = s.split("(", 1)[0].strip().split()
+                if before_paren:
+                    token = before_paren[-1]
+                    if token.isidentifier() and token not in dependent_apis:
+                        dependent_apis.append(token)
             if len(dependent_apis) >= 20:
                 break
 
