@@ -1,0 +1,83 @@
+# Transition Summary
+
+- Source: phase_outputs
+- Valid backport signal: True
+- Reason: Valid: Observed fail-to-pass and/or newly passing relevant tests with no regressions.
+- fail->pass (0): []
+- newly passing (72): ['io.crate.integrationtests.PostgresITest#testCloseConnectionWithUnfinishedResultSetDoesNotLeaveAnyPendingOperations', 'io.crate.integrationtests.PostgresITest#testCountDistinctFromJoin', 'io.crate.integrationtests.PostgresITest#testCreateInsertSelectStringAndTimestamp', 'io.crate.integrationtests.PostgresITest#testCreateNewStatementAfterUnfinishedResultSet', 'io.crate.integrationtests.PostgresITest#testEmptyStatement', 'io.crate.integrationtests.PostgresITest#testErrorDetailsFromStackTraceInErrorResponse', 'io.crate.integrationtests.PostgresITest#testErrorRecoveryFromErrorsOutsideSqlOperations', 'io.crate.integrationtests.PostgresITest#testExecuteBatch', 'io.crate.integrationtests.PostgresITest#testExecuteBatchDoesNotLeakSysJobsLog', 'io.crate.integrationtests.PostgresITest#testExecuteBatchWithAnalysisError', 'io.crate.integrationtests.PostgresITest#testExecuteBatchWithDifferentStatements', 'io.crate.integrationtests.PostgresITest#testExecuteBatchWithOneRuntimeFailure', 'io.crate.integrationtests.PostgresITest#testFetchSize', 'io.crate.integrationtests.PostgresITest#testGetPostgresPort', 'io.crate.integrationtests.PostgresITest#testGetTransactionIsolation', 'io.crate.integrationtests.PostgresITest#testMultiStatementQuery', 'io.crate.integrationtests.PostgresITest#testMultidimensionalArrayWithDifferentSizedArrays', 'io.crate.integrationtests.PostgresITest#testNoAutoCommit', 'io.crate.integrationtests.PostgresITest#testPreparedSelectStatementWithParametersCanBeDescribed', 'io.crate.integrationtests.PostgresITest#testPreparedStatementHandling', 'io.crate.integrationtests.PostgresITest#testRepeatedFetchDoesNotLeakSysJobsLog', 'io.crate.integrationtests.PostgresITest#testSelectPreparedStatement', 'io.crate.integrationtests.PostgresITest#testSelectWithParameters', 'io.crate.integrationtests.PostgresITest#testSetMultipleSchemasOnSession', 'io.crate.integrationtests.PostgresITest#testSetSchemaOnSession', 'io.crate.integrationtests.PostgresITest#testSimpleQuery', 'io.crate.integrationtests.PostgresITest#testStatementReadOnlyFailure', 'io.crate.integrationtests.PostgresITest#testStatementThatResultsInParseError', 'io.crate.integrationtests.PostgresITest#testUseOfUnsupportedType', 'io.crate.integrationtests.PostgresITest#testWriteOperationsWithoutAutocommitAndCommitAndRollback', 'io.crate.integrationtests.PostgresITest#test_all_system_columns_can_be_queried_via_postgres', 'io.crate.integrationtests.PostgresITest#test_c_options_in_properties', 'io.crate.integrationtests.PostgresITest#test_char_types_arrays', 'io.crate.integrationtests.PostgresITest#test_each_non_array_pg_type_entry_can_be_joined_with_pg_proc', 'io.crate.integrationtests.PostgresITest#test_execute_batch_fails_with_read_operations', 'io.crate.integrationtests.PostgresITest#test_fetch_with_intermediate_prepared_statement', 'io.crate.integrationtests.PostgresITest#test_float_vector_jdbc', 'io.crate.integrationtests.PostgresITest#test_geo_types_arrays', 'io.crate.integrationtests.PostgresITest#test_getProcedureColumns', 'io.crate.integrationtests.PostgresITest#test_insert_array_in_simple_query_mode', 'io.crate.integrationtests.PostgresITest#test_insert_from_unnest_returning_which_inserts_duplicate_keys', 'io.crate.integrationtests.PostgresITest#test_insert_with_on_conflict_do_nothing_batch_error_resp_is_0_for_conflicting_items', 'io.crate.integrationtests.PostgresITest#test_metadata_calls_do_not_query_pg_catalog_tables_repeatedly', 'io.crate.integrationtests.PostgresITest#test_numeric_types_arrays', 'io.crate.integrationtests.PostgresITest#test_original_query_appears_in_jobs_log', 'io.crate.integrationtests.PostgresITest#test_parse_failures_in_simple_protocol_mode_are_propagated_to_client', 'io.crate.integrationtests.PostgresITest#test_proper_termination_of_deallocate_through_http_call', 'io.crate.integrationtests.PostgresITest#test_query_inbetween_suspended_fetch_operation', 'io.crate.integrationtests.PostgresITest#test_simple_mode_can_handle_npgsql_startup_query', 'io.crate.integrationtests.PostgresITest#test_table_function_without_from_can_bind_parameters', 'io.crate.session.RowConsumerToResultReceiverTest#testBatchedIteratorConsumption', 'io.crate.session.RowConsumerToResultReceiverTest#testExceptionOnAllLoadedCallIsForwardedToResultReceiver', 'io.crate.session.RowConsumerToResultReceiverTest#test_consumer_pauses_and_resume_based_on_receivers_writablility', 'io.crate.session.RowConsumerToResultReceiverTest#test_does_not_suspend_consumer_on_last_row', 'io.crate.session.SessionTest#testDeallocateAllClearsAllPortalsAndPreparedStatements', 'io.crate.session.SessionTest#testDeallocatePreparedStatementClearsPreparedStatement', 'io.crate.session.SessionTest#testProperCleanupOnSessionClose', 'io.crate.session.SessionTest#test_binding_portal_again_closes_suspended_consumers_eventually', 'io.crate.session.SessionTest#test_binding_with_removed_prepared_statement_throws_sstatement_not_found_and_logs_error', 'io.crate.session.SessionTest#test_bulk_operations_completed_exceptionally_sys_job_cleared', 'io.crate.session.SessionTest#test_bulk_operations_result_in_jobslog_entries', 'io.crate.session.SessionTest#test_can_describe_cursor_created_using_declare', 'io.crate.session.SessionTest#test_closing_a_statement_closes_related_portals', 'io.crate.session.SessionTest#test_discard_all_discards_all_portals_and_prepared_statements', 'io.crate.session.SessionTest#test_flush_triggers_deferred_executions_and_sets_active_execution', 'io.crate.session.SessionTest#test_getParamType_returns_types_infered_from_statement', 'io.crate.session.SessionTest#test_kills_query_if_not_completed_within_statement_timeout', 'io.crate.session.SessionTest#test_out_of_bounds_getParamType_fails', 'io.crate.session.SessionTest#test_parsing_throws_an_error_on_exceeding_statement_timeout', 'io.crate.session.SessionTest#test_select_query_executed_on_session_execute_method', 'io.crate.session.SessionTest#test_statement_timeout_previous_statement_time_is_not_accounted_for', 'io.crate.session.SessionTest#test_statement_timeout_schedule_is_removed_for_finished_jobs']
+- pass->fail (0): []
+
+## Touched Test States
+- Touched tests (from patch): ['io.crate.integrationtests.PostgresITest', 'io.crate.session.RowConsumerToResultReceiverTest', 'io.crate.session.SessionTest']
+  - io.crate.integrationtests.PostgresITest#testCloseConnectionWithUnfinishedResultSetDoesNotLeaveAnyPendingOperations: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testCountDistinctFromJoin: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testCreateInsertSelectStringAndTimestamp: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testCreateNewStatementAfterUnfinishedResultSet: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testEmptyStatement: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testErrorDetailsFromStackTraceInErrorResponse: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testErrorRecoveryFromErrorsOutsideSqlOperations: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testExecuteBatch: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testExecuteBatchDoesNotLeakSysJobsLog: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testExecuteBatchWithAnalysisError: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testExecuteBatchWithDifferentStatements: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testExecuteBatchWithOneRuntimeFailure: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testFetchSize: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testGetPostgresPort: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testGetTransactionIsolation: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testMultiStatementQuery: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testMultidimensionalArrayWithDifferentSizedArrays: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testNoAutoCommit: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testPreparedSelectStatementWithParametersCanBeDescribed: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testPreparedStatementHandling: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testRepeatedFetchDoesNotLeakSysJobsLog: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testSelectPreparedStatement: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testSelectWithParameters: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testSetMultipleSchemasOnSession: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testSetSchemaOnSession: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testSimpleQuery: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testStatementReadOnlyFailure: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testStatementThatResultsInParseError: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testUseOfUnsupportedType: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#testWriteOperationsWithoutAutocommitAndCommitAndRollback: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_all_system_columns_can_be_queried_via_postgres: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_c_options_in_properties: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_char_types_arrays: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_each_non_array_pg_type_entry_can_be_joined_with_pg_proc: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_execute_batch_fails_with_read_operations: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_fetch_with_intermediate_prepared_statement: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_float_vector_jdbc: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_geo_types_arrays: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_getProcedureColumns: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_insert_array_in_simple_query_mode: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_insert_from_unnest_returning_which_inserts_duplicate_keys: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_insert_with_on_conflict_do_nothing_batch_error_resp_is_0_for_conflicting_items: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_metadata_calls_do_not_query_pg_catalog_tables_repeatedly: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_numeric_types_arrays: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_original_query_appears_in_jobs_log: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_parse_failures_in_simple_protocol_mode_are_propagated_to_client: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_proper_termination_of_deallocate_through_http_call: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_query_inbetween_suspended_fetch_operation: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_simple_mode_can_handle_npgsql_startup_query: baseline=absent, patched=passed
+  - io.crate.integrationtests.PostgresITest#test_table_function_without_from_can_bind_parameters: baseline=absent, patched=passed
+  - io.crate.session.RowConsumerToResultReceiverTest#testBatchedIteratorConsumption: baseline=absent, patched=passed
+  - io.crate.session.RowConsumerToResultReceiverTest#testExceptionOnAllLoadedCallIsForwardedToResultReceiver: baseline=absent, patched=passed
+  - io.crate.session.RowConsumerToResultReceiverTest#test_consumer_pauses_and_resume_based_on_receivers_writablility: baseline=absent, patched=passed
+  - io.crate.session.RowConsumerToResultReceiverTest#test_does_not_suspend_consumer_on_last_row: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#testDeallocateAllClearsAllPortalsAndPreparedStatements: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#testDeallocatePreparedStatementClearsPreparedStatement: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#testProperCleanupOnSessionClose: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_binding_portal_again_closes_suspended_consumers_eventually: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_binding_with_removed_prepared_statement_throws_sstatement_not_found_and_logs_error: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_bulk_operations_completed_exceptionally_sys_job_cleared: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_bulk_operations_result_in_jobslog_entries: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_can_describe_cursor_created_using_declare: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_closing_a_statement_closes_related_portals: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_discard_all_discards_all_portals_and_prepared_statements: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_flush_triggers_deferred_executions_and_sets_active_execution: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_getParamType_returns_types_infered_from_statement: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_kills_query_if_not_completed_within_statement_timeout: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_out_of_bounds_getParamType_fails: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_parsing_throws_an_error_on_exceeding_statement_timeout: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_select_query_executed_on_session_execute_method: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_statement_timeout_previous_statement_time_is_not_accounted_for: baseline=absent, patched=passed
+  - io.crate.session.SessionTest#test_statement_timeout_schedule_is_removed_for_finished_jobs: baseline=absent, patched=passed

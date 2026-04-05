@@ -232,6 +232,7 @@ def route_validation(state: AgentState) -> str:
             "hunk_sanity_failed",
             "generation_contract_failed",
             "incomplete_todo_steps",
+            "plan_preflight_failed",
         }:
             if complexity == "REWRITE":
                 print(

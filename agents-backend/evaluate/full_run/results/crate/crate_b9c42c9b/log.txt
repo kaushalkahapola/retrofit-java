@@ -1,0 +1,92 @@
+patch_id=crate_b9c42c9b
+project=crate
+mainline_commit=b9c42c9bbc08a39b51c7205a98da6972b56ce612
+backport_commit=e01a59319d802383fe4193c04cc0afce9d0c8d9a
+mode=full
+started_at=2026-04-05T06:00:10.248554
+----------------------------------------
+Running full workflow graph
+Completed node=context_analyzer
+Completed node=structural_locator
+Completed node=planning_agent
+Completed node=hunk_generator
+Completed node=validation
+Workflow completed successfully
+
+[crate/crate_b9c42c9b] Setting up repositories for mode=full...
+[crate/crate_b9c42c9b] Found cached Phase 0 results. Skipping Phase 0 and reusing baseline test state.
+[crate/crate_b9c42c9b] Running full workflow graph...
+Router: Skipping Phase 0 - entering full 4-agent pipeline directly.
+Agent 1 (Context Analyzer): Deterministic blueprint generation...
+Agent 1: Complete. Files=3 hunks=11 (deterministic).
+Agent 1: Detected 9 hunk(s) with variants.
+  Completed: context_analyzer
+Agent 2 (Structural Locator): Starting target location mapping...
+  Agent 2: 3 code file(s), 0 test file(s)
+LLM Provider: azure, Model: gpt-4.1-mini, Temperature: 0
+  Agent 2: Found 11 hunk(s) in hunk_chain
+  Agent 2: Locating target for server/src/main/java/io/crate/protocols/postgres/Portal.java (2 hunk(s))...
+Blob Hunting: Searching for SHA 8dcba13cda4ec1b3f72bff818491e3a3836fb010 (server/src/main/java/io/crate/protocols/postgres/Portal.java)
+Blob Hunting: Found EXACT match in HEAD at server/src/main/java/io/crate/protocols/postgres/Portal.java
+Phase 1 (Git) Match Found: server/src/main/java/io/crate/protocols/postgres/Portal.java
+  Agent 2: Git resolution found target: server/src/main/java/io/crate/protocols/postgres/Portal.java
+  Agent 2: Mapped hunk 1 (<import>) to <import> at lines 30-30
+  Agent 2: Mapped hunk 2 (hunk_2) to None at lines 91-91
+  Agent 2: Locating target for server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java (6 hunk(s))...
+Blob Hunting: Searching for SHA 6ecea107b33827f410618bda4e27e74e43e72f17 (server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java)
+Blob Hunting: Found EXACT match in HEAD at server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+Phase 1 (Git) Match Found: server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+  Agent 2: Git resolution found target: server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+  Agent 2: Mapped hunk 1 (hunk_1) to None at lines 48-48
+  Agent 2: Mapped hunk 2 (hunk_2) to None at lines 84-84
+  Agent 2: Mapped hunk 3 (hunk_3) to None at lines 112-112
+  Agent 2: Mapped hunk 4 (closeAndFinishIfSuspended) to closeAndFinishIfSuspended at lines 138-138
+  Agent 2: Mapped hunk 5 (resume) to resume at lines 162-162
+  Agent 2: Mapped hunk 6 (hunk_6) to None at lines 174-174
+  Agent 2: Locating target for server/src/main/java/io/crate/session/Session.java (3 hunk(s))...
+Blob Hunting: Searching for SHA dd4bfdf4ed9900b90e15b101a75ff8550ad95aed (server/src/main/java/io/crate/session/Session.java)
+Blob Hunting: Found EXACT match in HEAD at server/src/main/java/io/crate/session/Session.java
+Phase 1 (Git) Match Found: server/src/main/java/io/crate/session/Session.java
+  Agent 2: Git resolution found target: server/src/main/java/io/crate/session/Session.java
+  Agent 2: Mapped hunk 1 (hunk_1) to None at lines 585-585
+  Agent 2: Mapped hunk 2 (triggerDeferredExecutions) to triggerDeferredExecutions at lines 663-663
+  Agent 2: Mapped hunk 3 (hunk_3) to None at lines 673-673
+  Agent 2: Trace written to structural_locator_trace.md
+Agent 2: Complete. Mapped 3 file(s). Total hunk mappings: 11. ConsistencyMap has 0 rename(s).
+Router: complexity=REWRITE -> planning_agent.
+  Completed: structural_locator
+Planning Agent: Building per-hunk str_replace edit plans...
+LLM Provider: azure, Model: gpt-4.1-mini, Temperature: 0
+Planning Agent: Complete. Planned 19 adapted edit(s).
+  Completed: planning_agent
+Agent 3 (File Editor): Starting direct file-edit workflow...
+LLM Provider: azure, Model: gpt-4.1-mini, Temperature: 0
+  Agent 3: Processing 3 edit(s) for server/src/main/java/io/crate/protocols/postgres/Portal.java (op=MODIFIED)
+    Agent 3: Classified server/src/main/java/io/crate/protocols/postgres/Portal.java as TYPE_I (deterministic path)
+    Agent 3: base_types=['TYPE_I'] execution_types=['TYPE_I']
+    Agent 3: Developer patch fast path for server/src/main/java/io/crate/protocols/postgres/Portal.java (developer_fast_path_ok)
+  Agent 3: Processing 12 edit(s) for server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java (op=MODIFIED)
+    Agent 3: Classified server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java as TYPE_II (deterministic path)
+    Agent 3: base_types=['TYPE_I', 'TYPE_II'] execution_types=['TYPE_I', 'TYPE_II']
+    Agent 3: Developer patch fast path for server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java (developer_fast_path_ok)
+  Agent 3: Processing 4 edit(s) for server/src/main/java/io/crate/session/Session.java (op=MODIFIED)
+    Agent 3: Classified server/src/main/java/io/crate/session/Session.java as TYPE_II (deterministic path)
+    Agent 3: base_types=['TYPE_II'] execution_types=['TYPE_II']
+    Agent 3: Developer patch fast path for server/src/main/java/io/crate/session/Session.java (developer_fast_path_ok)
+  Agent 3 (File Editor): Done. 3 file(s) adapted, 3 edit record(s).
+  Completed: hunk_generator
+Agent 4 (Validation): Starting 'Prove Red, Make Green' loop...
+  Agent 4: Evaluation full-workflow mode (apply -> build -> relevant tests)...
+  Validation: server/src/main/java/io/crate/protocols/postgres/Portal.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: server/src/main/java/io/crate/session/Session.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: docs/appendices/release-notes/5.10.12.rst - applying 1 hunk(s) one by one in bottom-to-top order: [47]
+  Validation: server/src/test/java/io/crate/integrationtests/PostgresITest.java - applying 1 hunk(s) one by one in bottom-to-top order: [969]
+  Validation: server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java - applying 3 hunk(s) one by one in bottom-to-top order: [102, 30, 21]
+  Validation: server/src/test/java/io/crate/session/SessionTest.java - applying 6 hunk(s) one by one in bottom-to-top order: [515, 402, 72, 61, 44, 24]
+    Agent 4: Executing crate helper build script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/crate/run_build.sh
+    Agent 4: Executing crate helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/crate/run_tests.sh
+Trace saved to validation_trace.md
+Router: Validation PASSED after 1 attempt(s). Done.
+  Completed: validation
+[crate/crate_b9c42c9b] Full workflow completed!

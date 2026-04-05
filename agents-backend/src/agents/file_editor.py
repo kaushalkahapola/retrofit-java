@@ -73,6 +73,7 @@ _FRAMEWORK_CHAIN_SYMBOLS = {
     "delegateFailure",
 }
 
+
 def _is_framework_chain_symbol(symbol: str) -> bool:
     return str(symbol or "").strip() in _FRAMEWORK_CHAIN_SYMBOLS
 
@@ -270,6 +271,53 @@ def _normalize_rel_path(path: str) -> str:
     if p.startswith("a/") or p.startswith("b/"):
         p = p[2:]
     return p
+
+
+def _hunk_target_key(hunk: dict[str, Any]) -> str:
+    return _normalize_rel_path(
+        str((hunk or {}).get("target_file") or (hunk or {}).get("mainline_file") or "")
+    )
+
+
+def _merge_hunks_by_target_file(
+    base_hunks: list[AdaptedHunk],
+    override_hunks: list[AdaptedHunk],
+) -> list[AdaptedHunk]:
+    merged: dict[str, AdaptedHunk] = {}
+    order: list[str] = []
+
+    for h in base_hunks or []:
+        key = _hunk_target_key(h)
+        if not key:
+            continue
+        if key not in merged:
+            order.append(key)
+        merged[key] = h
+
+    for h in override_hunks or []:
+        key = _hunk_target_key(h)
+        if not key:
+            continue
+        if key not in merged:
+            order.append(key)
+        merged[key] = h
+
+    return [merged[k] for k in order if k in merged]
+
+
+def _upsert_hunk_by_target_file(
+    hunks: list[AdaptedHunk],
+    hunk: AdaptedHunk,
+) -> None:
+    key = _hunk_target_key(hunk)
+    if not key:
+        hunks.append(hunk)
+        return
+    for idx, existing in enumerate(hunks):
+        if _hunk_target_key(existing) == key:
+            hunks[idx] = hunk
+            return
+    hunks.append(hunk)
 
 
 def _extract_removed_text(hunk_text: str) -> str:
@@ -1572,8 +1620,54 @@ def _react_tool_budget_for_complexity(complexity: str) -> int:
     if c == "TRIVIAL":
         return 4
     if c == "STRUCTURAL":
-        return 12
-    return 40
+        return 10
+    return 24
+
+
+def _tool_call_signature(name: str, args: Any) -> str:
+    nm = str(name or "")
+    a = args if isinstance(args, dict) else {"value": str(args)}
+    try:
+        compact = json.dumps(a, sort_keys=True, separators=(",", ":"), default=str)
+    except Exception:
+        compact = str(a)
+    return f"{nm}:{compact}"
+
+
+def _detect_react_repeated_tool_loop(
+    calls: list[tuple[str, Any]],
+    *,
+    repeat_limit: int,
+) -> tuple[bool, str]:
+    if not calls:
+        return False, ""
+
+    read_tools = {
+        "read_file_window",
+        "read_full_file",
+        "get_exact_lines",
+        "grep_in_file",
+    }
+
+    streak_sig = ""
+    streak_count = 0
+    seen: dict[str, int] = {}
+    for name, args in calls:
+        if str(name or "") not in read_tools:
+            continue
+        sig = _tool_call_signature(name, args)
+        seen[sig] = seen.get(sig, 0) + 1
+        if sig == streak_sig:
+            streak_count += 1
+        else:
+            streak_sig = sig
+            streak_count = 1
+        if streak_count >= repeat_limit:
+            return True, f"repeated_tool_call_streak:{streak_count}:{sig[:160]}"
+        if seen[sig] >= (repeat_limit + 2):
+            return True, f"repeated_tool_call_total:{seen[sig]}:{sig[:160]}"
+
+    return False, ""
 
 
 def _trajectory_has_surrounding_code_read(
@@ -1682,6 +1776,8 @@ async def _run_react_edit_pass(
         )
 
     tool_budget = _react_tool_budget_for_complexity(patch_complexity)
+    if validation_attempts > 0:
+        tool_budget = max(6, min(tool_budget, 12))
     editor_agent = create_react_agent(llm, toolkit.get_tools())
     try:
         react_recursion = int(os.getenv("FILE_EDITOR_REACT_RECURSION_LIMIT", "40"))
@@ -1710,11 +1806,26 @@ async def _run_react_edit_pass(
         )
 
         tool_calls_count = 0
+        tool_calls_flat: list[tuple[str, Any]] = []
         for m in response.get("messages", []):
             if hasattr(m, "tool_calls") and m.tool_calls:
                 tool_calls_count += len(m.tool_calls)
+                for tc in m.tool_calls:
+                    tool_calls_flat.append((tc.get("name", ""), tc.get("args", {})))
         if tool_calls_count > tool_budget:
             return False, f"tool_budget_exceeded:{tool_calls_count}>{tool_budget}"
+
+        try:
+            repeat_limit = int(os.getenv("FILE_EDITOR_REACT_REPEAT_LIMIT", "4"))
+        except ValueError:
+            repeat_limit = 4
+        repeat_limit = max(3, min(12, repeat_limit))
+        has_loop, loop_reason = _detect_react_repeated_tool_loop(
+            tool_calls_flat,
+            repeat_limit=repeat_limit,
+        )
+        if has_loop:
+            return False, f"react_repeated_tool_loop:{loop_reason}"
 
         # Capture provider token usage from returned AI messages if available.
         if token_usage is not None:
@@ -1852,6 +1963,11 @@ async def file_editor_node(state: AgentState, config) -> dict:
     validation_failed_stage = str(state.get("validation_failed_stage") or "")
     force_type_v_latch = bool(state.get("force_type_v_until_success") or False)
     force_type_v_reason = str(state.get("force_type_v_reason") or "").strip()
+    force_type_v_scope_files = {
+        _normalize_rel_path(str(p))
+        for p in (state.get("force_type_v_retry_files") or [])
+        if str(p or "").strip()
+    }
     retry_files_raw = state.get("validation_retry_files") or []
     previous_patch_hash = str(state.get("generated_patch_hash") or "")
 
@@ -1865,7 +1981,9 @@ async def file_editor_node(state: AgentState, config) -> dict:
         failed_stage=validation_failed_stage,
         error_context=error_context,
     )
-    if force_type_v_latch:
+    if retry_files and "<all>" not in retry_files:
+        coupled_retry_lock = False
+    if force_type_v_latch and not force_type_v_scope_files:
         coupled_retry_lock = True
 
     if not semantic_blueprint:
@@ -1917,10 +2035,17 @@ async def file_editor_node(state: AgentState, config) -> dict:
     ]
 
     adapted_file_edits: list[FileEdit] = []
-    adapted_code_hunks: list[AdaptedHunk] = []
+    previous_adapted_code_hunks: list[AdaptedHunk] = list(
+        state.get("adapted_code_hunks") or []
+    )
+    adapted_code_hunks: list[AdaptedHunk] = _merge_hunks_by_target_file(
+        [], previous_adapted_code_hunks
+    )
     best_effort_adapted_code_hunks: list[AdaptedHunk] = list(
         state.get("best_effort_adapted_code_hunks") or []
     )
+    if not best_effort_adapted_code_hunks and previous_adapted_code_hunks:
+        best_effort_adapted_code_hunks = list(previous_adapted_code_hunks)
     generation_checklist: list[dict[str, Any]] = []
     plan_preflight_results: list[dict[str, Any]] = []
     agent_metrics = {
@@ -2023,7 +2148,11 @@ async def file_editor_node(state: AgentState, config) -> dict:
             target_repo_path=target_repo_path,
             change_type=change_type,
         )
-        deterministic_only = adaptation_type in {"TYPE_I", "TYPE_II", "TYPE_III"}
+        deterministic_only = adaptation_type in {
+            "TYPE_I",
+            "TYPE_II",
+            "TYPE_III",
+        }
         base_types = {
             str((e or {}).get("base_adaptation_type") or "").strip().upper()
             for e in plan_entries
@@ -2034,8 +2163,21 @@ async def file_editor_node(state: AgentState, config) -> dict:
             for e in plan_entries
             if str((e or {}).get("execution_type") or "").strip()
         }
-        if force_type_v_latch:
+
+        force_type_v_for_file = bool(force_type_v_latch)
+        if force_type_v_for_file and force_type_v_scope_files:
+            force_type_v_for_file = bool(
+                _normalize_rel_path(mainline_file) in force_type_v_scope_files
+                or _normalize_rel_path(target_file) in force_type_v_scope_files
+            )
+
+        if force_type_v_for_file:
             execution_types.add("TYPE_V")
+        # Try deterministic path first for TYPE_IV when planner produced verified anchors.
+        if adaptation_type == "TYPE_IV" and all(
+            bool((e or {}).get("verified", False)) for e in (plan_entries or [])
+        ):
+            deterministic_only = True
         if "TYPE_V" in execution_types:
             deterministic_only = False
         print(
@@ -2046,7 +2188,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
             print(
                 f"    Agent 3: base_types={sorted(base_types)} execution_types={sorted(execution_types)}"
             )
-        if force_type_v_latch:
+        if force_type_v_for_file:
             print(
                 "    Agent 3: TYPE_V latch active for this attempt "
                 f"(reason={force_type_v_reason or 'sticky_type_v_retry_latch'})."
@@ -2152,8 +2294,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 "file_operation_required": op_plan.get("operation_required", True),
                 "path_resolution_reason": op_plan.get("reason", "unknown"),
             }
-            adapted_code_hunks.append(hunk_fp)
-            best_effort_adapted_code_hunks.append(hunk_fp)
+            _upsert_hunk_by_target_file(adapted_code_hunks, hunk_fp)
+            _upsert_hunk_by_target_file(best_effort_adapted_code_hunks, hunk_fp)
             if toolkit and target_repo_path:
                 _git_reset_file(target_repo_path, target_file)
             task_entry["completed_steps"].append("restore_file")
@@ -2182,18 +2324,30 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 )
                 if not _pr.ok:
                     agent_metrics["plan_preflight_failures"] += 1
-                    print(
-                        f"    Agent 3: PLAN_PREFLIGHT_FAILED {target_file}: {_pr.reason} "
-                        "(skipping deterministic apply and ReAct; fix planning decomposition)"
+                    _react_recovery = validation_attempts > 0 or bool(
+                        state.get("evaluation_full_workflow")
                     )
-                    task_entry["status"] = "failed"
-                    task_entry["reason"] = "plan_preflight_failed"
-                    task_entry["error"] = str(_pr.reason)[:800]
-                    task_entry["completed_steps"].append("plan_preflight_failed")
-                    _git_reset_file(target_repo_path, target_file)
-                    continue
+                    if _react_recovery:
+                        print(
+                            f"    Agent 3: PLAN_PREFLIGHT_FAILED {target_file}: {_pr.reason} "
+                            "— falling back to ReAct (stale anchors after build failure or eval mode)."
+                        )
+                        deterministic_only = False
+                    else:
+                        print(
+                            f"    Agent 3: PLAN_PREFLIGHT_FAILED {target_file}: {_pr.reason} "
+                            "(skipping deterministic apply and ReAct; fix planning decomposition)"
+                        )
+                        task_entry["status"] = "failed"
+                        task_entry["reason"] = "plan_preflight_failed"
+                        task_entry["error"] = str(_pr.reason)[:800]
+                        task_entry["completed_steps"].append("plan_preflight_failed")
+                        _git_reset_file(target_repo_path, target_file)
+                        continue
             except Exception as _pex:
-                print(f"    Agent 3: Plan preflight read error for {target_file}: {_pex}")
+                print(
+                    f"    Agent 3: Plan preflight read error for {target_file}: {_pex}"
+                )
 
         # Step B: Apply edits via deterministic or ReAct path.
         used_react = False
@@ -2357,6 +2511,10 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     "validation_attempts": validation_attempts,
                     "force_type_v_until_success": True,
                     "force_type_v_reason": inv_reason,
+                    "force_type_v_retry_files": [
+                        _normalize_rel_path(mainline_file),
+                        _normalize_rel_path(target_file),
+                    ],
                     "generated_patch_hash": "",
                     "validation_repeated_patch_detected": False,
                     "token_usage": token_usage,
@@ -2367,7 +2525,9 @@ async def file_editor_node(state: AgentState, config) -> dict:
             plan_inv_callees = callee_names_from_java_snippet_lines(
                 _collect_file_plan_invariants(plan_entries)
             )
-            required_symbols = [s for s in required_symbols if s not in plan_inv_callees]
+            required_symbols = [
+                s for s in required_symbols if s not in plan_inv_callees
+            ]
             required_symbols = [
                 s for s in required_symbols if _type_v_symbol_gate_should_enforce(s)
             ]
@@ -2421,6 +2581,10 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         "validation_attempts": validation_attempts,
                         "force_type_v_until_success": True,
                         "force_type_v_reason": f"missing_required_symbol:{sym}",
+                        "force_type_v_retry_files": [
+                            _normalize_rel_path(mainline_file),
+                            _normalize_rel_path(target_file),
+                        ],
                         "generated_patch_hash": "",
                         "validation_repeated_patch_detected": False,
                         "token_usage": token_usage,
@@ -2478,6 +2642,10 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         "validation_attempts": validation_attempts,
                         "force_type_v_until_success": True,
                         "force_type_v_reason": f"missing_preserve_symbol:{sym}",
+                        "force_type_v_retry_files": [
+                            _normalize_rel_path(mainline_file),
+                            _normalize_rel_path(target_file),
+                        ],
                         "generated_patch_hash": "",
                         "validation_repeated_patch_detected": False,
                         "token_usage": token_usage,
@@ -2536,6 +2704,10 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     "validation_attempts": validation_attempts,
                     "force_type_v_until_success": True,
                     "force_type_v_reason": prot_reason,
+                    "force_type_v_retry_files": [
+                        _normalize_rel_path(mainline_file),
+                        _normalize_rel_path(target_file),
+                    ],
                     "generated_patch_hash": "",
                     "validation_repeated_patch_detected": False,
                     "token_usage": token_usage,
@@ -2594,6 +2766,10 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     "validation_attempts": validation_attempts,
                     "force_type_v_until_success": True,
                     "force_type_v_reason": chain_reason,
+                    "force_type_v_retry_files": [
+                        _normalize_rel_path(mainline_file),
+                        _normalize_rel_path(target_file),
+                    ],
                     "generated_patch_hash": "",
                     "validation_repeated_patch_detected": False,
                     "token_usage": token_usage,
@@ -2659,9 +2835,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 # In full-workflow evaluation, Agent 4 runs a real compile/build; do not
                 # short-circuit on a flaky YES/NO intent classifier (burns validation
                 # attempts without ever re-running Gradle).
-                if (
-                    "TYPE_V" in execution_types
-                    and not bool(state.get("evaluation_full_workflow"))
+                if "TYPE_V" in execution_types and not bool(
+                    state.get("evaluation_full_workflow")
                 ):
                     task_entry["status"] = "failed"
                     task_entry["reason"] = "generation_contract_failed"
@@ -2706,6 +2881,10 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         "validation_attempts": validation_attempts,
                         "force_type_v_until_success": True,
                         "force_type_v_reason": "type_v_intent_check_failed",
+                        "force_type_v_retry_files": [
+                            _normalize_rel_path(mainline_file),
+                            _normalize_rel_path(target_file),
+                        ],
                         "generated_patch_hash": "",
                         "validation_repeated_patch_detected": False,
                         "token_usage": token_usage,
@@ -2742,8 +2921,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
             "file_operation_required": op_plan.get("operation_required", True),
             "path_resolution_reason": op_plan.get("reason", "unknown"),
         }
-        adapted_code_hunks.append(hunk)
-        best_effort_adapted_code_hunks.append(hunk)
+        _upsert_hunk_by_target_file(adapted_code_hunks, hunk)
+        _upsert_hunk_by_target_file(best_effort_adapted_code_hunks, hunk)
 
     print(
         f"  Agent 3 (File Editor): Done. "
@@ -2807,6 +2986,9 @@ async def file_editor_node(state: AgentState, config) -> dict:
             "generated_patch_hash": current_patch_hash,
             "force_type_v_until_success": force_type_v_latch,
             "force_type_v_reason": force_type_v_reason,
+            "force_type_v_retry_files": sorted(force_type_v_scope_files)
+            if force_type_v_latch
+            else [],
             "token_usage": token_usage,
             "plan_preflight_results": plan_preflight_results,
             "agent_metrics": agent_metrics,
@@ -2835,6 +3017,9 @@ async def file_editor_node(state: AgentState, config) -> dict:
         "generated_patch_hash": current_patch_hash,
         "force_type_v_until_success": force_type_v_latch,
         "force_type_v_reason": force_type_v_reason,
+        "force_type_v_retry_files": sorted(force_type_v_scope_files)
+        if force_type_v_latch
+        else [],
         "token_usage": token_usage,
         "plan_preflight_results": plan_preflight_results,
         "agent_metrics": agent_metrics,

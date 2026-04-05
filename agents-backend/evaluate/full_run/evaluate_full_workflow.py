@@ -289,6 +289,27 @@ def _is_non_java_hunk_in_java_file(file_path: str, hunk_text: str) -> bool:
 
     content = "\n".join(lines)
 
+    java_code_line_count = 0
+    non_code_signal_count = 0
+
+    java_like_rx = [
+        r"\b(class|interface|enum|record)\b",
+        r"\b(public|private|protected|static|final|abstract|synchronized|native)\b",
+        r"\b(if|else|for|while|switch|case|default|return|throw|try|catch|finally|new)\b",
+        r"\b[A-Za-z_][A-Za-z0-9_]*\s*\(",
+        r"[{};]$",
+    ]
+
+    for raw in lines:
+        s = (raw or "").strip()
+        if not s:
+            continue
+        if re.match(r"^(case\s+[^:]+|default)\s*:\s*$", s):
+            java_code_line_count += 1
+            continue
+        if any(re.search(rx, s) for rx in java_like_rx):
+            java_code_line_count += 1
+
     # Patterns for non-Java content (regex patterns)
     patterns = [
         # SQL patterns (SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER)
@@ -299,7 +320,7 @@ def _is_non_java_hunk_in_java_file(file_path: str, hunk_text: str) -> bool:
         r"(?i)\bGROUP\s+BY\b",
         r"(?i)\bORDER\s+BY\b",
         # YAML patterns (key: value syntax)
-        r"^\s*[a-zA-Z_][a-zA-Z0-9_]*:\s+\S",  # key: value
+        r"^\s*[a-zA-Z_][a-zA-Z0-9_\-]{1,30}:\s+\S",  # key: value
         r"^---$|^\.\.\.$",  # YAML document markers
         r"^!\w+\s",  # YAML tags
         # JSON patterns
@@ -315,13 +336,24 @@ def _is_non_java_hunk_in_java_file(file_path: str, hunk_text: str) -> bool:
 
     for pattern in patterns:
         try:
-            if re.search(pattern, content, re.MULTILINE):
-                return True
+            m = re.search(pattern, content, re.MULTILINE)
+            if not m:
+                continue
+            # Avoid false positives for Java switch labels like `case 0:` and `default:`.
+            if pattern == r"^\s*[a-zA-Z_][a-zA-Z0-9_\-]{1,30}:\s+\S":
+                ms = (m.group(0) or "").strip()
+                if re.match(r"^(case\s+[^:]+|default)\s*:\s*$", ms):
+                    continue
+            non_code_signal_count += 1
         except Exception:
             # If regex is invalid, skip it
             pass
 
-    return False
+    if non_code_signal_count == 0:
+        return False
+    if java_code_line_count >= 2 and non_code_signal_count <= 1:
+        return False
+    return True
 
 
 def setup_repos(mainline_commit, backport_commit, mainline_repo_path, target_repo_path):

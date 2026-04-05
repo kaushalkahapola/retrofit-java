@@ -1,0 +1,849 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/io/crate/protocols/postgres/Portal.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import io.crate.session.PreparedStmt;",
+        "new_string": "import io.crate.analyze.AnalyzedStatement;\nimport io.crate.session.PreparedStmt;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "",
+          "import org.jetbrains.annotations.Nullable;",
+          ""
+        ],
+        "surround_after_3": [
+          "import io.crate.session.RowConsumerToResultReceiver;",
+          "import io.crate.analyze.AnalyzedStatement;",
+          ""
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "operation_index": 1,
+        "edit_type": "delete",
+        "old_string": "import io.crate.analyze.AnalyzedStatement;",
+        "new_string": "",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_delete",
+        "surround_before_3": [
+          "",
+          "import io.crate.session.PreparedStmt;",
+          "import io.crate.session.RowConsumerToResultReceiver;"
+        ],
+        "surround_after_3": [
+          "",
+          "public final class Portal {",
+          ""
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+        "operation_index": 0,
+        "edit_type": "insert_after",
+        "old_string": "               \", preparedStmt=\" + preparedStmt.rawStatement() +",
+        "new_string": "               \", preparedStmt=\" + preparedStmt.rawStatement() +\n               \", consumer=\" + consumer +",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_after",
+        "surround_before_3": [
+          "    public String toString() {",
+          "        return \"Portal{\" +",
+          "               \"portalName=\" + portalName +"
+        ],
+        "surround_after_3": [
+          "               '}';",
+          "    }",
+          "}"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "\", consumer=\" + consumer +"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ],
+    "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "     */\n    private int rowCount = 0;\n    private BatchIterator<Row> activeIt;\n",
+        "new_string": "     */\n    private int rowCount = 0;\n    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "",
+          "    /**",
+          "     * Reset per suspend/execute"
+        ],
+        "surround_after_3": [
+          "    public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {",
+          "        this.resultReceiver = resultReceiver;",
+          "        this.maxRows = maxRows;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();",
+          "completionFuture.whenComplete((_, err) -> {"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "        this.resultReceiver = resultReceiver;\n        this.maxRows = maxRows;\n        completionFuture.whenComplete((res, err) -> {\n            onCompletion.accept(err);",
+        "new_string": "        this.resultReceiver = resultReceiver;\n        this.maxRows = maxRows;\n        completionFuture.whenComplete((_, err) -> {\n            onCompletion.accept(err);",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "    private BatchIterator<Row> activeIt;",
+          "",
+          "    public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {"
+        ],
+        "surround_after_3": [
+          "        });",
+          "    }",
+          ""
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();",
+          "completionFuture.whenComplete((_, err) -> {"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "                    rowCount++;",
+        "new_string": "                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n                        suspendedIt.complete(iterator);\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                    rowCount++;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        while (true) {",
+          "            try {",
+          "                while (iterator.moveNext()) {"
+        ],
+        "surround_after_3": [
+          "                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());",
+          "                    if (writeFuture != null) {",
+          "                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {",
+          "suspendedIt.complete(iterator);",
+          "resultReceiver.batchFinished();",
+          "return; // resumed via postgres protocol, close is done later",
+          "suspendedIt = new CompletableFuture<>();",
+          "consumeIt(iterator);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        activeIt = iterator;\n                        writeFuture.thenRun(() -> {",
+        "new_string": "                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        suspendedIt.complete(iterator);\n                        writeFuture.thenRun(() -> {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "                while (iterator.moveNext()) {",
+          "                    rowCount++;",
+          "                    CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());"
+        ],
+        "surround_after_3": [
+          "                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);",
+          "                            resume();",
+          "                        });"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {",
+          "suspendedIt.complete(iterator);",
+          "resultReceiver.batchFinished();",
+          "return; // resumed via postgres protocol, close is done later",
+          "suspendedIt = new CompletableFuture<>();",
+          "consumeIt(iterator);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "operation_index": 2,
+        "edit_type": "replace",
+        "old_string": "                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            resume();\n                        });",
+        "new_string": "                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            suspendedIt = new CompletableFuture<>();\n                            rowCount = 0;\n                            consumeIt(iterator);\n                        });",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "                    if (writeFuture != null) {",
+          "                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);",
+          "                        activeIt = iterator;"
+        ],
+        "surround_after_3": [
+          "                        return;",
+          "                    }",
+          ""
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {",
+          "suspendedIt.complete(iterator);",
+          "resultReceiver.batchFinished();",
+          "return; // resumed via postgres protocol, close is done later",
+          "suspendedIt = new CompletableFuture<>();",
+          "consumeIt(iterator);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "operation_index": 3,
+        "edit_type": "delete",
+        "old_string": "\n                    if (maxRows > 0 && rowCount % maxRows == 0) {\n                        activeIt = iterator;\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }",
+        "new_string": "",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_delete",
+        "surround_before_3": [
+          "                        });",
+          "                        return;",
+          "                    }"
+        ],
+        "surround_after_3": [
+          "                }",
+          "                if (iterator.allLoaded()) {",
+          "                    completionFuture.complete(null);"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {",
+          "suspendedIt.complete(iterator);",
+          "resultReceiver.batchFinished();",
+          "return; // resumed via postgres protocol, close is done later",
+          "suspendedIt = new CompletableFuture<>();",
+          "consumeIt(iterator);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "                        continue;\n                    }\n                    nextBatch.whenComplete((r, f) -> {\n                        if (f == null) {",
+        "new_string": "                        continue;\n                    }\n                    nextBatch.whenComplete((_, f) -> {\n                        if (f == null) {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "                            // trigger exception",
+          "                            nextBatch.join();",
+          "                        }"
+        ],
+        "surround_after_3": [
+          "                            consumeIt(iterator);",
+          "                        } else {",
+          "                            Throwable t = SQLExceptions.unwrap(f);"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "nextBatch.whenComplete((_, f) -> {"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "     */\n    public void closeAndFinishIfSuspended() {\n        if (activeIt != null) {\n            activeIt.close();\n            completionFuture.complete(null);",
+        "new_string": "     */\n    public void closeAndFinishIfSuspended() {\n        suspendedIt.whenComplete((it, _) -> {\n            it.close();\n            completionFuture.complete(null);",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "    /**",
+          "     * If this consumer suspended itself (due to {@code maxRows} being > 0, it will close the BatchIterator",
+          "     * and finish the ResultReceiver"
+        ],
+        "surround_after_3": [
+          "            // resultReceiver is left untouched:",
+          "            // - A previous .batchCompleted() call already flushed out pending messages",
+          "            // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client."
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "suspendedIt.whenComplete((it, _) -> {",
+          "return suspendedIt.isDone();"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "            // - A previous .batchCompleted() call already flushed out pending messages\n            // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.\n        }\n    }",
+        "new_string": "            // - A previous .batchCompleted() call already flushed out pending messages\n            // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.\n        });\n    }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "            activeIt.close();",
+          "            completionFuture.complete(null);",
+          "            // resultReceiver is left untouched:"
+        ],
+        "surround_after_3": [
+          "",
+          "    public boolean suspended() {",
+          "        return activeIt != null;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "suspendedIt.whenComplete((it, _) -> {",
+          "return suspendedIt.isDone();"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "operation_index": 2,
+        "edit_type": "replace",
+        "old_string": "\n    public boolean suspended() {\n        return activeIt != null;\n    }",
+        "new_string": "\n    public boolean suspended() {\n        return suspendedIt.isDone();\n    }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "            // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.",
+          "        }",
+          "    }"
+        ],
+        "surround_after_3": [
+          "",
+          "    public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {",
+          "        if (!this.resultReceiver.completionFuture().isDone()) {"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "suspendedIt.whenComplete((it, _) -> {",
+          "return suspendedIt.isDone();"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 4,
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "\n    public void resume() {\n        assert activeIt != null : \"resume must only be called if suspended() returned true and activeIt is not null\";\n        BatchIterator<Row> iterator = this.activeIt;\n        this.activeIt = null;\n        consumeIt(iterator);\n    }",
+        "new_string": "\n    public void resume() {\n        assert suspended() : \"resume must only be called if suspended() returned true\";\n        BatchIterator<Row> it = null;\n        try {\n            it = suspendedIt.join();\n            suspendedIt = new CompletableFuture<>();\n            resultReceiver.setNextRow(it.currentElement());\n            consumeIt(it);\n        } catch (Throwable t) {\n            if (it != null) {\n                it.close();\n            }\n            completionFuture.completeExceptionally(t);\n            resultReceiver.fail(t);\n        }\n    }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "        this.resultReceiver = resultReceiver;",
+          "        this.maxRows = maxRows;",
+          "    }"
+        ],
+        "surround_after_3": [
+          "",
+          "    @Override",
+          "    public String toString() {"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "assert suspended() : \"resume must only be called if suspended() returned true\";",
+          "BatchIterator<Row> it = null;",
+          "it = suspendedIt.join();",
+          "suspendedIt = new CompletableFuture<>();",
+          "resultReceiver.setNextRow(it.currentElement());",
+          "} catch (Throwable t) {",
+          "completionFuture.completeExceptionally(t);",
+          "resultReceiver.fail(t);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 5,
+        "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "               \", maxRows=\" + maxRows +\n               \", rowCount=\" + rowCount +\n               \", activeIt=\" + activeIt +\n               '}';",
+        "new_string": "               \", maxRows=\" + maxRows +\n               \", rowCount=\" + rowCount +\n               \", activeIt=\" + suspendedIt +\n               '}';",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "    public String toString() {",
+          "        return \"RowConsumerToResultReceiver{\" +",
+          "               \"resultReceiver=\" + resultReceiver +"
+        ],
+        "surround_after_3": [
+          "    }",
+          "}"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "\", activeIt=\" + suspendedIt +"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 8,
+          "target_declared_methods_count": 8,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ],
+    "server/src/main/java/io/crate/session/Session.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "            var result = activeExecution;",
+        "new_string": "            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n            var result = activeExecution;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        if (activeExecution == null) {",
+          "            return triggerDeferredExecutions(forceBulk);",
+          "        } else {"
+        ],
+        "surround_after_3": [
+          "            activeExecution = null;",
+          "            return result;",
+          "        }"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 42,
+          "target_declared_methods_count": 41,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "\n    private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n        switch (deferredExecutionsByStmt.size()) {\n            case 0:",
+        "new_string": "\n    private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n        int numDeferred = deferredExecutionsByStmt.size();\n        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n        switch (numDeferred) {\n            case 0:",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "        ScheduledFuture<?> schedule = scheduler.schedule(kill, remainingTimeoutMs, TimeUnit.MILLISECONDS);",
+          "        result.whenComplete((_, _) -> schedule.cancel(false));",
+          "    }"
+        ],
+        "surround_after_3": [
+          "                LOGGER.debug(\"method=sync deferredExecutions=0\");",
+          "                return CompletableFuture.completedFuture(null);",
+          "            case 1: {"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "int numDeferred = deferredExecutionsByStmt.size();",
+          "LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);",
+          "switch (numDeferred) {"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 42,
+          "target_declared_methods_count": 41,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "operation_index": 1,
+        "edit_type": "delete",
+        "old_string": "                LOGGER.debug(\"method=sync deferredExecutions=0\");",
+        "new_string": "",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_delete",
+        "surround_before_3": [
+          "    private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {",
+          "        switch (deferredExecutionsByStmt.size()) {",
+          "            case 0:"
+        ],
+        "surround_after_3": [
+          "                return CompletableFuture.completedFuture(null);",
+          "            case 1: {",
+          "                var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "int numDeferred = deferredExecutionsByStmt.size();",
+          "LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);",
+          "switch (numDeferred) {"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 42,
+          "target_declared_methods_count": 41,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/session/Session.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "            }\n            default: {\n                // Mix of different defered execution is PG specific.\n                // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.",
+        "new_string": "            }\n            default: {\n                // Mix of different deferred execution is PG specific.\n                // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "                var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();",
+          "                deferredExecutionsByStmt.clear();",
+          "                return exec(deferredExecutions, forceBulk);"
+        ],
+        "surround_after_3": [
+          "                // sequentiallize execution to ensure client receives row counts in correct order",
+          "                CompletableFuture<?> allCompleted = null;",
+          "                for (var entry : deferredExecutionsByStmt.entrySet()) {"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 42,
+          "target_declared_methods_count": 41,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ]
+  },
+  "last_plan_signature": "26d6f32f9096339e0ba101acc1ffc0e4785037d20228beb2afb30dca87239c99",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}
