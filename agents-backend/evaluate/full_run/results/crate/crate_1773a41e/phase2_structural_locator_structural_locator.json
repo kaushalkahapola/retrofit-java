@@ -1,0 +1,326 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "server/src/main/java/io/crate/protocols/postgres/PgClient.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/protocols/postgres/PgClient.java",
+        "target_method": null,
+        "start_line": 600,
+        "end_line": 600,
+        "code_snippet": "        @Override\n        public DiscoveryNode getNode() {\n            return node;\n        }\n\n        @Override\n        public void sendRequest(long requestId,\n                                String action,\n                                TransportRequest request,\n                                TransportRequestOptions options) throws IOException, TransportException {\n            if (isClosing.get()) {\n                throw new NodeNotConnectedException(node, \"connection already closed\");\n            }\n            outboundHandler.sendRequest(\n                node,\n                channel,\n                requestId,\n                action,\n                request,\n                options,\n                version,\n                connectionProfile.getCompressionEnabled(),\n                false // isHandshake\n            );\n        }\n\n\n        @Override\n        public void close() {\n            if (isClosing.compareAndSet(false, true)) {\n                try {\n                    CloseableChannel.closeChannels(List.of(channel), false);\n                } finally {\n                    super.close();\n                }\n            }\n        }\n    }\n\n    public <Request extends TransportRequest, Response extends TransportResponse> CompletableFuture<Response> execute(ActionType<Response> action, Request request) {\n        return ensureConnected().thenCompose(connection -> {",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/org/elasticsearch/Version.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/org/elasticsearch/Version.java",
+        "target_method": null,
+        "start_line": 220,
+        "end_line": 220,
+        "code_snippet": "    public static final Version V_5_7_2 = new Version(8_07_02_99, false, org.apache.lucene.util.Version.LUCENE_9_10_0);\n    public static final Version V_5_7_3 = new Version(8_07_03_99, false, org.apache.lucene.util.Version.LUCENE_9_10_0);\n    public static final Version V_5_7_4 = new Version(8_07_04_99, false, org.apache.lucene.util.Version.LUCENE_9_10_0);\n    public static final Version V_5_7_5 = new Version(8_07_05_99, false, org.apache.lucene.util.Version.LUCENE_9_10_0);\n\n    public static final Version V_5_8_0 = new Version(8_08_00_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_8_1 = new Version(8_08_01_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_8_2 = new Version(8_08_02_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_8_3 = new Version(8_08_03_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_8_4 = new Version(8_08_04_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_8_5 = new Version(8_08_05_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n\n    public static final Version V_5_9_0 = new Version(8_09_00_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_1 = new Version(8_09_01_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_2 = new Version(8_09_02_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_3 = new Version(8_09_03_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_4 = new Version(8_09_04_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_5 = new Version(8_09_05_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_6 = new Version(8_09_06_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_7 = new Version(8_09_07_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_8 = new Version(8_09_08_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n\n    public static final Version V_5_10_0 = new Version(8_10_00_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_1 = new Version(8_10_01_99, true, org.apache.lucene.util.Version.LUCENE_9_12_0);\n\n    public static final Version CURRENT = V_5_10_1;\n\n    private static final ImmutableOpenIntMap<Version> ID_TO_VERSION;\n    private static final ImmutableOpenMap<String, Version> STRING_TO_VERSION;\n\n    static {\n        final ImmutableOpenIntMap.Builder<Version> builder = ImmutableOpenIntMap.builder();\n        final ImmutableOpenMap.Builder<String, Version> builderByString = ImmutableOpenMap.builder();\n\n        for (final Field declaredField : Version.class.getFields()) {\n            if (declaredField.getType().equals(Version.class)) {\n                final String fieldName = declaredField.getName();\n                if (fieldName.equals(\"CURRENT\") || fieldName.equals(\"V_EMPTY\")) {\n                    continue;\n                }\n                assert fieldName.matches(\"V_\\\\d+_\\\\d+_\\\\d+\")",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "server/src/main/java/org/elasticsearch/Version.java",
+        "target_method": null,
+        "start_line": 424,
+        "end_line": 424,
+        "code_snippet": "                } else if (buildStr.startsWith(\"RC\") || buildStr.startsWith(\"rc\")) {\n                    build = Integer.parseInt(buildStr.substring(2)) + 50;\n                } else {\n                    throw new IllegalArgumentException(\"unable to parse version \" + version);\n                }\n            }\n\n            return fromId(major + minor + revision + build + INTERNAL_OFFSET);\n\n        } catch (NumberFormatException e) {\n            throw new IllegalArgumentException(\"unable to parse version \" + version, e);\n        }\n    }\n\n    private final boolean isSnapshot;\n    public final int externalId;\n    public final int internalId;\n    public final byte major;\n    public final byte minor;\n    public final byte revision;\n    public final byte build;\n    public final org.apache.lucene.util.Version luceneVersion;\n\n    Version(int internalId, boolean isSnapshot, org.apache.lucene.util.Version luceneVersion) {\n        this(internalId, internalId - INTERNAL_OFFSET, isSnapshot, luceneVersion);\n    }\n\n    Version(int internalId, int externalId, boolean isSnapshot, org.apache.lucene.util.Version luceneVersion) {\n        this.internalId = internalId;\n        this.externalId = externalId;\n        this.major = (byte) ((internalId / 1000000) % 100);\n        this.minor = (byte) ((internalId / 10000) % 100);\n        this.revision = (byte) ((internalId / 100) % 100);\n        this.build = (byte) (internalId % 100);\n        this.luceneVersion = luceneVersion;\n        this.isSnapshot = isSnapshot;\n    }\n\n    public boolean isSnapshot() {\n        return isSnapshot;\n    }",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "hunk_3",
+        "target_file": "server/src/main/java/org/elasticsearch/Version.java",
+        "target_method": null,
+        "start_line": 494,
+        "end_line": 494,
+        "code_snippet": "            return version.minor > minor;\n        }\n        return version.major > major;\n    }\n\n    public boolean onOrBefore(Version version) {\n        return version.internalId >= internalId;\n    }\n\n    @Override\n    public int compareTo(Version other) {\n        return Integer.compare(this.internalId, other.internalId);\n    }\n\n    /*\n     * We need the declared versions when computing the minimum compatibility version. As computing the declared versions uses reflection it\n     * is not cheap. Since computing the minimum compatibility version can occur often, we use this holder to compute the declared versions\n     * lazily once.\n     */\n    private static class DeclaredVersionsHolder {\n        static final List<Version> DECLARED_VERSIONS = Collections.unmodifiableList(getDeclaredVersions(Version.class));\n    }\n\n\n    /**\n     * Returns the minimum compatible version based on the current\n     * version. Ie a node needs to have at least the return version in order\n     * to communicate with a node running the current version. The returned version\n     * is in most of the cases the smallest major version release unless the current version\n     * is a beta or RC release then the version itself is returned.\n     */\n    public Version minimumCompatibilityVersion() {\n        return V_4_0_0;\n    }\n\n    /**\n     * Returns the minimum created index version that this version supports. Indices created with lower versions\n     * can't be used with this version. This should also be used for file based serialization backwards compatibility ie. on serialization\n     * code that is used to read / write file formats like transaction logs, cluster state, and index metadata.\n     */\n    public Version minimumIndexCompatibilityVersion() {",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "minimumCompatibilityVersion",
+        "target_file": "server/src/main/java/org/elasticsearch/Version.java",
+        "target_method": "minimumCompatibilityVersion",
+        "start_line": 503,
+        "end_line": 503,
+        "code_snippet": "    @Override\n    public int compareTo(Version other) {\n        return Integer.compare(this.internalId, other.internalId);\n    }\n\n    /*\n     * We need the declared versions when computing the minimum compatibility version. As computing the declared versions uses reflection it\n     * is not cheap. Since computing the minimum compatibility version can occur often, we use this holder to compute the declared versions\n     * lazily once.\n     */\n    private static class DeclaredVersionsHolder {\n        static final List<Version> DECLARED_VERSIONS = Collections.unmodifiableList(getDeclaredVersions(Version.class));\n    }\n\n\n    /**\n     * Returns the minimum compatible version based on the current\n     * version. Ie a node needs to have at least the return version in order\n     * to communicate with a node running the current version. The returned version\n     * is in most of the cases the smallest major version release unless the current version\n     * is a beta or RC release then the version itself is returned.\n     */\n    public Version minimumCompatibilityVersion() {\n        return V_4_0_0;\n    }\n\n    /**\n     * Returns the minimum created index version that this version supports. Indices created with lower versions\n     * can't be used with this version. This should also be used for file based serialization backwards compatibility ie. on serialization\n     * code that is used to read / write file formats like transaction logs, cluster state, and index metadata.\n     */\n    public Version minimumIndexCompatibilityVersion() {\n        // https://cwiki.apache.org/confluence/display/lucene/BackwardsCompatibility\n        // Version X.N should be able to read indexes generated by any version after and including version X-1.0\n        return V_4_0_0;\n    }\n\n    /**\n     * Returns <code>true</code> iff both version are compatible. Otherwise <code>false</code>\n     */\n    public boolean isCompatible(Version version) {",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 5,
+        "mainline_method": "isCompatible",
+        "target_file": "server/src/main/java/org/elasticsearch/Version.java",
+        "target_method": "isCompatible",
+        "start_line": 524,
+        "end_line": 524,
+        "code_snippet": "     */\n    public Version minimumCompatibilityVersion() {\n        return V_4_0_0;\n    }\n\n    /**\n     * Returns the minimum created index version that this version supports. Indices created with lower versions\n     * can't be used with this version. This should also be used for file based serialization backwards compatibility ie. on serialization\n     * code that is used to read / write file formats like transaction logs, cluster state, and index metadata.\n     */\n    public Version minimumIndexCompatibilityVersion() {\n        // https://cwiki.apache.org/confluence/display/lucene/BackwardsCompatibility\n        // Version X.N should be able to read indexes generated by any version after and including version X-1.0\n        return V_4_0_0;\n    }\n\n    /**\n     * Returns <code>true</code> iff both version are compatible. Otherwise <code>false</code>\n     */\n    public boolean isCompatible(Version version) {\n        boolean compatible = onOrAfter(version.minimumCompatibilityVersion())\n            && version.onOrAfter(minimumCompatibilityVersion());\n\n        assert compatible == false || Math.max(major, version.major) - Math.min(major, version.major) <= 1;\n        return compatible;\n    }\n\n    @SuppressForbidden(reason = \"System.out.*\")\n    public static void main(String[] args) {\n        final String versionOutput = String.format(\n                Locale.ROOT,\n                \"Version: %s, Build: %s/%s, JVM: %s\",\n                Version.displayVersion(Version.CURRENT, Version.CURRENT.isSnapshot()),\n                Build.CURRENT.hashShort(),\n                Build.CURRENT.timestamp(),\n                JvmInfo.jvmInfo().version());\n        System.out.println(versionOutput);\n    }\n\n    @Override\n    public String toString() {",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<import>",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "target_method": "<import>",
+        "start_line": 22,
+        "end_line": 22,
+        "code_snippet": " * Licensed to Elasticsearch under one or more contributor\n * license agreements. See the NOTICE file distributed with\n * this work for additional information regarding copyright\n * ownership. Elasticsearch licenses this file to you under\n * the Apache License, Version 2.0 (the \"License\"); you may\n * not use this file except in compliance with the License.\n * You may obtain a copy of the License at\n *\n *    http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing,\n * software distributed under the License is distributed on an\n * \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY\n * KIND, either express or implied.  See the License for the\n * specific language governing permissions and limitations\n * under the License.\n */\n\npackage org.elasticsearch.transport;\n\nimport org.jetbrains.annotations.VisibleForTesting;\nimport io.crate.common.io.IOUtils;\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.bytes.BytesReference;\nimport org.elasticsearch.common.bytes.ReleasableBytesReference;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.lease.Releasable;\nimport org.elasticsearch.common.util.PageCacheRecycler;\n\nimport java.io.IOException;\nimport java.util.function.Consumer;\n\npublic class InboundDecoder implements Releasable {\n\n    static final Object PING = new Object();\n    static final Object END_CONTENT = new Object();\n\n    private final Version version;\n    private final PageCacheRecycler recycler;\n    private TransportDecompressor decompressor;\n    private int totalNetworkSize = -1;",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "target_method": null,
+        "start_line": 76,
+        "end_line": 76,
+        "code_snippet": "            cleanDecodeState();\n            throw e;\n        }\n    }\n\n    public int internalDecode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {\n        if (isOnHeader()) {\n            int messageLength = TcpTransport.readMessageLength(reference);\n            if (messageLength == -1) {\n                return 0;\n            } else if (messageLength == 0) {\n                fragmentConsumer.accept(PING);\n                return 6;\n            } else {\n                int headerBytesToRead = headerBytesToRead(reference);\n                if (headerBytesToRead == 0) {\n                    return 0;\n                } else {\n                    totalNetworkSize = messageLength + TcpHeader.BYTES_REQUIRED_FOR_MESSAGE_SIZE;\n\n                    Header header = readHeader(version, messageLength, reference);\n                    bytesConsumed += headerBytesToRead;\n                    if (header.isCompressed()) {\n                        decompressor = new TransportDecompressor(recycler);\n                    }\n                    fragmentConsumer.accept(header);\n\n                    if (isDone()) {\n                        finishMessage(fragmentConsumer);\n                    }\n                    return headerBytesToRead;\n                }\n            }\n        } else {\n            // There are a minimum number of bytes required to start decompression\n            if (decompressor != null && decompressor.canDecompress(reference.length()) == false) {\n                return 0;\n            }\n            int bytesToConsume = Math.min(reference.length(), totalNetworkSize - bytesConsumed);\n            bytesConsumed += bytesToConsume;\n            ReleasableBytesReference retainedContent;",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "hunk_3",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "target_method": null,
+        "start_line": 171,
+        "end_line": 171,
+        "code_snippet": "        }\n\n        Version remoteVersion = Version.fromId(reference.getInt(TcpHeader.VERSION_POSITION));\n        int fixedHeaderSize = TcpHeader.headerSize(remoteVersion);\n        if (fixedHeaderSize > reference.length()) {\n            return 0;\n        } else if (remoteVersion.before(TcpHeader.VERSION_WITH_HEADER_SIZE)) {\n            return fixedHeaderSize;\n        } else {\n            int variableHeaderSize = reference.getInt(TcpHeader.VARIABLE_HEADER_SIZE_POSITION);\n            int totalHeaderSize = fixedHeaderSize + variableHeaderSize;\n            if (totalHeaderSize > reference.length()) {\n                return 0;\n            } else {\n                return totalHeaderSize;\n            }\n        }\n    }\n\n    @VisibleForTesting\n    static Header readHeader(Version version, int networkMessageSize, BytesReference bytesReference) throws IOException {\n        try (StreamInput streamInput = bytesReference.streamInput()) {\n            streamInput.skip(TcpHeader.BYTES_REQUIRED_FOR_MESSAGE_SIZE);\n            long requestId = streamInput.readLong();\n            byte status = streamInput.readByte();\n            Version remoteVersion = Version.fromId(streamInput.readInt());\n            Header header = new Header(networkMessageSize, requestId, status, remoteVersion);\n            final IllegalStateException invalidVersion = ensureVersionCompatibility(remoteVersion, version, header.isHandshake());\n            if (invalidVersion != null) {\n                throw invalidVersion;\n            } else {\n                if (remoteVersion.onOrAfter(TcpHeader.VERSION_WITH_HEADER_SIZE)) {\n                    // Skip since we already have ensured enough data available\n                    streamInput.readInt();\n                    header.finishParsingHeader(streamInput);\n                }\n            }\n            return header;\n        }\n    }\n",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "ensureVersionCompatibility",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "target_method": "ensureVersionCompatibility",
+        "start_line": 202,
+        "end_line": 202,
+        "code_snippet": "                if (remoteVersion.onOrAfter(TcpHeader.VERSION_WITH_HEADER_SIZE)) {\n                    // Skip since we already have ensured enough data available\n                    streamInput.readInt();\n                    header.finishParsingHeader(streamInput);\n                }\n            }\n            return header;\n        }\n    }\n\n    private boolean isOnHeader() {\n        return totalNetworkSize == -1;\n    }\n\n    private void ensureOpen() {\n        if (isClosed) {\n            throw new IllegalStateException(\"Decoder is already closed\");\n        }\n    }\n\n    static IllegalStateException ensureVersionCompatibility(Version remoteVersion, Version currentVersion, boolean isHandshake) {\n        // for handshakes we are compatible with N-2 since otherwise we can't figure out our initial version\n        // since we are compatible with N-1 and N+1 so we always send our minCompatVersion as the initial version in the\n        // handshake. This looks odd but it's required to establish the connection correctly we check for real compatibility\n        // once the connection is established\n        final Version compatibilityVersion = isHandshake ? currentVersion.minimumCompatibilityVersion() : currentVersion;\n        if (remoteVersion.isCompatible(compatibilityVersion) == false) {\n            final Version minCompatibilityVersion = isHandshake ? compatibilityVersion : compatibilityVersion.minimumCompatibilityVersion();\n            String msg = \"Received \" + (isHandshake ? \"handshake \" : \"\") + \"message from unsupported version: [\";\n            return new IllegalStateException(msg + remoteVersion + \"] minimal compatible version is: [\" + minCompatibilityVersion + \"]\");\n        }\n        return null;\n    }\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/org/elasticsearch/transport/OutboundHandler.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/OutboundHandler.java",
+        "target_method": null,
+        "start_line": 92,
+        "end_line": 92,
+        "code_snippet": "                    LOGGER.warn(\"send message failed [channel: {}]\", channel, f.cause());\n                }\n            });\n            return future;\n        } catch (RuntimeException ex) {\n            channel.close();\n            throw ex;\n        }\n    }\n\n    /**\n     * Sends the request to the given channel. This method should be used to send {@link TransportRequest}\n     * objects back to the caller.\n     */\n    public void sendRequest(final DiscoveryNode node,\n                            final CloseableChannel channel,\n                            final long requestId,\n                            final String action,\n                            final TransportRequest request,\n                            final TransportRequestOptions options,\n                            final Version channelVersion,\n                            final boolean compressRequest,\n                            final boolean isHandshake) throws IOException, TransportException {\n        Version version = Version.min(this.version, channelVersion);\n        OutboundMessage.Request message = new OutboundMessage.Request(\n            request,\n            version,\n            action,\n            requestId,\n            isHandshake,\n            compressRequest\n        );\n        ChannelFuture future = sendMessage(channel, message);\n        future.addListener(f -> messageListener.onRequestSent(node, requestId, action, request, options));\n    }\n\n    /**\n     * Sends the response to the given channel. This method should be used to send {@link TransportResponse}\n     * objects back to the caller.\n     *\n     */",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/OutboundHandler.java",
+        "target_method": null,
+        "start_line": 113,
+        "end_line": 113,
+        "code_snippet": "                            final boolean compressRequest,\n                            final boolean isHandshake) throws IOException, TransportException {\n        Version version = Version.min(this.version, channelVersion);\n        OutboundMessage.Request message = new OutboundMessage.Request(\n            request,\n            version,\n            action,\n            requestId,\n            isHandshake,\n            compressRequest\n        );\n        ChannelFuture future = sendMessage(channel, message);\n        future.addListener(f -> messageListener.onRequestSent(node, requestId, action, request, options));\n    }\n\n    /**\n     * Sends the response to the given channel. This method should be used to send {@link TransportResponse}\n     * objects back to the caller.\n     *\n     */\n    void sendResponse(final Version nodeVersion,\n                      final CloseableChannel channel,\n                      final long requestId,\n                      final String action,\n                      final TransportResponse response,\n                      final boolean compress,\n                      final boolean isHandshake) throws IOException {\n        Version version = Version.min(this.version, nodeVersion);\n        OutboundMessage.Response message = new OutboundMessage.Response(\n            response,\n            version,\n            requestId,\n            isHandshake,\n            compress\n        );\n        ChannelFuture future = sendMessage(channel, message);\n        future.addListener(f -> messageListener.onResponseSent(requestId, action, response));\n    }\n\n    /**\n     * Sends back an error response to the caller via the given channel",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "hunk_3",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/OutboundHandler.java",
+        "target_method": null,
+        "start_line": 135,
+        "end_line": 135,
+        "code_snippet": "                      final long requestId,\n                      final String action,\n                      final TransportResponse response,\n                      final boolean compress,\n                      final boolean isHandshake) throws IOException {\n        Version version = Version.min(this.version, nodeVersion);\n        OutboundMessage.Response message = new OutboundMessage.Response(\n            response,\n            version,\n            requestId,\n            isHandshake,\n            compress\n        );\n        ChannelFuture future = sendMessage(channel, message);\n        future.addListener(f -> messageListener.onResponseSent(requestId, action, response));\n    }\n\n    /**\n     * Sends back an error response to the caller via the given channel\n     */\n    void sendErrorResponse(final Version nodeVersion,\n                           final CloseableChannel channel,\n                           final long requestId,\n                           final String action,\n                           final Exception error) throws IOException {\n        Version version = Version.min(this.version, nodeVersion);\n        TransportAddress address = new TransportAddress(channel.getLocalAddress());\n        RemoteTransportException tx = new RemoteTransportException(nodeName, address, action, error);\n        OutboundMessage.Response message = new OutboundMessage.Response(\n            tx,\n            version,\n            requestId,\n            false,\n            false\n        );\n        ChannelFuture future = sendMessage(channel, message);\n        future.addListener(f -> messageListener.onResponseSent(requestId, action, error));\n    }\n\n    private ChannelFuture sendMessage(CloseableChannel channel, OutboundMessage networkMessage) throws IOException {\n        channel.markAccessed(threadPool.relativeTimeInMillis());",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/org/elasticsearch/transport/TcpTransport.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/TcpTransport.java",
+        "target_method": null,
+        "start_line": 148,
+        "end_line": 148,
+        "code_snippet": "                        Version version,\n                        ThreadPool threadPool,\n                        PageCacheRecycler pageCacheRecycler,\n                        CircuitBreakerService circuitBreakerService,\n                        NamedWriteableRegistry namedWriteableRegistry,\n                        NetworkService networkService) {\n        this.settings = settings;\n        this.version = version;\n        this.threadPool = threadPool;\n        this.pageCacheRecycler = pageCacheRecycler;\n        this.circuitBreakerService = circuitBreakerService;\n        this.networkService = networkService;\n\n        String nodeName = Node.NODE_NAME_SETTING.get(settings);\n        BigArrays bigArrays = new BigArrays(pageCacheRecycler, circuitBreakerService, CircuitBreaker.IN_FLIGHT_REQUESTS);\n\n        this.outboundHandler = new OutboundHandler(nodeName, version, statsTracker, threadPool, bigArrays);\n        this.handshaker = new TransportHandshaker(version, threadPool,\n            (node, channel, requestId, v) -> outboundHandler.sendRequest(node, channel, requestId,\n                TransportHandshaker.HANDSHAKE_ACTION_NAME, new TransportHandshaker.HandshakeRequest(version),\n                TransportRequestOptions.EMPTY, v, false, true));\n        this.keepAlive = new TransportKeepAlive(threadPool, this.outboundHandler::sendBytes);\n        this.inboundHandler = new InboundHandler(threadPool, outboundHandler, namedWriteableRegistry, handshaker, keepAlive,\n            requestHandlers, responseHandlers);\n    }\n\n    public Version getVersion() {\n        return version;\n    }\n\n    public StatsTracker getStatsTracker() {\n        return statsTracker;\n    }\n\n    public ThreadPool getThreadPool() {\n        return threadPool;\n    }\n\n    public Supplier<CircuitBreaker> getInflightBreaker() {\n        return () -> circuitBreakerService.getBreaker(CircuitBreaker.IN_FLIGHT_REQUESTS);\n    }",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/TcpTransport.java",
+        "target_method": null,
+        "start_line": 249,
+        "end_line": 249,
+        "code_snippet": "                    CloseableChannel.closeChannels(channels, block);\n                } finally {\n                    // Call the super method to trigger listeners\n                    super.close();\n                }\n            }\n        }\n\n        @Override\n        public DiscoveryNode getNode() {\n            return this.node;\n        }\n\n        @Override\n        public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options)\n            throws IOException, TransportException {\n            if (isClosing.get()) {\n                throw new NodeNotConnectedException(node, \"connection already closed\");\n            }\n            CloseableChannel channel = channel(options.type());\n            outboundHandler.sendRequest(node, channel, requestId, action, request, options, getVersion(), compress, false);\n        }\n\n        @Override\n        public String toString() {\n            return \"NodeChannels{\" +\n                   \"channels=\" + channels +\n                   \", node=\" + node +\n                   \", version=\" + version +\n                   \", isClosing=\" + isClosing +\n                   '}';\n        }\n    }\n\n    // This allows transport implementations to potentially override specific connection profiles. This\n    // primarily exists for the test implementations.\n    protected ConnectionProfile maybeOverrideConnectionProfile(ConnectionProfile connectionProfile) {\n        return connectionProfile;\n    }\n\n    @Override",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java",
+        "target_method": null,
+        "start_line": 62,
+        "end_line": 62,
+        "code_snippet": "                        CloseableChannel channel,\n                        String action,\n                        long requestId,\n                        Version version,\n                        boolean compressResponse,\n                        boolean isHandshake,\n                        Releasable breakerRelease) {\n        this.version = version;\n        this.channel = channel;\n        this.outboundHandler = outboundHandler;\n        this.action = action;\n        this.requestId = requestId;\n        this.compressResponse = compressResponse;\n        this.isHandshake = isHandshake;\n        this.breakerRelease = breakerRelease;\n    }\n\n    @Override\n    public void sendResponse(TransportResponse response) throws IOException {\n        try {\n            outboundHandler.sendResponse(version, channel, requestId, action, response, compressResponse, isHandshake);\n        } finally {\n            release(false);\n        }\n    }\n\n    @Override\n    public void sendResponse(Exception exception) throws IOException {\n        try {\n            outboundHandler.sendErrorResponse(version, channel, requestId, action, exception);\n        } finally {\n            release(true);\n        }\n    }\n\n    private Exception releaseBy;\n\n    private void release(boolean isExceptionResponse) {\n        if (released.compareAndSet(false, true)) {\n            assert (releaseBy = new Exception()) != null; // easier to debug if it's already closed\n            breakerRelease.close();",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java",
+        "target_method": null,
+        "start_line": 71,
+        "end_line": 71,
+        "code_snippet": "        this.outboundHandler = outboundHandler;\n        this.action = action;\n        this.requestId = requestId;\n        this.compressResponse = compressResponse;\n        this.isHandshake = isHandshake;\n        this.breakerRelease = breakerRelease;\n    }\n\n    @Override\n    public void sendResponse(TransportResponse response) throws IOException {\n        try {\n            outboundHandler.sendResponse(version, channel, requestId, action, response, compressResponse, isHandshake);\n        } finally {\n            release(false);\n        }\n    }\n\n    @Override\n    public void sendResponse(Exception exception) throws IOException {\n        try {\n            outboundHandler.sendErrorResponse(version, channel, requestId, action, exception);\n        } finally {\n            release(true);\n        }\n    }\n\n    private Exception releaseBy;\n\n    private void release(boolean isExceptionResponse) {\n        if (released.compareAndSet(false, true)) {\n            assert (releaseBy = new Exception()) != null; // easier to debug if it's already closed\n            breakerRelease.close();\n        } else if (isExceptionResponse == false) {\n            // only fail if we are not sending an error - we might send the error triggered by the previous\n            // sendResponse call\n            throw new IllegalStateException(\"reserved bytes are already released\", releaseBy);\n        }\n    }\n\n    @Override\n    public String getChannelType() {",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ],
+    "server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "<import>",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java",
+        "target_method": "<import>",
+        "start_line": 35,
+        "end_line": 35,
+        "code_snippet": " * KIND, either express or implied.  See the License for the\n * specific language governing permissions and limitations\n * under the License.\n */\n\npackage org.elasticsearch.transport;\n\nimport java.io.EOFException;\nimport java.io.IOException;\nimport java.util.concurrent.ConcurrentHashMap;\nimport java.util.concurrent.ConcurrentMap;\nimport java.util.concurrent.atomic.AtomicBoolean;\n\nimport org.elasticsearch.Version;\nimport org.elasticsearch.action.ActionListener;\nimport org.elasticsearch.cluster.node.DiscoveryNode;\nimport org.elasticsearch.common.bytes.BytesReference;\nimport org.elasticsearch.common.io.stream.BytesStreamOutput;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.metrics.CounterMetric;\nimport org.elasticsearch.common.network.CloseableChannel;\nimport org.elasticsearch.threadpool.ThreadPool;\n\nimport io.crate.common.unit.TimeValue;\n\n/**\n * Sends and receives transport-level connection handshakes. This class will send the initial handshake,\n * manage state/timeouts while the handshake is in transit, and handle the eventual response.\n */\nfinal class TransportHandshaker {\n\n    static final String HANDSHAKE_ACTION_NAME = \"internal:tcp/handshake\";\n    private final ConcurrentMap<Long, HandshakeResponseHandler> pendingHandshakes = new ConcurrentHashMap<>();\n    private final CounterMetric numHandshakes = new CounterMetric();\n\n    private final Version version;\n    private final ThreadPool threadPool;\n    private final HandshakeRequestSender handshakeRequestSender;\n\n    TransportHandshaker(Version version, ThreadPool threadPool, HandshakeRequestSender handshakeRequestSender) {",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java",
+        "target_method": null,
+        "start_line": 69,
+        "end_line": 69,
+        "code_snippet": "    private final CounterMetric numHandshakes = new CounterMetric();\n\n    private final Version version;\n    private final ThreadPool threadPool;\n    private final HandshakeRequestSender handshakeRequestSender;\n\n    TransportHandshaker(Version version, ThreadPool threadPool, HandshakeRequestSender handshakeRequestSender) {\n        this.version = version;\n        this.threadPool = threadPool;\n        this.handshakeRequestSender = handshakeRequestSender;\n    }\n\n    void sendHandshake(long requestId, DiscoveryNode node, CloseableChannel channel, TimeValue timeout, ActionListener<Version> listener) {\n        numHandshakes.inc();\n        final HandshakeResponseHandler handler = new HandshakeResponseHandler(requestId, version, listener);\n        pendingHandshakes.put(requestId, handler);\n        channel.addCloseListener(ActionListener.wrap(\n            () -> handler.handleLocalException(new TransportException(\"handshake failed because connection reset\"))));\n        boolean success = false;\n        try {\n            // for the request we use the minCompatVersion since we don't know what's the version of the node we talk to\n            // we also have no payload on the request but the response will contain the actual version of the node we talk\n            // to as the payload.\n            final Version minCompatVersion = version.minimumCompatibilityVersion();\n            handshakeRequestSender.sendRequest(node, channel, requestId, minCompatVersion);\n\n            threadPool.schedule(\n                () -> handler.handleLocalException(new ConnectTransportException(node, \"handshake_timeout[\" + timeout + \"]\")),\n                timeout,\n                ThreadPool.Names.GENERIC\n            );\n            success = true;\n        } catch (Exception e) {\n            handler.handleLocalException(new ConnectTransportException(node, \"failure to send \" + HANDSHAKE_ACTION_NAME, e));\n        } finally {\n            if (success == false) {\n                TransportResponseHandler<?> removed = pendingHandshakes.remove(requestId);\n                assert removed == null : \"Handshake should not be pending if exception was thrown\";\n            }\n        }\n    }",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "hunk_3",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java",
+        "target_method": null,
+        "start_line": 92,
+        "end_line": 92,
+        "code_snippet": "            final Version minCompatVersion = version.minimumCompatibilityVersion();\n            handshakeRequestSender.sendRequest(node, channel, requestId, minCompatVersion);\n\n            threadPool.schedule(\n                () -> handler.handleLocalException(new ConnectTransportException(node, \"handshake_timeout[\" + timeout + \"]\")),\n                timeout,\n                ThreadPool.Names.GENERIC\n            );\n            success = true;\n        } catch (Exception e) {\n            handler.handleLocalException(new ConnectTransportException(node, \"failure to send \" + HANDSHAKE_ACTION_NAME, e));\n        } finally {\n            if (success == false) {\n                TransportResponseHandler<?> removed = pendingHandshakes.remove(requestId);\n                assert removed == null : \"Handshake should not be pending if exception was thrown\";\n            }\n        }\n    }\n\n    void handleHandshake(TransportChannel channel, long requestId, StreamInput stream) throws IOException {\n        // Must read the handshake request to exhaust the stream\n        new HandshakeRequest(stream);\n\n        final int nextByte = stream.read();\n        if (nextByte != -1) {\n            throw new IllegalStateException(\"Handshake request not fully read for requestId [\" + requestId + \"], action [\"\n                + TransportHandshaker.HANDSHAKE_ACTION_NAME + \"], available [\" + stream.available() + \"]; resetting\");\n        }\n        channel.sendResponse(new HandshakeResponse(this.version));\n    }\n\n    TransportResponseHandler<HandshakeResponse> removeHandlerForHandshake(long requestId) {\n        return pendingHandshakes.remove(requestId);\n    }\n\n    int getNumPendingHandshakes() {\n        return pendingHandshakes.size();\n    }\n\n    long getNumHandshakes() {\n        return numHandshakes.count();",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "handleResponse",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java",
+        "target_method": "handleResponse",
+        "start_line": 136,
+        "end_line": 136,
+        "code_snippet": "\n        private final long requestId;\n        private final Version currentVersion;\n        private final ActionListener<Version> listener;\n        private final AtomicBoolean isDone = new AtomicBoolean(false);\n\n        private HandshakeResponseHandler(long requestId, Version currentVersion, ActionListener<Version> listener) {\n            this.requestId = requestId;\n            this.currentVersion = currentVersion;\n            this.listener = listener;\n        }\n\n        @Override\n        public HandshakeResponse read(StreamInput in) throws IOException {\n            return new HandshakeResponse(in);\n        }\n\n        @Override\n        public void handleResponse(HandshakeResponse response) {\n            if (isDone.compareAndSet(false, true)) {\n                Version version = response.responseVersion;\n                if (currentVersion.isCompatible(version) == false) {\n                    listener.onFailure(new IllegalStateException(\"Received message from unsupported version: [\" + version\n                        + \"] minimal compatible version is: [\" + currentVersion.minimumCompatibilityVersion() + \"]\"));\n                } else {\n                    listener.onResponse(version);\n                }\n            }\n        }\n\n        @Override\n        public void handleException(TransportException e) {\n            if (isDone.compareAndSet(false, true)) {\n                listener.onFailure(new IllegalStateException(\"handshake failed\", e));\n            }\n        }\n\n        void handleLocalException(TransportException e) {\n            if (removeHandlerForHandshake(requestId) != null && isDone.compareAndSet(false, true)) {\n                listener.onFailure(e);\n            }",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 5,
+        "mainline_method": "<class_declaration>",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java",
+        "target_method": "<class_declaration>",
+        "start_line": 51,
+        "end_line": 51,
+        "code_snippet": "import org.elasticsearch.common.bytes.BytesReference;\nimport org.elasticsearch.common.io.stream.BytesStreamOutput;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.metrics.CounterMetric;\nimport org.elasticsearch.common.network.CloseableChannel;\nimport org.elasticsearch.threadpool.ThreadPool;\n\nimport io.crate.common.unit.TimeValue;\n\n/**\n * Sends and receives transport-level connection handshakes. This class will send the initial handshake,\n * manage state/timeouts while the handshake is in transit, and handle the eventual response.\n */\nfinal class TransportHandshaker {\n\n    static final String HANDSHAKE_ACTION_NAME = \"internal:tcp/handshake\";\n    private final ConcurrentMap<Long, HandshakeResponseHandler> pendingHandshakes = new ConcurrentHashMap<>();\n    private final CounterMetric numHandshakes = new CounterMetric();\n\n    private final Version version;\n    private final ThreadPool threadPool;\n    private final HandshakeRequestSender handshakeRequestSender;\n\n    TransportHandshaker(Version version, ThreadPool threadPool, HandshakeRequestSender handshakeRequestSender) {\n        this.version = version;\n        this.threadPool = threadPool;\n        this.handshakeRequestSender = handshakeRequestSender;\n    }\n\n    void sendHandshake(long requestId, DiscoveryNode node, CloseableChannel channel, TimeValue timeout, ActionListener<Version> listener) {\n        numHandshakes.inc();\n        final HandshakeResponseHandler handler = new HandshakeResponseHandler(requestId, version, listener);\n        pendingHandshakes.put(requestId, handler);\n        channel.addCloseListener(ActionListener.wrap(\n            () -> handler.handleLocalException(new TransportException(\"handshake failed because connection reset\"))));\n        boolean success = false;\n        try {\n            // for the request we use the minCompatVersion since we don't know what's the version of the node we talk to\n            // we also have no payload on the request but the response will contain the actual version of the node we talk\n            // to as the payload.",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 6,
+        "mainline_method": "hunk_6",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java",
+        "target_method": null,
+        "start_line": 183,
+        "end_line": 183,
+        "code_snippet": "    }\n\n\n    static final class HandshakeRequest extends TransportRequest {\n\n        private final Version version;\n\n        HandshakeRequest(Version version) {\n            this.version = version;\n        }\n\n        HandshakeRequest(StreamInput streamInput) throws IOException {\n            super(streamInput);\n            BytesReference remainingMessage;\n            try {\n                remainingMessage = streamInput.readBytesReference();\n            } catch (EOFException e) {\n                remainingMessage = null;\n            }\n            if (remainingMessage == null) {\n                version = null;\n            } else {\n                try (StreamInput messageStreamInput = remainingMessage.streamInput()) {\n                    this.version = Version.readVersion(messageStreamInput);\n                }\n            }\n        }\n\n        @Override\n        public void writeTo(StreamOutput streamOutput) throws IOException {\n            super.writeTo(streamOutput);\n            assert version != null;\n            try (BytesStreamOutput messageStreamOutput = new BytesStreamOutput(4)) {\n                Version.writeVersion(version, messageStreamOutput);\n                BytesReference reference = messageStreamOutput.bytes();\n                streamOutput.writeBytesReference(reference);\n            }\n        }\n    }\n\n    static final class HandshakeResponse extends TransportResponse {",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 7,
+        "mainline_method": "hunk_7",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java",
+        "target_method": null,
+        "start_line": 194,
+        "end_line": 194,
+        "code_snippet": "        HandshakeRequest(StreamInput streamInput) throws IOException {\n            super(streamInput);\n            BytesReference remainingMessage;\n            try {\n                remainingMessage = streamInput.readBytesReference();\n            } catch (EOFException e) {\n                remainingMessage = null;\n            }\n            if (remainingMessage == null) {\n                version = null;\n            } else {\n                try (StreamInput messageStreamInput = remainingMessage.streamInput()) {\n                    this.version = Version.readVersion(messageStreamInput);\n                }\n            }\n        }\n\n        @Override\n        public void writeTo(StreamOutput streamOutput) throws IOException {\n            super.writeTo(streamOutput);\n            assert version != null;\n            try (BytesStreamOutput messageStreamOutput = new BytesStreamOutput(4)) {\n                Version.writeVersion(version, messageStreamOutput);\n                BytesReference reference = messageStreamOutput.bytes();\n                streamOutput.writeBytesReference(reference);\n            }\n        }\n    }\n\n    static final class HandshakeResponse extends TransportResponse {\n\n        private final Version responseVersion;\n\n        HandshakeResponse(Version version) {\n            this.responseVersion = version;\n        }\n\n        private HandshakeResponse(StreamInput in) throws IOException {\n            responseVersion = Version.readVersion(in);\n        }\n",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 8,
+        "mainline_method": "<class_declaration>",
+        "target_file": "server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java",
+        "target_method": "<class_declaration>",
+        "start_line": 211,
+        "end_line": 211,
+        "code_snippet": "        @Override\n        public void writeTo(StreamOutput streamOutput) throws IOException {\n            super.writeTo(streamOutput);\n            assert version != null;\n            try (BytesStreamOutput messageStreamOutput = new BytesStreamOutput(4)) {\n                Version.writeVersion(version, messageStreamOutput);\n                BytesReference reference = messageStreamOutput.bytes();\n                streamOutput.writeBytesReference(reference);\n            }\n        }\n    }\n\n    static final class HandshakeResponse extends TransportResponse {\n\n        private final Version responseVersion;\n\n        HandshakeResponse(Version version) {\n            this.responseVersion = version;\n        }\n\n        private HandshakeResponse(StreamInput in) throws IOException {\n            responseVersion = Version.readVersion(in);\n        }\n\n        @Override\n        public void writeTo(StreamOutput out) throws IOException {\n            assert responseVersion != null;\n            Version.writeVersion(responseVersion, out);\n        }\n\n        Version getResponseVersion() {\n            return responseVersion;\n        }\n    }\n\n    @FunctionalInterface\n    interface HandshakeRequestSender {\n\n        void sendRequest(DiscoveryNode node, CloseableChannel channel, long requestId, Version version) throws IOException;\n    }\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
+  }
+}

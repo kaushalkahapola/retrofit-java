@@ -1,0 +1,100 @@
+{
+  "adapted_file_edits": [
+    {
+      "target_file": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+      "mainline_file": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+      "old_string": "<developer patch fast path>",
+      "new_string": "diff --git a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\nindex 87130eac33..e00bc5eec6 100644\n--- a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\n+++ b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\n@@ -62,7 +62,7 @@ public class SwapCastsInComparisonOperators implements Rule<Function> {\n             DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n             DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\n             if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n-                return true;\n+                return literalInnerType.isConvertableTo(refInnerType, false);\n             }\n             if (isSafeConversion(literalInnerType, refInnerType)) {\n                 return true;",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "developer_fast_path_ok",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    }
+  ],
+  "all_adapted_file_edits": [
+    [
+      {
+        "target_file": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+        "mainline_file": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\nindex 87130eac33..e00bc5eec6 100644\n--- a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\n+++ b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\n@@ -62,7 +62,7 @@ public class SwapCastsInComparisonOperators implements Rule<Function> {\n             DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n             DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\n             if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n-                return true;\n+                return literalInnerType.isConvertableTo(refInnerType, false);\n             }\n             if (isSafeConversion(literalInnerType, refInnerType)) {\n                 return true;",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "developer_fast_path_ok",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      }
+    ]
+  ],
+  "agent_trajectory_edits": [
+    []
+  ],
+  "adapted_code_hunks": [
+    {
+      "target_file": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+      "mainline_file": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\nindex 87130eac33..e00bc5eec6 100644\n--- a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\n+++ b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\n@@ -62,7 +62,7 @@ public class SwapCastsInComparisonOperators implements Rule<Function> {\n             DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n             DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\n             if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n-                return true;\n+                return literalInnerType.isConvertableTo(refInnerType, false);\n             }\n             if (isSafeConversion(literalInnerType, refInnerType)) {\n                 return true;\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "validation_repeated_patch_detected": false,
+  "validation_repeated_plan_detected": false,
+  "best_effort_adapted_code_hunks": [
+    {
+      "target_file": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+      "mainline_file": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\nindex 87130eac33..e00bc5eec6 100644\n--- a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\n+++ b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java\n@@ -62,7 +62,7 @@ public class SwapCastsInComparisonOperators implements Rule<Function> {\n             DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n             DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\n             if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n-                return true;\n+                return literalInnerType.isConvertableTo(refInnerType, false);\n             }\n             if (isSafeConversion(literalInnerType, refInnerType)) {\n                 return true;\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+      "target_file": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "developer_fast_path",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    }
+  ],
+  "generated_patch_hash": "f64ff4420dffd9d825c62628379278e20eaca213f1f26b6c00a8bc235351dba0",
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

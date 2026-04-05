@@ -1,0 +1,50 @@
+# Transition Summary
+
+- Source: phase_outputs
+- Valid backport signal: True
+- Reason: Valid: Observed fail-to-pass and/or newly passing relevant tests with no regressions.
+- fail->pass (0): []
+- newly passing (39): ['org.elasticsearch.VersionTest#test_can_parse_next_major_release_version', 'org.elasticsearch.VersionTest#test_can_parse_next_minor_release_version', 'org.elasticsearch.VersionTest#test_can_parse_next_patch_release_version', 'org.elasticsearch.VersionTest#test_compatible_current_version', 'org.elasticsearch.VersionTest#test_compatible_current_version_is_compatible_to_4_0_0', 'org.elasticsearch.VersionTest#test_min_version_is_4_0_0', 'org.elasticsearch.VersionTest#test_version_minimum_compatibility', 'org.elasticsearch.transport.InboundDecoderTests#testCompressedDecode', 'org.elasticsearch.transport.InboundDecoderTests#testCompressedDecodeHandshakeCompatibility', 'org.elasticsearch.transport.InboundDecoderTests#testDecode', 'org.elasticsearch.transport.InboundDecoderTests#testDecodeHandshakeCompatibility', 'org.elasticsearch.transport.InboundDecoderTests#testDecodePreHeaderSizeVariableInt', 'org.elasticsearch.transport.InboundHandlerTests#testClosesChannelOnErrorInHandshakeWithIncompatibleVersion', 'org.elasticsearch.transport.InboundHandlerTests#testLogsSlowInboundProcessing', 'org.elasticsearch.transport.InboundHandlerTests#testPing', 'org.elasticsearch.transport.InboundHandlerTests#testRequestAndResponse', 'org.elasticsearch.transport.InboundHandlerTests#testSendsErrorResponseToHandshakeFromCompatibleVersion', 'org.elasticsearch.transport.InboundHandlerTests#test_handshake_checks_minimum_compatible_version_if_normal_version_is_not_compatible', 'org.elasticsearch.transport.InboundHandlerTests#test_handshake_error_if_version_and_minimum_compatible_version_is_not_compatible', 'org.elasticsearch.transport.InboundHandlerTests#test_handshake_precedes_stream_version_for_compatibility', 'org.elasticsearch.transport.InboundPipelineTests#testDecodeExceptionIsPropagated', 'org.elasticsearch.transport.InboundPipelineTests#testEnsureBodyIsNotPrematurelyReleased', 'org.elasticsearch.transport.InboundPipelineTests#testPipelineHandling', 'org.elasticsearch.transport.OutboundHandlerTests#testErrorResponse', 'org.elasticsearch.transport.OutboundHandlerTests#testSendRawBytes', 'org.elasticsearch.transport.OutboundHandlerTests#testSendRequest', 'org.elasticsearch.transport.OutboundHandlerTests#testSendResponse', 'org.elasticsearch.transport.TransportActionProxyTests#testException', 'org.elasticsearch.transport.TransportActionProxyTests#testGetAction', 'org.elasticsearch.transport.TransportActionProxyTests#testIsProxyAction', 'org.elasticsearch.transport.TransportActionProxyTests#testIsProxyRequest', 'org.elasticsearch.transport.TransportActionProxyTests#testSendMessage', 'org.elasticsearch.transport.TransportActionProxyTests#testUnwrap', 'org.elasticsearch.transport.TransportHandshakerTests#testHandshakeError', 'org.elasticsearch.transport.TransportHandshakerTests#testHandshakeRequestAndResponse', 'org.elasticsearch.transport.TransportHandshakerTests#testHandshakeRequestFutureVersionsCompatibility', 'org.elasticsearch.transport.TransportHandshakerTests#testHandshakeTimeout', 'org.elasticsearch.transport.TransportHandshakerTests#testSendRequestThrowsException', 'org.elasticsearch.transport.TransportHandshakerTests#test_handshake_request_includes_minimumCompatibilityVersion']
+- pass->fail (0): []
+
+## Touched Test States
+- Touched tests (from patch): ['org.elasticsearch.VersionTest', 'org.elasticsearch.transport.InboundDecoderTests', 'org.elasticsearch.transport.InboundHandlerTests', 'org.elasticsearch.transport.InboundPipelineTests', 'org.elasticsearch.transport.OutboundHandlerTests', 'org.elasticsearch.transport.TransportActionProxyTests', 'org.elasticsearch.transport.TransportHandshakerTests']
+  - org.elasticsearch.VersionTest#test_can_parse_next_major_release_version: baseline=absent, patched=passed
+  - org.elasticsearch.VersionTest#test_can_parse_next_minor_release_version: baseline=absent, patched=passed
+  - org.elasticsearch.VersionTest#test_can_parse_next_patch_release_version: baseline=absent, patched=passed
+  - org.elasticsearch.VersionTest#test_compatible_current_version: baseline=absent, patched=passed
+  - org.elasticsearch.VersionTest#test_compatible_current_version_is_compatible_to_4_0_0: baseline=absent, patched=passed
+  - org.elasticsearch.VersionTest#test_min_version_is_4_0_0: baseline=absent, patched=passed
+  - org.elasticsearch.VersionTest#test_version_minimum_compatibility: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundDecoderTests#testCompressedDecode: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundDecoderTests#testCompressedDecodeHandshakeCompatibility: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundDecoderTests#testDecode: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundDecoderTests#testDecodeHandshakeCompatibility: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundDecoderTests#testDecodePreHeaderSizeVariableInt: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundHandlerTests#testClosesChannelOnErrorInHandshakeWithIncompatibleVersion: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundHandlerTests#testLogsSlowInboundProcessing: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundHandlerTests#testPing: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundHandlerTests#testRequestAndResponse: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundHandlerTests#testSendsErrorResponseToHandshakeFromCompatibleVersion: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundHandlerTests#test_handshake_checks_minimum_compatible_version_if_normal_version_is_not_compatible: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundHandlerTests#test_handshake_error_if_version_and_minimum_compatible_version_is_not_compatible: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundHandlerTests#test_handshake_precedes_stream_version_for_compatibility: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundPipelineTests#testDecodeExceptionIsPropagated: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundPipelineTests#testEnsureBodyIsNotPrematurelyReleased: baseline=absent, patched=passed
+  - org.elasticsearch.transport.InboundPipelineTests#testPipelineHandling: baseline=absent, patched=passed
+  - org.elasticsearch.transport.OutboundHandlerTests#testErrorResponse: baseline=absent, patched=passed
+  - org.elasticsearch.transport.OutboundHandlerTests#testSendRawBytes: baseline=absent, patched=passed
+  - org.elasticsearch.transport.OutboundHandlerTests#testSendRequest: baseline=absent, patched=passed
+  - org.elasticsearch.transport.OutboundHandlerTests#testSendResponse: baseline=absent, patched=passed
+  - org.elasticsearch.transport.TransportActionProxyTests#testException: baseline=absent, patched=passed
+  - org.elasticsearch.transport.TransportActionProxyTests#testGetAction: baseline=absent, patched=passed
+  - org.elasticsearch.transport.TransportActionProxyTests#testIsProxyAction: baseline=absent, patched=passed
+  - org.elasticsearch.transport.TransportActionProxyTests#testIsProxyRequest: baseline=absent, patched=passed
+  - org.elasticsearch.transport.TransportActionProxyTests#testSendMessage: baseline=absent, patched=passed
+  - org.elasticsearch.transport.TransportActionProxyTests#testUnwrap: baseline=absent, patched=passed
+  - org.elasticsearch.transport.TransportHandshakerTests#testHandshakeError: baseline=absent, patched=passed
+  - org.elasticsearch.transport.TransportHandshakerTests#testHandshakeRequestAndResponse: baseline=absent, patched=passed
+  - org.elasticsearch.transport.TransportHandshakerTests#testHandshakeRequestFutureVersionsCompatibility: baseline=absent, patched=passed
+  - org.elasticsearch.transport.TransportHandshakerTests#testHandshakeTimeout: baseline=absent, patched=passed
+  - org.elasticsearch.transport.TransportHandshakerTests#testSendRequestThrowsException: baseline=absent, patched=passed
+  - org.elasticsearch.transport.TransportHandshakerTests#test_handshake_request_includes_minimumCompatibilityVersion: baseline=absent, patched=passed

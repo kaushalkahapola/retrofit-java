@@ -1,0 +1,26 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+        "target_method": null,
+        "start_line": 65,
+        "end_line": 65,
+        "code_snippet": "import io.crate.types.DataType;\nimport io.crate.types.DataTypes;\n\npublic class SwapCastsInComparisonOperators implements Rule<Function> {\n\n    private final Capture<Function> castCapture;\n    private final Pattern<Function> pattern;\n\n    /**\n     * A cast is 'swappable' if the cast does not cause loss of precision. This method executes the casts in uncertain\n     * situations. i.e.:: casting 126 type of int to a byte, which is a narrowing conversion, is convertable since 126\n     * does fit in a byte.\n     */\n    private static boolean isSwappable(Function cmpOp) {\n        if (cmpOp.arguments().get(1) instanceof Literal<?> literal) {\n            Function cast = (Function) cmpOp.arguments().getFirst();\n            Reference ref = (Reference) cast.arguments().getFirst();\n            DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n            DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\n            if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n                return true;\n            }\n            if (isSafeConversion(literalInnerType, refInnerType)) {\n                return true;\n            }\n            return isNarrowingConversionPossible(literal.value(), ref.valueType());\n        }\n        return true;\n    }\n\n    /**\n     * Executes a narrowing conversion to verify that it is possible.\n     */\n    private static boolean isNarrowingConversionPossible(Object value, DataType<?> targetType) {\n        if (DataTypes.isArray(targetType)) {\n            return ((List<?>) value).stream().allMatch(e -> isNarrowingConversionPossible(e, ((ArrayType<?>) targetType).innerType()));\n        } else {\n            try {\n                Number n = (Number) value;\n                var literalStr = String.valueOf(n);\n                var castedStr = String.valueOf(targetType.implicitCast(n));",
+        "anchor_confidence": "medium",
+        "anchor_reason": "line_resolved_method_unresolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
+  }
+}

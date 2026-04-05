@@ -1,0 +1,84 @@
+# Phase 0 Inputs
+
+- Mainline commit: 6e18150a3937176f863d24c4449a8f7c95e84331
+- Backport commit: 5fccaabf41c037565ce98f174213766bb316d5e7
+- Java-only files for agentic phases: 1
+- Developer auxiliary hunks (test + non-Java): 2
+
+## Commit Pair Consistency
+- Pair mismatch: False
+- Reason: scope_overlap_ok
+- Mainline Java files: ['server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java']
+- Developer Java files: ['server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java']
+- Overlap Java files: ['server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java']
+- Overlap ratio (mainline): 1.0
+
+## Mainline Patch
+```diff
+From 6e18150a3937176f863d24c4449a8f7c95e84331 Mon Sep 17 00:00:00 2001
+From: baur <baurzhansahariev@gmail.com>
+Date: Thu, 20 Feb 2025 16:55:31 +0100
+Subject: [PATCH] Allow comparing a non-boolean column to a boolean literal in
+ WHERE clause
+
+Follow up to https://github.com/crate/crate/commit/77caeaf06fa6b211f18995099e99c0ab74c0a267
+---
+ docs/appendices/release-notes/5.10.2.rst                   | 5 +++++
+ .../symbol/rule/SwapCastsInComparisonOperators.java        | 5 +++--
+ .../test/java/io/crate/lucene/CommonQueryBuilderTest.java  | 7 +++++++
+ 3 files changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/docs/appendices/release-notes/5.10.2.rst b/docs/appendices/release-notes/5.10.2.rst
+index a57deb0641..d9132347b3 100644
+--- a/docs/appendices/release-notes/5.10.2.rst
++++ b/docs/appendices/release-notes/5.10.2.rst
+@@ -62,3 +62,8 @@ Fixes
+ 
+ - Fixed an issue that caused a ``NullPointerException`` when binding to a
+   non-existing prepared statement via PostgreSQL wire protocol.
++
++- Fixed an issue that caused a ``SELECT`` query to fail if a ``WHERE`` clause
++  had a comparison of a non-boolean column with a boolean literal, e.g.::
++
++    SELECT int_col FROM t where int_col = true;
+diff --git a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java
+index 13d2b87e42..9714089cba 100644
+--- a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java
++++ b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java
+@@ -60,10 +60,11 @@ public class SwapCastsInComparisonOperators implements Rule<Function> {
+             Reference ref = (Reference) cast.arguments().getFirst();
+             DataType<?> refInnerType = ArrayType.unnest(ref.valueType());
+             DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());
++            var value = literal.value();
+             if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {
+-                return true;
++                return literalInnerType.isConvertableTo(refInnerType, false);
+             }
+-            return isNarrowingConversionPossible(literal.value(), ref.valueType());
++            return isNarrowingConversionPossible(value, ref.valueType());
+         }
+         return true;
+     }
+diff --git a/server/src/test/java/io/crate/lucene/CommonQueryBuilderTest.java b/server/src/test/java/io/crate/lucene/CommonQueryBuilderTest.java
+index 240e24042f..8297fadcb6 100644
+--- a/server/src/test/java/io/crate/lucene/CommonQueryBuilderTest.java
++++ b/server/src/test/java/io/crate/lucene/CommonQueryBuilderTest.java
+@@ -833,6 +833,13 @@ public class CommonQueryBuilderTest extends LuceneQueryBuilderTest {
+         assertThat(query).hasToString("(f = 0.99999999)");
+     }
+ 
++    @Test
++    public void test_can_compare_any_type_with_boolean() {
++        Query query = convert("x = true");
++        assertThat(query).isExactlyInstanceOf(GenericFunctionQuery.class);
++        assertThat(query).hasToString("(x = true)");
++    }
++
+     public void test_all_eq_on_empty_array_literal() {
+         Query query = convert("y = all([])");
+         assertThat(query).hasToString("*:*");
+-- 
+2.53.0
+
+
+```

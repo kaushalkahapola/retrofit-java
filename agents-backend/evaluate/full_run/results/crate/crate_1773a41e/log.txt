@@ -1,0 +1,155 @@
+patch_id=crate_1773a41e
+project=crate
+mainline_commit=1773a41e1d9171fe62e1a5e0aed7cbb3754eea99
+backport_commit=980d38ada0286f56ad3dd9594c1019081ee14c5d
+mode=full
+started_at=2026-04-05T13:24:31.256609
+----------------------------------------
+Running full workflow graph
+Completed node=phase_0_optimistic
+Completed node=context_analyzer
+Completed node=structural_locator
+
+[crate/crate_1773a41e] Setting up repositories for mode=full...
+[crate/crate_1773a41e] Running full workflow graph...
+Router: Running Phase 0.
+Phase 0 (Optimistic): Checking direct patch applicability...
+Phase 0: Experiment mode — checking out parent of 980d38ada0286f56ad3dd9594c1019081ee14c5d...
+Phase 0: Building baseline by applying developer backport test hunks only...
+  Validation: server/src/test/java/org/elasticsearch/VersionTest.java - applying 1 hunk(s) one by one in bottom-to-top order: [37]
+  Validation: server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java - applying 5 hunk(s) one by one in bottom-to-top order: [239, 215, 130, 30, 20]
+  Validation: server/src/test/java/org/elasticsearch/transport/InboundHandlerTests.java - applying 3 hunk(s) one by one in bottom-to-top order: [279, 261, 232]
+  Validation: server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java - applying 2 hunk(s) one by one in bottom-to-top order: [188, 23]
+  Validation: server/src/test/java/org/elasticsearch/transport/OutboundHandlerTests.java - applying 6 hunk(s) one by one in bottom-to-top order: [252, 236, 201, 182, 148, 126]
+  Validation: server/src/test/java/org/elasticsearch/transport/TransportActionProxyTests.java - applying 1 hunk(s) one by one in bottom-to-top order: [46]
+  Validation: server/src/test/java/org/elasticsearch/transport/TransportHandshakerTests.java - applying 6 hunk(s) one by one in bottom-to-top order: [186, 168, 150, 124, 94, 75]
+    Agent 4: Executing crate helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/crate/run_tests.sh
+Phase 0: git apply --check FAILED. Escalating to full pipeline.
+  Hint: error: docs/appendices/release-notes/6.0.0.rst: No such file or directory
+error: patch failed: server/src/main/java/org/elasticsearch/Version.java:220
+error: server/src/main/java/org/elasticsearch/Ver
+Router: Phase 0 failed - entering full 4-agent pipeline.
+  Completed: phase_0_optimistic
+Agent 1 (Context Analyzer): Deterministic blueprint generation...
+Agent 1: Complete. Files=7 hunks=25 (deterministic).
+Agent 1: Detected 19 hunk(s) with variants.
+  Completed: context_analyzer
+Agent 2 (Structural Locator): Starting target location mapping...
+  Agent 2: 7 code file(s), 0 test file(s)
+LLM Provider: azure, Model: gpt-4.1-mini, Temperature: 0
+  Agent 2: Found 25 hunk(s) in hunk_chain
+  Agent 2: Locating target for server/src/main/java/io/crate/protocols/postgres/PgClient.java (1 hunk(s))...
+Phase 1 (Git) Match Found: server/src/main/java/io/crate/protocols/postgres/PgClient.java
+  Agent 2: Git resolution found target: server/src/main/java/io/crate/protocols/postgres/PgClient.java
+  Agent 2: Mapped hunk 1 (hunk_1) to None at lines 600-600
+  Agent 2: Locating target for server/src/main/java/org/elasticsearch/Version.java (5 hunk(s))...
+Phase 1 (Git) Match Found: server/src/main/java/org/elasticsearch/Version.java
+  Agent 2: Git resolution found target: server/src/main/java/org/elasticsearch/Version.java
+  Agent 2: Mapped hunk 1 (hunk_1) to None at lines 220-220
+  Agent 2: Mapped hunk 2 (hunk_2) to None at lines 424-424
+  Agent 2: Mapped hunk 3 (hunk_3) to None at lines 494-494
+  Agent 2: Mapped hunk 4 (minimumCompatibilityVersion) to minimumCompatibilityVersion at lines 503-503
+  Agent 2: Mapped hunk 5 (isCompatible) to isCompatible at lines 524-524
+  Agent 2: Locating target for server/src/main/java/org/elasticsearch/transport/InboundDecoder.java (4 hunk(s))...
+Phase 1 (Git) Match Found: server/src/main/java/org/elasticsearch/transport/InboundDecoder.java
+  Agent 2: Git resolution found target: server/src/main/java/org/elasticsearch/transport/InboundDecoder.java
+  Agent 2: Mapped hunk 1 (<import>) to <import> at lines 22-22
+  Agent 2: Mapped hunk 2 (hunk_2) to None at lines 76-76
+  Agent 2: Mapped hunk 3 (hunk_3) to None at lines 171-171
+  Agent 2: Mapped hunk 4 (ensureVersionCompatibility) to ensureVersionCompatibility at lines 202-202
+  Agent 2: Locating target for server/src/main/java/org/elasticsearch/transport/OutboundHandler.java (3 hunk(s))...
+Phase 1 (Git) Match Found: server/src/main/java/org/elasticsearch/transport/OutboundHandler.java
+  Agent 2: Git resolution found target: server/src/main/java/org/elasticsearch/transport/OutboundHandler.java
+  Agent 2: Mapped hunk 1 (hunk_1) to None at lines 92-92
+  Agent 2: Mapped hunk 2 (hunk_2) to None at lines 113-113
+  Agent 2: Mapped hunk 3 (hunk_3) to None at lines 135-135
+  Agent 2: Locating target for server/src/main/java/org/elasticsearch/transport/TcpTransport.java (2 hunk(s))...
+Phase 1 (Git) Match Found: server/src/main/java/org/elasticsearch/transport/TcpTransport.java
+  Agent 2: Git resolution found target: server/src/main/java/org/elasticsearch/transport/TcpTransport.java
+  Agent 2: Mapped hunk 1 (hunk_1) to None at lines 148-148
+  Agent 2: Mapped hunk 2 (hunk_2) to None at lines 249-249
+  Agent 2: Locating target for server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java (2 hunk(s))...
+Phase 1 (Git) Match Found: server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java
+  Agent 2: Git resolution found target: server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java
+  Agent 2: Mapped hunk 1 (hunk_1) to None at lines 62-62
+  Agent 2: Mapped hunk 2 (hunk_2) to None at lines 71-71
+  Agent 2: Locating target for server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java (8 hunk(s))...
+Phase 1 (Git) Match Found: server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java
+  Agent 2: Git resolution found target: server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java
+  Agent 2: Mapped hunk 1 (<import>) to <import> at lines 35-35
+  Agent 2: Mapped hunk 2 (hunk_2) to None at lines 69-69
+  Agent 2: Mapped hunk 3 (hunk_3) to None at lines 92-92
+  Agent 2: Mapped hunk 4 (handleResponse) to handleResponse at lines 136-136
+  Agent 2: Mapped hunk 5 (<class_declaration>) to <class_declaration> at lines 51-51
+  Agent 2: Mapped hunk 6 (hunk_6) to None at lines 183-183
+  Agent 2: Mapped hunk 7 (hunk_7) to None at lines 194-194
+  Agent 2: Mapped hunk 8 (<class_declaration>) to <class_declaration> at lines 211-211
+  Agent 2: Trace written to structural_locator_trace.md
+Agent 2: Complete. Mapped 7 file(s). Total hunk mappings: 25. ConsistencyMap has 0 rename(s).
+Router: complexity=STRUCTURAL -> skip planning, go hunk_generator.
+  Completed: structural_locator
+Agent 3 (File Editor): Starting direct file-edit workflow...
+LLM Provider: azure, Model: gpt-4.1-mini, Temperature: 0
+  Agent 3: Built 1 deterministic fallback edit(s) for server/src/main/java/io/crate/protocols/postgres/PgClient.java.
+  Agent 3: Processing 1 edit(s) for server/src/main/java/io/crate/protocols/postgres/PgClient.java (op=MODIFIED)
+    Agent 3: Classified server/src/main/java/io/crate/protocols/postgres/PgClient.java as TYPE_II (deterministic path)
+    Agent 3: base_types=['TYPE_II'] execution_types=['TYPE_II']
+    Agent 3: Developer patch fast path for server/src/main/java/io/crate/protocols/postgres/PgClient.java (developer_fast_path_ok)
+  Agent 3: Built 5 deterministic fallback edit(s) for server/src/main/java/org/elasticsearch/Version.java.
+  Agent 3: Processing 5 edit(s) for server/src/main/java/org/elasticsearch/Version.java (op=MODIFIED)
+    Agent 3: Classified server/src/main/java/org/elasticsearch/Version.java as TYPE_II (deterministic path)
+    Agent 3: base_types=['TYPE_II'] execution_types=['TYPE_II']
+    Agent 3: Developer patch fast path for server/src/main/java/org/elasticsearch/Version.java (developer_fast_path_ok)
+  Agent 3: Built 4 deterministic fallback edit(s) for server/src/main/java/org/elasticsearch/transport/InboundDecoder.java.
+  Agent 3: Processing 4 edit(s) for server/src/main/java/org/elasticsearch/transport/InboundDecoder.java (op=MODIFIED)
+    Agent 3: Classified server/src/main/java/org/elasticsearch/transport/InboundDecoder.java as TYPE_II (deterministic path)
+    Agent 3: base_types=['TYPE_II'] execution_types=['TYPE_II']
+    Agent 3: Developer patch fast path for server/src/main/java/org/elasticsearch/transport/InboundDecoder.java (developer_fast_path_ok)Completed node=hunk_generator
+Completed node=validation
+Workflow completed successfully
+
+  Agent 3: Built 3 deterministic fallback edit(s) for server/src/main/java/org/elasticsearch/transport/OutboundHandler.java.
+  Agent 3: Processing 3 edit(s) for server/src/main/java/org/elasticsearch/transport/OutboundHandler.java (op=MODIFIED)
+    Agent 3: Classified server/src/main/java/org/elasticsearch/transport/OutboundHandler.java as TYPE_II (deterministic path)
+    Agent 3: base_types=['TYPE_II'] execution_types=['TYPE_II']
+    Agent 3: Developer patch fast path for server/src/main/java/org/elasticsearch/transport/OutboundHandler.java (developer_fast_path_ok)
+  Agent 3: Built 2 deterministic fallback edit(s) for server/src/main/java/org/elasticsearch/transport/TcpTransport.java.
+  Agent 3: Processing 2 edit(s) for server/src/main/java/org/elasticsearch/transport/TcpTransport.java (op=MODIFIED)
+    Agent 3: Classified server/src/main/java/org/elasticsearch/transport/TcpTransport.java as TYPE_II (deterministic path)
+    Agent 3: base_types=['TYPE_II'] execution_types=['TYPE_II']
+    Agent 3: Developer patch fast path for server/src/main/java/org/elasticsearch/transport/TcpTransport.java (developer_fast_path_ok)
+  Agent 3: Built 2 deterministic fallback edit(s) for server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java.
+  Agent 3: Processing 2 edit(s) for server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java (op=MODIFIED)
+    Agent 3: Classified server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java as TYPE_II (deterministic path)
+    Agent 3: base_types=['TYPE_II'] execution_types=['TYPE_II']
+    Agent 3: Developer patch fast path for server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java (developer_fast_path_ok)
+  Agent 3: Built 8 deterministic fallback edit(s) for server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java.
+  Agent 3: Processing 8 edit(s) for server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java (op=MODIFIED)
+    Agent 3: Classified server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java as TYPE_II (deterministic path)
+    Agent 3: base_types=['TYPE_II'] execution_types=['TYPE_II']
+    Agent 3: Developer patch fast path for server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java (developer_fast_path_ok)
+  Agent 3 (File Editor): Done. 7 file(s) adapted, 7 edit record(s).
+  Completed: hunk_generator
+Agent 4 (Validation): Starting 'Prove Red, Make Green' loop...
+  Agent 4: Evaluation full-workflow mode (apply -> build -> relevant tests)...
+  Validation: server/src/main/java/io/crate/protocols/postgres/PgClient.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: server/src/main/java/org/elasticsearch/Version.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: server/src/main/java/org/elasticsearch/transport/InboundDecoder.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: server/src/main/java/org/elasticsearch/transport/OutboundHandler.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: server/src/main/java/org/elasticsearch/transport/TcpTransport.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: docs/appendices/release-notes/5.10.1.rst - applying 1 hunk(s) one by one in bottom-to-top order: [58]
+  Validation: server/src/test/java/org/elasticsearch/VersionTest.java - applying 1 hunk(s) one by one in bottom-to-top order: [37]
+  Validation: server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java - applying 5 hunk(s) one by one in bottom-to-top order: [239, 215, 130, 30, 20]
+  Validation: server/src/test/java/org/elasticsearch/transport/InboundHandlerTests.java - applying 3 hunk(s) one by one in bottom-to-top order: [279, 261, 232]
+  Validation: server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java - applying 2 hunk(s) one by one in bottom-to-top order: [188, 23]
+  Validation: server/src/test/java/org/elasticsearch/transport/OutboundHandlerTests.java - applying 6 hunk(s) one by one in bottom-to-top order: [252, 236, 201, 182, 148, 126]
+  Validation: server/src/test/java/org/elasticsearch/transport/TransportActionProxyTests.java - applying 1 hunk(s) one by one in bottom-to-top order: [46]
+  Validation: server/src/test/java/org/elasticsearch/transport/TransportHandshakerTests.java - applying 6 hunk(s) one by one in bottom-to-top order: [186, 168, 150, 124, 94, 75]
+    Agent 4: Executing crate helper build script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/crate/run_build.sh
+    Agent 4: Executing crate helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/crate/run_tests.sh
+Trace saved to validation_trace.md
+Router: Validation PASSED after 1 attempt(s). Done.
+  Completed: validation
+[crate/crate_1773a41e] Full workflow completed!

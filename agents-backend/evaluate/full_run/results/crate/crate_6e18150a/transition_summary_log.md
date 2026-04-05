@@ -1,0 +1,93 @@
+# Transition Summary
+
+- Source: phase_outputs
+- Valid backport signal: True
+- Reason: Valid: Observed fail-to-pass and/or newly passing relevant tests with no regressions.
+- fail->pass (1): ['io.crate.lucene.CommonQueryBuilderTest#test_can_compare_any_type_with_boolean']
+- newly passing (0): []
+- pass->fail (0): []
+
+## Touched Test States
+- Touched tests (from patch): ['io.crate.lucene.CommonQueryBuilderTest']
+  - io.crate.lucene.CommonQueryBuilderTest#testAnyEqArrayLiteral: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testAnyEqArrayReference: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testAnyEqOnTimestampArrayColumn: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testAnyGreaterAndSmaller: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testAnyNotEqOnTimestampColumn: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testAnyOnObjectArrayResultsInXY: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testArrayAccessResultsInTermAndFunctionQuery: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testEqAnyOnNestedArray: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testEqOnArrayWithTooManyClauses: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testEqOnObjectDoesBoolTermQueryForContents: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testEqOnObjectPreFiltersOnKnownObjectLiteralContents: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testEqOnTwoArraysBecomesGenericFunctionQuery: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testEqOnTwoArraysBecomesGenericFunctionQueryAllValuesNull: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testGtAnyOnNestedArrayIsNotSupported: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testGtQuery: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testGteAnyOnNestedArrayIsNotSupported: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testGteQuery: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testIdQuery: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testIpRange: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testIsNullOnGeoPoint: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testLessThanAnyOnArrayLiteral: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testLtAnyOnNestedArrayIsNotSupported: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testLteAnyOnNestedArrayIsNotSupported: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testLteQuery: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testMatchQueryTermMustBeALiteral: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testMatchQueryTermMustNotBeNull: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testMatchWithOperator: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testMultiMatchWithOperator: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testNeqAnyOnArrayLiteral: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testNiceErrorIsThrownOnInvalidTopLevelLiteral: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testNoMatchWhereClause: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testNotEqOnNotNullableColumnQuery: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testObjectArrayAccessResultsInFunctionQuery: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testRangeQueryForId: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testRangeQueryForUid: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testRangeQueryOnDocThrowsException: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testRegexQueryFast: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testRegexQueryPcre: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testRewriteDocReferenceInWhereClause: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testWhereInIsOptimized: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testWhereLiteralEqReference: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testWhereRefEqLiteral: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testWhereRefEqNullWithDifferentTypes: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testWhereRefEqRef: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testWhereRefInSetLiteralIsConvertedToTermsQuery: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#testWhereStringRefInSetLiteralIsConvertedToTermsQuery: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_any_neq_operator_maps_column_names_to_oids: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_any_operators_with_empty_array_literal: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_any_operators_with_null_array_literal: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_any_operators_with_operands_containing_nulls: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_arr_eq_empty_array_literal_is_optimized: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_arr_eq_empty_array_literal_is_optimized_before_V590: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_array_not_any_with_and_without_docvalues: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_bkd_tree_backed_geo_shape_match_disjoint: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_bkd_tree_backed_geo_shape_match_with_default_match_type: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_can_compare_any_type_with_boolean: baseline=error, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_cannot_use_field_exists_query_on_args_of_coalesce_function: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_comparisons_between_different_types_do_not_cause_precision_loss: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_eq_any_on_float_column_uses_set_query: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_eq_object_with_undefined_key: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_eq_on_bool_uses_termquery: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_eq_on_byte_column: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_eq_on_float_column_uses_float_point_query: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_equal_on_varchar_column_uses_term_query: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_equality_query_on_double_array_with_index_off_and_no_docvalues_falls_back_to_generic_query: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_function_arguments_are_unaliased: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_in_operator_with_arrays_on_both_lhs_and_rhs: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_ip_eq_any_uses_point_term_set_query: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_ip_eq_uses_point_range_query: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_is_not_null_on_ignored_results_in_function_query: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_is_not_null_on_not_null_ref: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_is_null_on_analyzed_text_column_uses_norms_query: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_is_null_on_ignored_results_in_function_query: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_is_null_on_subscript_function: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_is_null_without_index_and_docvalues: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_neq_on_object_literal: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_neq_operator_on_nullable_and_not_nullable_args_does_not_filter_nulls_from_non_nullable_arg: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_neq_operator_on_nullable_and_not_nullable_args_filters_nulls: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_nested_not_operators: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_not_operator_on_query_equivalent_to_null: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_prefix_tree_backed_geo_shape_match_disjoint: baseline=passed, patched=passed
+  - io.crate.lucene.CommonQueryBuilderTest#test_prefix_tree_backed_geo_shape_match_with_default_match_type: baseline=passed, patched=passed
