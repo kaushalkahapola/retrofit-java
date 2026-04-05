@@ -39,8 +39,31 @@ class TestGraphRouting(unittest.TestCase):
             "validation_attempts": 1,
             "patch_complexity": "STRUCTURAL",
             "validation_repeated_patch_detected": True,
+            # No failed build on record — true stagnation (e.g. tests only).
+            "validation_results": {"build": {"success": True}},
         }
         self.assertEqual(route_validation(state), "END")
+
+    def test_validation_stagnation_escalates_non_rewrite_when_build_failed(self):
+        state = {
+            "validation_passed": False,
+            "validation_attempts": 1,
+            "patch_complexity": "STRUCTURAL",
+            "validation_repeated_patch_detected": True,
+            "validation_results": {"build": {"success": False}},
+        }
+        self.assertEqual(route_validation(state), "planning_agent")
+
+    def test_validation_stagnation_escalates_generation_contract_on_repeated_patch(self):
+        state = {
+            "validation_passed": False,
+            "validation_attempts": 1,
+            "patch_complexity": "STRUCTURAL",
+            "validation_repeated_patch_detected": True,
+            "validation_failed_stage": "generation_contract_failed",
+            "validation_results": {"build": {"success": True}},
+        }
+        self.assertEqual(route_validation(state), "planning_agent")
 
     def test_validation_stagnation_escalates_for_rewrite(self):
         state = {

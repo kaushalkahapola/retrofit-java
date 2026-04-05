@@ -35,6 +35,17 @@ from agents import (
 MAX_VALIDATION_ATTEMPTS = 3
 
 
+def _validation_build_failed_in_state(state: AgentState) -> bool:
+    """True when the last validation run recorded a failed compile/build step."""
+    vr = state.get("validation_results") or {}
+    if not isinstance(vr, dict):
+        return False
+    b = vr.get("build") or {}
+    if isinstance(b, dict) and b.get("success") is False:
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Conditional routing functions
 # ---------------------------------------------------------------------------
@@ -141,6 +152,21 @@ def route_validation(state: AgentState) -> str:
                 print(
                     "Router: Stagnation detected (repeated plan/patch) on REWRITE. "
                     "Escalating once via planning_agent."
+                )
+                return "planning_agent"
+            if _validation_build_failed_in_state(state):
+                print(
+                    "Router: Stagnation (repeated plan/patch) on non-REWRITE after a "
+                    "failed build; escalating to planning_agent for adaptation "
+                    "(API/signature fixes, alternate str_replace plans)."
+                )
+                return "planning_agent"
+            # Deterministic retry produced the same patch + generator contract flag;
+            # continuing would loop forever without an LLM/planning pass.
+            if repeated_patch and failed_stage == "generation_contract_failed":
+                print(
+                    "Router: Stagnation (repeated patch + generation_contract_failed) "
+                    "on non-REWRITE; escalating to planning_agent."
                 )
                 return "planning_agent"
             print(

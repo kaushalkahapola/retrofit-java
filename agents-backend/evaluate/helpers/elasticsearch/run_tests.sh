@@ -68,7 +68,11 @@ elif [ -n "${TEST_TARGETS:-}" ] && [ "${TEST_TARGETS}" != "NONE" ]; then
                         echo "javaRestTest,internalClusterTest"
                         return
                     fi
-                    echo "test,internalClusterTest"
+                    # Standard unit tests live under src/test/java. Do not append
+                    # internalClusterTest here: many plugins (e.g. x-pack/plugin/deprecation)
+                    # do not register that task, and Gradle fails the whole invocation
+                    # if any listed task is missing.
+                    echo "test"
                     return
                 fi
             fi

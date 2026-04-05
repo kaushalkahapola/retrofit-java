@@ -501,6 +501,10 @@ async def validation_agent(state: AgentState, config) -> dict:
             "validation_failed_stage": failed_stage,
             "force_type_v_until_success": force_type_v_latch,
             "force_type_v_reason": force_type_v_reason,
+            # Preserve prior validation step results (e.g. failed compile/build) so
+            # graph routing (stagnation + build-failure escalation) still sees them
+            # after checklist-short-circuit returns.
+            "validation_results": dict(state.get("validation_results") or {}),
         }
 
     # Ensure clean repo

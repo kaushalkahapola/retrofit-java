@@ -2083,14 +2083,27 @@ async def file_editor_node(state: AgentState, config) -> dict:
             task_entry["reason"] = "toolkit_unavailable"
             continue
 
-        _dfp = try_developer_fast_path(
-            target_repo_path=target_repo_path or "",
-            target_file=target_file,
-            developer_patch_diff=str(state.get("developer_patch_diff") or ""),
-            agent_eligible_patch=str(state.get("patch_diff") or ""),
-            evaluation_full_workflow=bool(state.get("evaluation_full_workflow")),
-            backport_commit=str(state.get("backport_commit") or ""),
-        )
+        # After a failed validation, re-applying the developer slice via git apply
+        # reproduces the same bytes and the same build error — skip fast path so
+        # deterministic str_replace / ReAct can try to adapt (e.g. missing APIs).
+        _dfp: dict[str, Any] = {
+            "applied": False,
+            "reason": "not_attempted",
+        }
+        if validation_attempts <= 0:
+            _dfp = try_developer_fast_path(
+                target_repo_path=target_repo_path or "",
+                target_file=target_file,
+                developer_patch_diff=str(state.get("developer_patch_diff") or ""),
+                agent_eligible_patch=str(state.get("patch_diff") or ""),
+                evaluation_full_workflow=bool(state.get("evaluation_full_workflow")),
+                backport_commit=str(state.get("backport_commit") or ""),
+            )
+        else:
+            print(
+                "    Agent 3: Skipping developer fast path "
+                f"(validation retry #{validation_attempts}; use deterministic/ReAct path)."
+            )
         if _dfp.get("applied"):
             agent_metrics["developer_fast_path_hits"] += 1
             print(
@@ -2643,7 +2656,13 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 print(
                     f"    Agent 3: Blueprint intent check FAILED for {target_file} - flagging."
                 )
-                if "TYPE_V" in execution_types:
+                # In full-workflow evaluation, Agent 4 runs a real compile/build; do not
+                # short-circuit on a flaky YES/NO intent classifier (burns validation
+                # attempts without ever re-running Gradle).
+                if (
+                    "TYPE_V" in execution_types
+                    and not bool(state.get("evaluation_full_workflow"))
+                ):
                     task_entry["status"] = "failed"
                     task_entry["reason"] = "generation_contract_failed"
                     task_entry["error"] = "type_v_intent_check_failed"
@@ -2691,6 +2710,13 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         "validation_repeated_patch_detected": False,
                         "token_usage": token_usage,
                     }
+                if "TYPE_V" in execution_types and bool(
+                    state.get("evaluation_full_workflow")
+                ):
+                    print(
+                        "    Agent 3: evaluation_full_workflow — proceeding despite "
+                        "intent check; validation will compile/test."
+                    )
         task_entry["completed_steps"].append("intent_check")
 
         # Step F: Reset file to HEAD (leave repo clean for validation)
