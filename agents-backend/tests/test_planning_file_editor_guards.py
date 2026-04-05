@@ -41,7 +41,9 @@ class TestFileEditorSymbolGuards(unittest.TestCase):
         symbols = _collect_required_symbols_from_invariants(invariants)
         self.assertNotIn("this", symbols)
         self.assertNotIn("super", symbols)
-        self.assertIn("snapshotsInProgress", symbols)
+        # Callee-shaped identifiers are not Type V hard requirements (see
+        # _type_v_symbol_gate_should_enforce + tree-sitter callee filtering).
+        self.assertNotIn("snapshotsInProgress", symbols)
 
 
 class TestCoverageMatchingGuards(unittest.TestCase):

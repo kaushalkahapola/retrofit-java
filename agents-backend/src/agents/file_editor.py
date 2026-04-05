@@ -62,6 +62,7 @@ from utils.plan_validator import (
 )
 from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_line
 from utils.patch_apply_strategy import try_developer_fast_path
+from utils.java_ts_invocation_names import callee_names_from_java_snippet_lines
 
 
 _FRAMEWORK_CHAIN_SYMBOLS = {
@@ -72,9 +73,35 @@ _FRAMEWORK_CHAIN_SYMBOLS = {
     "delegateFailure",
 }
 
-
 def _is_framework_chain_symbol(symbol: str) -> bool:
     return str(symbol or "").strip() in _FRAMEWORK_CHAIN_SYMBOLS
+
+
+def _type_v_symbol_gate_should_enforce(symbol: str) -> bool:
+    """
+    Whether Type V should treat a token as a hard requirement (after TS callee
+    filtering on invariants).
+
+    Fallback when tree-sitter is unavailable or snippets do not parse: Java
+    style — types/constants usually start uppercase; callees usually start
+    lowercase. That is a heuristic, not a proof.
+
+    Callee names taken from parsed plan invariants (see
+    ``callee_names_from_java_snippet_lines``) are dropped from enforcement first,
+    which generalizes fluent APIs without a fixed denylist.
+
+    Tradeoff: a rare required lowercase identifier is not checked by this gate;
+    compilation, tests, and exact invariant lines still apply.
+    """
+    s = str(symbol or "").strip()
+    if not s or s in {"this", "super"}:
+        return False
+    if _is_framework_chain_symbol(s):
+        return False
+    c0 = s[0]
+    if c0.islower():
+        return False
+    return bool(c0.isupper())
 
 
 # ---------------------------------------------------------------------------
@@ -1101,10 +1128,19 @@ def _normalize_code_line(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip())
 
 
-def _collect_required_symbols_from_invariants(invariants: list[str]) -> list[str]:
+def _collect_required_symbols_from_invariants(
+    invariants: list[str],
+    *,
+    skip_callee_names: set[str] | frozenset[str] | None = None,
+) -> list[str]:
     """
     Extract stable symbol-level requirements from invariant lines.
+
+    skip_callee_names: identifiers that are method-invocation callees in the
+    invariant snippets (from tree-sitter), not argument constants — do not
+    promote those to hard requirements.
     """
+    skip = frozenset(skip_callee_names or ())
     symbols: list[str] = []
     seen: set[str] = set()
     for inv in invariants or []:
@@ -1122,6 +1158,10 @@ def _collect_required_symbols_from_invariants(invariants: list[str]) -> list[str
             }:
                 continue
             if _is_framework_chain_symbol(token):
+                continue
+            if token in skip:
+                continue
+            if not _type_v_symbol_gate_should_enforce(token):
                 continue
             if token not in seen:
                 seen.add(token)
@@ -1205,7 +1245,11 @@ def _invariants_satisfied(
     ]
 
     # Second pass: symbol-level semantic presence for non-exactly matched lines.
-    required_symbols = _collect_required_symbols_from_invariants(missing_lines)
+    missing_invocation_callees = callee_names_from_java_snippet_lines(missing_lines)
+    required_symbols = _collect_required_symbols_from_invariants(
+        missing_lines,
+        skip_callee_names=missing_invocation_callees,
+    )
     for sym in required_symbols:
         if _file_has_symbol(file_text_after, sym):
             continue
@@ -2307,6 +2351,13 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
             required_symbols = _collect_file_plan_required_symbols(plan_entries)
             required_symbols = _dedupe_nonframework_symbols(required_symbols)
+            plan_inv_callees = callee_names_from_java_snippet_lines(
+                _collect_file_plan_invariants(plan_entries)
+            )
+            required_symbols = [s for s in required_symbols if s not in plan_inv_callees]
+            required_symbols = [
+                s for s in required_symbols if _type_v_symbol_gate_should_enforce(s)
+            ]
             for sym in required_symbols:
                 if _file_has_symbol(target_after_text, sym):
                     continue

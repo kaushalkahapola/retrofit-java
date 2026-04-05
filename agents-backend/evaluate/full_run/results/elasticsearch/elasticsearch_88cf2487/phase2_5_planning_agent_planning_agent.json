@@ -10,7 +10,7 @@
         "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Insert missing import before existing import to match mainline patch",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "import java.util.Map;",
           "import java.util.Objects;",
@@ -21,60 +21,79 @@
           "import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;",
           "import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;"
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
-        "namespace_changes": [
-          {
-            "from": "import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;",
-            "to": "import static org.elasticsearch.script.ScriptStats.Fields.CONTEXTS;",
-            "reason": "Detected target surroundings differ by missing some imports, but context is effectively same for insertion"
-          }
-        ]
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 10,
+          "target_declared_methods_count": 10,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       },
       {
         "hunk_index": 1,
         "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
         "operation_index": 0,
         "edit_type": "replace",
-        "old_string": "                builder.startObject(COMPILATIONS_HISTORY);",
-        "new_string": "                builder.startObject(CACHE_EVICTIONS_HISTORY);",
-        "verified": false,
-        "verification_result": "sanitize_old_not_found:not_found_single",
-        "notes": "Location differs and surrounding context mismatch prevent direct same-location edit; requires relocation of edit|sanitize_old_not_found:not_found_single",
+        "old_string": "            }\n            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n            }",
+        "new_string": "            }\n            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                builder.startObject(CACHE_EVICTIONS_HISTORY);\n                cacheEvictionsHistory.toXContent(builder, params);",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
         "surround_before_3": [
+          "            ob.field(COMPILATION_LIMIT_TRIGGERED, compilationLimitTriggered);",
           "            if (compilationsHistory != null && compilationsHistory.areTimingsEmpty() == false) {",
-          "                builder.startObject(COMPILATIONS_HISTORY);",
-          "                compilationsHistory.toXContent(builder, params);"
+          "                ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);"
         ],
         "surround_after_3": [
-          "            return builder;",
-          "        }), ChunkedToXContentHelper.array(CONTEXTS, contextStats.iterator()), ChunkedToXContentHelper.endObject());",
+          "            ob.array(CONTEXTS, contextStats.iterator());",
+          "        });",
           "    }"
         ],
         "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target surrounding context does not match mainline pre-patch surrounding context",
-          "Mainline edit location at line 205 vs detected target location at line 215"
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
-        "namespace_changes": []
+        "namespace_changes": [],
+        "required_invariants": [
+          "builder.startObject(CACHE_EVICTIONS_HISTORY);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 10,
+          "target_declared_methods_count": 10,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
       }
     ]
   },
-  "last_plan_signature": "6a7e5bbbb264d9da8c35e81306b11c92bf3b22f23df9d69873fe817dd16fd312",
+  "last_plan_signature": "4d315c8ec0d330383eae77a142a009e955d78a2ba52dcc34e6fa9ff35daf5679",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
   "token_usage": {
-    "input_tokens": 2342,
-    "output_tokens": 616,
-    "total_tokens": 2958,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
     "estimated": false,
-    "sources": [
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage"
-    ]
+    "sources": []
   }
 }

@@ -1,13 +1,3 @@
-# Full Trace of Agentic File Edits
-
-## Attempt #1
-
-### Final Output Diff
-**server/src/main/java/org/elasticsearch/script/ScriptStats.java** [replace]
-```java
-// --- OLD ---
-<developer patch fast path>
-// --- NEW ---
 diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
 index f24052ef7e3..e085eb50ffb 100644
 --- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java
@@ -29,4 +19,3 @@ index f24052ef7e3..e085eb50ffb 100644
              }
              ob.array(CONTEXTS, contextStats.iterator());
          });
-```

@@ -408,7 +408,12 @@ def validate_plan_before_apply(
     target_file: str,
 ) -> PlanPreflightResult:
     """
-    Run static checks, then dry apply + tree-sitter validation.
+    Run static checks, then in-memory dry apply.
+
+    Tree-sitter is **opt-in** (`PLAN_VALIDATOR_USE_TREE_SITTER=1`): tree-sitter-java
+    often reports ERROR nodes on valid modern Java (generics, records, etc.), which
+    blocked good plans. Real syntax is still enforced by `javac` during deterministic
+    apply in the file editor.
     """
     warnings: list[str] = []
     entries = list(plan_entries or [])
@@ -434,29 +439,31 @@ def validate_plan_before_apply(
             tree_sitter_ok=False,
         )
 
-    skip_ts = (os.getenv("PLAN_VALIDATOR_SKIP_TREE_SITTER", "") or "").strip() in (
+    legacy_skip = (os.getenv("PLAN_VALIDATOR_SKIP_TREE_SITTER", "") or "").strip() in (
         "1",
         "true",
         "yes",
     )
-    ts_bad = (not skip_ts) and target_file.lower().endswith(
-        ".java"
-    ) and java_source_has_tree_sitter_errors(merged)
-    if ts_bad:
-        return PlanPreflightResult(
-            ok=False,
-            reason="PLAN_TREE_SITTER_REJECT:parse_has_error_nodes",
-            static_warnings=warnings,
-            dry_run_ok=True,
-            tree_sitter_ok=False,
-        )
+    use_ts = (not legacy_skip) and (
+        (os.getenv("PLAN_VALIDATOR_USE_TREE_SITTER", "") or "").strip()
+        in ("1", "true", "yes")
+    )
+    if use_ts and target_file.lower().endswith(".java"):
+        if java_source_has_tree_sitter_errors(merged):
+            return PlanPreflightResult(
+                ok=False,
+                reason="PLAN_TREE_SITTER_REJECT:parse_has_error_nodes",
+                static_warnings=warnings,
+                dry_run_ok=True,
+                tree_sitter_ok=False,
+            )
 
     return PlanPreflightResult(
         ok=True,
         reason="preflight_ok",
         static_warnings=warnings,
         dry_run_ok=True,
-        tree_sitter_ok=True,
+        tree_sitter_ok=not use_ts or not java_source_has_tree_sitter_errors(merged),
     )
 
 

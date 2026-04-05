@@ -3,468 +3,54 @@
     {
       "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
       "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-      "old_string": "<line-based ReAct agent diff>",
-      "new_string": "diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\nindex f24052ef7e3..f44a51e738d 100644\n--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n+++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n@@ -26,6 +26,7 @@ import java.util.Map;\n import java.util.Objects;\n \n import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\n+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\n import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;\n@@ -149,7 +150,6 @@ public record ScriptStats(\n         );\n     }\n \n-    @Override\n     public void writeTo(StreamOutput out) throws IOException {\n         if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {\n             compilationsHistory.writeTo(out);\n@@ -189,7 +189,6 @@ public record ScriptStats(\n         return new ScriptCacheStats(contexts);\n     }\n \n-    @Override\n     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {\n         return ChunkedToXContent.builder(params).object(SCRIPT_STATS, ob -> {\n             ob.field(COMPILATIONS, compilations);\n@@ -199,7 +198,7 @@ public record ScriptStats(\n                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n             }\n             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n             }\n             ob.array(CONTEXTS, contextStats.iterator());\n         });",
+      "old_string": "<developer patch fast path>",
+      "new_string": "diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\nindex f24052ef7e3..e085eb50ffb 100644\n--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n+++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n@@ -25,6 +25,7 @@ import java.util.List;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\n import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\n import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n@@ -199,7 +200,7 @@ public record ScriptStats(\n                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n             }\n             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n             }\n             ob.array(CONTEXTS, contextStats.iterator());\n         });",
       "edit_type": "replace",
       "verified": true,
-      "verification_result": "ReAct agent applied",
+      "verification_result": "developer_fast_path_ok",
       "applied": true,
       "apply_result": "SUCCESS"
     }
   ],
   "all_adapted_file_edits": [
-    [],
     [
       {
         "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
         "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "old_string": "<line-based ReAct agent diff>",
-        "new_string": "diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\nindex f24052ef7e3..f44a51e738d 100644\n--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n+++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n@@ -26,6 +26,7 @@ import java.util.Map;\n import java.util.Objects;\n \n import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\n+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\n import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;\n@@ -149,7 +150,6 @@ public record ScriptStats(\n         );\n     }\n \n-    @Override\n     public void writeTo(StreamOutput out) throws IOException {\n         if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {\n             compilationsHistory.writeTo(out);\n@@ -189,7 +189,6 @@ public record ScriptStats(\n         return new ScriptCacheStats(contexts);\n     }\n \n-    @Override\n     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {\n         return ChunkedToXContent.builder(params).object(SCRIPT_STATS, ob -> {\n             ob.field(COMPILATIONS, compilations);\n@@ -199,7 +198,7 @@ public record ScriptStats(\n                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n             }\n             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n             }\n             ob.array(CONTEXTS, contextStats.iterator());\n         });",
+        "old_string": "<developer patch fast path>",
+        "new_string": "diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\nindex f24052ef7e3..e085eb50ffb 100644\n--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n+++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n@@ -25,6 +25,7 @@ import java.util.List;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\n import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\n import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n@@ -199,7 +200,7 @@ public record ScriptStats(\n                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n             }\n             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n             }\n             ob.array(CONTEXTS, contextStats.iterator());\n         });",
         "edit_type": "replace",
         "verified": true,
-        "verification_result": "ReAct agent applied",
+        "verification_result": "developer_fast_path_ok",
         "applied": true,
         "apply_result": "SUCCESS"
       }
     ]
   ],
   "agent_trajectory_edits": [
-    [
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "str_replace_in_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "edit_type": "insert_before",
-          "resolution_reason": "exact",
-          "resolved_old_preview": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
-          "resolved_new_preview": "import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 25,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 210,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 200,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 201,
-          "radius": 5
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 28,
-          "radius": 5
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "old_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;\nimport static org.elasticsearch.script.ScriptStats.Fields.CONTEXTS;\nimport static org.elasticsearch.script.ScriptStats.Fields.SCRIPT_STATS;",
-          "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;\nimport static org.elasticsearch.script.ScriptStats.Fields.CONTEXTS;\nimport static org.elasticsearch.script.ScriptStats.Fields.SCRIPT_STATS;",
-          "replace_all": false
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "old_string": "            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n            }",
-          "new_string": "            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n            }",
-          "replace_all": false
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "check_java_syntax",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 150,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 190,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "git_diff_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "verify_guidelines",
-        "args": {
-          "diff_text": "diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\nindex f24052ef7e3..f4b62ad687b 100644\n--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n+++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n@@ -26,6 +26,7 @@ import java.util.Map;\n import java.util.Objects;\n \n import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\n+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\n import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;\n@@ -199,7 +200,7 @@ public record ScriptStats(\n                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n             }\n             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n             }\n             ob.array(CONTEXTS, contextStats.iterator());\n         });\n"
-        }
-      }
-    ],
-    [
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "str_replace_in_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "edit_type": "insert_before",
-          "resolution_reason": "exact",
-          "resolved_old_preview": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;",
-          "resolved_new_preview": "import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "manage_todo",
-        "args": {
-          "action": "add",
-          "task": "Read file head to verify import section and locate existing imports around line 28"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 28,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "old_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;",
-          "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;",
-          "replace_all": false
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 215,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 200,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "old_string": "            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n            }",
-          "new_string": "            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n            }",
-          "replace_all": false
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "check_java_syntax",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 150,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 190,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 140,
-          "radius": 20
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 153,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 170,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 190,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 203,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "check_java_syntax",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 150,
-          "radius": 20
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 100,
-          "radius": 20
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 50,
-          "radius": 20
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 55,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "center_line": 153,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "search_text": "@Override"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "search_text": "implements Writeable"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "search_text": "writeTo"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "search_text": "toXContentChunked"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "search_text": "@Override\n    public Iterator<? extends ToXContent> toXContentChunked"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "search_text": "public Iterator<? extends ToXContent> toXContentChunked"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "search_text": "@Override\n    public void writeTo(StreamOutput out) throws IOException"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "search_text": "public void writeTo(StreamOutput out) throws IOException"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "old_string": "    @Override\n    public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {\n        return ChunkedToXContent.builder(params).object(SCRIPT_STATS, ob -> {\n            ob.field(COMPILATIONS, compilations);\n            ob.field(CACHE_EVICTIONS, cacheEvictions);\n            ob.field(COMPILATION_LIMIT_TRIGGERED, compilationLimitTriggered);\n            if (compilationsHistory != null && compilationsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n            }\n            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n            }\n            ob.array(CONTEXTS, contextStats.iterator());\n        });\n    }",
-          "new_string": "    public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {\n        return ChunkedToXContent.builder(params).object(SCRIPT_STATS, ob -> {\n            ob.field(COMPILATIONS, compilations);\n            ob.field(CACHE_EVICTIONS, cacheEvictions);\n            ob.field(COMPILATION_LIMIT_TRIGGERED, compilationLimitTriggered);\n            if (compilationsHistory != null && compilationsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n            }\n            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n            }\n            ob.array(CONTEXTS, contextStats.iterator());\n        });\n    }",
-          "replace_all": false
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "old_string": "    @Override\n    public void writeTo(StreamOutput out) throws IOException {\n        if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {\n            compilationsHistory.writeTo(out);\n            cacheEvictionsHistory.writeTo(out);\n        } else {\n            out.writeVLong(compilations);\n            out.writeVLong(cacheEvictions);\n        }\n        out.writeVLong(compilationLimitTriggered);\n        out.writeCollection(contextStats);\n    }",
-          "new_string": "    public void writeTo(StreamOutput out) throws IOException {\n        if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {\n            compilationsHistory.writeTo(out);\n            cacheEvictionsHistory.writeTo(out);\n        } else {\n            out.writeVLong(compilations);\n            out.writeVLong(cacheEvictions);\n        }\n        out.writeVLong(compilationLimitTriggered);\n        out.writeCollection(contextStats);\n    }",
-          "replace_all": false
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "read_full_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-          "old_string": "    @Override\n    public void writeTo(StreamOutput out) throws IOException {\n        if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {\n            compilationsHistory.writeTo(out);\n            cacheEvictionsHistory.writeTo(out);\n        } else {\n            out.writeVLong(compilations);\n            out.writeVLong(cacheEvictions);\n        }\n        out.writeVLong(compilationLimitTriggered);\n        out.writeCollection(contextStats);\n    }",
-          "new_string": "    public void writeTo(StreamOutput out) throws IOException {\n        if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {\n            compilationsHistory.writeTo(out);\n            cacheEvictionsHistory.writeTo(out);\n        } else {\n            out.writeVLong(compilations);\n            out.writeVLong(cacheEvictions);\n        }\n        out.writeVLong(compilationLimitTriggered);\n        out.writeCollection(contextStats);\n    }",
-          "replace_all": false
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "check_java_syntax",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "git_diff_file",
-        "args": {
-          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-        "tool": "verify_guidelines",
-        "args": {
-          "diff_text": "diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\nindex f24052ef7e3..f44a51e738d 100644\n--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n+++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n@@ -26,6 +26,7 @@ import java.util.Map;\n import java.util.Objects;\n \n import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\n+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\n import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;\n@@ -149,7 +150,6 @@ public record ScriptStats(\n         );\n     }\n \n-    @Override\n     public void writeTo(StreamOutput out) throws IOException {\n         if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {\n             compilationsHistory.writeTo(out);\n             cacheEvictionsHistory.writeTo(out);\n         } else {\n             out.writeVLong(compilations);\n             out.writeVLong(cacheEvictions);\n         }\n         out.writeVLong(compilationLimitTriggered);\n         out.writeCollection(contextStats);\n     }\n \n-    @Override\n     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {\n         return ChunkedToXContent.builder(params).object(SCRIPT_STATS, ob -> {\n             ob.field(COMPILATIONS, compilations);\n             ob.field(CACHE_EVICTIONS, cacheEvictions);\n             ob.field(COMPILATION_LIMIT_TRIGGERED, compilationLimitTriggered);\n             if (compilationsHistory != null && compilationsHistory.areTimingsEmpty() == false) {\n                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n             }\n             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n             }\n             ob.array(CONTEXTS, contextStats.iterator());\n         });\n     }\n"
-        }
-      }
-    ]
+    []
   ],
   "adapted_code_hunks": [
     {
       "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
       "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
-      "hunk_text": "diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\nindex f24052ef7e3..f44a51e738d 100644\n--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n+++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n@@ -26,6 +26,7 @@ import java.util.Map;\n import java.util.Objects;\n \n import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\n+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\n import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;\n@@ -149,7 +150,6 @@ public record ScriptStats(\n         );\n     }\n \n-    @Override\n     public void writeTo(StreamOutput out) throws IOException {\n         if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {\n             compilationsHistory.writeTo(out);\n@@ -189,7 +189,6 @@ public record ScriptStats(\n         return new ScriptCacheStats(contexts);\n     }\n \n-    @Override\n     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {\n         return ChunkedToXContent.builder(params).object(SCRIPT_STATS, ob -> {\n             ob.field(COMPILATIONS, compilations);\n@@ -199,7 +198,7 @@ public record ScriptStats(\n                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n             }\n             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n             }\n             ob.array(CONTEXTS, contextStats.iterator());\n         });\n",
-      "insertion_line": 26,
+      "hunk_text": "diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\nindex f24052ef7e3..e085eb50ffb 100644\n--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n+++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n@@ -25,6 +25,7 @@ import java.util.List;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\n import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\n import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n@@ -199,7 +200,7 @@ public record ScriptStats(\n                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n             }\n             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n             }\n             ob.array(CONTEXTS, contextStats.iterator());\n         });\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "validation_repeated_patch_detected": false,
+  "validation_repeated_plan_detected": false,
+  "best_effort_adapted_code_hunks": [
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "hunk_text": "diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\nindex f24052ef7e3..e085eb50ffb 100644\n--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n+++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n@@ -25,6 +25,7 @@ import java.util.List;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\n import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\n import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n@@ -199,7 +200,7 @@ public record ScriptStats(\n                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n             }\n             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n             }\n             ob.array(CONTEXTS, contextStats.iterator());\n         });\n",
+      "insertion_line": 1,
       "intent_verified": true,
       "file_operation": "MODIFIED",
       "old_target_file": null,
@@ -479,8 +65,12 @@
       "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
       "hunk_index": 0,
       "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_I",
+        "TYPE_II"
+      ],
       "status": "success",
-      "reason": "generated_and_validated",
+      "reason": "developer_fast_path",
       "todo_steps": [
         "reset_file",
         "apply_edits",
@@ -497,14 +87,14 @@
       ]
     }
   ],
-  "generated_patch_hash": "8be2a0aa3ebf389ec099614913147baf0d7a2b0521d14e9984fdac06b8046ff2",
+  "generated_patch_hash": "87752c6841afdd177bb9f62c7683a227e020bca96f7ebaabb1dcf3d169114e19",
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
   "token_usage": {
-    "input_tokens": 566,
-    "output_tokens": 1,
-    "total_tokens": 567,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
     "estimated": false,
-    "sources": [
-      "file_editor.intent.provider_usage"
-    ]
+    "sources": []
   }
 }

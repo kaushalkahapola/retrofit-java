@@ -154,7 +154,7 @@ Treat the stack as **defense in depth**: validate plans → prefer monolithic sa
 | Complexity routing | `agents-backend/src/utils/patch_complexity.py` — single-file / small multi-file overlap can classify as STRUCTURAL at lower anchor ratios (0.38 / 0.40) |
 | Locator line recovery | `agents-backend/src/agents/structural_locator.py` — second pass uses longer hunk anchor candidates when `start_line` is still `None` |
 | Tests | `agents-backend/tests/test_plan_validator.py` (requires deps from `requirements.txt`; `PYTHONPATH=src pytest`) |
-| Tree-sitter opt-out | `PLAN_VALIDATOR_SKIP_TREE_SITTER=1` if parse gate is too strict for a project |
+| Tree-sitter (preflight) | **Opt-in** `PLAN_VALIDATOR_USE_TREE_SITTER=1`; default off (too many false positives on valid Java). Legacy `PLAN_VALIDATOR_SKIP_TREE_SITTER=1` still forces TS off. |
 | Phase C: developer fast path | `utils/patch_apply_strategy.py` — `try_developer_fast_path()`; `evaluate_full_workflow` passes `developer_patch_diff` in graph state; Agent 3 applies developer slice when `git apply --check` passes (opt-out: `EVAL_DISABLE_DEVELOPER_FAST_PATH=1`; similarity floor: `EVAL_DEVELOPER_FAST_PATH_MIN_SIMILARITY`, default 0.55 vs agent-eligible mainline slice) |
 | Idempotency | `file_already_matches_developer_commit()` — if working tree already matches `backport_commit` blob, reuse `git diff` without applying |
 | Planner consolidation | `consolidate_plan_entries_java()` — drops redundant `this.field =` inserts already covered by replace hunks; planning agent runs it before emitting `hunk_generation_plan` |

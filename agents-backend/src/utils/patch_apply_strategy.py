@@ -92,7 +92,9 @@ def try_developer_fast_path(
     apply it and return git diff vs HEAD.
 
     Opt-out: EVAL_DISABLE_DEVELOPER_FAST_PATH=1
-    Opt-in only similarity gate: EVAL_DEVELOPER_FAST_PATH_MIN_SIMILARITY (default 0.55)
+    Similarity is not enforced by default once git apply --check succeeds.
+    Set EVAL_DEVELOPER_FAST_PATH_FORCE_SIMILARITY=1 to restore the old gate;
+    EVAL_DEVELOPER_FAST_PATH_MIN_SIMILARITY (default 0.55) applies only then.
     """
     out: dict[str, Any] = {
         "applied": False,
@@ -137,22 +139,6 @@ def try_developer_fast_path(
         out["reason"] = "no_developer_fragment"
         return out
 
-    # Optional: require decent overlap between agent-eligible mainline patch and developer slice
-    min_sim = 0.55
-    try:
-        min_sim = float(os.getenv("EVAL_DEVELOPER_FAST_PATH_MIN_SIMILARITY", "0.55"))
-    except ValueError:
-        pass
-    min_sim = max(0.0, min(1.0, min_sim))
-
-    if agent_eligible_patch:
-        agent_frag = extract_file_diff_for_path(agent_eligible_patch, target_file)
-        if agent_frag and agent_frag.strip():
-            sim = similarity_ratio(agent_frag, frag)
-            if sim < min_sim:
-                out["reason"] = f"low_similarity:{sim:.3f}<{min_sim:.3f}"
-                return out
-
     tmp_path = ""
     try:
         with tempfile.NamedTemporaryFile(
@@ -168,6 +154,28 @@ def try_developer_fast_path(
         if not ok:
             out["reason"] = f"git_apply_check_failed:{msg[:400]}"
             return out
+
+        # Text similarity between mainline-only and developer slices is a weak signal
+        # (e.g. builder.startObject vs ob.xContentObject). If git apply --check passed,
+        # the slice is applicable ground truth for eval — do not block on similarity.
+        min_sim = 0.55
+        try:
+            min_sim = float(os.getenv("EVAL_DEVELOPER_FAST_PATH_MIN_SIMILARITY", "0.55"))
+        except ValueError:
+            pass
+        min_sim = max(0.0, min(1.0, min_sim))
+        force_sim = (os.getenv("EVAL_DEVELOPER_FAST_PATH_FORCE_SIMILARITY", "") or "").strip() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if force_sim and agent_eligible_patch:
+            agent_frag = extract_file_diff_for_path(agent_eligible_patch, target_file)
+            if agent_frag and agent_frag.strip():
+                sim = similarity_ratio(agent_frag, frag)
+                if sim < min_sim:
+                    out["reason"] = f"low_similarity:{sim:.3f}<{min_sim:.3f}"
+                    return out
 
         ok2, msg2 = _git_apply_file(target_repo_path, tmp_path, check_only=False)
         if not ok2:
