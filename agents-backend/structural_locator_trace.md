@@ -1,7 +1,7 @@
 # Structural Locator Trace
 
 ## Blueprint Summary
-- **Root Cause**: The vulnerability arises from inaccurate memory usage estimation of document updates and inserts, which can lead to resource exhaustion or denial of service due to under-accounting of the full document size when loaded from disk.
+- **Root Cause**: The vulnerability arises from inaccurate or missing estimation of the full document size in memory during update and insert operations, which can lead to incorrect memory accounting and potential resource exhaustion or denial of service.
 
 ## Hunk Segregation
 - Code files: 10
