@@ -1,0 +1,17 @@
+patch_id=crate_4f42b38d
+project=crate
+mainline_commit=4f42b38d70b18e2b3c1d760e4f406c00b163c465
+backport_commit=c08290ccf4521eabe33d32c5f146aedcf167dbdf
+mode=full
+started_at=2026-04-06T18:31:38.730032
+----------------------------------------
+Running full workflow graph
+
+[crate/crate_4f42b38d] Setting up repositories for mode=full...
+[crate/crate_4f42b38d] Running full workflow graph...
+Router: Running Phase 0.
+Phase 0 (Optimistic): Checking direct patch applicability...
+Phase 0: Experiment mode — checking out parent of c08290ccf4521eabe33d32c5f146aedcf167dbdf...
+Phase 0: Building baseline by applying developer backport test hunks only...
+  Validation: server/src/test/java/io/crate/planner/operators/LogicalPlannerTest.java - applying 1 hunk(s) one by one in bottom-to-top order: [838]
+    Agent 4: Executing crate helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/crate/run_tests.sh

@@ -9,7 +9,10 @@
         {
           "error_type": "api_or_signature_mismatch",
           "suggested_action": "replan_and_regenerate_with_api_compatibility",
-          "compiler_errors": []
+          "compiler_errors": [
+            "[ERROR] /repo/server/src/main/java/io/crate/statistics/TableStats.java:[75,30] error: method estimateSizeForColumns in class Stats cannot be applied to given types;",
+            "[ERROR] /repo/server/src/main/java/io/crate/statistics/TableStats.java:[75,30] error: method estimateSizeForColumns in class Stats cannot be applied to given types;"
+          ]
         }
       ],
       "failed_locations": [
@@ -25,17 +28,17 @@
       "symbol_errors": [],
       "signature_errors": [],
       "primary_failed_symbol": "",
-      "raw_error_preview": "Build failed: API/signature mismatch in generated patch against target branch."
+      "raw_error_preview": "Build failed: API/signature mismatch in generated patch against target branch. Compiler errors: [ERROR] /repo/server/src/main/java/io/crate/statistics/TableStats.java:[75,30] error: method estimateSizeForColumns in class Stats cannot be applied to given types; | [ERROR] /repo/server/src/main/java/io/crate/statistics/TableStats.java:[75,30] error: method estimateSizeForColumns in class Stats cannot be applied to given types;"
     },
     "side_files": [],
-    "iteration": 2,
+    "iteration": 1,
     "surgical_ops": []
   },
-  "reasoning_iterations": 2,
+  "reasoning_iterations": 1,
   "token_usage": {
-    "input_tokens": 14614,
-    "output_tokens": 173,
-    "total_tokens": 14787,
+    "input_tokens": 100214,
+    "output_tokens": 886,
+    "total_tokens": 101100,
     "estimated": false,
     "sources": [
       "reasoning_architect.react.aggregate_usage"

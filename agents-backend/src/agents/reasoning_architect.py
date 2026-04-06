@@ -19,36 +19,63 @@ from langgraph.prebuilt import create_react_agent
 
 from agents.failure_diagnosis import FailureDiagnosisEngine, FailureKind
 from agents.hunk_generator_tools import HunkGeneratorToolkit
+from agents.type_v_rulebook import TypeVRulebook
 from state import AgentState, SurgicalOp
+
 from utils.llm_provider import get_llm
 from utils.plan_validator import _resolve_old as _resolve_old_in_content
 from utils.token_counter import add_usage, aggregate_usage_from_messages
 
-_REASONING_SYSTEM = """You are the H-MABS Reasoning Architect for complex backports.
 
-Mission:
-- Produce a deterministic, multi-file surgical plan that resolves compilation/API drift.
-- You can inspect parent classes and connected classes when required.
-- You cannot edit files directly.
 
-Execution protocol (mandatory):
-1) Call diagnose_api_drift first.
-2) Inspect related files and method hints (list_related_files, list_method_hints).
-3) For every proposed operation:
-   - verify anchor in the target file (read_target_code_window and/or grep_in_target_file),
-   - if needed, inspect other files using read_repo_code_window/grep_in_repo,
-   - ensure operation is minimal and deterministic.
-4) Submit a single final plan using submit_surgical_plan.
+_REASONING_SYSTEM = """You are ReasoningArchitect — a senior Java backporting specialist working inside the H-MABS system.
 
-Strict rules:
-- Prefer exact local replacements; do not invent broad rewrites.
-- Include cross-file edits only when diagnostics/symbol drift justify them.
-- Every operation must set anchor_verified=true.
-- Use target_file per op when the fix belongs to parent/connected classes.
+[ROLE & AUTONOMY]
+You are meticulous and safety-first. Your only goal is to produce a verified, minimal, deterministic surgical plan that resolves compilation and API drift failures.
+You never edit files directly. You only diagnose and plan.
+
+[AUTONOMY BUDGET]
+- You MUST start with diagnosis tools.
+- You are authorized to inspect ANY file in the related_files list (including parents and callers/callees).
+- You may propose edits to multiple files if needed to resolve cascading signature changes (e.g. fullDocSizeEstimate propagation).
+- You are NOT allowed to make repetitive tool calls with identical arguments.
+
+[EXECUTION PROTOCOL — follow strictly]
+1. Always begin by calling diagnose_api_drift.
+2. Use read_target_code_window / grep_in_target_file to verify anchors in the target file.
+3. When signature or API drift is detected, use compare_mainline_target and read_repo_code_window on connected files.
+4. Understand parent classes and callers/callees before proposing changes.
+5. Propose only minimal changes that preserve original intent.
+6. Every operation must have anchor_verified=true and be verifiable with exact string match (or resolved whitespace).
+
+[OUTPUT CONTRACT — use exactly this structure]
+<thinking>Brief internal reasoning (1-3 sentences). What is the root cause? What files are in scope?</thinking>
+[DIAGNOSIS] Root cause + API drift summary + sphere of influence.
+[PLAN]
+```json
+[
+  {
+    "target_file": "...",
+    "old_string": "...",
+    "new_string": "...",
+    "anchor_verified": true,
+    "verification_method": "exact",
+    "confidence": 0.85
+  }
+]
+```
+[CONFIDENCE] high/medium/low + one-sentence justification
+
+[STRICT RULES]
+- Process ONE primary file at a time. Do not bleed context from previous files.
+- Never repeat the same tool call with the same arguments twice.
+- If anchor not found, shrink search window and re-read — do not guess large blocks.
+- When proposing changes to parent/connected files, explain why in <thinking>.
+- Final submission must go through submit_surgical_plan only.
 
 Current primary file: {current_file}
 
-Known related files:
+Related files (sphere of influence):
 {related_files}
 
 Method/symbol hints:
@@ -57,10 +84,11 @@ Method/symbol hints:
 Build diagnostics:
 {build_diagnostics}
 
-Patch intent:
+Patch intent (high-level):
 {patch_intent}
 
-Return only via submit_surgical_plan.
+Session modified files so far:
+{session_modified_files}
 """
 
 
@@ -256,15 +284,19 @@ def _extract_side_files_from_state(state: AgentState, target_file: str) -> list[
             candidates.add(p)
 
     build_raw = str(build.get("raw") or "")
+    # Robust regex for both Maven/Gradle and containerized paths
     for m in re.findall(
-        r"([a-zA-Z0-9_./-]+\.java):(?:\[(\d+),\d+\]|(\d+)):", build_raw
+        r"((?:/repo/)?[a-zA-Z0-9_./-]+\.java):(?:\[(\d+),\d+\]|(\d+)):", build_raw
     ):
-        p = _normalize_rel_path(str(m[0] or ""))
+        path_match = str(m[0] or "")
+        if path_match.startswith("/repo/"):
+            path_match = path_match[len("/repo/") :]
+        p = _normalize_rel_path(path_match)
         if p:
             candidates.add(p)
 
     out = [p for p in sorted(candidates) if p and p != target]
-    return out[:6]
+    return out[:10]  # Slightly increase limit for more context
 
 
 def _extract_related_files_and_method_hints(
@@ -501,86 +533,6 @@ def _sanitize_surgical_ops(
     return safe, rejected
 
 
-def _heuristic_signature_drift_ops(
-    repo_path: str, target_file: str
-) -> list[SurgicalOp]:
-    """
-    Deterministic fallback for known fullDocSizeEstimate drift when LLM plans are malformed.
-    Produces only exact verified replacements for existing anchors.
-    """
-    target = _normalize_rel_path(target_file)
-    text = _load_file_text(repo_path, target)
-    if not text or "fullDocSizeEstimate" in text:
-        return []
-
-    candidates: list[tuple[str, str]] = [
-        (
-            "public static Item forUpdate(String id,\n"
-            "                                     Symbol[] assignments,\n"
-            "                                     long requiredVersion,\n"
-            "                                     long seqNo,\n"
-            "                                     long primaryTerm,\n"
-            "                                     long sizeEstimate) {",
-            "public static Item forUpdate(String id,\n"
-            "                                     Symbol[] assignments,\n"
-            "                                     long requiredVersion,\n"
-            "                                     long seqNo,\n"
-            "                                     long primaryTerm,\n"
-            "                                     long fullDocSizeEstimate) {",
-        ),
-        (
-            "usedBytes += sizeEstimate;",
-            "usedBytes += fullDocSizeEstimate;",
-        ),
-        (
-            "@Nullable Symbol[] onConflictAssignments) {",
-            "@Nullable Symbol[] onConflictAssignments,\n"
-            "                                     long fullDocSizeEstimate) {",
-        ),
-        (
-            "for (var assignment : onConflictAssignments) {",
-            "usedBytes += fullDocSizeEstimate;\n"
-            "                for (var assignment : onConflictAssignments) {",
-        ),
-        (
-            "List<Symbol> returnValues)",
-            "List<Symbol> returnValues,\n"
-            "                                       long fullDocSizeEstimate)",
-        ),
-        (
-            "this.returnValues = returnValues;",
-            "this.returnValues = returnValues;\n"
-            "        this.fullDocSizeEstimate = fullDocSizeEstimate;",
-        ),
-        (
-            "@Nullable Long requiredVersion) {",
-            "@Nullable Long requiredVersion,\n"
-            "                            long fullDocSizeEstimate) {",
-        ),
-        (
-            "this.requiredVersion = requiredVersion;",
-            "this.requiredVersion = requiredVersion;\n"
-            "        this.fullDocSizeEstimate = fullDocSizeEstimate;",
-        ),
-    ]
-
-    out: list[SurgicalOp] = []
-    seen: set[str] = set()
-    for old_s, new_s in candidates:
-        if old_s in text and old_s not in seen:
-            out.append(
-                {
-                    "target_file": target,
-                    "old_string": old_s,
-                    "new_string": new_s,
-                    "anchor_verified": True,
-                    "verification_method": "exact",
-                    "confidence": 0.65,
-                }
-            )
-            seen.add(old_s)
-
-    return out
 
 
 def _fallback_surgical_from_existing_plan(
@@ -1096,31 +1048,87 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
 
         plan: list[SurgicalOp] = []
         try:
+            # 1. Run Structured Rulebook Diagnosis
+            rulebook = TypeVRulebook(target_repo_path, mainline_repo_path)
+            
+            # Find the failed hunk entry if any
+            failed_hunk = {}
+            validation_error_context = state.get("validation_error_context") or ""
+            
+            # Safely extract hunk information
+            validation_retry_hunks = state.get("validation_retry_hunks")
+            failed_hunk_indices = []
+            if isinstance(validation_retry_hunks, dict):
+                failed_hunk_indices = validation_retry_hunks.get(target_file, [])
+            elif isinstance(validation_retry_hunks, list):
+                # If it's a list, it might be a broadcasted retry or special signal
+                failed_hunk_indices = [] # Default to empty for list types
+
+            extracted_hunks_val = state.get("extracted_hunks")
+            all_hunks = []
+            if isinstance(extracted_hunks_val, dict):
+                all_hunks = extracted_hunks_val.get(target_file, [])
+
+            current_failed_entry = {}
+            if failed_hunk_indices and all_hunks:
+                # Take the first failed one for the rulebook focus
+                idx = failed_hunk_indices[0]
+                if 0 <= idx < len(all_hunks):
+                    current_failed_entry = all_hunks[idx]
+
+
+            rule_decision = rulebook.apply(
+                target_file=target_file,
+                failed_plan_entry=current_failed_entry,
+                build_error=str(validation_error_context),
+            )
+            
+            rulebook_hint = rule_decision.to_prompt_context()
+
+            # 2. Enhanced Prompt Construction
             prompt = _REASONING_SYSTEM.format(
                 current_file=target_file,
-                related_files="\n".join(f"- {p}" for p in related_files)
-                if related_files
-                else "- <none>",
-                method_hints=", ".join(method_hints) if method_hints else "<none>",
-                build_diagnostics=str(diagnostics),
-                patch_intent=patch_intent or "<none>",
+                related_files="\n".join(f"- {p}" for p in related_files[:30]) or "- <none>",
+                method_hints=", ".join(method_hints[:30]) or "<none>",
+                build_diagnostics=_truncate_for_log(str(diagnostics), 4000),
+                patch_intent=_truncate_for_log(patch_intent or "<none>", 1000),
+                session_modified_files="\n".join(
+                    f"- {f}" for f in sorted(list(set(
+                        op.get("target_file", "") 
+                        for op in state.get("surgical_history", [])
+                        if op.get("target_file")
+                    )))
+                ) or "- <none>",
             )
+
+            # 3. Initial Code Context
+            initial_code = ""
+            if diagnostics.get("failed_locations"):
+                loc = diagnostics["failed_locations"][0]
+                line = int(loc.get("line") or 0)
+                if line > 0:
+                    win = toolkit.read_target_code_window(center_line=line, radius=12)
+                    initial_code = f"\n\nCurrent code window around failure (line {line}):\n{win}\n"
+
+            # Strong initial message that forces diagnostic-first behavior
+            initial_message = HumanMessage(
+                content=(
+                    "Diagnose the failure completely and submit a clean surgical plan. "
+                    "Start with diagnose_api_drift. Verify every anchor. "
+                    "Handle cascading changes across related files if needed. "
+                    f"Primary file: {target_file}\n\n"
+                    f"{rulebook_hint}\n"
+                    f"{initial_code}"
+                )
+            )
+
             agent = create_react_agent(llm, tools=toolkit.get_tools(), prompt=prompt)
             result = await agent.ainvoke(
-                {
-                    "messages": [
-                        HumanMessage(
-                            content=(
-                                "Diagnose this file and submit a fully verified surgical plan. "
-                                "Inspect parent/connected files if needed. "
-                                "Avoid malformed constructor/signature insertions. "
-                                "Only propose operations that keep Java structure valid. "
-                                f"Primary file: `{target_file}`."
-                            )
-                        )
-                    ]
+                {"messages": [initial_message]},
+                config={
+                    "recursion_limit": 60,
+                    "configurable": {"thread_id": f"reasoning-{target_file}"}
                 },
-                config={"recursion_limit": 20},
             )
             _log_reasoning_trace(result or {}, target_file)
             agg = aggregate_usage_from_messages((result or {}).get("messages") or [])
@@ -1148,13 +1156,6 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
                     f"{target_file} count={len(verified_plan)}"
                 )
 
-        heur = _heuristic_signature_drift_ops(target_repo_path, target_file)
-        if heur:
-            print(
-                "Reasoning Architect: heuristic signature-drift ops for "
-                f"{target_file} count={len(heur)}"
-            )
-            verified_plan.extend(heur)
 
         verified_plan, rejected = _sanitize_surgical_ops(
             repo_path=target_repo_path,

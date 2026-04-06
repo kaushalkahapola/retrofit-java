@@ -20,4 +20,4 @@
 **Final Status: BUILD FAILED**
 
 **Agent Analysis:**
-API/signature mismatch in generated patch against target branch.
+Build failed; deterministic parser could not identify a narrower category.

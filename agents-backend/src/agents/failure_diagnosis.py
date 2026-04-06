@@ -121,7 +121,7 @@ class FailureDiagnosisEngine:
         # 2. Symbol present but signature changed (compile error: cannot find symbol / 
         #    wrong arg count)
         if failed_symbol and _is_api_error(build_error):
-            sig_diag = self._check_signature_changed(failed_symbol, target_file)
+            sig_diag = self._check_signature_changed(failed_symbol, target_file, build_error)
             if sig_diag:
                 return sig_diag
 
@@ -143,13 +143,14 @@ class FailureDiagnosisEngine:
             if anchor_diag:
                 return anchor_diag
 
+        evidence_str = f"No deterministic diagnosis found. Build error: {build_error}"
         return Diagnosis(
             kind=FailureKind.UNKNOWN,
             confidence=0.0,
             target_file=target_file,
             failed_symbol=failed_symbol,
             suggested_strategy="escalate_to_full_react",
-            evidence=[f"No deterministic diagnosis found. Build error: {build_error[:300]}"],
+            evidence=[str(evidence_str[:300])],
         )
 
     # ------------------------------------------------------------------ #
@@ -167,9 +168,9 @@ class FailureDiagnosisEngine:
 
         other_files = [
             h for h in hits
-            if h["file"] != current_file
-            and not h["file"].lower().endswith("test.java")
-            and "test" not in h["file"].lower()
+            if str(h.get("file") or "") != current_file
+            and not str(h.get("file") or "").lower().endswith("test.java")
+            and "test" not in str(h.get("file") or "").lower()
         ]
         if not other_files:
             return None
@@ -177,7 +178,8 @@ class FailureDiagnosisEngine:
         # Count hits per file and rank
         by_file: dict[str, list] = {}
         for h in other_files:
-            by_file.setdefault(h["file"], []).append(h)
+            f = str(h.get("file") or "")
+            by_file.setdefault(f, []).append(h)
 
         ranked = sorted(by_file.items(), key=lambda x: len(x[1]), reverse=True)
         best_file, best_hits = ranked[0]
@@ -188,12 +190,12 @@ class FailureDiagnosisEngine:
             if re.search(
                 rf"\b(class|interface|enum)\s+{re.escape(symbol)}\b"
                 rf"|\b(void|[A-Z][a-zA-Z0-9<>]*)\s+{re.escape(symbol)}\s*\(",
-                h["content"],
+                str(h.get("content") or ""),
             )
         ]
         confidence = 0.85 if decl_hits else 0.55
 
-        candidates = [f for f, _ in ranked[:3]]
+        candidates = [str(f) for f, _ in ranked[:5]]
         return Diagnosis(
             kind=FailureKind.LOGIC_MOVED,
             confidence=confidence,
@@ -207,58 +209,80 @@ class FailureDiagnosisEngine:
             ],
         )
 
+
     # ------------------------------------------------------------------ #
     # Check 2: signature changed                                           #
     # ------------------------------------------------------------------ #
 
-    def _check_signature_changed(self, symbol: str, target_file: str) -> Diagnosis | None:
-        # Find all method declarations matching the symbol name in target file
-        content = self._read_file(target_file)
-        if not content:
-            return None
+    def _check_signature_changed(self, symbol: str, target_file: str, build_error: str = "") -> Diagnosis | None:
+        # 1. Try to find class/method hints in build error
+        # [ERROR] ...: error: method estimateSizeForColumns in class Stats cannot be applied...
+        target_f = target_file
+        sym = symbol
+        
+        m_error = re.search(r"method (\w+) in class (\w+) cannot be applied", build_error)
+        evidence = []
+        if m_error:
+            sym = m_error.group(1)
+            class_name = m_error.group(2)
+            evidence.append(f"Detected javac signature mismatch: method '{sym}' in class '{class_name}'")
+            # Find the file for this class
+            hits = self._grep(f"class {class_name}", "*.java", context=0)
+            if hits:
+                target_f = str(hits[0].get("file") or "")
+                evidence.append(f"Mapped class '{class_name}' to file '{target_f}'")
+            else:
+                # Fallback: grep for method declaration globally if class search failed
+                evidence.append(f"Could not find 'class {class_name}', searching globally for method '{sym}' declaration")
+                hits = self._grep(rf"\b{re.escape(sym)}\s*\(", "*.java", context=0, is_regex=True)
+                if hits:
+                    # Filter for declarations (contains public/private/protected/etc)
+                    decls = [h for h in hits if re.search(r"(public|protected|private|static|void|[A-Z])", str(h.get("content") or ""))]
+                    if decls:
+                        target_f = str(decls[0].get("file") or "")
+                        evidence.append(f"Global search found declaration in '{target_f}'")
 
+        # Find all method declarations matching the symbol name in target file
+        content = self._read_file(target_f)
+        if not content:
+            if target_f != target_file:
+                evidence.append(f"File '{target_f}' unreadable, falling back to '{target_file}'")
+                target_f = target_file
+                content = self._read_file(target_f)
+            if not content:
+                return None
+
+        # Broader pattern for Java method signatures (generics, annotations, throws)
         pattern = re.compile(
-            rf"(?:public|protected|private|static|final|synchronized|\s)+"
-            rf"[\w<>\[\]?,\s]*\s+{re.escape(symbol)}\s*\(([^)]*)\)",
+            rf"(?:@\w+\s+)?(?:public|protected|private|static|final|synchronized|native|abstract|\s)*"
+            rf"[<\w\s,>?\[\]]*\s+{re.escape(sym)}\s*\(([^)]*)\)"
+            rf"(?:\s*throws\s+[\w\s,.]+)?\s*\{{?",
             re.MULTILINE,
         )
         matches = list(pattern.finditer(content))
         if not matches:
-            return None  # symbol truly absent, not just signature-changed
+            evidence.append(f"No declaration for '{sym}' found in '{target_f}' using enhanced regex")
+            return None
 
-        # Extract signatures found in target
-        found_sigs = [m.group(0).strip() for m in matches]
-        lines = content.splitlines()
-
-        candidate_methods = []
-        for m in matches:
-            line_no = content[: m.start()].count("\n") + 1
-            candidate_methods.append(
-                MethodMatch(
-                    name=symbol,
-                    file=target_file,
-                    line=line_no,
-                    signature=m.group(0).strip(),
-                )
-            )
-
-        # Compare param counts between first found sig and what planner expected
-        first_sig = matches[0].group(1)  # params string
-        param_count = len([p for p in first_sig.split(",") if p.strip()])
-
+        # Return the first match with metadata
+        first_match = matches[0]
+        line_no = int(content[: first_match.start()].count("\n") + 1)
+        sig_text = str(first_match.group(0)).strip().rstrip("{").strip()
+        params_list = _extract_params(sig_text)
+        
+        evidence.append(f"Found signature: '{sig_text}' at line {line_no}")
         return Diagnosis(
             kind=FailureKind.SIGNATURE_CHANGED,
-            confidence=0.80,
-            target_file=target_file,
-            failed_symbol=symbol,
-            new_signature=found_sigs[0] if found_sigs else "",
-            candidate_methods=candidate_methods,
+            confidence=0.95,
+            target_file=target_f,
+            failed_symbol=sym,
+            new_signature=sig_text,
+            param_diff=params_list,
             suggested_strategy="adapt_call_to_target_signature",
-            evidence=[
-                f"Method '{symbol}' exists in {target_file} but with different signature.",
-                f"Target signatures found: {found_sigs[:2]}",
-            ],
+            evidence=evidence,
         )
+
+
 
     # ------------------------------------------------------------------ #
     # Check 3: method defined in parent class                              #
@@ -355,16 +379,16 @@ class FailureDiagnosisEngine:
         if not hits:
             return None
 
-        candidate_files = list({h["file"] for h in hits})[:5]
+        candidates = list({str(h.get("file") or "") for h in hits})
         return Diagnosis(
             kind=FailureKind.ANCHOR_NOT_FOUND,
             confidence=0.65,
             target_file="(unknown)",
             failed_symbol=symbol,
-            candidate_files=candidate_files,
+            candidate_files=candidates[:5],
             suggested_strategy="remap_anchor_to_found_location",
             evidence=[
-                f"Anchor line '{best_line[:80]}' found in: {candidate_files}"
+                f"Anchor line '{best_line[:80]}' found in: {candidates[:5]}"
             ],
         )
 
@@ -390,18 +414,19 @@ class FailureDiagnosisEngine:
             result = subprocess.run(
                 cmd, capture_output=True, text=True, cwd=self.repo, timeout=15
             )
-            hits = []
+            hits: list[dict[str, Any]] = []
             for line in result.stdout.splitlines()[:max_results]:
                 parts = line.split(":", 3)
                 if len(parts) >= 4:
                     hits.append({
-                        "file": parts[1],
+                        "file": str(parts[1]),
                         "line": int(parts[2]) if parts[2].isdigit() else 0,
-                        "content": parts[3],
+                        "content": str(parts[3]),
                     })
             return hits
         except Exception:
             return []
+
 
     def _read_file(self, rel_path: str) -> str:
         try:
@@ -448,3 +473,22 @@ def _is_api_error(build_error: str) -> bool:
         or "no suitable method" in lower
         or "method" in lower and "argument" in lower
     )
+
+
+def _extract_params(text: str) -> list[str]:
+    """Extract parameter type names from a method signature fragment."""
+    m = re.search(r"\(([^)]*)\)", text)
+    if not m:
+        return []
+    raw = m.group(1)
+    params = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        # "TypeName varName" → take TypeName
+        words = part.split()
+        if words:
+            params.append(words[0].split("<")[0])  # strip generics
+    return params
+

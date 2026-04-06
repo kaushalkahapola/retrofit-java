@@ -56,7 +56,7 @@ from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_l
 from utils.java_ts_invocation_names import callee_names_from_java_snippet_lines
 from utils.llm_provider import get_llm
 from utils.patch_analyzer import PatchAnalyzer
-from utils.patch_apply_strategy import try_developer_fast_path
+from utils.patch_apply_strategy import try_developer_fast_path, try_mainline_fast_path
 from utils.plan_validator import (
     classify_syntax_failure_message,
     validate_plan_before_apply,
@@ -2357,6 +2357,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
         "plan_preflight_failures": 0,
         "react_escalations": 0,
         "react_skipped_statement_outside_block": 0,
+        "mainline_fast_path_hits": 0,
         "developer_fast_path_hits": 0,
     }
 
@@ -2580,29 +2581,18 @@ async def file_editor_node(state: AgentState, config) -> dict:
         # After a failed validation, re-applying the developer slice via git apply
         # reproduces the same bytes and the same build error — skip fast path so
         # deterministic str_replace / ReAct can try to adapt (e.g. missing APIs).
-        _dfp: dict[str, Any] = {
-            "applied": False,
-            "reason": "not_attempted",
-        }
-        if validation_attempts <= 0:
-            _dfp = try_developer_fast_path(
-                target_repo_path=target_repo_path or "",
-                target_file=target_file,
-                developer_patch_diff=str(state.get("developer_patch_diff") or ""),
-                agent_eligible_patch=str(state.get("patch_diff") or ""),
-                evaluation_full_workflow=bool(state.get("evaluation_full_workflow")),
-                backport_commit=str(state.get("backport_commit") or ""),
-            )
-        else:
+        # Logical fast path: attempt to apply the original mainline hunk directly.
+        # This is non-cheating because it only uses the source branch patch.
+        _mfp = try_mainline_fast_path(
+            target_repo_path=target_repo_path or "",
+            target_file=target_file,
+            mainline_patch_diff=str(state.get("patch_diff") or ""),
+        )
+        if _mfp.get("applied"):
+            agent_metrics["mainline_fast_path_hits"] += 1
             print(
-                "    Agent 3: Skipping developer fast path "
-                f"(validation retry #{validation_attempts}; use deterministic/ReAct path)."
-            )
-        if _dfp.get("applied"):
-            agent_metrics["developer_fast_path_hits"] += 1
-            print(
-                f"    Agent 3: Developer patch fast path for {target_file} "
-                f"({_dfp.get('reason', '')})"
+                f"    Agent 3: Mainline patch fast path for {target_file} "
+                f"({_mfp.get('reason', '')})"
             )
             checks_ok, checks_reason, diff_text_fp = _run_mandatory_file_checks(
                 toolkit=toolkit,
@@ -2612,48 +2602,51 @@ async def file_editor_node(state: AgentState, config) -> dict:
             )
             if not checks_ok:
                 print(
-                    f"    Agent 3: Developer fast path failed checks: {checks_reason}"
+                    f"    Agent 3: Mainline fast path failed checks: {checks_reason}"
                 )
                 _git_reset_file(target_repo_path, target_file)
-                task_entry["status"] = "failed"
-                task_entry["reason"] = "developer_fast_path_checks_failed"
-                task_entry["error"] = str(checks_reason)[:800]
+                # Fall back to deterministic/ReAct logic if checks fail
+            else:
+                task_entry["completed_steps"].extend(
+                    ["apply_edits", "capture_diff", "intent_check"]
+                )
+                agent_metrics["mainline_fast_path_hits"] += 1
+                fe_fp: FileEdit = {
+                    "target_file": target_file,
+                    "mainline_file": mainline_file,
+                    "old_string": "<mainline patch fast path>",
+                    "new_string": (diff_text_fp or "").strip(),
+                    "edit_type": "replace",
+                    "verified": True,
+                    "verification_result": str(_mfp.get("reason") or "mainline_fast_path"),
+                    "applied": True,
+                    "apply_result": "SUCCESS",
+                }
+                adapted_file_edits.append(fe_fp)
+                hunk_fp: AdaptedHunk = {
+                    "target_file": target_file,
+                    "mainline_file": mainline_file,
+                    "hunk_text": diff_text_fp,
+                    "insertion_line": 1,
+                    "intent_verified": True,
+                    "file_operation": op_plan.get("effective_operation", change_type),
+                    "old_target_file": op_plan.get("old_target_file"),
+                    "file_operation_required": op_plan.get("operation_required", True),
+                    "path_resolution_reason": op_plan.get("reason", "unknown"),
+                }
+                _upsert_hunk_by_target_file(adapted_code_hunks, hunk_fp)
+                _upsert_hunk_by_target_file(best_effort_adapted_code_hunks, hunk_fp)
+                if toolkit and target_repo_path:
+                    _git_reset_file(target_repo_path, target_file)
+                task_entry["completed_steps"].append("restore_file")
+                task_entry["status"] = "success"
+                task_entry["reason"] = "mainline_fast_path"
                 continue
-
-            task_entry["completed_steps"].extend(
-                ["apply_edits", "capture_diff", "intent_check"]
+        else:
+            print(
+                f"    Agent 3: Mainline fast path skipped for {target_file}: "
+                f"{_mfp.get('reason', 'unknown')}"
             )
-            fe_fp: FileEdit = {
-                "target_file": target_file,
-                "mainline_file": mainline_file,
-                "old_string": "<developer patch fast path>",
-                "new_string": (diff_text_fp or "").strip(),
-                "edit_type": "replace",
-                "verified": True,
-                "verification_result": str(_dfp.get("reason") or "developer_fast_path"),
-                "applied": True,
-                "apply_result": "SUCCESS",
-            }
-            adapted_file_edits.append(fe_fp)
-            hunk_fp: AdaptedHunk = {
-                "target_file": target_file,
-                "mainline_file": mainline_file,
-                "hunk_text": diff_text_fp,
-                "insertion_line": 1,
-                "intent_verified": True,
-                "file_operation": op_plan.get("effective_operation", change_type),
-                "old_target_file": op_plan.get("old_target_file"),
-                "file_operation_required": op_plan.get("operation_required", True),
-                "path_resolution_reason": op_plan.get("reason", "unknown"),
-            }
-            _upsert_hunk_by_target_file(adapted_code_hunks, hunk_fp)
-            _upsert_hunk_by_target_file(best_effort_adapted_code_hunks, hunk_fp)
-            if toolkit and target_repo_path:
-                _git_reset_file(target_repo_path, target_file)
-            task_entry["completed_steps"].append("restore_file")
-            task_entry["status"] = "success"
-            task_entry["reason"] = "developer_fast_path"
-            continue
 
         if deterministic_only and target_file.lower().endswith(".java"):
             try:
@@ -3331,50 +3324,64 @@ async def file_editor_node(state: AgentState, config) -> dict:
         and current_patch_hash
         and previous_patch_hash == current_patch_hash
     ):
-        print(
-            "  Agent 3: Identical patch hash detected on retry; flagging for replanning."
-        )
-        return {
-            "messages": [
-                HumanMessage(
-                    content=(
-                        "Agent 3 (File Editor): identical generated patch detected on retry; "
-                        "requesting replanning."
+        if bool(state.get("evaluation_full_workflow")):
+            # In evaluation_full_workflow mode, Agent 4 runs a real Gradle
+            # build+test which is cheap compared to another planning round and
+            # gives actionable feedback even for an identical patch (e.g. a
+            # context-mismatch build error that the reasoning agent needs to
+            # diagnose).  Emitting generation_contract_failed here would cause
+            # validation_agent to defer the build entirely, burning a retry
+            # slot with no new information.  Fall through to the normal return.
+            print(
+                "  Agent 3: Identical patch hash detected on retry "
+                "(evaluation_full_workflow — suppressing contract_failed, "
+                "forwarding to Agent 4 for build/test feedback)."
+            )
+        else:
+            print(
+                "  Agent 3: Identical patch hash detected on retry; flagging for replanning."
+            )
+            return {
+                "messages": [
+                    HumanMessage(
+                        content=(
+                            "Agent 3 (File Editor): identical generated patch detected on retry; "
+                            "requesting replanning."
+                        )
                     )
-                )
-            ],
-            "adapted_file_edits": adapted_file_edits,
-            "all_adapted_file_edits": all_edits_history,
-            "agent_trajectory_edits": agent_trajectory_edits,
-            "adapted_code_hunks": adapted_code_hunks,
-            "best_effort_adapted_code_hunks": best_effort_adapted_code_hunks,
-            "adapted_test_hunks": [],
-            "generation_checklist": [
-                {
-                    "mainline_file": "<all>",
-                    "target_file": "<all>",
-                    "hunk_index": 0,
-                    "status": "failed",
-                    "reason": "generation_contract_failed",
-                    "todo_steps": ["replan"],
-                    "completed_steps": [],
-                }
-            ],
-            "validation_failed_stage": "generation_contract_failed",
-            "validation_repeated_patch_detected": True,
-            "validation_repeated_plan_detected": bool(
-                state.get("validation_repeated_plan_detected", False)
-            ),
-            "generated_patch_hash": current_patch_hash,
-            "force_type_v_until_success": force_type_v_latch,
-            "force_type_v_reason": force_type_v_reason,
-            "force_type_v_retry_files": sorted(force_type_v_scope_files)
-            if force_type_v_latch
-            else [],
-            "token_usage": token_usage,
-            "plan_preflight_results": plan_preflight_results,
-            "agent_metrics": agent_metrics,
-        }
+                ],
+                "adapted_file_edits": adapted_file_edits,
+                "all_adapted_file_edits": all_edits_history,
+                "agent_trajectory_edits": agent_trajectory_edits,
+                "adapted_code_hunks": adapted_code_hunks,
+                "best_effort_adapted_code_hunks": best_effort_adapted_code_hunks,
+                "adapted_test_hunks": [],
+                "generation_checklist": [
+                    {
+                        "mainline_file": "<all>",
+                        "target_file": "<all>",
+                        "hunk_index": 0,
+                        "status": "failed",
+                        "reason": "generation_contract_failed",
+                        "todo_steps": ["replan"],
+                        "completed_steps": [],
+                    }
+                ],
+                "validation_failed_stage": "generation_contract_failed",
+                "validation_repeated_patch_detected": True,
+                "validation_repeated_plan_detected": bool(
+                    state.get("validation_repeated_plan_detected", False)
+                ),
+                "generated_patch_hash": current_patch_hash,
+                "force_type_v_until_success": force_type_v_latch,
+                "force_type_v_reason": force_type_v_reason,
+                "force_type_v_retry_files": sorted(force_type_v_scope_files)
+                if force_type_v_latch
+                else [],
+                "token_usage": token_usage,
+                "plan_preflight_results": plan_preflight_results,
+                "agent_metrics": agent_metrics,
+            }
 
     return {
         "messages": [

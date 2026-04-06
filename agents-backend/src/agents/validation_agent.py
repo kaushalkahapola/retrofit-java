@@ -136,12 +136,19 @@ def _classify_build_failure(
     # Filter out common noise and non-project files
     def is_relevant_file(path: str) -> bool:
         p = path.lower()
-        if "test" in p or "fixtures" in p:
+        if "test" in p or "fixtures" in p or "build/generated" in p:
             return False
         if not p.endswith(".java"):
             return False
-        # Only include files that likely belong to the project source
-        return "src/main/java" in p or "org/elasticsearch" in p or "io/crate" in p
+        # If we have a project-specific identifier, great.
+        # Otherwise, if it's a .java file in a likely source tree, include it.
+        return (
+            "src/main/java" in p 
+            or "org/elasticsearch" in p 
+            or "io/crate" in p 
+            or "org/apache/hbase" in p
+            or "src/java" in p
+        )
 
     # Map compiler errors to files and lines
     # maven format: [ERROR] /path/to/File.java:[line,col] error message
@@ -234,11 +241,12 @@ def _classify_build_failure(
 
         for ln in text.splitlines():
             ll = ln.strip()
-            if ": error: cannot find symbol" in ll and len(concrete_errors) < 8:
+            # Handle both Maven [ERROR] and raw Gradle/javac output
+            if ("error: cannot find symbol" in ll or "error: method" in ll) and len(concrete_errors) < 10:
                 # Extract the symbol name to see if it's actually relevant
                 sym_match = re.search(
                     r"symbol:\s+(?:variable|method|class)\s+(\w+)",
-                    text[text.find(ll) :],
+                    text[text.find(ll) : text.find(ll) + 500],
                 )
                 if sym_match:
                     sym = sym_match.group(1)
@@ -256,7 +264,8 @@ def _classify_build_failure(
         )
         reason = "API/signature mismatch in generated patch against target branch."
         if concrete_errors:
-            reason += " Compiler errors: " + " | ".join(concrete_errors[:3])
+            # Surface more errors to the agent
+            reason += " Compiler errors: " + " | ".join(concrete_errors[:5])
         return (
             "context_mismatch",
             sorted(retry_files),
@@ -349,27 +358,42 @@ def _extract_structured_failure_context(
 
     # Map errors to hunks
     failed_hunk_targets = []
-    for loc in failed_locations[:5]:
+    for loc in failed_locations:
+        loc_file = str(loc.get("file") or "")
+        loc_line = int(loc.get("line") or 0)
         for hunk in effective_hunks:
             target_f = str(hunk.get("target_file") or "").replace("\\", "/")
-            if target_f.endswith(loc["file"]) or loc["file"].endswith(target_f):
+            if target_f.endswith(loc_file) or loc_file.endswith(target_f):
                 failed_hunk_targets.append(
                     {
                         "target_file": hunk.get("target_file"),
                         "mainline_file": hunk.get("mainline_file"),
-                        "error_line": loc["line"],
+                        "error_line": loc_line,
                     }
                 )
                 break
 
+    primary_f = ""
+    if failed_locations:
+        primary_f = str(failed_locations[0].get("file") or "")
+
+    primary_s = ""
+    if symbol_errors:
+        primary_s = str(symbol_errors[0].get("name") or "")
+
+    res_locations = failed_locations[:20] if len(failed_locations) > 20 else failed_locations
+    res_symbols = symbol_errors[:20] if len(symbol_errors) > 20 else symbol_errors
+    res_sigs = sig_errors[:20] if len(sig_errors) > 20 else sig_errors
+    res_hunks = failed_hunk_targets[:20] if len(failed_hunk_targets) > 20 else failed_hunk_targets
+
     return {
-        "raw_error": text[:3000],
-        "failed_locations": failed_locations[:5],
-        "symbol_errors": symbol_errors[:10],
-        "signature_errors": sig_errors[:5],
-        "failed_hunk_targets": failed_hunk_targets,
-        "primary_failed_file": failed_locations[0]["file"] if failed_locations else "",
-        "primary_failed_symbol": symbol_errors[0]["name"] if symbol_errors else "",
+        "raw_error": str(text[:10000]),
+        "failed_locations": list(res_locations),
+        "symbol_errors": list(res_symbols),
+        "signature_errors": list(res_sigs),
+        "failed_hunk_targets": list(res_hunks),
+        "primary_failed_file": str(primary_f),
+        "primary_failed_symbol": str(primary_s),
     }
 
 

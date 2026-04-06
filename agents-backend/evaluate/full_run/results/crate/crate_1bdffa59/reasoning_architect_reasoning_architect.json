@@ -1,0 +1,27 @@
+{
+  "surgical_plans": {},
+  "reasoning_context": {
+    "current_file": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+    "failure_kind": "anchor_not_found",
+    "build_diagnostics": {
+      "target_file": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+      "issues": [],
+      "failed_locations": [],
+      "symbol_errors": [],
+      "signature_errors": [],
+      "primary_failed_symbol": "",
+      "raw_error_preview": "Validation deferred: generator checklist has incomplete hunk tasks. Route back to planning/generation before running build/tests. Incomplete hunks: [{\"mainline_file\": \"server/src/main/java/io/crate/replication/logical/MetadataTracker.java\", \"target_file\": \"server/src/main/java/io/crate/replication/logical/MetadataTracker.java\", \"hunk_index\": 0, \"adaptation_type\": \"TYPE_II\", \"execution_types\": [\"TYPE_I\", \"TYPE_II\"], \"status\": \"failed\", \"reason\": \"generation_contract_failed\", \"todo_steps\": [\"reset_file\", \"apply_edits\", \"capture_diff\", \"intent_check\", \"restore_file\"], \"completed_steps\": [\"reset_file\"], \"error\": \"tool_budget_exceeded:19>12\"}]"
+    },
+    "side_files": [],
+    "iteration": 2,
+    "surgical_ops": []
+  },
+  "reasoning_iterations": 2,
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

@@ -136,6 +136,7 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
             continue
         file_hunks[file_path].extend(hunks or [])
 
+    # Initial hunk chain generation strictly from mainline patch
     hunk_chain: list[dict[str, Any]] = []
     hunk_variants_map: dict[int, Any] = {}  # global_idx → variants
     global_idx = 1

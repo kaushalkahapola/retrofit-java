@@ -4,17 +4,11 @@ TYPE_V Rulebook — Structured retry logic for complex backport failures.
 This replaces the "give the LLM all tools and hope" approach with a
 deterministic decision tree that runs FIRST, then hands targeted context
 to the planning/editing agent.
-
-The rulebook does NOT call the LLM. It gathers facts and builds a
-structured context dict that the planning agent can consume directly
-in its prompt without burning tokens on re-investigation.
 """
 from __future__ import annotations
 
-import json
 import os
 import re
-import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -77,7 +71,9 @@ class RulebookDecision:
         if self.new_anchor_file:
             lines.append(f"Anchor found in: `{self.new_anchor_file}` line {self.new_anchor_line}")
         if self.new_anchor_snippet:
-            lines.append(f"New anchor context:\n```java\n{self.new_anchor_snippet[:400]}\n```")
+            snippet_str = str(self.new_anchor_snippet)
+            lines.append(f"New anchor context:\n```java\n{snippet_str[:400]}\n```")
+
         lines.append(
             "\nYou MUST follow this diagnosis. Do NOT re-investigate what the "
             "rulebook already checked — go straight to the action above."
@@ -88,9 +84,6 @@ class RulebookDecision:
 class TypeVRulebook:
     """
     Runs the structured decision tree for TYPE_V retry scenarios.
-    
-    Call apply() with the failure context, get back a RulebookDecision
-    that tells the planning agent exactly what to do.
     """
 
     def __init__(self, target_repo_path: str, mainline_repo_path: str = ""):
@@ -113,7 +106,6 @@ class TypeVRulebook:
         """
         old_string = str(failed_plan_entry.get("old_string") or "")
         new_string = str(failed_plan_entry.get("new_string") or "")
-        edit_type = str(failed_plan_entry.get("edit_type") or "replace")
 
         # Extract the most likely "failed symbol" from old_string
         failed_symbol = _extract_primary_symbol(old_string or new_string)
@@ -129,11 +121,8 @@ class TypeVRulebook:
         )
 
         # --- Route to rule ---
-        return self._route(diag, target_file, old_string, new_string)
+        return self._route(diag, target_file, old_string, new_string, build_error=build_error)
 
-    # ------------------------------------------------------------------ #
-    # Routing rules                                                        #
-    # ------------------------------------------------------------------ #
 
     def _route(
         self,
@@ -141,7 +130,9 @@ class TypeVRulebook:
         target_file: str,
         old_string: str,
         new_string: str,
+        build_error: str = "",
     ) -> RulebookDecision:
+
 
         if diag.kind == FailureKind.LOGIC_MOVED:
             return self._rule_logic_moved(diag, old_string, new_string)
@@ -159,15 +150,27 @@ class TypeVRulebook:
             return self._rule_anchor_moved(diag, old_string)
 
         # Unknown — escalate to full ReAct but with evidence
+        # Emergency Fallback: If build error has signature mismatch, try one more time
+        m_error = re.search(r"method (\w+) in class (\w+) cannot be applied", build_error)
+        if m_error:
+            # We already tried this in the engine and it failed, but maybe we can just 
+            # tell the agent to check that class regardless.
+            return RulebookDecision(
+                action="full_react",
+                confidence=0.4,
+                investigation_summary=(
+                    f"POTENTIAL SIGNATURE MISMATCH: The build error mentions method '{m_error.group(1)}' "
+                    f"in class '{m_error.group(2)}'. Investigation failed to locate it precisely. "
+                    f"You MUST use grep_in_repo to find 'class {m_error.group(2)}' and its methods."
+                ),
+            )
+
         return RulebookDecision(
             action="full_react",
             confidence=0.3,
-            investigation_summary="\n".join(diag.evidence),
+            investigation_summary="\n".join([str(e) for e in diag.evidence]),
         )
 
-    # ------------------------------------------------------------------ #
-    # Rule: logic moved to another file                                    #
-    # ------------------------------------------------------------------ #
 
     def _rule_logic_moved(
         self, diag: Diagnosis, old_string: str, new_string: str
@@ -175,9 +178,7 @@ class TypeVRulebook:
         if not diag.candidate_files:
             return RulebookDecision(action="full_react", confidence=0.2)
 
-        best_file = diag.candidate_files[0]
-
-        # Read a snippet from the new file around the symbol
+        best_file = str(diag.candidate_files[0])
         snippet = self._get_method_snippet(diag.failed_symbol, best_file)
 
         return RulebookDecision(
@@ -187,12 +188,8 @@ class TypeVRulebook:
             new_anchor_file=best_file,
             new_anchor_snippet=snippet,
             confidence=diag.confidence,
-            investigation_summary="\n".join(diag.evidence),
+            investigation_summary="\n".join([str(e) for e in diag.evidence]),
         )
-
-    # ------------------------------------------------------------------ #
-    # Rule: method signature changed                                       #
-    # ------------------------------------------------------------------ #
 
     def _rule_signature_changed(
         self, diag: Diagnosis, old_string: str, new_string: str
@@ -200,7 +197,6 @@ class TypeVRulebook:
         if not diag.new_signature:
             return RulebookDecision(action="full_react", confidence=0.3)
 
-        # Build adaptation notes: what params differ?
         old_params = _extract_params(old_string)
         new_params = _extract_params(diag.new_signature)
 
@@ -214,12 +210,11 @@ class TypeVRulebook:
         if not notes_parts:
             notes_parts.append("Parameter types likely changed")
 
-        # Get the method body snippet for context
         snippet = ""
         if diag.candidate_methods:
             snippet = self._get_lines_around(
                 diag.target_file,
-                diag.candidate_methods[0].line,
+                int(diag.candidate_methods[0].get("line") or 0),
                 radius=15,
             )
 
@@ -230,12 +225,8 @@ class TypeVRulebook:
             param_adaptation_notes=" | ".join(notes_parts),
             new_anchor_snippet=snippet,
             confidence=diag.confidence,
-            investigation_summary="\n".join(diag.evidence),
+            investigation_summary="\n".join([str(e) for e in diag.evidence]),
         )
-
-    # ------------------------------------------------------------------ #
-    # Rule: method is in parent class                                      #
-    # ------------------------------------------------------------------ #
 
     def _rule_parent_class(
         self, diag: Diagnosis, old_string: str, new_string: str
@@ -252,24 +243,16 @@ class TypeVRulebook:
             new_anchor_file=diag.parent_file,
             new_anchor_snippet=snippet,
             confidence=diag.confidence,
-            investigation_summary="\n".join(diag.evidence),
+            investigation_summary="\n".join([str(e) for e in diag.evidence]),
         )
-
-    # ------------------------------------------------------------------ #
-    # Rule: side files need editing too                                    #
-    # ------------------------------------------------------------------ #
 
     def _rule_side_files(self, diag: Diagnosis) -> RulebookDecision:
         return RulebookDecision(
             action="add_side_file",
             additional_files=diag.side_files,
             confidence=diag.confidence,
-            investigation_summary="\n".join(diag.evidence),
+            investigation_summary="\n".join([str(e) for e in diag.evidence]),
         )
-
-    # ------------------------------------------------------------------ #
-    # Rule: anchor moved within same codebase                              #
-    # ------------------------------------------------------------------ #
 
     def _rule_anchor_moved(
         self, diag: Diagnosis, old_string: str
@@ -277,7 +260,7 @@ class TypeVRulebook:
         if not diag.candidate_files:
             return RulebookDecision(action="full_react", confidence=0.2)
 
-        best_file = diag.candidate_files[0]
+        best_file = str(diag.candidate_files[0])
         line = self._find_text_line(old_string, best_file)
         snippet = self._get_lines_around(best_file, line or 1, radius=12) if line else ""
 
@@ -288,12 +271,8 @@ class TypeVRulebook:
             new_anchor_line=line or 0,
             new_anchor_snippet=snippet,
             confidence=diag.confidence,
-            investigation_summary="\n".join(diag.evidence),
+            investigation_summary="\n".join([str(e) for e in diag.evidence]),
         )
-
-    # ------------------------------------------------------------------ #
-    # Helpers                                                               #
-    # ------------------------------------------------------------------ #
 
     def _get_method_snippet(self, method_name: str, rel_file: str, radius: int = 25) -> str:
         content = self._read(rel_file)
@@ -324,7 +303,6 @@ class TypeVRulebook:
         content = self._read(rel_file)
         if not content:
             return None
-        # Try strongest line first
         best = max(
             (l.strip() for l in text.splitlines() if l.strip() and len(l.strip()) > 15),
             key=len,
@@ -345,27 +323,7 @@ class TypeVRulebook:
             return ""
 
 
-# ------------------------------------------------------------------ #
-# Utilities                                                            #
-# ------------------------------------------------------------------ #
-
 def _extract_primary_symbol(text: str) -> str:
-    """Pick the most likely class/method name from a code fragment."""
-    # Ignore import lines and comments
-    lines = text.splitlines()
-    filtered_lines = []
-    for line in lines:
-        s = line.strip()
-        if not s or s.startswith(("import ", "//", "*", "/*")):
-            continue
-        filtered_lines.append(line)
-    
-    if not filtered_lines:
-        return ""
-    
-    text = "\n".join(filtered_lines)
-
-    # Prefer method declarations
     m = re.search(
         r"(?:public|private|protected|static|final|synchronized)+"
         r"\s+[\w<>?,\[\]]+\s+(\w+)\s*\(",
@@ -376,7 +334,6 @@ def _extract_primary_symbol(text: str) -> str:
         if name not in {"if", "for", "while", "new", "return"}:
             return name
 
-    # Fallback: first identifier that looks like a class (CamelCase) or method
     tokens = re.findall(r"\b([A-Z][a-zA-Z0-9]+|[a-z][a-zA-Z0-9]+)\b", text)
     for t in tokens:
         if len(t) > 4 and t not in {"this", "null", "true", "false", "void", "class"}:
@@ -385,7 +342,6 @@ def _extract_primary_symbol(text: str) -> str:
 
 
 def _extract_params(text: str) -> list[str]:
-    """Extract parameter type names from a method signature fragment."""
     m = re.search(r"\(([^)]*)\)", text)
     if not m:
         return []
@@ -395,8 +351,7 @@ def _extract_params(text: str) -> list[str]:
         part = part.strip()
         if not part:
             continue
-        # "TypeName varName" → take TypeName
         words = part.split()
         if words:
-            params.append(words[0].split("<")[0])  # strip generics
+            params.append(words[0].split("<")[0])
     return params
