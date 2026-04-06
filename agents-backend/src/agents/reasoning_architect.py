@@ -407,6 +407,23 @@ def _extract_related_files_and_method_hints(
     return rel_out[:40], hint_out[:40]
 
 
+def _derive_retry_files_from_generation_checklist(state: AgentState) -> list[str]:
+    out: set[str] = set()
+    for item in state.get("generation_checklist") or []:
+        if not isinstance(item, dict):
+            continue
+        status = str(item.get("status") or "").strip().lower()
+        if status and status != "failed":
+            continue
+        for key in ("target_file", "mainline_file"):
+            p = _normalize_rel_path(str(item.get(key) or ""))
+            if not p or p == "<all>":
+                continue
+            if p.lower().endswith(".java"):
+                out.add(p)
+    return sorted(out)
+
+
 def _sanitize_surgical_ops(
     *,
     repo_path: str,
@@ -899,6 +916,7 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
     """Build per-file surgical plans for retry-heavy failures."""
     print("Reasoning Architect: Starting per-file diagnostic planning...")
     retry_files = list(state.get("validation_retry_files") or [])
+    print(f"Reasoning Architect: input validation_retry_files={retry_files}")
     structured = state.get("validation_error_context_structured") or {}
     if not retry_files and isinstance(structured, dict):
         primary = str(structured.get("primary_failed_file") or "").strip()
@@ -928,6 +946,22 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
         seen.add(p)
         normalized_files.append(p)
 
+    if not normalized_files:
+        derived = _derive_retry_files_from_generation_checklist(state)
+        if derived:
+            print(
+                "Reasoning Architect: fallback retry scope from generation_checklist="
+                + ", ".join(derived)
+            )
+            for p in derived:
+                if p in seen:
+                    continue
+                full = os.path.join(target_repo_path, p)
+                if not os.path.isfile(full):
+                    continue
+                seen.add(p)
+                normalized_files.append(p)
+
     expanded_retry_files: list[str] = []
     for p in list(normalized_files):
         expanded_retry_files.extend(_extract_side_files_from_state(state, p))
@@ -941,6 +975,10 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
         normalized_files.append(p)
 
     if not normalized_files:
+        print(
+            "Reasoning Architect: no concrete retry files found; returning no-op "
+            "(check validation_retry_files and generation_checklist extraction)."
+        )
         return {
             "messages": [
                 HumanMessage(
