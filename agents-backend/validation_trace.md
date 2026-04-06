@@ -1,9 +1,9 @@
 # Validation Trace
 
 ## Blueprint Summary
-- **Root Cause**: The vulnerability arises from inaccurate memory usage estimation of document updates and inserts, which can lead to resource exhaustion or denial of service due to under-accounting of the full document size when loaded from disk.
-- **Fix Logic**: Introduce a new parameter 'fullDocSizeEstimate' representing the expected full document size in bytes when loaded from disk, and incorporate this estimate into memory usage calculations for update and insert operations, ensuring more accurate resource accounting and preventing underestimation of memory usage.
-- **Dependent APIs**: ['ColumnIndexWriterProjection.fullDocSizeEstimate', 'ColumnIndexWriterProjector constructor', 'RamUsageEstimator.sizeOf', 'ShardUpsertRequest.Item.forInsert', 'ShardUpsertRequest.Item.forUpdate', 'Symbol.ramBytesUsed', 'UpdateProjection.fullDocSizeEstimate', 'estimate', 'estimatedSizePerRow', 'estimation', 'fullDocSizeEstimate', 'if']
+- **Root Cause**: The vulnerability stems from inaccurate memory usage estimation for upsert operations, specifically underestimating the size of full documents when loaded from disk, which can lead to resource exhaustion or denial of service due to improper memory accounting.
+- **Fix Logic**: Introduce a new parameter 'fullDocSizeEstimate' representing the expected memory footprint of the full document loaded from disk, and incorporate this estimate into the memory usage calculations for upsert request items and related projections, ensuring more accurate memory tracking and preventing underestimation.
+- **Dependent APIs**: ['ColumnIndexWriterProjection.<init>', 'ColumnIndexWriterProjection.fullDocSizeEstimate', 'ColumnIndexWriterProjector.<init>', 'RamUsageEstimator.sizeOf', 'ShardUpsertRequest.Item.forInsert', 'ShardUpsertRequest.Item.forUpdate', 'StreamInput.readLong', 'StreamOutput.writeLong', 'Symbol.ramBytesUsed', 'UpdateProjection.<init>', 'UpdateProjection.fullDocSizeEstimate', 'Version.V_5_10_5', 'estimate', 'estimatedSizePerRow', 'estimation', 'fullDocSizeEstimate', 'if']
 
 ## Hunk Segregation
 - Code files: 18
