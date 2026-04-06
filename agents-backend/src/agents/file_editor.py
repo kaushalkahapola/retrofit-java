@@ -56,7 +56,7 @@ from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_l
 from utils.java_ts_invocation_names import callee_names_from_java_snippet_lines
 from utils.llm_provider import get_llm
 from utils.patch_analyzer import PatchAnalyzer
-from utils.patch_apply_strategy import try_developer_fast_path, try_mainline_fast_path
+from utils.patch_apply_strategy import try_mainline_fast_path
 from utils.plan_validator import (
     classify_syntax_failure_message,
     validate_plan_before_apply,
@@ -2601,9 +2601,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 run_guideline=True,
             )
             if not checks_ok:
-                print(
-                    f"    Agent 3: Mainline fast path failed checks: {checks_reason}"
-                )
+                print(f"    Agent 3: Mainline fast path failed checks: {checks_reason}")
                 _git_reset_file(target_repo_path, target_file)
                 # Fall back to deterministic/ReAct logic if checks fail
             else:
@@ -2618,7 +2616,9 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     "new_string": (diff_text_fp or "").strip(),
                     "edit_type": "replace",
                     "verified": True,
-                    "verification_result": str(_mfp.get("reason") or "mainline_fast_path"),
+                    "verification_result": str(
+                        _mfp.get("reason") or "mainline_fast_path"
+                    ),
                     "applied": True,
                     "apply_result": "SUCCESS",
                 }

@@ -239,58 +239,6 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
         },
     }
 
-    developer_aux_hunks = state.get("developer_auxiliary_hunks", []) or []
-    developer_test_hunks = [
-        h for h in developer_aux_hunks if "test" in (h.get("target_file", "").lower())
-    ]
-
-    # ------------------------------------------------------------------
-    # Build a rename map: old_class_fqn -> new_class_fqn.
-    # We keep this for cross-class transition matching (old -> new class names),
-    # but baseline/post test execution keeps the same detected targets.
-    # ------------------------------------------------------------------
-    test_rename_map: dict[str, str] = (
-        validation_toolkit.build_test_rename_map_from_aux_hunks(developer_aux_hunks)
-    )
-    baseline_test_targets = test_targets
-
-    if developer_test_hunks:
-        print(
-            "Phase 0: Building baseline by applying developer backport test hunks only..."
-        )
-        baseline_apply = validation_toolkit.apply_adapted_hunks(
-            code_hunks=[], test_hunks=developer_test_hunks
-        )
-        if baseline_apply.get("success"):
-            phase0_baseline_test_result = validation_toolkit.run_relevant_tests(
-                project=project_name,
-                target_info=baseline_test_targets,
-            )
-        else:
-            phase0_baseline_test_result = {
-                "success": False,
-                "compile_error": True,
-                "output": f"Failed to apply developer test hunks for baseline: {baseline_apply.get('output', '')}",
-                "failed_tests": [],
-                "mode": "baseline-apply-failed",
-                "targets": test_targets,
-                "test_state": {
-                    "xml_reports": [],
-                    "target_classes": [],
-                    "test_cases": {},
-                    "classes": {},
-                    "summary": {"passed": 0, "failed": 0, "skipped": 0, "total": 0},
-                },
-            }
-        validation_toolkit.restore_repo_state()
-        if experiment_mode and backport_commit:
-            subprocess.run(
-                ["git", "checkout", f"{backport_commit}^"],
-                cwd=target_repo_path,
-                capture_output=True,
-                text=True,
-            )
-
     # ------------------------------------------------------------------
     # 3. Attempt direct patch application check
     # ------------------------------------------------------------------
@@ -417,7 +365,7 @@ async def phase_0_optimistic(state: AgentState, config) -> dict:
         transition_eval = validation_toolkit.evaluate_test_state_transition(
             phase0_baseline_test_result,
             test_result,
-            rename_map=test_rename_map or None,
+            rename_map=None,
         )
         transition_summary = _format_transition_summary(transition_eval)
         print(f"Phase 0: Transition summary -> {transition_summary}")

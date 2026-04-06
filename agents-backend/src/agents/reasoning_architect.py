@@ -27,7 +27,6 @@ from utils.plan_validator import _resolve_old as _resolve_old_in_content
 from utils.token_counter import add_usage, aggregate_usage_from_messages
 
 
-
 _REASONING_SYSTEM = """You are ReasoningArchitect — a senior Java backporting specialist working inside the H-MABS system.
 
 [ROLE & AUTONOMY]
@@ -54,14 +53,14 @@ You never edit files directly. You only diagnose and plan.
 [PLAN]
 ```json
 [
-  {
+  {{
     "target_file": "...",
     "old_string": "...",
     "new_string": "...",
     "anchor_verified": true,
     "verification_method": "exact",
     "confidence": 0.85
-  }
+  }}
 ]
 ```
 [CONFIDENCE] high/medium/low + one-sentence justification
@@ -531,8 +530,6 @@ def _sanitize_surgical_ops(
         )
 
     return safe, rejected
-
-
 
 
 def _fallback_surgical_from_existing_plan(
@@ -1050,11 +1047,11 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
         try:
             # 1. Run Structured Rulebook Diagnosis
             rulebook = TypeVRulebook(target_repo_path, mainline_repo_path)
-            
+
             # Find the failed hunk entry if any
             failed_hunk = {}
             validation_error_context = state.get("validation_error_context") or ""
-            
+
             # Safely extract hunk information
             validation_retry_hunks = state.get("validation_retry_hunks")
             failed_hunk_indices = []
@@ -1062,7 +1059,7 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
                 failed_hunk_indices = validation_retry_hunks.get(target_file, [])
             elif isinstance(validation_retry_hunks, list):
                 # If it's a list, it might be a broadcasted retry or special signal
-                failed_hunk_indices = [] # Default to empty for list types
+                failed_hunk_indices = []  # Default to empty for list types
 
             extracted_hunks_val = state.get("extracted_hunks")
             all_hunks = []
@@ -1076,29 +1073,35 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
                 if 0 <= idx < len(all_hunks):
                     current_failed_entry = all_hunks[idx]
 
-
             rule_decision = rulebook.apply(
                 target_file=target_file,
                 failed_plan_entry=current_failed_entry,
                 build_error=str(validation_error_context),
             )
-            
+
             rulebook_hint = rule_decision.to_prompt_context()
 
             # 2. Enhanced Prompt Construction
             prompt = _REASONING_SYSTEM.format(
                 current_file=target_file,
-                related_files="\n".join(f"- {p}" for p in related_files[:30]) or "- <none>",
+                related_files="\n".join(f"- {p}" for p in related_files[:30])
+                or "- <none>",
                 method_hints=", ".join(method_hints[:30]) or "<none>",
                 build_diagnostics=_truncate_for_log(str(diagnostics), 4000),
                 patch_intent=_truncate_for_log(patch_intent or "<none>", 1000),
                 session_modified_files="\n".join(
-                    f"- {f}" for f in sorted(list(set(
-                        op.get("target_file", "") 
-                        for op in state.get("surgical_history", [])
-                        if op.get("target_file")
-                    )))
-                ) or "- <none>",
+                    f"- {f}"
+                    for f in sorted(
+                        list(
+                            set(
+                                op.get("target_file", "")
+                                for op in state.get("surgical_history", [])
+                                if op.get("target_file")
+                            )
+                        )
+                    )
+                )
+                or "- <none>",
             )
 
             # 3. Initial Code Context
@@ -1127,7 +1130,7 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
                 {"messages": [initial_message]},
                 config={
                     "recursion_limit": 60,
-                    "configurable": {"thread_id": f"reasoning-{target_file}"}
+                    "configurable": {"thread_id": f"reasoning-{target_file}"},
                 },
             )
             _log_reasoning_trace(result or {}, target_file)
@@ -1155,7 +1158,6 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
                     "Reasoning Architect: using fallback existing-plan ops for "
                     f"{target_file} count={len(verified_plan)}"
                 )
-
 
         verified_plan, rejected = _sanitize_surgical_ops(
             repo_path=target_repo_path,
