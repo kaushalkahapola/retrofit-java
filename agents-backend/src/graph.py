@@ -174,14 +174,14 @@ def route_validation(state: AgentState) -> str:
         complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
         needs_reasoning = (
             complexity in {"REWRITE"}
-            and failure_category == "context_mismatch"
+            and attempts >= 1
+            and not bool(state.get("validation_repeated_patch_detected"))
             and (
                 "api_or_signature_mismatch" in _get_build_issue_types(state)
+                or bool(state.get("force_type_v_until_success"))
                 or failed_stage
                 in {"generation_contract_failed", "surgical_plan_execution_failed"}
-                or bool(state.get("force_type_v_until_success"))
             )
-            and not bool(state.get("validation_repeated_patch_detected"))
         )
         if needs_reasoning:
             print(

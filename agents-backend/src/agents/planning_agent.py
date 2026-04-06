@@ -716,7 +716,7 @@ def _normalize_path(path: str) -> str:
 
 def _build_local_repomap(target_repo_path: str, target_file: str) -> Optional[Any]:
     """
-    Builds a small, localized RepoMap for the given target file by analyzing its 
+    Builds a small, localized RepoMap for the given target file by analyzing its
     immediate neighborhood (imports and superclasses).
     """
     try:
@@ -727,23 +727,23 @@ def _build_local_repomap(target_repo_path: str, target_file: str) -> Optional[An
             {
                 "target_repo_path": target_repo_path,
                 "file_paths": [target_file],
-                "explore_neighbors": True, # Get siblings in same package
+                "explore_neighbors": True,  # Get siblings in same package
             },
         )
-        
+
         # 2. Collect all unique file paths in the graph
         related_files = set()
         for node in graph.get("nodes", []):
             f_path = node.get("file_path")
             if f_path:
                 related_files.add(f_path)
-        
+
         if not related_files:
             return None
-            
+
         # 3. Fetch structural analysis for all related files
         analyses = []
-        for f in list(related_files)[:15]: # Cap to avoid massive latency
+        for f in list(related_files)[:15]:  # Cap to avoid massive latency
             analysis = client.call_tool(
                 "get_structural_analysis",
                 {
@@ -754,7 +754,7 @@ def _build_local_repomap(target_repo_path: str, target_file: str) -> Optional[An
             if analysis:
                 analysis["file_path"] = f
                 analyses.append(analysis)
-        
+
         return build_repomap_from_analysis(target_repo_path, analyses)
     except Exception as e:
         print(f"    Planning Agent: Failed to build local repomap: {e}")
@@ -1671,16 +1671,16 @@ async def _repair_type_v_unverified_entries_with_subagent(
 
     # Map repaired payloads back to original entries
     repaired_map = {p.get("operation_index"): p for p in repaired_payloads}
-    
+
     out = []
     for entry in entries:
         if entry.get("verified", False):
             out.append(entry)
             continue
-            
+
         op_idx = entry.get("operation_index")
         payload = repaired_map.get(op_idx)
-        
+
         repaired = dict(entry)
         if isinstance(payload, dict) and payload.get("found_equivalent"):
             repaired = _apply_anchor_strategy_to_payload(
@@ -1699,21 +1699,25 @@ async def _repair_type_v_unverified_entries_with_subagent(
         else:
             # Fallback logic for unverified entries
             repaired = _sanitize_entry_against_target(repaired, target_content)
-            if (not repaired.get("verified", False)) and _entry_requires_chain_sensitive_repair(entry):
+            if (
+                not repaired.get("verified", False)
+            ) and _entry_requires_chain_sensitive_repair(entry):
                 promoted = _promote_unverified_chain_entry_to_method_block(
                     repaired, target_content, method_block_map
                 )
                 repaired = _sanitize_entry_against_target(promoted, target_content)
-                
+
             op_key = (entry.get("hunk_index"), entry.get("operation_index"))
             fallback = req_by_idx.get(op_key, entry)
             if not repaired.get("verified", False):
-                det_fallback = _sanitize_entry_against_target(dict(fallback), target_content)
+                det_fallback = _sanitize_entry_against_target(
+                    dict(fallback), target_content
+                )
                 if det_fallback and det_fallback.get("verified", False):
                     repaired = det_fallback
-        
+
         out.append(repaired)
-        
+
     return out
 
 
@@ -2259,6 +2263,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     validation_attempts = int(state.get("validation_attempts") or 0)
     retry_files_raw = state.get("validation_retry_files") or []
     retry_hunks_raw = state.get("validation_retry_hunks") or []
+    additional_scope_files_raw = state.get("additional_scope_files") or []
     validation_error_context = str(state.get("validation_error_context") or "")
     validation_failure_category = str(state.get("validation_failure_category") or "")
     validation_failed_stage = str(state.get("validation_failed_stage") or "")
@@ -2306,6 +2311,11 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         str(p).replace("\\", "/").strip().lstrip("/")
         for p in retry_files_raw
         if str(p).strip()
+    }
+    additional_scope_files = {
+        _normalize_path(str(p))
+        for p in additional_scope_files_raw
+        if str(p or "").strip()
     }
     retry_hunks = {int(h) for h in retry_hunks_raw if isinstance(h, int)}
     if validation_attempts > 0 and retry_hunks and "<all>" in retry_files:
@@ -2373,7 +2383,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     # If we have a previous plan and a list of specific hunks to retry,
     # we can keep the successful parts of the previous plan.
     previous_plan = state.get("hunk_generation_plan") or {}
-    
+
     for mainline_file, raw_hunks in (raw_hunks_by_file or {}).items():
         normalized_mainline = str(mainline_file).replace("\\", "/").strip().lstrip("/")
         if not _is_java_code_file(normalized_mainline):
@@ -2399,23 +2409,37 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         mapped = mapped_target_context.get(mainline_file, [])
         if mapped and mainline_pre:
             first_ctx = mapped[0] if mapped else {}
-            target_file_for_drift = (first_ctx.get("target_file") or mainline_file).replace("\\", "/")
-            target_content_for_drift = _read_target_file(target_repo_path, target_file_for_drift)
+            target_file_for_drift = (
+                first_ctx.get("target_file") or mainline_file
+            ).replace("\\", "/")
+            target_content_for_drift = _read_target_file(
+                target_repo_path, target_file_for_drift
+            )
             if target_content_for_drift:
                 # Build local repomap to detect cross-file drifts (e.g. moved methods)
                 repomap = _build_local_repomap(target_repo_path, target_file_for_drift)
-                drift_map = detect_drift(mainline_pre, target_content_for_drift, repomap=repomap)
+                drift_map = detect_drift(
+                    mainline_pre, target_content_for_drift, repomap=repomap
+                )
                 if repomap:
-                    print(f"    Planning Agent: Drift analysis for {target_file_for_drift} complete with RepoMap.")
+                    print(
+                        f"    Planning Agent: Drift analysis for {target_file_for_drift} complete with RepoMap."
+                    )
 
         for hidx, raw_hunk in enumerate(raw_hunks):
             # Selective Retry: If we have specific hunks to retry, and this hunk isn't one of them,
             # reuse the previous plan entry for this hunk.
             if validation_attempts > 0 and retry_hunks and hidx not in retry_hunks:
                 if mainline_file in previous_plan:
-                    existing_entries = [e for e in previous_plan[mainline_file] if e.get("hunk_index") == hidx]
+                    existing_entries = [
+                        e
+                        for e in previous_plan[mainline_file]
+                        if e.get("hunk_index") == hidx
+                    ]
                     if existing_entries:
-                        print(f"    Planning Agent: Reusing {len(existing_entries)} successful plan entries for hunk {hidx}")
+                        print(
+                            f"    Planning Agent: Reusing {len(existing_entries)} successful plan entries for hunk {hidx}"
+                        )
                         plan[mainline_file].extend(existing_entries)
                         continue
 
@@ -2505,7 +2529,10 @@ async def planning_agent_node(state: AgentState, config) -> dict:
 
                 # If rulebook says remap to a different file, update target_file NOW
                 # before we even call the LLM
-                if rulebook_decision.action == "remap_file" and rulebook_decision.override_target_file:
+                if (
+                    rulebook_decision.action == "remap_file"
+                    and rulebook_decision.override_target_file
+                ):
                     if rulebook_decision.confidence >= 0.7:
                         old_target = target_file
                         target_file = rulebook_decision.override_target_file
@@ -2526,7 +2553,10 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                         )
 
                 # If rulebook says apply to parent, redirect
-                elif rulebook_decision.action == "apply_to_parent" and rulebook_decision.override_target_file:
+                elif (
+                    rulebook_decision.action == "apply_to_parent"
+                    and rulebook_decision.override_target_file
+                ):
                     target_file = rulebook_decision.override_target_file
                     print(
                         f"    Planning Agent: RULEBOOK parent redirect → {target_file}"
@@ -2537,13 +2567,15 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                     for sf in rulebook_decision.additional_files:
                         if sf not in mapped_target_context:
                             # Add a minimal mapping so hunk generator picks it up
-                            mapped_target_context[sf] = [{
-                                "hunk_index": 0,
-                                "target_file": sf,
-                                "start_line": None,
-                                "code_snippet": "",
-                                "anchor_reason": "rulebook_side_file",
-                            }]
+                            mapped_target_context[sf] = [
+                                {
+                                    "hunk_index": 0,
+                                    "target_file": sf,
+                                    "start_line": None,
+                                    "code_snippet": "",
+                                    "anchor_reason": "rulebook_side_file",
+                                }
+                            ]
                             print(f"    Planning Agent: RULEBOOK added side file: {sf}")
 
             if force_type_v_for_entry:
@@ -2744,6 +2776,23 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                 normalized_entries.append(entry)
 
             plan[mainline_file].extend(normalized_entries)
+
+    # Additional files discovered by reasoning/rulebook that do not appear in
+    # mainline raw_hunks_by_file (e.g. parent class edits in target branch).
+    for extra_file in sorted(additional_scope_files):
+        if not _is_java_code_file(extra_file):
+            continue
+        if extra_file in plan:
+            continue
+
+        # Keep an explicit key so downstream agents observe expanded scope,
+        # while concrete edit operations come from reasoning surgical_plans.
+        plan.setdefault(extra_file, [])
+        print(
+            "    Planning Agent: Added additional-scope file to planning scope "
+            "(surgical-plan driven): "
+            f"{extra_file}."
+        )
 
     for _mf in list(plan.keys()):
         plan[_mf] = consolidate_plan_entries_java(list(plan.get(_mf) or []))

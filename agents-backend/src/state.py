@@ -231,6 +231,9 @@ class AgentState(TypedDict):
     surgical_plans: NotRequired[
         dict[str, list[SurgicalOp]]
     ]  # per-target-file surgical operations from Reasoning Architect
+    additional_scope_files: NotRequired[
+        list[str]
+    ]  # Extra files injected into planning/editor scope (e.g. parent/side files)
     reasoning_iterations: NotRequired[int]
 
     # --- Legacy / Agent 2 compatibility ---

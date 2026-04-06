@@ -17,10 +17,11 @@ from langchain_core.messages import HumanMessage
 from langchain_core.tools import StructuredTool
 from langgraph.prebuilt import create_react_agent
 
-from agents.failure_diagnosis import FailureDiagnosisEngine
+from agents.failure_diagnosis import FailureDiagnosisEngine, FailureKind
 from agents.hunk_generator_tools import HunkGeneratorToolkit
 from state import AgentState, SurgicalOp
 from utils.llm_provider import get_llm
+from utils.plan_validator import _resolve_old
 from utils.token_counter import add_usage, aggregate_usage_from_messages
 
 
@@ -424,6 +425,116 @@ def _derive_retry_files_from_generation_checklist(state: AgentState) -> list[str
     return sorted(out)
 
 
+def _extract_candidate_old_string_for_file(
+    state: AgentState,
+    target_file: str,
+) -> str:
+    """
+    Best-effort failed anchor text for deterministic diagnosis.
+    """
+    target = _normalize_rel_path(target_file)
+    candidates: list[str] = []
+
+    hgp = state.get("hunk_generation_plan") or {}
+    if isinstance(hgp, dict):
+        for mainline_file, entries in hgp.items():
+            if not isinstance(entries, list):
+                continue
+            mainline_norm = _normalize_rel_path(str(mainline_file or ""))
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                entry_target = _normalize_rel_path(
+                    str(entry.get("target_file") or mainline_norm)
+                )
+                if entry_target != target and mainline_norm != target:
+                    continue
+                old_s = str(entry.get("old_string") or "")
+                if old_s.strip():
+                    candidates.append(old_s)
+
+    surgical = state.get("surgical_plans") or {}
+    if isinstance(surgical, dict):
+        for file_key, ops in surgical.items():
+            key_norm = _normalize_rel_path(str(file_key or ""))
+            if not isinstance(ops, list):
+                continue
+            for op in ops:
+                if not isinstance(op, dict):
+                    continue
+                op_target = _normalize_rel_path(str(op.get("target_file") or key_norm))
+                if op_target != target and key_norm != target:
+                    continue
+                old_s = str(op.get("old_string") or "")
+                if old_s.strip():
+                    candidates.append(old_s)
+
+    if not candidates:
+        return ""
+    return max(candidates, key=lambda s: len(str(s or "").strip()))
+
+
+def _discover_additional_scope_files(
+    state: AgentState,
+    *,
+    target_repo_path: str,
+    mainline_repo_path: str,
+    current_scope_files: list[str],
+) -> list[str]:
+    """
+    Detect extra files that should enter reasoning scope (e.g., parent class files).
+    """
+    if not target_repo_path:
+        return []
+
+    engine = FailureDiagnosisEngine(target_repo_path, mainline_repo_path)
+    build_error = str(state.get("validation_error_context") or "")
+    out: set[str] = set()
+
+    for target_file in current_scope_files or []:
+        diagnostics = _extract_file_diagnostics(state, target_file)
+        failed_symbol = _extract_primary_symbol_from_context(diagnostics, build_error)
+        failed_old_string = _extract_candidate_old_string_for_file(state, target_file)
+
+        diag = engine.diagnose(
+            target_file=_normalize_rel_path(target_file),
+            failed_old_string=failed_old_string,
+            failed_symbol=failed_symbol,
+            build_error=build_error,
+        )
+
+        if diag.kind == FailureKind.PARENT_CLASS_CHANGE:
+            p = _normalize_rel_path(str(diag.parent_file or ""))
+            if p:
+                out.add(p)
+        elif diag.kind == FailureKind.LOGIC_MOVED:
+            for p in (diag.candidate_files or [])[:4]:
+                pp = _normalize_rel_path(str(p or ""))
+                if pp:
+                    out.add(pp)
+
+    discovered: list[str] = []
+    for p in sorted(out):
+        full = os.path.join(target_repo_path, p)
+        if os.path.isfile(full):
+            discovered.append(p)
+    return discovered
+
+
+def _collect_patch_change_files(state: AgentState) -> set[str]:
+    out: set[str] = set()
+    for change in state.get("patch_analysis") or []:
+        p = ""
+        if isinstance(change, dict):
+            p = str(change.get("file_path") or "")
+        else:
+            p = str(getattr(change, "file_path", "") or "")
+        p = _normalize_rel_path(p)
+        if p:
+            out.add(p)
+    return out
+
+
 def _sanitize_surgical_ops(
     *,
     repo_path: str,
@@ -471,9 +582,12 @@ def _sanitize_surgical_ops(
             rejected.append(f"op_{idx}: nul_bytes")
             continue
         content = _load_file_text(repo_path, op_target)
-        if content and old_s not in content:
-            rejected.append(f"op_{idx}: anchor_not_in_file")
-            continue
+        if content:
+            resolved_old, reason = _resolve_old(content, old_s)
+            if not resolved_old:
+                rejected.append(f"op_{idx}: anchor_not_in_file:{reason}")
+                continue
+            old_s = resolved_old
 
         key = (op_target, old_s, new_s)
         if key in seen:
@@ -936,6 +1050,11 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
 
     normalized_files: list[str] = []
     seen: set[str] = set()
+    additional_scope_files: set[str] = {
+        _normalize_rel_path(str(p or ""))
+        for p in (state.get("additional_scope_files") or [])
+        if _normalize_rel_path(str(p or ""))
+    }
     for f in retry_files:
         p = _normalize_rel_path(str(f or ""))
         if not p or p in seen:
@@ -973,6 +1092,24 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
             continue
         seen.add(p)
         normalized_files.append(p)
+
+    diagnosed_scope = _discover_additional_scope_files(
+        state,
+        target_repo_path=target_repo_path,
+        mainline_repo_path=mainline_repo_path,
+        current_scope_files=list(normalized_files),
+    )
+    for p in diagnosed_scope:
+        additional_scope_files.add(p)
+        if p in seen:
+            continue
+        seen.add(p)
+        normalized_files.append(p)
+    if diagnosed_scope:
+        print(
+            "Reasoning Architect: injected additional scope files from diagnosis="
+            + ", ".join(sorted(diagnosed_scope))
+        )
 
     if not normalized_files:
         print(
@@ -1147,6 +1284,11 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
             "surgical_ops": verified_plan,
         }
 
+    patch_change_files = _collect_patch_change_files(state)
+    for tf in list(merged.keys()):
+        if tf and tf not in patch_change_files:
+            additional_scope_files.add(tf)
+
     return {
         "messages": [
             HumanMessage(
@@ -1157,6 +1299,9 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
             )
         ],
         "surgical_plans": merged,
+        "additional_scope_files": sorted(
+            p for p in additional_scope_files if p and p not in patch_change_files
+        ),
         "reasoning_context": last_context,
         "reasoning_iterations": int(state.get("reasoning_iterations") or 0) + 1,
         "token_usage": token_usage,

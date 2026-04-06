@@ -2305,6 +2305,36 @@ async def file_editor_node(state: AgentState, config) -> dict:
             else fc.get("is_test_file", False)
         )
     ]
+    additional_scope_files = {
+        _normalize_rel_path(str(p or ""))
+        for p in (state.get("additional_scope_files") or [])
+        if _normalize_rel_path(str(p or ""))
+    }
+    if additional_scope_files:
+        existing_change_files = {
+            _normalize_rel_path(
+                str(
+                    c.file_path
+                    if hasattr(c, "file_path")
+                    else (c or {}).get("file_path", "")
+                )
+            )
+            for c in code_changes
+        }
+        for sf in sorted(additional_scope_files):
+            if sf in existing_change_files:
+                continue
+            code_changes.append(
+                {
+                    "file_path": sf,
+                    "change_type": "MODIFIED",
+                    "is_test_file": False,
+                }
+            )
+        print(
+            "  Agent 3: Added additional scope files to processing set: "
+            f"{sorted(additional_scope_files)}"
+        )
     surgical_retry_mode = validation_attempts > 0 and bool(surgical_plans)
     surgical_targets: set[str] = {
         _normalize_rel_path(str(p or ""))
