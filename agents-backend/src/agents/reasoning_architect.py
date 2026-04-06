@@ -81,6 +81,14 @@ def _load_file_text(repo_path: str, rel_path: str) -> str:
         return ""
 
 
+def _is_readable_repo_file(repo_path: str, rel_path: str) -> bool:
+    p = _normalize_rel_path(rel_path)
+    if not p:
+        return False
+    full = os.path.normpath(os.path.join(repo_path, p))
+    return os.path.isfile(full)
+
+
 def _extract_primary_symbol_from_context(
     structured: dict[str, Any],
     diagnostics_text: str,
@@ -474,6 +482,7 @@ class FileIsolatedToolkit:
         self._submitted_plan: list[SurgicalOp] = []
 
     def read_target_code_window(self, center_line: int, radius: int = 20) -> str:
+        """Read code window around a line in the primary file."""
         return self._hg.read_file_window(
             self.locked_file, int(center_line), int(radius)
         )
@@ -484,6 +493,7 @@ class FileIsolatedToolkit:
         is_regex: bool = False,
         max_results: int = 20,
     ) -> str:
+        """Search text in the primary file and return line hits."""
         return self._hg.grep_in_file(
             file_path=self.locked_file,
             search_text=str(search_text or ""),
@@ -492,6 +502,7 @@ class FileIsolatedToolkit:
         )
 
     def list_related_files(self) -> dict[str, Any]:
+        """Return suggested related files for this reasoning pass."""
         return {
             "current_file": self.locked_file,
             "allowed_files": self.allowed_files,
@@ -499,6 +510,7 @@ class FileIsolatedToolkit:
         }
 
     def list_method_hints(self) -> dict[str, Any]:
+        """Return method/symbol hints collected from failure context."""
         return {
             "current_file": self.locked_file,
             "method_hints": self.method_hints,
@@ -511,9 +523,10 @@ class FileIsolatedToolkit:
         center_line: int,
         radius: int = 20,
     ) -> str:
+        """Read code window from any repository file by path."""
         p = _normalize_rel_path(str(file_path or ""))
-        if p not in self.allowed_files:
-            return f"ERROR: file_not_allowed:{p}"
+        if not _is_readable_repo_file(self.repo, p):
+            return f"ERROR: file_not_found:{p}"
         return self._hg.read_file_window(p, int(center_line), int(radius))
 
     def grep_in_repo(
@@ -523,9 +536,10 @@ class FileIsolatedToolkit:
         is_regex: bool = False,
         max_results: int = 20,
     ) -> str:
+        """Search text in any repository file by path."""
         p = _normalize_rel_path(str(file_path or ""))
-        if p not in self.allowed_files:
-            return f"ERROR: file_not_allowed:{p}"
+        if not _is_readable_repo_file(self.repo, p):
+            return f"ERROR: file_not_found:{p}"
         return self._hg.grep_in_file(
             file_path=p,
             search_text=str(search_text or ""),
@@ -533,7 +547,47 @@ class FileIsolatedToolkit:
             max_results=max(1, min(int(max_results or 20), 100)),
         )
 
+    def search_repo_symbol(
+        self,
+        search_text: str,
+        is_regex: bool = False,
+        max_results: int = 50,
+    ) -> str:
+        """Search symbol/text across repo Java files and return file:line hits."""
+        text = str(search_text or "").strip()
+        if not text:
+            return "ERROR: empty_search_text"
+        cap = max(1, min(int(max_results or 50), 200))
+        cmd = ["git", "grep", "-n", "--full-name"]
+        if not is_regex:
+            cmd.append("-F")
+        cmd.extend([text, "HEAD", "--", "*.java"])
+        try:
+            res = subprocess.run(
+                cmd,
+                cwd=self.repo,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            lines = (res.stdout or "").splitlines()
+            if not lines:
+                return f"No matches for '{text}'"
+            out = [f"[search_repo_symbol] '{text}' matches={min(len(lines), cap)}"]
+            for ln in lines[:cap]:
+                parts = ln.split(":", 3)
+                if len(parts) < 4:
+                    continue
+                file_path = _normalize_rel_path(str(parts[1] or ""))
+                line_no = str(parts[2] or "").strip()
+                code = str(parts[3] or "")
+                out.append(f"{file_path}:{line_no}: {code}")
+            return "\n".join(out)
+        except Exception as e:
+            return f"ERROR: search_repo_symbol_failed:{e}"
+
     def diagnose_api_drift(self) -> dict[str, Any]:
+        """Run deterministic failure diagnosis for current file."""
         engine = FailureDiagnosisEngine(self.repo, self.mainline)
         failed_symbol = _extract_primary_symbol_from_context(
             self.diagnostics,
@@ -550,6 +604,7 @@ class FileIsolatedToolkit:
         return payload
 
     def get_method_signature(self, method_name: str) -> str:
+        """Get candidate method signatures for a method in current file."""
         content = _load_file_text(self.repo, self.locked_file)
         if not content:
             return f"Method {method_name} not found in {self.locked_file}"
@@ -568,6 +623,7 @@ class FileIsolatedToolkit:
         return "\n".join(results)
 
     def compare_mainline_target(self, method_name: str) -> str:
+        """Compare method signature between target and mainline for current file."""
         target_sig = self.get_method_signature(method_name)
         mainline_content = _load_file_text(self.mainline, self.locked_file)
         if not mainline_content:
@@ -585,6 +641,7 @@ class FileIsolatedToolkit:
         return f"Target:\n{target_sig}\n\nMainline:\n{mainline_sig}"
 
     def submit_surgical_plan(self, operations: list[dict[str, Any]]) -> str:
+        """Submit final multi-file surgical operations for deterministic execution."""
         cleaned: list[SurgicalOp] = []
         for op in operations or []:
             if not isinstance(op, dict):
@@ -592,7 +649,7 @@ class FileIsolatedToolkit:
             target_file = _normalize_rel_path(
                 str(op.get("target_file") or self.locked_file)
             )
-            if target_file not in self.allowed_files:
+            if not _is_readable_repo_file(self.repo, target_file):
                 continue
             old_s = str(op.get("old_string") or "")
             new_s = str(op.get("new_string") or "")
@@ -624,48 +681,65 @@ class FileIsolatedToolkit:
         )
 
     def get_submitted_plan(self) -> list[SurgicalOp]:
+        """Return last submitted surgical plan."""
         return list(self._submitted_plan or [])
 
     def get_tools(self) -> list[StructuredTool]:
         return [
             StructuredTool.from_function(
-                self.diagnose_api_drift, name="diagnose_api_drift"
+                self.diagnose_api_drift,
+                name="diagnose_api_drift",
+                description="Run deterministic diagnosis for current file",
             ),
             StructuredTool.from_function(
                 self.read_target_code_window,
                 name="read_target_code_window",
+                description="Read code window in current file",
             ),
             StructuredTool.from_function(
                 self.grep_in_target_file,
                 name="grep_in_target_file",
+                description="Search text in current file",
             ),
             StructuredTool.from_function(
                 self.list_related_files,
                 name="list_related_files",
+                description="List suggested related files",
             ),
             StructuredTool.from_function(
                 self.list_method_hints,
                 name="list_method_hints",
+                description="List method and symbol hints",
             ),
             StructuredTool.from_function(
                 self.read_repo_code_window,
                 name="read_repo_code_window",
+                description="Read code window in any repo file",
             ),
             StructuredTool.from_function(
                 self.grep_in_repo,
                 name="grep_in_repo",
+                description="Search text in a specific repo file",
+            ),
+            StructuredTool.from_function(
+                self.search_repo_symbol,
+                name="search_repo_symbol",
+                description="Search symbol across repo Java files",
             ),
             StructuredTool.from_function(
                 self.get_method_signature,
                 name="get_method_signature",
+                description="Get method signatures in current file",
             ),
             StructuredTool.from_function(
                 self.compare_mainline_target,
                 name="compare_mainline_target",
+                description="Compare method signature target vs mainline",
             ),
             StructuredTool.from_function(
                 self.submit_surgical_plan,
                 name="submit_surgical_plan",
+                description="Submit final verified surgical operations",
             ),
         ]
 
@@ -782,8 +856,11 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
                     "messages": [
                         HumanMessage(
                             content=(
-                                "Diagnose this file and submit a fully verified surgical plan "
-                                f"for `{target_file}`."
+                                "Diagnose this file and submit a fully verified surgical plan. "
+                                "Inspect parent/connected files if needed. "
+                                "Avoid malformed constructor/signature insertions. "
+                                "Only propose operations that keep Java structure valid. "
+                                f"Primary file: `{target_file}`."
                             )
                         )
                     ]
