@@ -17,12 +17,12 @@ from langchain_core.messages import HumanMessage
 from langchain_core.tools import StructuredTool
 from langgraph.prebuilt import create_react_agent
 
-from agents.failure_diagnosis import FailureDiagnosisEngine
+from agents.failure_diagnosis import FailureDiagnosisEngine, FailureKind
 from agents.hunk_generator_tools import HunkGeneratorToolkit
 from state import AgentState, SurgicalOp
 from utils.llm_provider import get_llm
+from utils.plan_validator import _resolve_old as _resolve_old_in_content
 from utils.token_counter import add_usage, aggregate_usage_from_messages
-
 
 _REASONING_SYSTEM = """You are the H-MABS Reasoning Architect for complex backports.
 
@@ -472,8 +472,16 @@ def _sanitize_surgical_ops(
             continue
         content = _load_file_text(repo_path, op_target)
         if content and old_s not in content:
-            rejected.append(f"op_{idx}: anchor_not_in_file")
-            continue
+            # Before hard-rejecting, attempt whitespace-normalised resolution so
+            # that LLM-guessed indentation variants don't silently drop valid ops.
+            resolved_s, _resolve_reason = _resolve_old_in_content(content, old_s)
+            if not resolved_s:
+                rejected.append(f"op_{idx}: anchor_not_in_file")
+                continue
+            # Adopt the resolved anchor so the deterministic apply will succeed.
+            op = dict(op)
+            op["old_string"] = resolved_s
+            old_s = resolved_s
 
         key = (op_target, old_s, new_s)
         if key in seen:
@@ -988,6 +996,58 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
         }
 
     print("Reasoning Architect: retry scope files=" + ", ".join(normalized_files))
+
+    # --- Parent-class scope expansion ---
+    # For each retry file, inspect its failed plan entries and run the
+    # FailureDiagnosisEngine to detect PARENT_CLASS_CHANGE.  When the
+    # anchor text that the planner tried to match lives in a parent class
+    # rather than the child file, that parent file needs its own reasoning
+    # pass so the file editor can apply the correct edit there instead.
+    try:
+        _diag_engine = FailureDiagnosisEngine(target_repo_path, mainline_repo_path)
+        _hgp = state.get("hunk_generation_plan") or {}
+        _build_error = str(state.get("validation_error_context") or "")
+        _parent_additions: list[str] = []
+        for _tf in list(normalized_files):
+            # Collect old_strings from plan entries that target this file.
+            _failed_old_strings: list[str] = []
+            for _entries in _hgp.values() if isinstance(_hgp, dict) else []:
+                for _e in _entries or []:
+                    if not isinstance(_e, dict):
+                        continue
+                    _e_target = _normalize_rel_path(str(_e.get("target_file") or ""))
+                    if _e_target != _tf:
+                        continue
+                    _os = str(_e.get("old_string") or "")
+                    if _os and len(_os.strip()) > 10:
+                        _failed_old_strings.append(_os)
+            for _os in _failed_old_strings[:3]:
+                _diag = _diag_engine.diagnose(
+                    target_file=_tf,
+                    failed_old_string=_os,
+                    failed_symbol="",
+                    build_error=_build_error,
+                )
+                if _diag.kind == FailureKind.PARENT_CLASS_CHANGE and _diag.parent_file:
+                    _pf = _normalize_rel_path(_diag.parent_file)
+                    if _pf and _pf not in seen:
+                        _full_pf = os.path.join(target_repo_path, _pf)
+                        if os.path.isfile(_full_pf):
+                            _parent_additions.append(_pf)
+                            seen.add(_pf)
+                            print(
+                                f"Reasoning Architect: PARENT_CLASS_CHANGE detected — "
+                                f"adding parent file {_pf} (child={_tf})"
+                            )
+                    break  # one confirmed diagnosis per file is sufficient
+        normalized_files.extend(_parent_additions)
+        if _parent_additions:
+            print(
+                "Reasoning Architect: expanded retry scope with parent file(s): "
+                + ", ".join(_parent_additions)
+            )
+    except Exception as _parent_exc:
+        print(f"Reasoning Architect: parent-class detection skipped: {_parent_exc}")
 
     llm = get_llm(temperature=0)
     token_usage = {

@@ -7,11 +7,13 @@ H-MABS Phase 4 — "Prove Red, Make Green" Loop
 import json
 import os
 import re
+
 from langchain_core.messages import HumanMessage, SystemMessage
-from state import AgentState, AdaptedHunk
-from utils.llm_provider import get_llm
-from agents.validation_tools import ValidationToolkit, classify_test_failure_signal
+
 from agents.hunk_generator import _extract_hunk_block
+from agents.validation_tools import ValidationToolkit, classify_test_failure_signal
+from state import AdaptedHunk, AgentState
+from utils.llm_provider import get_llm
 
 # Test-suite compatibility shim for legacy patch target.
 ChatGoogleGenerativeAI = None
@@ -33,7 +35,7 @@ Analyze the error and provide a concise, actionable diagnosis.
 
 Focus on:
 - Root cause (missing API, signature mismatch, logic error, etc.)
-- Specific files/methods involved  
+- Specific files/methods involved
 - Clear fix suggestion for hunk regeneration
 
 Keep response under 3 sentences. Be direct and technical."""
@@ -149,7 +151,7 @@ def _classify_build_failure(
         if ": error:" in line or "error: " in line:
             # Try to extract file and line number
             match = re.search(
-                r"([^:\s]+\.java):(?:\[(\d+),\d+\]|(\d+)):",
+                r"([^:\s]+\.java):(?:\[(\d+),\d+\][ ]?:?|(\d+):)",
                 line,
             )
             if match:
@@ -179,9 +181,9 @@ def _classify_build_failure(
                         retry_hunk_ids.add(f"{m_file}:{h_idx}")
 
     file_hit_patterns = [
-        r"(/repo/[^:\n]+\.java):\[(\d+),\d+\]:",
+        r"(/repo/[^:\n]+\.java):\[(\d+),\d+\][ ]?:?",
         r"(/repo/[^:\n]+\.java):\d+:",
-        r"([^:\s]+\.java):\[(\d+),\d+\]:",
+        r"([^:\s]+\.java):\[(\d+),\d+\][ ]?:?",
         r"(x-pack/[^:\n]+\.java):\d+:",
         r"error:\s+patch failed:\s+([^:\n]+):\d+",
     ]
@@ -303,9 +305,12 @@ def _extract_structured_failure_context(
     passed to the planning agent as validation_error_context_structured.
     """
     text = str(build_error or hunk_apply_error or "")
-
-    # Extract failed file + line from javac output
-    file_line_pattern = re.compile(r"([a-zA-Z0-9_/.-]+\.java):(?:\[(\d+),\d+\]|(\d+)):")
+    # Extract failed file + line from javac/maven output.
+    # Maven format: file.java:[line,col] error:   (space before error)
+    # javac format: file.java:line: error:        (colon immediately after line)
+    file_line_pattern = re.compile(
+        r"([a-zA-Z0-9_/.-]+\.java):(?:\[(\d+),\d+\][ ]?:?|(\d+):)"
+    )
     failed_locations = []
     for m in file_line_pattern.finditer(text):
         line_num = int(m.group(2) or m.group(3) or 0)

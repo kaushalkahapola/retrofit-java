@@ -407,156 +407,6 @@ index b7fd9e6668..15bc7a83b1 100644
 ## Attempt #2
 
 ### ReAct Agent Actions
-- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "edit_type": "delete",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "import io.crate.metadata.table.TableInfo;\nimport io.crate.statistics.Stats;",
-  "resolved_new_preview": ""
-}
-```
-- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "edit_type": "insert_before",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "        public static Item forUpdate(String id,",
-  "resolved_new_preview": "        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forUpdate(String id,"
-}
-```
-- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "edit_type": "replace",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "                                     long seqNo,\n                                     long primaryTerm,\n                                     long sizeEstimate) {\n            long usedBytes = SHALLOW_S",
-  "resolved_new_preview": "                                     long seqNo,\n                                     long primaryTerm,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SH"
-}
-```
-- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "edit_type": "replace",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "            long usedBytes = SHALLOW_SIZE;\n            usedBytes += sizeEstimate;\n            usedBytes += RamUsageEstimator.sizeOf(id);",
-  "resolved_new_preview": "            long usedBytes = SHALLOW_SIZE;\n            usedBytes += fullDocSizeEstimate;\n            usedBytes += RamUsageEstimator.sizeOf(id);"
-}
-```
-- **server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-  "edit_type": "replace",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "        }\n\n        public static long sizeEstimateForUpdate(Stats stats, TableInfo tableInfo) {\n            // if stats are not available we fall back to estimate the size based on\n            // colu",
-  "resolved_new_preview": "        }\n\n        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forInsert(String id,"
-}
-```
-- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
-  "edit_type": "insert_before",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "     * List of values or expressions used to be retrieved from the inserted/updated rows,",
-  "resolved_new_preview": "    private final long fullDocSizeEstimate;\n\n     * List of values or expressions used to be retrieved from the inserted/updated rows,"
-}
-```
-- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
-  "edit_type": "replace",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "                                       boolean autoCreateIndices,\n                                       List<? extends Symbol> outputs,\n                                       List<Symbol> returnValue",
-  "resolved_new_preview": "                                       boolean autoCreateIndices,\n                                       List<? extends Symbol> outputs,\n                                       List<Symbol> returnValue"
-}
-```
-- **server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
-  "edit_type": "insert_before",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "    ColumnIndexWriterProjection(StreamInput in) throws IOException {",
-  "resolved_new_preview": "        this.fullDocSizeEstimate = fullDocSizeEstimate;\n    ColumnIndexWriterProjection(StreamInput in) throws IOException {"
-}
-```
-- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
-  "edit_type": "replace",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "                                      boolean autoCreateIndices,\n                                      List<Symbol> returnValues,\n                                      UUID jobId\n                     ",
-  "resolved_new_preview": "                                      boolean autoCreateIndices,\n                                      List<Symbol> returnValues,\n                                      UUID jobId,\n                    "
-}
-```
-- **server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
-  "edit_type": "replace",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "\n        InputRow insertValues = new InputRow(insertInputs);\n        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(\n   ",
-  "resolved_new_preview": "\n        InputRow insertValues = new InputRow(insertInputs);\n        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {\n            return ShardUpsertReques"
-}
-```
-- **server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
-  "edit_type": "replace",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "            missingAssignmentsColumns,\n            new Object[]{source.value()},\n            null\n        );",
-  "resolved_new_preview": "            missingAssignmentsColumns,\n            new Object[]{source.value()},\n            null,\n            0\n        );"
-}
-```
-- **server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java",
-  "edit_type": "replace",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "            statement.tableInfo().isPartitioned(),\n            outputs,\n            statement.outputs() == null ? List.of() : statement.outputs()\n        );",
-  "resolved_new_preview": "            statement.tableInfo().isPartitioned(),\n            outputs,\n            statement.outputs() == null ? List.of() : statement.outputs(),\n            plannerContext.nodeContext().tableStats()"
-}
-```
-- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java",
-  "edit_type": "insert_before",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "        UpdateProjection updateProjection = new UpdateProjection(",
-  "resolved_new_preview": "\n        UpdateProjection updateProjection = new UpdateProjection("
-}
-```
-- **server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java",
-  "edit_type": "replace",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "            outputSymbols,\n            returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n            null);\n",
-  "resolved_new_preview": "            outputSymbols,\n            returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n            null,\n            plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableI"
-}
-```
-- **server/src/main/java/io/crate/planner/operators/InsertFromValues.java**: Called `str_replace_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
-  "edit_type": "replace",
-  "resolution_reason": "exact",
-  "resolved_old_preview": "                writerProjection.allTargetColumns().toArray(Reference[]::new),\n                insertValues.materialize(),\n                onConflictAssignments\n            );",
-  "resolved_new_preview": "                writerProjection.allTargetColumns().toArray(Reference[]::new),\n                insertValues.materialize(),\n                onConflictAssignments,\n                0\n            );"
-}
-```
 - **server/src/main/java/io/crate/statistics/TableStats.java**: Called `str_replace_in_file`
 ```json
 {
@@ -579,139 +429,6 @@ index b7fd9e6668..15bc7a83b1 100644
 ```
 
 ### Final Output Diff
-**server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java** [replace]
-```java
-// --- OLD ---
-<deterministic file-editor diff>
-// --- NEW ---
-diff --git a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
-index 2825a9c1fe..6b8e92159a 100644
---- a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
-+++ b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
-@@ -85,7 +85,8 @@ public class ColumnIndexWriterProjector implements Projector {
-                                       int bulkActions,
-                                       boolean autoCreateIndices,
-                                       List<Symbol> returnValues,
--                                      UUID jobId
-+                                      UUID jobId,
-+                                      long fullDocSizeEstimate
-                                       ) {
-         RowShardResolver rowShardResolver = new RowShardResolver(
-             txnCtx, nodeCtx, primaryKeyIdents, primaryKeySymbols, clusteredByColumn, routingSymbol);
-@@ -116,14 +117,17 @@ public class ColumnIndexWriterProjector implements Projector {
-         );
- 
-         InputRow insertValues = new InputRow(insertInputs);
--        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(
--            id,
--            pkValues,
--            autoGeneratedTimestamp,
--            insertColumns,
--            insertValues.materialize(),
--            onConflictAssignments
--        );
-+        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {
-+            return ShardUpsertRequest.Item.forInsert(
-+                id,
-+                pkValues,
-+                autoGeneratedTimestamp,
-+                insertColumns,
-+                insertValues.materialize(),
-+                onConflictAssignments,
-+                fullDocSizeEstimate
-+            );
-+        };
- 
-         var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();
-```
-**server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java** [replace]
-```java
-// --- OLD ---
-<deterministic file-editor diff>
-// --- NEW ---
-diff --git a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
-index 24cf0ec297..3668fe0214 100644
---- a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
-+++ b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
-@@ -123,7 +123,8 @@ public class IndexWriterProjector implements Projector {
-             autoGeneratedTimestamp,
-             missingAssignmentsColumns,
-             new Object[]{source.value()},
--            null
-+            null,
-+            0
-         );
- 
-         Predicate<UpsertResults> earlyTerminationCondition = results -> failFast && results.containsErrors();
-```
-**server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java** [replace]
-```java
-// --- OLD ---
-<deterministic file-editor diff>
-// --- NEW ---
-diff --git a/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java b/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java
-index 880bb53eee..fe02d2dc55 100644
---- a/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java
-+++ b/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java
-@@ -77,7 +77,8 @@ public final class InsertFromSubQueryPlanner {
-             Settings.EMPTY,
-             statement.tableInfo().isPartitioned(),
-             outputs,
--            statement.outputs() == null ? List.of() : statement.outputs()
-+            statement.outputs() == null ? List.of() : statement.outputs(),
-+            plannerContext.nodeContext().tableStats().estimatedSizePerRow(statement.tableInfo())
-         );
-         LogicalPlan plannedSubQuery = logicalPlanner.plan(
-             statement.subQueryRelation(),
-```
-**server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java** [replace]
-```java
-// --- OLD ---
-<deterministic file-editor diff>
-// --- NEW ---
-diff --git a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
-index 14f14396d5..8c846e62dc 100644
---- a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
-+++ b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
-@@ -270,13 +270,16 @@ public final class UpdatePlanner {
-                 outputSymbols[i] = new InputColumn(i, returnValues.get(i).valueType());
-             }
-         }
-+
-         UpdateProjection updateProjection = new UpdateProjection(
-             new InputColumn(0, idReference.valueType()),
-             assignments.targetNames(),
-             assignmentSources,
-             outputSymbols,
-             returnValues == null ? null : returnValues.toArray(new Symbol[0]),
--            null);
-+            null,
-+            plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)
-+        );
- 
-         WhereClause where = detailedQuery.toBoundWhereClause(
-             tableInfo, params, subQueryResults, plannerCtx.transactionContext(), plannerCtx.nodeContext(), plannerCtx.clusterState().metadata());
-```
-**server/src/main/java/io/crate/planner/operators/InsertFromValues.java** [replace]
-```java
-// --- OLD ---
-<deterministic file-editor diff>
-// --- NEW ---
-diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
-index 3204716803..284b524195 100644
---- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
-+++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
-@@ -477,7 +477,8 @@ public class InsertFromValues implements LogicalPlan {
-                 autoGeneratedTimestamp,
-                 writerProjection.allTargetColumns().toArray(Reference[]::new),
-                 insertValues.materialize(),
--                onConflictAssignments
-+                onConflictAssignments,
-+                0
-             );
- 
-         var rowShardResolver = new RowShardResolver(
-```
 **server/src/main/java/io/crate/statistics/TableStats.java** [replace]
 ```java
 // --- OLD ---
@@ -755,252 +472,66 @@ index b7fd9e6668..1794c60c41 100644
 
 ## Attempt #3
 
+### ReAct Agent Actions
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `str_replace_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "edit_type": "insert_before",
+  "resolution_reason": "exact",
+  "resolved_old_preview": "import java.util.HashMap;",
+  "resolved_new_preview": "import io.crate.metadata.table.TableInfo;\nimport java.util.HashMap;"
+}
+```
+- **server/src/main/java/io/crate/statistics/TableStats.java**: Called `str_replace_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/statistics/TableStats.java",
+  "edit_type": "insert_before",
+  "resolution_reason": "exact",
+  "resolved_old_preview": "    public Iterable<ColumnStatsEntry> statsEntries() {",
+  "resolved_new_preview": "    /**\n     * Returns an estimation (avg) size of each row of the table in bytes or if no stats are available\n     * for the given table an estimate (avg) based on the column types of the table.\n    "
+}
+```
+
 ### Final Output Diff
-**server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java** [replace]
+**server/src/main/java/io/crate/statistics/TableStats.java** [replace]
 ```java
 // --- OLD ---
-import io.crate.metadata.table.TableInfo;
-import io.crate.statistics.Stats;
+<deterministic file-editor diff>
 // --- NEW ---
-
-```
-**server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java** [replace]
-```java
-// --- OLD ---
-        public static Item forUpdate(String id,
-// --- NEW ---
-        /// @param fullDocSizeEstimate the expected number of bytes
-        /// the full document has when loaded from disk
-        public static Item forUpdate(String id,
-```
-**server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java** [replace]
-```java
-// --- OLD ---
-                                     long seqNo,
-                                     long primaryTerm,
-                                     long sizeEstimate) {
-            long usedBytes = SHALLOW_SIZE;
-// --- NEW ---
-                                     long seqNo,
-                                     long primaryTerm,
-                                     long fullDocSizeEstimate) {
-            long usedBytes = SHALLOW_SIZE;
-```
-**server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java** [replace]
-```java
-// --- OLD ---
-            long usedBytes = SHALLOW_SIZE;
-            usedBytes += sizeEstimate;
-            usedBytes += RamUsageEstimator.sizeOf(id);
-// --- NEW ---
-            long usedBytes = SHALLOW_SIZE;
-            usedBytes += fullDocSizeEstimate;
-            usedBytes += RamUsageEstimator.sizeOf(id);
-```
-**server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java** [replace]
-```java
-// --- OLD ---
-        }
-
-        public static long sizeEstimateForUpdate(Stats stats, TableInfo tableInfo) {
-            // if stats are not available we fall back to estimate the size based on
-            // column types. Therefore we need to get the column information.
-            if (stats.isEmpty()) {
-                Collection<Reference> ramAccountedColumns = tableInfo.allColumns();
-                return stats.estimateSizeForColumns(ramAccountedColumns);
-            } else {
-                return stats.averageSizePerRowInBytes();
-            }
-        }
-
-// --- NEW ---
-        }
-
-        /// @param fullDocSizeEstimate the expected number of bytes
-        /// the full document has when loaded from disk
-        public static Item forInsert(String id,
-```
-**server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java** [replace]
-```java
-// --- OLD ---
-                                     @Nullable Reference[] insertColumns,
-                                     @Nullable Object[] values,
-                                     @Nullable Symbol[] onConflictAssignments) {
-            long usedBytes = SHALLOW_SIZE;
-// --- NEW ---
-                                     @Nullable Reference[] insertColumns,
-                                     @Nullable Object[] values,
-                                     @Nullable Symbol[] onConflictAssignments,
-                                     long fullDocSizeEstimate) {
-            long usedBytes = SHALLOW_SIZE;
-```
-**server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java** [replace]
-```java
-// --- OLD ---
-                for (var assignment : onConflictAssignments) {
-// --- NEW ---
-                usedBytes += fullDocSizeEstimate;
-                for (var assignment : onConflictAssignments) {
-```
-**server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java** [replace]
-```java
-// --- OLD ---
-     * List of values or expressions used to be retrieved from the inserted/updated rows,
-// --- NEW ---
-    private final long fullDocSizeEstimate;
-
-     * List of values or expressions used to be retrieved from the inserted/updated rows,
-```
-**server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java** [replace]
-```java
-// --- OLD ---
-                                       boolean autoCreateIndices,
-                                       List<? extends Symbol> outputs,
-                                       List<Symbol> returnValues) {
-
-// --- NEW ---
-                                       boolean autoCreateIndices,
-                                       List<? extends Symbol> outputs,
-                                       List<Symbol> returnValues,
-                                       long fullDocSizeEstimate) {
-
-```
-**server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java** [replace]
-```java
-// --- OLD ---
-    ColumnIndexWriterProjection(StreamInput in) throws IOException {
-// --- NEW ---
-        this.fullDocSizeEstimate = fullDocSizeEstimate;
-    ColumnIndexWriterProjection(StreamInput in) throws IOException {
-```
-**server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java** [replace]
-```java
-// --- OLD ---
-    public List<? extends Symbol> outputs() {
-// --- NEW ---
-        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {
-            fullDocSizeEstimate = in.readLong();
-        } else {
-            fullDocSizeEstimate = 0;
-        }
-    }
-    public List<? extends Symbol> outputs() {
-```
-**server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java** [replace]
-```java
-// --- OLD ---
-    public List<? extends Symbol> outputs() {
-// --- NEW ---
-    public long fullDocSizeEstimate() {
-        return fullDocSizeEstimate;
-    public List<? extends Symbol> outputs() {
-```
-**server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java** [replace]
-```java
-// --- OLD ---
-               allTargetColumns.equals(that.allTargetColumns) &&
-               Objects.equals(outputs, that.outputs) &&
-               Objects.equals(returnValues, that.returnValues);
-    }
-// --- NEW ---
-               allTargetColumns.equals(that.allTargetColumns) &&
-               Objects.equals(outputs, that.outputs) &&
-               Objects.equals(returnValues, that.returnValues) &&
-               Objects.equals(fullDocSizeEstimate, that.fullDocSizeEstimate);
-    }
-```
-**server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java** [replace]
-```java
-// --- OLD ---
-                            allTargetColumns,
-                            outputs,
-                            returnValues);
-    }
-// --- NEW ---
-                            allTargetColumns,
-                            outputs,
-                            returnValues,
-                            fullDocSizeEstimate);
-    }
-```
-**server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java** [replace]
-```java
-// --- OLD ---
-    public ColumnIndexWriterProjection bind(Function<? super Symbol, Symbol> binder) {
-// --- NEW ---
-        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
-            out.writeLong(fullDocSizeEstimate);
-        }
-    public ColumnIndexWriterProjection bind(Function<? super Symbol, Symbol> binder) {
-```
-**server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java** [replace]
-```java
-// --- OLD ---
-            autoCreateIndices(),
-            outputs,
-            returnValues
-            );
-// --- NEW ---
-            autoCreateIndices(),
-            outputs,
-            returnValues,
-            fullDocSizeEstimate
-            );
-```
-**server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java** [replace]
-```java
-// --- OLD ---
-    public UpdateProjection(Symbol uidSymbol,
-// --- NEW ---
-    private final long fullDocSizeEstimate;
-
-    public UpdateProjection(Symbol uidSymbol,
-```
-**server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java** [replace]
-```java
-// --- OLD ---
-                            Symbol[] outputs,
-                            @Nullable Symbol[] returnValues,
-                            @Nullable Long requiredVersion) {
-        this.uidSymbol = uidSymbol;
-// --- NEW ---
-                            Symbol[] outputs,
-                            @Nullable Symbol[] returnValues,
-                            @Nullable Long requiredVersion,
-                            long fullDocSizeEstimate) {
-        this.uidSymbol = uidSymbol;
-```
-**server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java** [replace]
-```java
-// --- OLD ---
-    public UpdateProjection(StreamInput in) throws IOException {
-// --- NEW ---
-        this.fullDocSizeEstimate = fullDocSizeEstimate;
-    public UpdateProjection(StreamInput in) throws IOException {
-```
-**server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java** [replace]
-```java
-// --- OLD ---
-    public Symbol uidSymbol() {
-// --- NEW ---
-        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {
-            this.fullDocSizeEstimate = in.readLong();
-        } else {
-            this.fullDocSizeEstimate = 0;
-        }
-    }
-
-    public long fullDocSizeEstimate() {
-        return fullDocSizeEstimate;
-    public Symbol uidSymbol() {
-```
-**server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java** [replace]
-```java
-// --- OLD ---
-                out.writeVInt(0);
-// --- NEW ---
-                out.writeVInt(0);
-        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
-            out.writeLong(fullDocSizeEstimate);
-        }
+diff --git a/server/src/main/java/io/crate/statistics/TableStats.java b/server/src/main/java/io/crate/statistics/TableStats.java
+index b7fd9e6668..1794c60c41 100644
+--- a/server/src/main/java/io/crate/statistics/TableStats.java
++++ b/server/src/main/java/io/crate/statistics/TableStats.java
+@@ -23,6 +23,7 @@ package io.crate.statistics;
+ 
+ import io.crate.metadata.RelationName;
+ 
++import io.crate.metadata.table.TableInfo;
+ import java.util.HashMap;
+ import java.util.Map;
+ import java.util.Set;
+@@ -62,6 +63,21 @@ public class TableStats {
+         return tableStats.getOrDefault(relationName, Stats.EMPTY).averageSizePerRowInBytes();
+     }
+ 
++    /**
++     * Returns an estimation (avg) size of each row of the table in bytes or if no stats are available
++     * for the given table an estimate (avg) based on the column types of the table.
++     */
++    public long estimatedSizePerRow(TableInfo tableInfo) {
++        Stats stats = tableStats.get(tableInfo.ident());
++        if (stats == null) {
++            // if stats are not available we fall back to estimate the size based on
++            // column types. Therefore we need to get the column information.
++            return Stats.EMPTY.estimateSizeForColumns(tableInfo);
++        } else {
++            return stats.averageSizePerRowInBytes();
++        }
++    }
++
+     public Iterable<ColumnStatsEntry> statsEntries() {
+         Set<Map.Entry<RelationName, Stats>> entries = tableStats.entrySet();
+         return () -> entries.stream()
 ```
