@@ -3,7 +3,7 @@ project=crate
 mainline_commit=3d3bf8420bc62678d696f0d632b0e857e40c0e8e
 backport_commit=02ea68b62cb63a7fd6176a5174df94d5fb1016b5
 mode=full
-started_at=2026-04-05T17:10:36.328785
+started_at=2026-04-06T05:42:44.839462
 ----------------------------------------
 Running full workflow graph
 Completed node=context_analyzer
@@ -163,14 +163,14 @@ Agent 3 (File Editor): Starting direct file-edit workflow...
 LLM Provider: azure, Model: gpt-4.1-mini, Temperature: 0
   Agent 3: Processing 6 edit(s) for server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java (op=MODIFIED)
     Agent 3: Classified server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java as TYPE_V (reactive path)
-    Agent 3: base_types=['TYPE_II'] execution_types=['TYPE_V']
+    Agent 3: base_types=['TYPE_II', 'TYPE_V'] execution_types=['TYPE_V']
     Agent 3: TYPE_V latch active for this attempt (reason=context_mismatch_with_build_api_or_syntax).
     Agent 3: Skipping developer fast path (validation retry #1; use deterministic/ReAct path).
     Agent 3: Invoking ReAct agent for server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
-    Agent 3: Agent failed: tool_budget_exceeded:19>12
+    Agent 3: Agent failed: tool_budget_exceeded:16>12
   Agent 3: Processing 8 edit(s) for server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java (op=MODIFIED)
     Agent 3: Classified server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java as TYPE_V (reactive path)
-    Agent 3: base_types=['TYPE_I', 'TYPE_II'] execution_types=['TYPE_V']
+    Agent 3: base_types=['TYPE_I', 'TYPE_II', 'TYPE_V'] execution_types=['TYPE_V']
     Agent 3: TYPE_V latch active for this attempt (reason=context_mismatch_with_build_api_or_syntax).
     Agent 3: Skipping developer fast path (validation retry #1; use deterministic/ReAct path).
     Agent 3: Invoking ReAct agent for server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java

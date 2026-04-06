@@ -261,6 +261,70 @@ def _format_transition_summary(transition_eval: dict) -> str:
     )
 
 
+def _extract_structured_failure_context(
+    build_error: str,
+    hunk_apply_error: str,
+    effective_hunks: list,
+) -> dict:
+    """
+    Produce a structured failure context dict for the rulebook.
+    Stored in validation_results["structured_failure"] and
+    passed to the planning agent as validation_error_context_structured.
+    """
+    text = str(build_error or hunk_apply_error or "")
+
+    # Extract failed file + line from javac output
+    file_line_pattern = re.compile(r"([a-zA-Z0-9_/.-]+\.java):(\d+):")
+    failed_locations = []
+    for m in file_line_pattern.finditer(text):
+        failed_locations.append({
+            "file": m.group(1),
+            "line": int(m.group(2)),
+        })
+
+    # Extract "cannot find symbol" details
+    symbol_errors = []
+    for m in re.finditer(r"symbol:\s+(variable|method|class)\s+(\w+)", text):
+        symbol_errors.append({
+            "kind": m.group(1),
+            "name": m.group(2),
+        })
+
+    # Extract "cannot be applied to given types" — signature mismatch
+    sig_errors = []
+    for m in re.finditer(
+        r"method (\w+)\([^)]*\) in class (\S+) cannot be applied",
+        text,
+    ):
+        sig_errors.append({
+            "method": m.group(1),
+            "class": m.group(2),
+        })
+
+    # Map errors to hunks
+    failed_hunk_targets = []
+    for loc in failed_locations[:5]:
+        for hunk in effective_hunks:
+            target_f = str(hunk.get("target_file") or "").replace("\\", "/")
+            if target_f.endswith(loc["file"]) or loc["file"].endswith(target_f):
+                failed_hunk_targets.append({
+                    "target_file": hunk.get("target_file"),
+                    "mainline_file": hunk.get("mainline_file"),
+                    "error_line": loc["line"],
+                })
+                break
+
+    return {
+        "raw_error": text[:3000],
+        "failed_locations": failed_locations[:5],
+        "symbol_errors": symbol_errors[:10],
+        "signature_errors": sig_errors[:5],
+        "failed_hunk_targets": failed_hunk_targets,
+        "primary_failed_file": failed_locations[0]["file"] if failed_locations else "",
+        "primary_failed_symbol": symbol_errors[0]["name"] if symbol_errors else "",
+    }
+
+
 def _detect_type_v_retry_scope(
     generation_checklist: list[dict],
 ) -> tuple[bool, list[str]]:
@@ -668,6 +732,14 @@ async def validation_agent(state: AgentState, config) -> dict:
             failure_category, retry_files, diagnostics, analysis, retry_hunks = (
                 _classify_build_failure(build_res.get("output", ""), target_repo_path, effective_code_hunks)
             )
+
+            structured_failure = _extract_structured_failure_context(
+                build_error=build_res.get("output", ""),
+                hunk_apply_error="",
+                effective_hunks=effective_code_hunks,
+            )
+            validation_results["structured_failure"] = structured_failure
+
             if type_v_present and type_v_files:
                 retry_files = sorted(set(retry_files) | set(type_v_files))
             sticky_type_v = bool(force_type_v_latch or type_v_present)
@@ -697,6 +769,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 "validation_passed": False,
                 "validation_attempts": attempts + 1,
                 "validation_error_context": f"Build failed: {analysis}",
+                "validation_error_context_structured": structured_failure,
                 "validation_results": validation_results,
                 "regeneration_hint": analysis,
                 "validation_failure_category": failure_category,
@@ -999,6 +1072,14 @@ async def validation_agent(state: AgentState, config) -> dict:
                 failure_category, retry_files, diagnostics, analysis, retry_hunks = (
                     _classify_build_failure(build_res.get("output", ""), target_repo_path, effective_code_hunks)
                 )
+
+                structured_failure = _extract_structured_failure_context(
+                    build_error=build_res.get("output", ""),
+                    hunk_apply_error="",
+                    effective_hunks=effective_code_hunks,
+                )
+                validation_results["structured_failure"] = structured_failure
+
                 validation_results["compilation"]["agent_evaluation"] = analysis
                 validation_results["compilation"]["error_context"] = analysis
                 validation_results["compilation"]["diagnostics"] = {
@@ -1014,6 +1095,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                     "validation_passed": False,
                     "validation_attempts": attempts + 1,
                     "validation_error_context": f"Compilation failed: {analysis}",
+                    "validation_error_context_structured": structured_failure,
                     "validation_results": validation_results,
                     "regeneration_hint": analysis,  # For hunk generator to use
                     "validation_retry_files": retry_files,

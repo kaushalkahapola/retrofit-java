@@ -237,6 +237,12 @@ class AgentState(TypedDict):
     validation_results: dict[
         str, dict
     ]  # Detailed results per step (e.g. "hunk_application": {...})
+    validation_error_context_structured: NotRequired[dict[str, Any]]
+    # Structured failure context from validation agent.
+    # Contains: failed_locations, symbol_errors, signature_errors,
+    # primary_failed_file, primary_failed_symbol.
+    # Fed to TypeVRulebook for deterministic pre-analysis.
+
     validation_infrastructure_failure: NotRequired[
         bool
     ]  # True when failure is test infra/runner related (not code generation)

@@ -32,6 +32,8 @@ from langgraph.prebuilt import create_react_agent
 
 from agents.hunk_generator_tools import HunkGeneratorToolkit
 from agents.semantic_hunk_adapter import SemanticHunkAdapter
+from agents.type_v_rulebook import TypeVRulebook, RulebookDecision
+from agents.failure_diagnosis import FailureDiagnosisEngine
 from state import AgentState
 from utils.llm_provider import get_llm
 from utils.patch_analyzer import PatchAnalyzer
@@ -886,7 +888,12 @@ def _build_hunk_planner_prompt(
     drift_map: dict[str, Any],
     deterministic_entries: list[dict[str, Any]],
     retry_failure_context: str,
+    rulebook_decision: RulebookDecision | None = None,
 ) -> str:
+    rulebook_section = ""
+    if rulebook_decision and rulebook_decision.confidence > 0.4:
+        rulebook_section = rulebook_decision.to_prompt_context()
+
     return f"""Plan this backport hunk.
 
 Mainline file: {mainline_file}
@@ -913,6 +920,8 @@ Consistency map:
 
 API DRIFT MAP (Crucial for structural changes):
 {json.dumps(drift_map or {}, indent=2, ensure_ascii=False)}
+
+{rulebook_section}
 
 Deterministic candidate operations:
 {json.dumps(deterministic_entries, indent=2, ensure_ascii=False)}
@@ -2480,7 +2489,62 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                     _normalize_path(normalized_mainline) in sticky_force_type_v_files
                     or _normalize_path(target_file) in sticky_force_type_v_files
                 )
-            # Retry file filtering is already handled at file-iteration level.
+
+            # ------------------------------------------------------------------
+            # TYPE_V RULEBOOK: Run before LLM planning to guide it deterministically
+            # ------------------------------------------------------------------
+            rulebook_decision = None
+            if force_type_v_for_entry and validation_attempts > 0:
+                rulebook = TypeVRulebook(target_repo_path, mainline_repo_path)
+                rulebook_decision = rulebook.apply(
+                    target_file=target_file,
+                    failed_plan_entry=sanitized_entries[0] if sanitized_entries else {},
+                    build_error=str(validation_error_context or ""),
+                    consistency_map=consistency_map or {},
+                )
+
+                # If rulebook says remap to a different file, update target_file NOW
+                # before we even call the LLM
+                if rulebook_decision.action == "remap_file" and rulebook_decision.override_target_file:
+                    if rulebook_decision.confidence >= 0.7:
+                        old_target = target_file
+                        target_file = rulebook_decision.override_target_file
+                        print(
+                            f"    Planning Agent: RULEBOOK remap: {old_target} → {target_file} "
+                            f"(confidence={rulebook_decision.confidence:.0%})"
+                        )
+                        # Re-run sanitize against new target
+                        new_content = _read_target_file(target_repo_path, target_file)
+                        if new_content:
+                            sanitized_entries = [
+                                _sanitize_entry_against_target(e, new_content)
+                                for e in sanitized_entries
+                            ]
+                    else:
+                        print(
+                            f"    Planning Agent: RULEBOOK remap rejected due to low confidence ({rulebook_decision.confidence:.0%})"
+                        )
+
+                # If rulebook says apply to parent, redirect
+                elif rulebook_decision.action == "apply_to_parent" and rulebook_decision.override_target_file:
+                    target_file = rulebook_decision.override_target_file
+                    print(
+                        f"    Planning Agent: RULEBOOK parent redirect → {target_file}"
+                    )
+
+                # If rulebook says add side files, add them to the plan queue
+                elif rulebook_decision.action == "add_side_file":
+                    for sf in rulebook_decision.additional_files:
+                        if sf not in mapped_target_context:
+                            # Add a minimal mapping so hunk generator picks it up
+                            mapped_target_context[sf] = [{
+                                "hunk_index": 0,
+                                "target_file": sf,
+                                "start_line": None,
+                                "code_snippet": "",
+                                "anchor_reason": "rulebook_side_file",
+                            }]
+                            print(f"    Planning Agent: RULEBOOK added side file: {sf}")
 
             if force_type_v_for_entry:
                 forced_scope_files.add(_normalize_path(normalized_mainline))
@@ -2504,6 +2568,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                     drift_map=drift_map,
                     deterministic_entries=sanitized_entries,
                     retry_failure_context=truncated_failure_context,
+                    rulebook_decision=rulebook_decision,
                 )
 
                 planner_messages = [
