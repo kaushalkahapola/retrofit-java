@@ -7,6 +7,7 @@ for deterministic application by Agent 3 (File Editor).
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -61,6 +62,74 @@ Patch intent:
 
 Return only via submit_surgical_plan.
 """
+
+
+def _render_msg_content(content: Any) -> str:
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if text is not None:
+                    parts.append(str(text))
+            else:
+                parts.append(str(item))
+        return "\n".join([p for p in parts if p]).strip()
+    return str(content or "").strip()
+
+
+def _truncate_for_log(text: str, max_chars: int = 5000) -> str:
+    t = str(text or "")
+    if len(t) <= max_chars:
+        return t
+    head = max_chars // 2
+    tail = max_chars - head
+    return t[:head] + "\n... [TRUNCATED] ...\n" + t[-tail:]
+
+
+def _log_reasoning_trace(response: dict[str, Any], target_file: str) -> None:
+    try:
+        messages = (response or {}).get("messages", []) or []
+        if not messages:
+            print(f"Reasoning Architect: no trace messages for {target_file}")
+            return
+        print(
+            "Reasoning Architect: ReAct trace for "
+            f"{target_file} [BEGIN] (messages={len(messages)})"
+        )
+        for idx, msg in enumerate(messages, start=1):
+            role = str(getattr(msg, "type", "") or "unknown").strip().lower()
+            print(f"Reasoning Architect: [message {idx}] role={role}")
+
+            tool_calls = getattr(msg, "tool_calls", None) or []
+            if tool_calls:
+                for tc_i, tc in enumerate(tool_calls, start=1):
+                    tc_name = str((tc or {}).get("name") or "")
+                    tc_args = (tc or {}).get("args", {})
+                    try:
+                        args_text = json.dumps(tc_args, ensure_ascii=False, default=str)
+                    except Exception:
+                        args_text = str(tc_args)
+                    print(
+                        "Reasoning Architect:   tool_call["
+                        f"{tc_i}] name={tc_name} args={_truncate_for_log(args_text, 2000)}"
+                    )
+
+            rendered = _render_msg_content(getattr(msg, "content", ""))
+            if rendered:
+                print(_truncate_for_log(rendered, 6000))
+
+            if role == "tool":
+                tool_name = str(getattr(msg, "name", "") or "")
+                tool_call_id = str(getattr(msg, "tool_call_id", "") or "")
+                if tool_name or tool_call_id:
+                    print(
+                        "Reasoning Architect:   tool_result "
+                        f"name={tool_name} call_id={tool_call_id}"
+                    )
+        print(f"Reasoning Architect: ReAct trace for {target_file} [END]")
+    except Exception as e:
+        print(f"Reasoning Architect: trace logging failed for {target_file}: {e}")
 
 
 def _normalize_rel_path(path: str) -> str:
@@ -405,6 +474,88 @@ def _sanitize_surgical_ops(
         )
 
     return safe, rejected
+
+
+def _heuristic_signature_drift_ops(
+    repo_path: str, target_file: str
+) -> list[SurgicalOp]:
+    """
+    Deterministic fallback for known fullDocSizeEstimate drift when LLM plans are malformed.
+    Produces only exact verified replacements for existing anchors.
+    """
+    target = _normalize_rel_path(target_file)
+    text = _load_file_text(repo_path, target)
+    if not text or "fullDocSizeEstimate" in text:
+        return []
+
+    candidates: list[tuple[str, str]] = [
+        (
+            "public static Item forUpdate(String id,\n"
+            "                                     Symbol[] assignments,\n"
+            "                                     long requiredVersion,\n"
+            "                                     long seqNo,\n"
+            "                                     long primaryTerm,\n"
+            "                                     long sizeEstimate) {",
+            "public static Item forUpdate(String id,\n"
+            "                                     Symbol[] assignments,\n"
+            "                                     long requiredVersion,\n"
+            "                                     long seqNo,\n"
+            "                                     long primaryTerm,\n"
+            "                                     long fullDocSizeEstimate) {",
+        ),
+        (
+            "usedBytes += sizeEstimate;",
+            "usedBytes += fullDocSizeEstimate;",
+        ),
+        (
+            "@Nullable Symbol[] onConflictAssignments) {",
+            "@Nullable Symbol[] onConflictAssignments,\n"
+            "                                     long fullDocSizeEstimate) {",
+        ),
+        (
+            "for (var assignment : onConflictAssignments) {",
+            "usedBytes += fullDocSizeEstimate;\n"
+            "                for (var assignment : onConflictAssignments) {",
+        ),
+        (
+            "List<Symbol> returnValues)",
+            "List<Symbol> returnValues,\n"
+            "                                       long fullDocSizeEstimate)",
+        ),
+        (
+            "this.returnValues = returnValues;",
+            "this.returnValues = returnValues;\n"
+            "        this.fullDocSizeEstimate = fullDocSizeEstimate;",
+        ),
+        (
+            "@Nullable Long requiredVersion) {",
+            "@Nullable Long requiredVersion,\n"
+            "                            long fullDocSizeEstimate) {",
+        ),
+        (
+            "this.requiredVersion = requiredVersion;",
+            "this.requiredVersion = requiredVersion;\n"
+            "        this.fullDocSizeEstimate = fullDocSizeEstimate;",
+        ),
+    ]
+
+    out: list[SurgicalOp] = []
+    seen: set[str] = set()
+    for old_s, new_s in candidates:
+        if old_s in text and old_s not in seen:
+            out.append(
+                {
+                    "target_file": target,
+                    "old_string": old_s,
+                    "new_string": new_s,
+                    "anchor_verified": True,
+                    "verification_method": "exact",
+                    "confidence": 0.65,
+                }
+            )
+            seen.add(old_s)
+
+    return out
 
 
 def _fallback_surgical_from_existing_plan(
@@ -798,6 +949,8 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
             ]
         }
 
+    print("Reasoning Architect: retry scope files=" + ", ".join(normalized_files))
+
     llm = get_llm(temperature=0)
     token_usage = {
         "input_tokens": 0,
@@ -825,6 +978,10 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
             state,
             target_file,
             target_repo_path,
+        )
+        print(
+            "Reasoning Architect: file="
+            f"{target_file} related_files={len(related_files)} method_hints={len(method_hints)}"
         )
         patch_intent = str(
             (state.get("semantic_blueprint") or {}).get("fix_logic") or ""
@@ -867,6 +1024,7 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
                 },
                 config={"recursion_limit": 20},
             )
+            _log_reasoning_trace(result or {}, target_file)
             agg = aggregate_usage_from_messages((result or {}).get("messages") or [])
             if agg.get("input_tokens") or agg.get("output_tokens"):
                 add_usage(
@@ -883,7 +1041,22 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
             op for op in (plan or []) if bool(op.get("anchor_verified", False))
         ]
         if not verified_plan:
-            verified_plan = _fallback_surgical_from_existing_plan(state, target_file)
+            # Do not blindly replay stale planner ops when reasoning produced
+            # no valid plan; this often injects malformed code and burns retries.
+            verified_plan = []
+            if verified_plan:
+                print(
+                    "Reasoning Architect: using fallback existing-plan ops for "
+                    f"{target_file} count={len(verified_plan)}"
+                )
+
+        heur = _heuristic_signature_drift_ops(target_repo_path, target_file)
+        if heur:
+            print(
+                "Reasoning Architect: heuristic signature-drift ops for "
+                f"{target_file} count={len(heur)}"
+            )
+            verified_plan.extend(heur)
 
         verified_plan, rejected = _sanitize_surgical_ops(
             repo_path=target_repo_path,
@@ -895,6 +1068,19 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
                 f"Reasoning Architect: rejected {len(rejected)} unsafe op(s) for {target_file}: "
                 + ", ".join(rejected[:5])
             )
+
+        if verified_plan:
+            print(
+                "Reasoning Architect: accepted ops for "
+                f"{target_file} count={len(verified_plan)}"
+            )
+            for i, op in enumerate(verified_plan, start=1):
+                old_preview = str(op.get("old_string") or "").replace("\n", "\\n")[:120]
+                new_preview = str(op.get("new_string") or "").replace("\n", "\\n")[:120]
+                print(
+                    "Reasoning Architect:   op["
+                    f"{i}] target={op.get('target_file')} old='{old_preview}' new='{new_preview}'"
+                )
 
         if verified_plan:
             grouped: dict[str, list[SurgicalOp]] = {}

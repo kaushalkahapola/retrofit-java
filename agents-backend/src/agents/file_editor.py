@@ -1541,59 +1541,77 @@ def _execute_surgical_plan(
     Deterministic, pre-verified execution path for surgical operations.
     """
     edits: list[FileEdit] = []
-    full_path = os.path.join(target_repo_path, target_file)
-    try:
-        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-    except Exception as e:
-        return False, f"file_read_error:{e}", []
+    per_file_plans: dict[str, list[SurgicalOp]] = {}
+    for op in surgical_ops or []:
+        tf = _normalize_rel_path(str(op.get("target_file") or target_file))
+        if not tf:
+            tf = _normalize_rel_path(target_file)
+        per_file_plans.setdefault(tf, []).append(op)
 
-    for i, op in enumerate(surgical_ops or []):
-        if not bool(op.get("anchor_verified", False)):
-            return False, f"op_{i}_not_verified", []
-        old_string = str(op.get("old_string") or "")
-        if not old_string:
-            return False, f"op_{i}_empty_old_string", []
-        if old_string not in content:
-            return (
-                False,
-                json.dumps(
-                    {
-                        "type": "anchor_not_found",
-                        "operation_index": i,
-                        "failed_old_string_preview": old_string[:120],
-                        "target_file": target_file,
-                    }
-                ),
-                [],
-            )
+    if not per_file_plans:
+        return False, "empty_surgical_plan", []
 
-    for i, op in enumerate(surgical_ops or []):
-        old_string = str(op.get("old_string") or "")
-        new_string = str(op.get("new_string") or "")
-        result = toolkit.str_replace_in_file(target_file, old_string, new_string)
-        if not str(result).startswith("SUCCESS"):
-            return False, f"op_{i}_apply_failed:{result}", edits
-
-        edits.append(
-            {
-                "target_file": target_file,
-                "mainline_file": mainline_file,
-                "old_string": old_string,
-                "new_string": new_string,
-                "edit_type": "replace",
-                "verified": True,
-                "verification_result": str(op.get("verification_method") or "exact"),
-                "applied": True,
-                "apply_result": str(result),
-            }
-        )
-
+    # Phase 1: verify all anchors in all target files before any mutation.
+    for tf, ops in per_file_plans.items():
+        full_path = os.path.join(target_repo_path, tf)
         try:
             with open(full_path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
         except Exception as e:
-            return False, f"file_read_after_apply_error:{e}", edits
+            return False, f"file_read_error:{tf}:{e}", []
+
+        for i, op in enumerate(ops):
+            if not bool(op.get("anchor_verified", False)):
+                return False, f"op_{i}_not_verified:{tf}", []
+            old_string = str(op.get("old_string") or "")
+            if not old_string:
+                return False, f"op_{i}_empty_old_string:{tf}", []
+            if old_string not in content:
+                return (
+                    False,
+                    json.dumps(
+                        {
+                            "type": "anchor_not_found",
+                            "operation_index": i,
+                            "failed_old_string_preview": old_string[:120],
+                            "target_file": tf,
+                        }
+                    ),
+                    [],
+                )
+
+    # Phase 2: apply edits grouped by target file.
+    for tf, ops in per_file_plans.items():
+        for i, op in enumerate(ops):
+            old_string = str(op.get("old_string") or "")
+            new_string = str(op.get("new_string") or "")
+            result = toolkit.str_replace_in_file(tf, old_string, new_string)
+            if not str(result).startswith("SUCCESS"):
+                return False, f"op_{i}_apply_failed:{tf}:{result}", edits
+
+            edits.append(
+                {
+                    "target_file": tf,
+                    "mainline_file": mainline_file,
+                    "old_string": old_string,
+                    "new_string": new_string,
+                    "edit_type": "replace",
+                    "verified": True,
+                    "verification_result": str(
+                        op.get("verification_method") or "exact"
+                    ),
+                    "applied": True,
+                    "apply_result": str(result),
+                }
+            )
+
+        syntax = toolkit.check_java_syntax(tf)
+        if not _syntax_is_valid(syntax):
+            return (
+                False,
+                f"post_surgical_syntax_failed:{tf}:{_syntax_output(syntax)[:500]}",
+                edits,
+            )
 
     return True, "success", edits
 
