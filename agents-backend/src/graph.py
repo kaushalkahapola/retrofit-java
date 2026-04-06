@@ -27,6 +27,7 @@ from agents import (
     file_editor_node,
     phase_0_optimistic,
     planning_agent_node,
+    reasoning_architect_node,
     structural_locator_node,
     validation_agent,
 )
@@ -154,6 +155,41 @@ def route_validation(state: AgentState) -> str:
         return "END"
 
     if attempts < MAX_VALIDATION_ATTEMPTS:
+
+        def _get_build_issue_types(state_obj: AgentState) -> set[str]:
+            diagnostics = (
+                (state_obj.get("validation_results") or {}).get("build") or {}
+            ).get("diagnostics") or {}
+            issues = diagnostics.get("issues") if isinstance(diagnostics, dict) else []
+            out: set[str] = set()
+            for issue in issues or []:
+                if not isinstance(issue, dict):
+                    continue
+                err = str(issue.get("error_type") or "").strip().lower()
+                if err:
+                    out.add(err)
+            return out
+
+        failed_stage = (state.get("validation_failed_stage") or "").strip().lower()
+        complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
+        needs_reasoning = (
+            complexity in {"REWRITE"}
+            and failure_category == "context_mismatch"
+            and (
+                "api_or_signature_mismatch" in _get_build_issue_types(state)
+                or failed_stage
+                in {"generation_contract_failed", "surgical_plan_execution_failed"}
+                or bool(state.get("force_type_v_until_success"))
+            )
+            and not bool(state.get("validation_repeated_patch_detected"))
+        )
+        if needs_reasoning:
+            print(
+                "Router: Routing to reasoning_architect "
+                f"(complexity={complexity}, category={failure_category})."
+            )
+            return "reasoning_architect"
+
         failed_stage = (state.get("validation_failed_stage") or "").strip().lower()
         complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
         repeated_patch = bool(state.get("validation_repeated_patch_detected", False))
@@ -307,6 +343,7 @@ workflow.add_node("phase_0_optimistic", phase_0_optimistic)
 workflow.add_node("context_analyzer", context_analyzer_node)
 workflow.add_node("structural_locator", structural_locator_node)
 workflow.add_node("planning_agent", planning_agent_node)
+workflow.add_node("reasoning_architect", reasoning_architect_node)
 workflow.add_node("hunk_generator", file_editor_node)
 workflow.add_node("validation", validation_agent)
 
@@ -343,6 +380,7 @@ workflow.add_conditional_edges(
     },
 )
 workflow.add_edge("planning_agent", "hunk_generator")
+workflow.add_edge("reasoning_architect", "hunk_generator")
 workflow.add_edge("hunk_generator", "validation")
 
 # Validation feedback loop: pass -> END, fail -> retry Agent 3 or give up
@@ -353,6 +391,7 @@ workflow.add_conditional_edges(
         "END": END,
         "structural_locator": "structural_locator",
         "planning_agent": "planning_agent",
+        "reasoning_architect": "reasoning_architect",
         "hunk_generator": "hunk_generator",
     },
 )

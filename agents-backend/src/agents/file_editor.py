@@ -49,8 +49,9 @@ except ImportError:  # Compatibility fallback for older langgraph versions
     class GraphRecursionError(Exception):
         pass
 
+
 from agents.hunk_generator_tools import HunkGeneratorToolkit
-from state import AdaptedHunk, AgentState, FileEdit, SemanticBlueprint
+from state import AdaptedHunk, AgentState, FileEdit, SemanticBlueprint, SurgicalOp
 from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_line
 from utils.java_ts_invocation_names import callee_names_from_java_snippet_lines
 from utils.llm_provider import get_llm
@@ -1493,6 +1494,110 @@ def _should_lock_coupled_retry(
     return False
 
 
+def _normalize_surgical_plan_map(
+    surgical_plans: dict[str, Any] | None,
+) -> dict[str, list[SurgicalOp]]:
+    out: dict[str, list[SurgicalOp]] = {}
+    for raw_file, raw_ops in (surgical_plans or {}).items():
+        file_key = _normalize_rel_path(str(raw_file or ""))
+        if not file_key or not isinstance(raw_ops, list):
+            continue
+        ops: list[SurgicalOp] = []
+        for op in raw_ops:
+            if not isinstance(op, dict):
+                continue
+            old_s = str(op.get("old_string") or "")
+            new_s = str(op.get("new_string") or "")
+            if not old_s:
+                continue
+            ops.append(
+                {
+                    "target_file": _normalize_rel_path(
+                        str(op.get("target_file") or file_key)
+                    ),
+                    "old_string": old_s,
+                    "new_string": new_s,
+                    "anchor_verified": bool(op.get("anchor_verified", False)),
+                    "verification_method": str(
+                        op.get("verification_method") or "exact"
+                    ),
+                    "confidence": float(op.get("confidence", 0.0) or 0.0),
+                }
+            )
+        if ops:
+            out[file_key] = ops
+    return out
+
+
+def _execute_surgical_plan(
+    *,
+    surgical_ops: list[SurgicalOp],
+    target_file: str,
+    mainline_file: str,
+    target_repo_path: str,
+    toolkit: HunkGeneratorToolkit,
+) -> tuple[bool, str, list[FileEdit]]:
+    """
+    Deterministic, pre-verified execution path for surgical operations.
+    """
+    edits: list[FileEdit] = []
+    full_path = os.path.join(target_repo_path, target_file)
+    try:
+        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except Exception as e:
+        return False, f"file_read_error:{e}", []
+
+    for i, op in enumerate(surgical_ops or []):
+        if not bool(op.get("anchor_verified", False)):
+            return False, f"op_{i}_not_verified", []
+        old_string = str(op.get("old_string") or "")
+        if not old_string:
+            return False, f"op_{i}_empty_old_string", []
+        if old_string not in content:
+            return (
+                False,
+                json.dumps(
+                    {
+                        "type": "anchor_not_found",
+                        "operation_index": i,
+                        "failed_old_string_preview": old_string[:120],
+                        "target_file": target_file,
+                    }
+                ),
+                [],
+            )
+
+    for i, op in enumerate(surgical_ops or []):
+        old_string = str(op.get("old_string") or "")
+        new_string = str(op.get("new_string") or "")
+        result = toolkit.str_replace_in_file(target_file, old_string, new_string)
+        if not str(result).startswith("SUCCESS"):
+            return False, f"op_{i}_apply_failed:{result}", edits
+
+        edits.append(
+            {
+                "target_file": target_file,
+                "mainline_file": mainline_file,
+                "old_string": old_string,
+                "new_string": new_string,
+                "edit_type": "replace",
+                "verified": True,
+                "verification_result": str(op.get("verification_method") or "exact"),
+                "applied": True,
+                "apply_result": str(result),
+            }
+        )
+
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+        except Exception as e:
+            return False, f"file_read_after_apply_error:{e}", edits
+
+    return True, "success", edits
+
+
 def _apply_plan_entries_deterministically(
     *,
     toolkit: HunkGeneratorToolkit,
@@ -1627,7 +1732,9 @@ def _env_flag(name: str, default: bool = False) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _to_int_env(name: str, default: int, minimum: int = 0, maximum: int = 100000) -> int:
+def _to_int_env(
+    name: str, default: int, minimum: int = 0, maximum: int = 100000
+) -> int:
     raw = os.getenv(name, "").strip()
     try:
         value = int(raw) if raw else int(default)
@@ -2009,9 +2116,7 @@ async def _run_react_edit_pass(
 
         return True, "react_apply_success"
     except GraphRecursionError as e:
-        print(
-            f"    Agent 3: ReAct recursion limit exceeded for {target_file}: {e}"
-        )
+        print(f"    Agent 3: ReAct recursion limit exceeded for {target_file}: {e}")
         return False, f"react_recursion_limit_exceeded:{e}"
     except Exception as e:
         err = str(e)
@@ -2092,6 +2197,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
     mapped_target_context: dict = state.get("mapped_target_context") or {}
     hunk_generation_plan: dict = state.get("hunk_generation_plan") or {}
+    surgical_plans = _normalize_surgical_plan_map(state.get("surgical_plans") or {})
+    reasoning_iterations = int(state.get("reasoning_iterations") or 0)
     patch_complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
     semantic_blueprint: SemanticBlueprint = state.get("semantic_blueprint")
     patch_analysis: list = state.get("patch_analysis") or []
@@ -2141,6 +2248,11 @@ async def file_editor_node(state: AgentState, config) -> dict:
     if validation_attempts > 0 and error_context:
         print(
             f"  Agent 3: Retry #{validation_attempts} - deterministic re-application with failure context."
+        )
+    if surgical_plans:
+        print(
+            "  Agent 3: Received surgical plans for "
+            f"{len(surgical_plans)} file(s) (reasoning_iterations={reasoning_iterations})."
         )
 
     # Setup
@@ -2264,9 +2376,23 @@ async def file_editor_node(state: AgentState, config) -> dict:
             if not any(p for p in candidate_paths if p in retry_files):
                 continue
 
+        normalized_mainline_file = _normalize_rel_path(mainline_file)
+        normalized_target_file = _normalize_rel_path(target_file)
+        surgical_ops_for_file = []
+        if validation_attempts > 0:
+            surgical_ops_for_file = (
+                surgical_plans.get(normalized_target_file)
+                or surgical_plans.get(normalized_mainline_file)
+                or []
+            )
+
         # Get plan entries for this file
         plan_entries: list[dict[str, Any]] = hunk_generation_plan.get(mainline_file, [])
-        if not plan_entries and patch_complexity in {"TRIVIAL", "STRUCTURAL"}:
+        if (
+            not plan_entries
+            and not surgical_ops_for_file
+            and patch_complexity in {"TRIVIAL", "STRUCTURAL"}
+        ):
             fallback_raw_hunks = raw_hunks_by_file.get(mainline_file, [])
             plan_entries = _build_fallback_plan_entries(
                 raw_hunks=fallback_raw_hunks,
@@ -2278,11 +2404,11 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     f"  Agent 3: Built {len(plan_entries)} deterministic fallback edit(s) for {mainline_file}."
                 )
 
-        if not plan_entries:
+        if not plan_entries and not surgical_ops_for_file:
             print(f"  Agent 3: No plan entries for {mainline_file} - skipping.")
             continue
 
-        if any(
+        if not surgical_ops_for_file and any(
             "mapping_low_confidence" in str((e or {}).get("notes") or "")
             for e in plan_entries
         ):
@@ -2303,10 +2429,16 @@ async def file_editor_node(state: AgentState, config) -> dict:
             )
             continue
 
-        print(
-            f"  Agent 3: Processing {len(plan_entries)} edit(s) for "
-            f"{target_file} (op={change_type})"
-        )
+        if surgical_ops_for_file:
+            print(
+                f"  Agent 3: Processing surgical plan with {len(surgical_ops_for_file)} "
+                f"operation(s) for {target_file} (op={change_type})"
+            )
+        else:
+            print(
+                f"  Agent 3: Processing {len(plan_entries)} edit(s) for "
+                f"{target_file} (op={change_type})"
+            )
 
         adaptation_type = _classify_file_edit_type(
             mainline_file=mainline_file,
@@ -2516,46 +2648,93 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     f"    Agent 3: Plan preflight read error for {target_file}: {_pex}"
                 )
 
-        # Step B: Apply edits via deterministic or ReAct path.
+        # Step B: Apply edits via surgical fast-path or deterministic/ReAct path.
         used_react = False
-        if "TYPE_V" in execution_types:
-            unverified_entries = _collect_unverified_entries(plan_entries)
-            if unverified_entries:
-                print(
-                    f"    Agent 3: TYPE_V has {len(unverified_entries)} unverified entries; "
-                    "attempting targeted ReAct repair instead of empty-generation fail-close."
-                )
-
-        if deterministic_only:
-            agent_metrics["deterministic_apply_attempts"] += 1
-            ok, apply_reason = _apply_plan_entries_deterministically(
-                toolkit=toolkit,
-                target_repo_path=target_repo_path,
+        used_surgical = False
+        if surgical_ops_for_file:
+            ok, apply_reason, surgical_edits = _execute_surgical_plan(
+                surgical_ops=surgical_ops_for_file,
                 target_file=target_file,
-                plan_entries=plan_entries,
-                current_attempt_trajectory=current_attempt_trajectory,
+                mainline_file=mainline_file,
+                target_repo_path=target_repo_path,
+                toolkit=toolkit,
             )
             if not ok:
-                agent_metrics["deterministic_apply_failures"] += 1
-                fail_bucket = classify_syntax_failure_message(apply_reason)
-                skip_react = fail_bucket == "statement_outside_block"
-                if skip_react:
-                    agent_metrics["react_skipped_statement_outside_block"] += 1
+                print(
+                    f"    Agent 3: Surgical plan execution failed for {target_file}: {apply_reason}"
+                )
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "surgical_plan_execution_failed"
+                task_entry["error"] = str(apply_reason)[:1000]
+                _git_reset_file(target_repo_path, target_file)
+                continue
+            used_surgical = True
+            adapted_file_edits.extend(surgical_edits)
+        else:
+            if "TYPE_V" in execution_types:
+                unverified_entries = _collect_unverified_entries(plan_entries)
+                if unverified_entries:
+                    print(
+                        f"    Agent 3: TYPE_V has {len(unverified_entries)} unverified entries; "
+                        "attempting targeted ReAct repair instead of empty-generation fail-close."
+                    )
+
+            if deterministic_only:
+                agent_metrics["deterministic_apply_attempts"] += 1
+                ok, apply_reason = _apply_plan_entries_deterministically(
+                    toolkit=toolkit,
+                    target_repo_path=target_repo_path,
+                    target_file=target_file,
+                    plan_entries=plan_entries,
+                    current_attempt_trajectory=current_attempt_trajectory,
+                )
+                if not ok:
+                    agent_metrics["deterministic_apply_failures"] += 1
+                    fail_bucket = classify_syntax_failure_message(apply_reason)
+                    skip_react = fail_bucket == "statement_outside_block"
+                    if skip_react:
+                        agent_metrics["react_skipped_statement_outside_block"] += 1
+                        print(
+                            f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}. "
+                            "ESCALATION_SKIP_REACT: statement_outside_block (avoid token burn)."
+                        )
+                        _git_reset_file(target_repo_path, target_file)
+                        task_entry["status"] = "failed"
+                        task_entry["reason"] = "deterministic_syntax_failed_no_react"
+                        task_entry["error"] = str(apply_reason)[:800]
+                        continue
+
                     print(
                         f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}. "
-                        "ESCALATION_SKIP_REACT: statement_outside_block (avoid token burn)."
+                        "Escalating to smart ReAct refinement."
                     )
                     _git_reset_file(target_repo_path, target_file)
-                    task_entry["status"] = "failed"
-                    task_entry["reason"] = "deterministic_syntax_failed_no_react"
-                    task_entry["error"] = str(apply_reason)[:800]
-                    continue
-
-                print(
-                    f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}. "
-                    "Escalating to smart ReAct refinement."
-                )
-                _git_reset_file(target_repo_path, target_file)
+                    used_react = True
+                    agent_metrics["react_escalations"] += 1
+                    react_ok, react_reason = await _run_react_edit_pass(
+                        llm=llm,
+                        toolkit=toolkit,
+                        state=state,
+                        mainline_file=mainline_file,
+                        target_file=target_file,
+                        plan_entries=plan_entries,
+                        validation_attempts=validation_attempts,
+                        error_context=error_context,
+                        current_attempt_trajectory=current_attempt_trajectory,
+                        extra_retry_context=apply_reason,
+                        patch_complexity=patch_complexity,
+                        type_v_mode=("TYPE_V" in execution_types),
+                        token_usage=token_usage,
+                    )
+                    if not react_ok:
+                        task_entry["status"] = "failed"
+                        task_entry["reason"] = "generation_contract_failed"
+                        task_entry["error"] = (
+                            f"react_refinement_failed: {react_reason}"[:1000]
+                        )
+                        _git_reset_file(target_repo_path, target_file)
+                        continue
+            else:
                 used_react = True
                 agent_metrics["react_escalations"] += 1
                 react_ok, react_reason = await _run_react_edit_pass(
@@ -2568,43 +2747,17 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     validation_attempts=validation_attempts,
                     error_context=error_context,
                     current_attempt_trajectory=current_attempt_trajectory,
-                    extra_retry_context=apply_reason,
                     patch_complexity=patch_complexity,
                     type_v_mode=("TYPE_V" in execution_types),
                     token_usage=token_usage,
                 )
                 if not react_ok:
+                    print(f"    Agent 3: Agent failed: {react_reason}")
                     task_entry["status"] = "failed"
                     task_entry["reason"] = "generation_contract_failed"
-                    task_entry["error"] = f"react_refinement_failed: {react_reason}"[
-                        :1000
-                    ]
+                    task_entry["error"] = str(react_reason)[:500]
                     _git_reset_file(target_repo_path, target_file)
                     continue
-        else:
-            used_react = True
-            agent_metrics["react_escalations"] += 1
-            react_ok, react_reason = await _run_react_edit_pass(
-                llm=llm,
-                toolkit=toolkit,
-                state=state,
-                mainline_file=mainline_file,
-                target_file=target_file,
-                plan_entries=plan_entries,
-                validation_attempts=validation_attempts,
-                error_context=error_context,
-                current_attempt_trajectory=current_attempt_trajectory,
-                patch_complexity=patch_complexity,
-                type_v_mode=("TYPE_V" in execution_types),
-                token_usage=token_usage,
-            )
-            if not react_ok:
-                print(f"    Agent 3: Agent failed: {react_reason}")
-                task_entry["status"] = "failed"
-                task_entry["reason"] = "generation_contract_failed"
-                task_entry["error"] = str(react_reason)[:500]
-                _git_reset_file(target_repo_path, target_file)
-                continue
 
         task_entry["completed_steps"].append("apply_edits")
 
@@ -2625,7 +2778,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
             _git_reset_file(target_repo_path, target_file)
             continue
 
-        if "TYPE_V" in execution_types:
+        if "TYPE_V" in execution_types and not used_surgical:
             invariants = _collect_file_plan_invariants(plan_entries)
             target_after_text = _load_file_text(target_repo_path, target_file)
             inv_ok, inv_reason = _invariants_satisfied(
@@ -2950,23 +3103,25 @@ async def file_editor_node(state: AgentState, config) -> dict:
             f"({len(diff_text.splitlines())} lines)"
         )
 
-        # Record pseudo-FileEdit to satisfy legacy tracking and trace logging
-        fe: FileEdit = {
-            "target_file": target_file,
-            "mainline_file": mainline_file,
-            "old_string": "<deterministic file-editor diff>"
-            if not used_react
-            else "<line-based ReAct agent diff>",
-            "new_string": diff_text.strip(),
-            "edit_type": "replace",
-            "verified": True,
-            "verification_result": "Deterministic file editor applied"
-            if not used_react
-            else "ReAct agent applied",
-            "applied": True,
-            "apply_result": "SUCCESS",
-        }
-        adapted_file_edits.append(fe)
+        # Record pseudo-FileEdit to satisfy legacy tracking and trace logging.
+        # Surgical path already contributes concrete FileEdit rows per operation.
+        if not used_surgical:
+            fe: FileEdit = {
+                "target_file": target_file,
+                "mainline_file": mainline_file,
+                "old_string": "<deterministic file-editor diff>"
+                if not used_react
+                else "<line-based ReAct agent diff>",
+                "new_string": diff_text.strip(),
+                "edit_type": "replace",
+                "verified": True,
+                "verification_result": "Deterministic file editor applied"
+                if not used_react
+                else "ReAct agent applied",
+                "applied": True,
+                "apply_result": "SUCCESS",
+            }
+            adapted_file_edits.append(fe)
 
         # Step D: Extract just the hunk portions from the full git diff output
         # git diff HEAD produces: diff --git a/... b/... \n--- a/... \n+++ b/...\n@@...
@@ -2988,7 +3143,12 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 break
 
         # Step E: Intent check (skip extra LLM call for deterministic TYPE I/II/III)
-        if deterministic_only and not used_react:
+        if used_surgical:
+            intent_ok = True
+            print(
+                f"    Agent 3: Skipping LLM intent check for {target_file} (surgical plan)."
+            )
+        elif deterministic_only and not used_react:
             intent_ok = True
             print(
                 f"    Agent 3: Skipping LLM intent check for {target_file} ({adaptation_type})."

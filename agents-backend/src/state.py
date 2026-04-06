@@ -84,6 +84,31 @@ Each entry schema:
 """
 
 
+class SurgicalOp(TypedDict):
+    """
+    Verified deterministic operation produced by Reasoning Architect.
+    """
+
+    target_file: str
+    old_string: str
+    new_string: str
+    anchor_verified: bool
+    verification_method: str  # "exact" | "grep_confirmed" | "ast_boundary"
+    confidence: float
+
+
+class ReasoningContext(TypedDict):
+    """
+    Per-file reasoning context captured for surgical retry planning.
+    """
+
+    current_file: str
+    failure_kind: str  # "signature_drift" | "logic_moved" | "anchor_not_found"
+    build_diagnostics: dict[str, Any]
+    iteration: int
+    surgical_ops: list[SurgicalOp]
+
+
 class FileEdit(TypedDict):
     """
     One atomic str_replace edit applied directly to a checked-out target file.
@@ -201,6 +226,11 @@ class AgentState(TypedDict):
     generation_checklist: NotRequired[
         list[dict[str, Any]]
     ]  # Per-hunk generation status (success/failed/noop) for fail-closed orchestration
+    reasoning_context: NotRequired[ReasoningContext]
+    surgical_plans: NotRequired[
+        dict[str, list[SurgicalOp]]
+    ]  # per-target-file surgical operations from Reasoning Architect
+    reasoning_iterations: NotRequired[int]
 
     # --- Legacy / Agent 2 compatibility ---
     implementation_plan: (
