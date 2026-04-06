@@ -174,8 +174,9 @@ class EnsembleRetriever:
         with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
             results = list(executor.map(process, java_files))
 
+        # Update Symbol Index
         for i, (symbols, processed_code) in enumerate(results):
-            # Update Symbol Index
+            # Update Symbol Index with weights for different symbol types
             for sym in symbols:
                 if sym not in self.symbol_index:
                     self.symbol_index[sym] = set()
@@ -185,9 +186,14 @@ class EnsembleRetriever:
 
             documents.append(processed_code)
 
-        # Build TF-IDF Matrix
+        # Build TF-IDF Matrix with BM25-like behavior (sublinear TF)
         print("Building TF-IDF matrix...")
-        self.vectorizer = TfidfVectorizer(max_features=5000)
+        self.vectorizer = TfidfVectorizer(
+            max_features=10000,
+            sublinear_tf=True,
+            ngram_range=(1, 2),
+            stop_words="english",
+        )
         try:
             self.target_matrix = self.vectorizer.fit_transform(documents)
         except ValueError:
@@ -236,7 +242,7 @@ class EnsembleRetriever:
         return [{"file": f, "score": 1.0, "method": "GIT"} for f in set(candidates)]
 
     # --- SIGNAL 2: SYMBOL MATCHING ---
-    def get_symbol_candidates(self, file_path, commit, top_k=5):
+    def get_symbol_candidates(self, file_path, commit, top_k=8):
         # Lazy build index only when Phase 2 is needed
         self._ensure_index_built()
 
@@ -251,7 +257,8 @@ class EnsembleRetriever:
             if s in self.symbol_index:
                 matches = self.symbol_index[s]
                 count = self.symbol_counts[s]
-                weight = 1.0 / count
+                # Inverse document frequency (IDF) weight
+                weight = 1.0 / (1.0 + np.log(count))
 
                 for m_file in matches:
                     scores[m_file] = scores.get(m_file, 0) + weight
@@ -259,12 +266,15 @@ class EnsembleRetriever:
         results = []
         if not scores:
             return []
-        max_score = max(scores.values())
+        
+        # Normalize by max possible score for this query
+        max_possible = sum(1.0 / (1.0 + np.log(self.symbol_counts[s])) for s in query_symbols if s in self.symbol_index)
+        if max_possible == 0: return []
 
         sorted_files = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         for f, raw_score in sorted_files[:top_k]:
-            norm_score = raw_score / max_score
-            if norm_score > 0.1:
+            norm_score = raw_score / max_possible
+            if norm_score > 0.05:
                 results.append(
                     {
                         "file": self.target_files[f],

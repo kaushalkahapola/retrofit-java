@@ -120,13 +120,58 @@ def _classify_apply_failure(raw_output: str) -> tuple[str, list[str], list[dict]
     return category, sorted(retry_files), diagnostics
 
 
-def _classify_build_failure(raw_output: str) -> tuple[str, list[str], list[dict], str]:
+def _classify_build_failure(raw_output: str, target_repo_path: str = "", effective_hunks: list[AdaptedHunk] = []) -> tuple[str, list[str], list[dict], str, list[str]]:
     """Deterministic build failure parser for retry routing and concise diagnostics."""
     text = str(raw_output or "")
     text_lower = text.lower()
 
     retry_files: set[str] = set()
+    retry_hunk_ids: set[str] = set()
     diagnostics: list[dict] = []
+
+    # Filter out common noise and non-project files
+    def is_relevant_file(path: str) -> bool:
+        p = path.lower()
+        if "test" in p or "fixtures" in p:
+            return False
+        if not p.endswith(".java"):
+            return False
+        # Only include files that likely belong to the project source
+        return "src/main/java" in p or "org/elasticsearch" in p or "io/crate" in p
+
+    # Map compiler errors to files and lines
+    # javac format: [ERROR] /path/to/File.java:[line,col] error message
+    # gradle format: /path/to/File.java:line: error message
+    error_locations = []
+    for line in text.splitlines():
+        if ": error:" in line or "error: " in line:
+            # Try to extract file and line number
+            match = re.search(r"([^:\s]+\.java):(\d+):", line)
+            if match:
+                file_path = match.group(1).replace("\\", "/")
+                # Normalize path if it starts with /repo/
+                if file_path.startswith("/repo/"):
+                    file_path = file_path[len("/repo/"):]
+                
+                if is_relevant_file(file_path):
+                    line_num = int(match.group(2))
+                    retry_files.add(file_path)
+                    error_locations.append((file_path, line_num))
+
+    # Failure Attribution: Map error locations to specific hunks using (mainline_file, hunk_index)
+    for f_path, l_num in error_locations:
+        for hunk in effective_hunks:
+            target_f = str(hunk.get("target_file") or "").replace("\\", "/")
+            if target_f == f_path:
+                # Check if the error line is within the hunk's range
+                h_start = int(hunk.get("insertion_line") or 0)
+                h_text = str(hunk.get("hunk_text") or "")
+                h_len = len(h_text.splitlines())
+                if h_start - 5 <= l_num <= h_start + h_len + 5:
+                    m_file = hunk.get("mainline_file", "")
+                    h_idx = hunk.get("hunk_index", 0)
+                    if m_file:
+                        retry_hunk_ids.add(f"{m_file}:{h_idx}")
 
     file_hit_patterns = [
         r"(/repo/[^:\n]+\.java):\d+:",
@@ -138,7 +183,7 @@ def _classify_build_failure(raw_output: str) -> tuple[str, list[str], list[dict]
             p = (m or "").strip().replace("\\", "/")
             if p.startswith("/repo/"):
                 p = p[len("/repo/") :]
-            if p:
+            if p and is_relevant_file(p):
                 retry_files.add(p)
 
     if (
@@ -152,19 +197,29 @@ def _classify_build_failure(raw_output: str) -> tuple[str, list[str], list[dict]
             }
         )
         reason = "Java syntax errors detected after patch application (likely malformed hunk output)."
-        return "context_mismatch", sorted(retry_files), diagnostics, reason
+        return "context_mismatch", sorted(retry_files), diagnostics, reason, sorted(retry_hunk_ids)
 
     if (
         "cannot find symbol" in text_lower
         or "method" in text_lower
         and "cannot be applied" in text_lower
     ):
-        # Capture a few concrete javac error lines to provide grounded retry context.
+        # Capture concrete javac error lines but filter out Java stdlib and common identifiers
         concrete_errors = []
+        noise_identifiers = {"symbol", "location", "variable", "class", "method", "package", "type"}
+        
         for ln in text.splitlines():
             ll = ln.strip()
-            if ": error:" in ll and len(concrete_errors) < 8:
-                concrete_errors.append(ll)
+            if ": error: cannot find symbol" in ll and len(concrete_errors) < 8:
+                # Extract the symbol name to see if it's actually relevant
+                sym_match = re.search(r"symbol:\s+(?:variable|method|class)\s+(\w+)", text[text.find(ll):])
+                if sym_match:
+                    sym = sym_match.group(1)
+                    if sym.lower() not in noise_identifiers and len(sym) > 3:
+                        concrete_errors.append(ll)
+                else:
+                    concrete_errors.append(ll)
+
         diagnostics.append(
             {
                 "error_type": "api_or_signature_mismatch",
@@ -175,7 +230,7 @@ def _classify_build_failure(raw_output: str) -> tuple[str, list[str], list[dict]
         reason = "API/signature mismatch in generated patch against target branch."
         if concrete_errors:
             reason += " Compiler errors: " + " | ".join(concrete_errors[:3])
-        return "context_mismatch", sorted(retry_files), diagnostics, reason
+        return "context_mismatch", sorted(retry_files), diagnostics, reason, sorted(retry_hunk_ids)
 
     diagnostics.append(
         {
@@ -186,7 +241,7 @@ def _classify_build_failure(raw_output: str) -> tuple[str, list[str], list[dict]
     reason = (
         "Build failed; deterministic parser could not identify a narrower category."
     )
-    return "unknown", sorted(retry_files), diagnostics, reason
+    return "unknown", sorted(retry_files), diagnostics, reason, sorted(retry_hunk_ids)
 
 
 def _format_transition_summary(transition_eval: dict) -> str:
@@ -610,8 +665,8 @@ async def validation_agent(state: AgentState, config) -> dict:
             "raw": build_res.get("output", ""),
         }
         if not build_res.get("success", False):
-            failure_category, retry_files, diagnostics, analysis = (
-                _classify_build_failure(build_res.get("output", ""))
+            failure_category, retry_files, diagnostics, analysis, retry_hunks = (
+                _classify_build_failure(build_res.get("output", ""), target_repo_path, effective_code_hunks)
             )
             if type_v_present and type_v_files:
                 retry_files = sorted(set(retry_files) | set(type_v_files))
@@ -630,6 +685,7 @@ async def validation_agent(state: AgentState, config) -> dict:
             validation_results["build"]["diagnostics"] = {
                 "category": failure_category,
                 "retry_files": retry_files,
+                "retry_hunks": retry_hunks,
                 "issues": diagnostics,
             }
             trace.append(
@@ -645,6 +701,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 "regeneration_hint": analysis,
                 "validation_failure_category": failure_category,
                 "validation_retry_files": retry_files,
+                "validation_retry_hunks": retry_hunks,
                 "force_type_v_until_success": sticky_type_v,
                 "force_type_v_reason": sticky_reason,
                 "force_type_v_retry_files": sticky_scope_files,
@@ -938,12 +995,17 @@ async def validation_agent(state: AgentState, config) -> dict:
             }
 
             if not build_res.get("success"):
-                # Use LLM to analyze compilation failure
-                analysis = await _analyze_failure(
-                    "Compilation", build_res.get("output", ""), state
+                # Failure Attribution: Map error locations to specific hunks
+                failure_category, retry_files, diagnostics, analysis, retry_hunks = (
+                    _classify_build_failure(build_res.get("output", ""), target_repo_path, effective_code_hunks)
                 )
                 validation_results["compilation"]["agent_evaluation"] = analysis
                 validation_results["compilation"]["error_context"] = analysis
+                validation_results["compilation"]["diagnostics"] = {
+                    "category": failure_category,
+                    "retry_files": retry_files,
+                    "retry_hunks": retry_hunks,
+                }
                 trace.append(
                     f"\n**Final Status: COMPILATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
                 )
@@ -954,6 +1016,8 @@ async def validation_agent(state: AgentState, config) -> dict:
                     "validation_error_context": f"Compilation failed: {analysis}",
                     "validation_results": validation_results,
                     "regeneration_hint": analysis,  # For hunk generator to use
+                    "validation_retry_files": retry_files,
+                    "validation_retry_hunks": retry_hunks,
                 }
             else:
                 validation_results["compilation"]["agent_evaluation"] = (
