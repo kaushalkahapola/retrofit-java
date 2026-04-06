@@ -1,8 +1,8 @@
 # Validation Trace
 
 ## Blueprint Summary
-- **Root Cause**: The vulnerability arises from inaccurate or missing estimation of the full document size in memory during update and insert operations, which can lead to incorrect memory accounting and potential resource exhaustion or denial of service.
-- **Fix Logic**: Introduce and propagate a precise 'fullDocSizeEstimate' parameter representing the expected memory footprint of the full document loaded from disk, and incorporate this estimate into memory usage calculations for update and insert operations to ensure accurate resource tracking.
+- **Root Cause**: The vulnerability arises from inaccurate memory usage estimation of document updates and inserts, which can lead to resource exhaustion or denial of service due to under-accounting of the full document size when loaded from disk.
+- **Fix Logic**: Introduce a new parameter 'fullDocSizeEstimate' representing the expected full document size in bytes when loaded from disk, and incorporate this estimate into memory usage calculations for update and insert operations, ensuring more accurate resource accounting and preventing underestimation of memory usage.
 - **Dependent APIs**: ['ColumnIndexWriterProjection.fullDocSizeEstimate', 'ColumnIndexWriterProjector constructor', 'RamUsageEstimator.sizeOf', 'ShardUpsertRequest.Item.forInsert', 'ShardUpsertRequest.Item.forUpdate', 'Symbol.ramBytesUsed', 'UpdateProjection.fullDocSizeEstimate', 'estimate', 'estimatedSizePerRow', 'estimation', 'fullDocSizeEstimate', 'if']
 
 ## Hunk Segregation
