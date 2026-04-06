@@ -120,7 +120,9 @@ def _classify_apply_failure(raw_output: str) -> tuple[str, list[str], list[dict]
     return category, sorted(retry_files), diagnostics
 
 
-def _classify_build_failure(raw_output: str, target_repo_path: str = "", effective_hunks: list[AdaptedHunk] = []) -> tuple[str, list[str], list[dict], str, list[str]]:
+def _classify_build_failure(
+    raw_output: str, target_repo_path: str = "", effective_hunks: list[AdaptedHunk] = []
+) -> tuple[str, list[str], list[dict], str, list[str]]:
     """Deterministic build failure parser for retry routing and concise diagnostics."""
     text = str(raw_output or "")
     text_lower = text.lower()
@@ -140,21 +142,24 @@ def _classify_build_failure(raw_output: str, target_repo_path: str = "", effecti
         return "src/main/java" in p or "org/elasticsearch" in p or "io/crate" in p
 
     # Map compiler errors to files and lines
-    # javac format: [ERROR] /path/to/File.java:[line,col] error message
-    # gradle format: /path/to/File.java:line: error message
+    # maven format: [ERROR] /path/to/File.java:[line,col] error message
+    # gradle/javac format: /path/to/File.java:line: error message
     error_locations = []
     for line in text.splitlines():
         if ": error:" in line or "error: " in line:
             # Try to extract file and line number
-            match = re.search(r"([^:\s]+\.java):(\d+):", line)
+            match = re.search(
+                r"([^:\s]+\.java):(?:\[(\d+),\d+\]|(\d+)):",
+                line,
+            )
             if match:
                 file_path = match.group(1).replace("\\", "/")
                 # Normalize path if it starts with /repo/
                 if file_path.startswith("/repo/"):
-                    file_path = file_path[len("/repo/"):]
-                
+                    file_path = file_path[len("/repo/") :]
+
                 if is_relevant_file(file_path):
-                    line_num = int(match.group(2))
+                    line_num = int(match.group(2) or match.group(3) or 0)
                     retry_files.add(file_path)
                     error_locations.append((file_path, line_num))
 
@@ -174,13 +179,16 @@ def _classify_build_failure(raw_output: str, target_repo_path: str = "", effecti
                         retry_hunk_ids.add(f"{m_file}:{h_idx}")
 
     file_hit_patterns = [
+        r"(/repo/[^:\n]+\.java):\[(\d+),\d+\]:",
         r"(/repo/[^:\n]+\.java):\d+:",
+        r"([^:\s]+\.java):\[(\d+),\d+\]:",
         r"(x-pack/[^:\n]+\.java):\d+:",
         r"error:\s+patch failed:\s+([^:\n]+):\d+",
     ]
     for pat in file_hit_patterns:
         for m in re.findall(pat, text, flags=re.IGNORECASE):
-            p = (m or "").strip().replace("\\", "/")
+            p = m[0] if isinstance(m, tuple) else m
+            p = (p or "").strip().replace("\\", "/")
             if p.startswith("/repo/"):
                 p = p[len("/repo/") :]
             if p and is_relevant_file(p):
@@ -197,7 +205,13 @@ def _classify_build_failure(raw_output: str, target_repo_path: str = "", effecti
             }
         )
         reason = "Java syntax errors detected after patch application (likely malformed hunk output)."
-        return "context_mismatch", sorted(retry_files), diagnostics, reason, sorted(retry_hunk_ids)
+        return (
+            "context_mismatch",
+            sorted(retry_files),
+            diagnostics,
+            reason,
+            sorted(retry_hunk_ids),
+        )
 
     if (
         "cannot find symbol" in text_lower
@@ -206,13 +220,24 @@ def _classify_build_failure(raw_output: str, target_repo_path: str = "", effecti
     ):
         # Capture concrete javac error lines but filter out Java stdlib and common identifiers
         concrete_errors = []
-        noise_identifiers = {"symbol", "location", "variable", "class", "method", "package", "type"}
-        
+        noise_identifiers = {
+            "symbol",
+            "location",
+            "variable",
+            "class",
+            "method",
+            "package",
+            "type",
+        }
+
         for ln in text.splitlines():
             ll = ln.strip()
             if ": error: cannot find symbol" in ll and len(concrete_errors) < 8:
                 # Extract the symbol name to see if it's actually relevant
-                sym_match = re.search(r"symbol:\s+(?:variable|method|class)\s+(\w+)", text[text.find(ll):])
+                sym_match = re.search(
+                    r"symbol:\s+(?:variable|method|class)\s+(\w+)",
+                    text[text.find(ll) :],
+                )
                 if sym_match:
                     sym = sym_match.group(1)
                     if sym.lower() not in noise_identifiers and len(sym) > 3:
@@ -230,7 +255,13 @@ def _classify_build_failure(raw_output: str, target_repo_path: str = "", effecti
         reason = "API/signature mismatch in generated patch against target branch."
         if concrete_errors:
             reason += " Compiler errors: " + " | ".join(concrete_errors[:3])
-        return "context_mismatch", sorted(retry_files), diagnostics, reason, sorted(retry_hunk_ids)
+        return (
+            "context_mismatch",
+            sorted(retry_files),
+            diagnostics,
+            reason,
+            sorted(retry_hunk_ids),
+        )
 
     diagnostics.append(
         {
@@ -274,21 +305,29 @@ def _extract_structured_failure_context(
     text = str(build_error or hunk_apply_error or "")
 
     # Extract failed file + line from javac output
-    file_line_pattern = re.compile(r"([a-zA-Z0-9_/.-]+\.java):(\d+):")
+    file_line_pattern = re.compile(r"([a-zA-Z0-9_/.-]+\.java):(?:\[(\d+),\d+\]|(\d+)):")
     failed_locations = []
     for m in file_line_pattern.finditer(text):
-        failed_locations.append({
-            "file": m.group(1),
-            "line": int(m.group(2)),
-        })
+        line_num = int(m.group(2) or m.group(3) or 0)
+        file_path = str(m.group(1) or "")
+        if file_path.startswith("/repo/"):
+            file_path = file_path[len("/repo/") :]
+        failed_locations.append(
+            {
+                "file": file_path,
+                "line": line_num,
+            }
+        )
 
     # Extract "cannot find symbol" details
     symbol_errors = []
     for m in re.finditer(r"symbol:\s+(variable|method|class)\s+(\w+)", text):
-        symbol_errors.append({
-            "kind": m.group(1),
-            "name": m.group(2),
-        })
+        symbol_errors.append(
+            {
+                "kind": m.group(1),
+                "name": m.group(2),
+            }
+        )
 
     # Extract "cannot be applied to given types" — signature mismatch
     sig_errors = []
@@ -296,10 +335,12 @@ def _extract_structured_failure_context(
         r"method (\w+)\([^)]*\) in class (\S+) cannot be applied",
         text,
     ):
-        sig_errors.append({
-            "method": m.group(1),
-            "class": m.group(2),
-        })
+        sig_errors.append(
+            {
+                "method": m.group(1),
+                "class": m.group(2),
+            }
+        )
 
     # Map errors to hunks
     failed_hunk_targets = []
@@ -307,11 +348,13 @@ def _extract_structured_failure_context(
         for hunk in effective_hunks:
             target_f = str(hunk.get("target_file") or "").replace("\\", "/")
             if target_f.endswith(loc["file"]) or loc["file"].endswith(target_f):
-                failed_hunk_targets.append({
-                    "target_file": hunk.get("target_file"),
-                    "mainline_file": hunk.get("mainline_file"),
-                    "error_line": loc["line"],
-                })
+                failed_hunk_targets.append(
+                    {
+                        "target_file": hunk.get("target_file"),
+                        "mainline_file": hunk.get("mainline_file"),
+                        "error_line": loc["line"],
+                    }
+                )
                 break
 
     return {
@@ -730,7 +773,9 @@ async def validation_agent(state: AgentState, config) -> dict:
         }
         if not build_res.get("success", False):
             failure_category, retry_files, diagnostics, analysis, retry_hunks = (
-                _classify_build_failure(build_res.get("output", ""), target_repo_path, effective_code_hunks)
+                _classify_build_failure(
+                    build_res.get("output", ""), target_repo_path, effective_code_hunks
+                )
             )
 
             structured_failure = _extract_structured_failure_context(
@@ -1070,7 +1115,11 @@ async def validation_agent(state: AgentState, config) -> dict:
             if not build_res.get("success"):
                 # Failure Attribution: Map error locations to specific hunks
                 failure_category, retry_files, diagnostics, analysis, retry_hunks = (
-                    _classify_build_failure(build_res.get("output", ""), target_repo_path, effective_code_hunks)
+                    _classify_build_failure(
+                        build_res.get("output", ""),
+                        target_repo_path,
+                        effective_code_hunks,
+                    )
                 )
 
                 structured_failure = _extract_structured_failure_context(

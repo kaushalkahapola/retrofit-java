@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from typing import Any
 
 from langchain_core.messages import HumanMessage
@@ -22,18 +23,35 @@ from utils.llm_provider import get_llm
 from utils.token_counter import add_usage, aggregate_usage_from_messages
 
 
-_REASONING_SYSTEM = """You are the H-MABS Reasoning Architect.
+_REASONING_SYSTEM = """You are the H-MABS Reasoning Architect for complex backports.
 
-You operate on exactly one target file and cannot edit files.
-Your only output is a verified surgical plan for deterministic execution.
+Mission:
+- Produce a deterministic, multi-file surgical plan that resolves compilation/API drift.
+- You can inspect parent classes and connected classes when required.
+- You cannot edit files directly.
 
-Hard constraints:
-- Call diagnose_api_drift first.
-- Verify every old_string anchor using read_target_code_window and/or grep_in_target_file.
-- Submit only operations where anchor_verified=true.
-- Keep the plan minimal and deterministic.
+Execution protocol (mandatory):
+1) Call diagnose_api_drift first.
+2) Inspect related files and method hints (list_related_files, list_method_hints).
+3) For every proposed operation:
+   - verify anchor in the target file (read_target_code_window and/or grep_in_target_file),
+   - if needed, inspect other files using read_repo_code_window/grep_in_repo,
+   - ensure operation is minimal and deterministic.
+4) Submit a single final plan using submit_surgical_plan.
 
-Current file: {current_file}
+Strict rules:
+- Prefer exact local replacements; do not invent broad rewrites.
+- Include cross-file edits only when diagnostics/symbol drift justify them.
+- Every operation must set anchor_verified=true.
+- Use target_file per op when the fix belongs to parent/connected classes.
+
+Current primary file: {current_file}
+
+Known related files:
+{related_files}
+
+Method/symbol hints:
+{method_hints}
 
 Build diagnostics:
 {build_diagnostics}
@@ -41,7 +59,7 @@ Build diagnostics:
 Patch intent:
 {patch_intent}
 
-When ready, call submit_surgical_plan with the complete operation list.
+Return only via submit_surgical_plan.
 """
 
 
@@ -128,6 +146,259 @@ def _extract_file_diagnostics(
     return out
 
 
+def _extract_side_files_from_state(state: AgentState, target_file: str) -> list[str]:
+    """
+    Derive side files from validation/build diagnostics to loosen retry scope
+    for API/signature drift fixes that require multi-file adaptation.
+    """
+    target = _normalize_rel_path(target_file)
+    candidates: set[str] = set()
+
+    vr = state.get("validation_results") or {}
+    build = (vr.get("build") or {}) if isinstance(vr, dict) else {}
+    diagnostics = (build.get("diagnostics") or {}) if isinstance(build, dict) else {}
+    structured = state.get("validation_error_context_structured") or {}
+
+    for issue in diagnostics.get("issues") or []:
+        if not isinstance(issue, dict):
+            continue
+        p = _normalize_rel_path(str(issue.get("file") or ""))
+        if p:
+            candidates.add(p)
+
+    for p in diagnostics.get("retry_files") or []:
+        pp = _normalize_rel_path(str(p or ""))
+        if pp:
+            candidates.add(pp)
+
+    for loc in structured.get("failed_locations") or []:
+        if not isinstance(loc, dict):
+            continue
+        p = _normalize_rel_path(str(loc.get("file") or ""))
+        if p:
+            candidates.add(p)
+
+    build_raw = str(build.get("raw") or "")
+    for m in re.findall(
+        r"([a-zA-Z0-9_./-]+\.java):(?:\[(\d+),\d+\]|(\d+)):", build_raw
+    ):
+        p = _normalize_rel_path(str(m[0] or ""))
+        if p:
+            candidates.add(p)
+
+    out = [p for p in sorted(candidates) if p and p != target]
+    return out[:6]
+
+
+def _extract_related_files_and_method_hints(
+    state: AgentState,
+    target_file: str,
+    target_repo_path: str,
+) -> tuple[list[str], list[str]]:
+    target = _normalize_rel_path(target_file)
+    related: set[str] = set()
+    hints: set[str] = set()
+
+    for p in state.get("validation_retry_files") or []:
+        pp = _normalize_rel_path(str(p or ""))
+        if pp:
+            related.add(pp)
+
+    for p in state.get("force_type_v_retry_files") or []:
+        pp = _normalize_rel_path(str(p or ""))
+        if pp:
+            related.add(pp)
+
+    for p in _extract_side_files_from_state(state, target):
+        if p:
+            related.add(p)
+
+    mapped_ctx = state.get("mapped_target_context") or {}
+    if isinstance(mapped_ctx, dict):
+        for _, entries in mapped_ctx.items():
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                tf = _normalize_rel_path(str(entry.get("target_file") or ""))
+                if tf:
+                    related.add(tf)
+                for key in ("target_method", "mainline_method"):
+                    hv = str(entry.get(key) or "").strip()
+                    if hv:
+                        hints.add(hv)
+
+    hgp = state.get("hunk_generation_plan") or {}
+    if isinstance(hgp, dict):
+        for _, entries in hgp.items():
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                tf = _normalize_rel_path(str(entry.get("target_file") or ""))
+                if tf:
+                    related.add(tf)
+                for k in (
+                    "required_symbols",
+                    "must_preserve_symbols",
+                    "protected_symbols",
+                ):
+                    for sym in entry.get(k) or []:
+                        sv = str(sym or "").strip()
+                        if sv:
+                            hints.add(sv)
+
+    structured = state.get("validation_error_context_structured") or {}
+    if isinstance(structured, dict):
+        pf = _normalize_rel_path(str(structured.get("primary_failed_file") or ""))
+        if pf:
+            related.add(pf)
+
+        ps = str(structured.get("primary_failed_symbol") or "").strip()
+        if ps:
+            hints.add(ps)
+
+        for item in structured.get("symbol_errors") or []:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            if name:
+                hints.add(name)
+
+        for item in structured.get("signature_errors") or []:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("method") or "").strip()
+            if name:
+                hints.add(name)
+
+        for loc in structured.get("failed_locations") or []:
+            if not isinstance(loc, dict):
+                continue
+            f = _normalize_rel_path(str(loc.get("file") or ""))
+            if f:
+                related.add(f)
+
+    # Parent-class hint from current file (if any)
+    current_text = _load_file_text(target_repo_path, target)
+    m = re.search(r"class\s+\w+\s+extends\s+(\w+)", current_text)
+    if m:
+        parent_name = str(m.group(1) or "").strip()
+        if parent_name:
+            hints.add(parent_name)
+            try:
+                rg = subprocess.run(
+                    [
+                        "git",
+                        "grep",
+                        "-n",
+                        "--full-name",
+                        "-E",
+                        rf"class\s+{re.escape(parent_name)}\b",
+                        "HEAD",
+                        "--",
+                        "*.java",
+                    ],
+                    cwd=target_repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                for ln in (rg.stdout or "").splitlines()[:10]:
+                    parts = ln.split(":", 3)
+                    if len(parts) < 4:
+                        continue
+                    pf = _normalize_rel_path(str(parts[1] or ""))
+                    if pf:
+                        related.add(pf)
+            except Exception:
+                pass
+
+    rel_out = []
+    for p in sorted(related):
+        if not p:
+            continue
+        full = os.path.join(target_repo_path, p)
+        if os.path.isfile(full):
+            rel_out.append(p)
+    if target and target not in rel_out:
+        rel_out.insert(0, target)
+
+    hint_out = sorted(hints)
+    return rel_out[:40], hint_out[:40]
+
+
+def _sanitize_surgical_ops(
+    *,
+    repo_path: str,
+    default_target_file: str,
+    ops: list[SurgicalOp],
+) -> tuple[list[SurgicalOp], list[str]]:
+    """Reject unsafe/malformed operations before deterministic execution."""
+    safe: list[SurgicalOp] = []
+    rejected: list[str] = []
+    seen: set[tuple[str, str, str]] = set()
+    default_target = _normalize_rel_path(default_target_file)
+
+    for idx, op in enumerate(ops or []):
+        if not isinstance(op, dict):
+            rejected.append(f"op_{idx}: not_a_dict")
+            continue
+
+        old_s = str(op.get("old_string") or "")
+        new_s = str(op.get("new_string") or "")
+        op_target = _normalize_rel_path(str(op.get("target_file") or default_target))
+        if not op_target:
+            rejected.append(f"op_{idx}: empty_target_file")
+            continue
+        op_full = os.path.join(repo_path, op_target)
+        if not os.path.isfile(op_full):
+            rejected.append(f"op_{idx}: missing_target_file:{op_target}")
+            continue
+
+        if not bool(op.get("anchor_verified", False)):
+            rejected.append(f"op_{idx}: unverified_anchor")
+            continue
+        if not old_s:
+            rejected.append(f"op_{idx}: empty_old_string")
+            continue
+        if old_s == new_s:
+            rejected.append(f"op_{idx}: no_op")
+            continue
+        if old_s.strip() in {"{", "}", ";", "(", ")"}:
+            rejected.append(f"op_{idx}: weak_anchor")
+            continue
+        if len(old_s.strip()) < 4:
+            rejected.append(f"op_{idx}: tiny_anchor")
+            continue
+        if "\x00" in old_s or "\x00" in new_s:
+            rejected.append(f"op_{idx}: nul_bytes")
+            continue
+        content = _load_file_text(repo_path, op_target)
+        if content and old_s not in content:
+            rejected.append(f"op_{idx}: anchor_not_in_file")
+            continue
+
+        key = (op_target, old_s, new_s)
+        if key in seen:
+            continue
+        seen.add(key)
+        safe.append(
+            {
+                "target_file": op_target,
+                "old_string": old_s,
+                "new_string": new_s,
+                "anchor_verified": True,
+                "verification_method": str(op.get("verification_method") or "exact"),
+                "confidence": float(op.get("confidence", 0.0) or 0.0),
+            }
+        )
+
+    return safe, rejected
+
+
 def _fallback_surgical_from_existing_plan(
     state: AgentState,
     target_file: str,
@@ -178,12 +449,24 @@ class FileIsolatedToolkit:
         *,
         target_repo_path: str,
         target_file: str,
+        allowed_files: list[str],
+        method_hints: list[str],
         mainline_repo_path: str,
         build_diagnostics: dict[str, Any],
         validation_error_context: str,
     ):
         self.repo = target_repo_path
         self.locked_file = _normalize_rel_path(target_file)
+        self.allowed_files = [
+            _normalize_rel_path(p)
+            for p in (allowed_files or [])
+            if _normalize_rel_path(p)
+        ]
+        if self.locked_file and self.locked_file not in self.allowed_files:
+            self.allowed_files.insert(0, self.locked_file)
+        self.method_hints = [
+            str(m).strip() for m in (method_hints or []) if str(m).strip()
+        ]
         self.mainline = mainline_repo_path
         self.diagnostics = build_diagnostics or {}
         self.validation_error_context = str(validation_error_context or "")
@@ -203,6 +486,48 @@ class FileIsolatedToolkit:
     ) -> str:
         return self._hg.grep_in_file(
             file_path=self.locked_file,
+            search_text=str(search_text or ""),
+            is_regex=bool(is_regex),
+            max_results=max(1, min(int(max_results or 20), 100)),
+        )
+
+    def list_related_files(self) -> dict[str, Any]:
+        return {
+            "current_file": self.locked_file,
+            "allowed_files": self.allowed_files,
+            "count": len(self.allowed_files),
+        }
+
+    def list_method_hints(self) -> dict[str, Any]:
+        return {
+            "current_file": self.locked_file,
+            "method_hints": self.method_hints,
+            "count": len(self.method_hints),
+        }
+
+    def read_repo_code_window(
+        self,
+        file_path: str,
+        center_line: int,
+        radius: int = 20,
+    ) -> str:
+        p = _normalize_rel_path(str(file_path or ""))
+        if p not in self.allowed_files:
+            return f"ERROR: file_not_allowed:{p}"
+        return self._hg.read_file_window(p, int(center_line), int(radius))
+
+    def grep_in_repo(
+        self,
+        file_path: str,
+        search_text: str,
+        is_regex: bool = False,
+        max_results: int = 20,
+    ) -> str:
+        p = _normalize_rel_path(str(file_path or ""))
+        if p not in self.allowed_files:
+            return f"ERROR: file_not_allowed:{p}"
+        return self._hg.grep_in_file(
+            file_path=p,
             search_text=str(search_text or ""),
             is_regex=bool(is_regex),
             max_results=max(1, min(int(max_results or 20), 100)),
@@ -264,13 +589,18 @@ class FileIsolatedToolkit:
         for op in operations or []:
             if not isinstance(op, dict):
                 continue
+            target_file = _normalize_rel_path(
+                str(op.get("target_file") or self.locked_file)
+            )
+            if target_file not in self.allowed_files:
+                continue
             old_s = str(op.get("old_string") or "")
             new_s = str(op.get("new_string") or "")
             if not old_s:
                 continue
             cleaned.append(
                 {
-                    "target_file": self.locked_file,
+                    "target_file": target_file,
                     "old_string": old_s,
                     "new_string": new_s,
                     "anchor_verified": bool(op.get("anchor_verified", False)),
@@ -308,6 +638,22 @@ class FileIsolatedToolkit:
             StructuredTool.from_function(
                 self.grep_in_target_file,
                 name="grep_in_target_file",
+            ),
+            StructuredTool.from_function(
+                self.list_related_files,
+                name="list_related_files",
+            ),
+            StructuredTool.from_function(
+                self.list_method_hints,
+                name="list_method_hints",
+            ),
+            StructuredTool.from_function(
+                self.read_repo_code_window,
+                name="read_repo_code_window",
+            ),
+            StructuredTool.from_function(
+                self.grep_in_repo,
+                name="grep_in_repo",
             ),
             StructuredTool.from_function(
                 self.get_method_signature,
@@ -357,6 +703,18 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
         seen.add(p)
         normalized_files.append(p)
 
+    expanded_retry_files: list[str] = []
+    for p in list(normalized_files):
+        expanded_retry_files.extend(_extract_side_files_from_state(state, p))
+    for p in expanded_retry_files:
+        if not p or p in seen:
+            continue
+        full = os.path.join(target_repo_path, p)
+        if not os.path.isfile(full):
+            continue
+        seen.add(p)
+        normalized_files.append(p)
+
     if not normalized_files:
         return {
             "messages": [
@@ -389,12 +747,19 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
 
     for target_file in normalized_files:
         diagnostics = _extract_file_diagnostics(state, target_file)
+        related_files, method_hints = _extract_related_files_and_method_hints(
+            state,
+            target_file,
+            target_repo_path,
+        )
         patch_intent = str(
             (state.get("semantic_blueprint") or {}).get("fix_logic") or ""
         )
         toolkit = FileIsolatedToolkit(
             target_repo_path=target_repo_path,
             target_file=target_file,
+            allowed_files=related_files,
+            method_hints=method_hints,
             mainline_repo_path=mainline_repo_path,
             build_diagnostics=diagnostics,
             validation_error_context=str(state.get("validation_error_context") or ""),
@@ -404,6 +769,10 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
         try:
             prompt = _REASONING_SYSTEM.format(
                 current_file=target_file,
+                related_files="\n".join(f"- {p}" for p in related_files)
+                if related_files
+                else "- <none>",
+                method_hints=", ".join(method_hints) if method_hints else "<none>",
                 build_diagnostics=str(diagnostics),
                 patch_intent=patch_intent or "<none>",
             )
@@ -439,20 +808,40 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
         if not verified_plan:
             verified_plan = _fallback_surgical_from_existing_plan(state, target_file)
 
+        verified_plan, rejected = _sanitize_surgical_ops(
+            repo_path=target_repo_path,
+            default_target_file=target_file,
+            ops=verified_plan,
+        )
+        if rejected:
+            print(
+                f"Reasoning Architect: rejected {len(rejected)} unsafe op(s) for {target_file}: "
+                + ", ".join(rejected[:5])
+            )
+
         if verified_plan:
-            merged[target_file] = verified_plan
+            grouped: dict[str, list[SurgicalOp]] = {}
+            for op in verified_plan:
+                tf = _normalize_rel_path(str(op.get("target_file") or target_file))
+                if not tf:
+                    continue
+                grouped.setdefault(tf, []).append(op)
+            for tf, ops in grouped.items():
+                merged[tf] = ops
             planned_count += 1
 
         failed_symbol = _extract_primary_symbol_from_context(
             diagnostics,
             str(state.get("validation_error_context") or ""),
         )
+        side_files = _extract_side_files_from_state(state, target_file)
         last_context = {
             "current_file": target_file,
             "failure_kind": "anchor_not_found"
             if not verified_plan
             else "signature_drift",
             "build_diagnostics": diagnostics,
+            "side_files": side_files,
             "iteration": int(state.get("reasoning_iterations") or 0) + 1,
             "surgical_ops": verified_plan,
         }

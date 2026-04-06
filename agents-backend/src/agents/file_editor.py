@@ -2287,6 +2287,37 @@ async def file_editor_node(state: AgentState, config) -> dict:
             else fc.get("is_test_file", False)
         )
     ]
+    surgical_retry_mode = validation_attempts > 0 and bool(surgical_plans)
+    surgical_targets: set[str] = {
+        _normalize_rel_path(str(p or ""))
+        for p in (surgical_plans.keys() if isinstance(surgical_plans, dict) else [])
+        if _normalize_rel_path(str(p or ""))
+    }
+    if surgical_retry_mode and surgical_targets:
+        existing_change_files = {
+            _normalize_rel_path(
+                str(
+                    c.file_path
+                    if hasattr(c, "file_path")
+                    else (c or {}).get("file_path", "")
+                )
+            )
+            for c in code_changes
+        }
+        for st in sorted(surgical_targets):
+            if st in existing_change_files:
+                continue
+            code_changes.append(
+                {
+                    "file_path": st,
+                    "change_type": "MODIFIED",
+                    "is_test_file": False,
+                }
+            )
+        print(
+            "  Agent 3: Surgical retry mode active; restricting edits to reasoning-proposed files. "
+            f"targets={sorted(surgical_targets)}"
+        )
 
     adapted_file_edits: list[FileEdit] = []
     previous_adapted_code_hunks: list[AdaptedHunk] = list(
@@ -2360,8 +2391,19 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 op_plan["target_file"] = _ctx_target
                 op_plan["reason"] = "mapped_target_context_pair_mismatch"
 
-        # Skip files not in retry scope (on retries)
-        if retry_files and not coupled_retry_lock:
+        normalized_mainline_file = _normalize_rel_path(mainline_file)
+        normalized_target_file = _normalize_rel_path(target_file)
+        surgical_ops_for_file = []
+        if validation_attempts > 0:
+            surgical_ops_for_file = (
+                surgical_plans.get(normalized_target_file)
+                or surgical_plans.get(normalized_mainline_file)
+                or []
+            )
+
+        # Skip files not in retry scope (on retries), unless reasoning produced
+        # a surgical plan for this file.
+        if retry_files and not coupled_retry_lock and not surgical_ops_for_file:
             candidate_paths = {
                 _normalize_rel_path(mainline_file),
                 _normalize_rel_path(target_file),
@@ -2376,15 +2418,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
             if not any(p for p in candidate_paths if p in retry_files):
                 continue
 
-        normalized_mainline_file = _normalize_rel_path(mainline_file)
-        normalized_target_file = _normalize_rel_path(target_file)
-        surgical_ops_for_file = []
-        if validation_attempts > 0:
-            surgical_ops_for_file = (
-                surgical_plans.get(normalized_target_file)
-                or surgical_plans.get(normalized_mainline_file)
-                or []
-            )
+        if surgical_retry_mode and not surgical_ops_for_file:
+            continue
 
         # Get plan entries for this file
         plan_entries: list[dict[str, Any]] = hunk_generation_plan.get(mainline_file, [])

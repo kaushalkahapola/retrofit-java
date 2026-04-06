@@ -105,6 +105,7 @@ class ReasoningContext(TypedDict):
     current_file: str
     failure_kind: str  # "signature_drift" | "logic_moved" | "anchor_not_found"
     build_diagnostics: dict[str, Any]
+    side_files: NotRequired[list[str]]
     iteration: int
     surgical_ops: list[SurgicalOp]
 
