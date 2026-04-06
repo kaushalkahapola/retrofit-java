@@ -10,7 +10,7 @@
         "new_string": "",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_delete|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_delete",
         "surround_before_3": [
           "import io.crate.expression.symbol.Symbols;",
           "import io.crate.metadata.Reference;",
@@ -21,13 +21,13 @@
           "",
           "public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, ShardUpsertRequest.Item> {"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
@@ -50,7 +50,7 @@
         "new_string": "        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forUpdate(String id,",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "         */",
           "        private transient long usedBytes = -1L;",
@@ -61,15 +61,13 @@
           "                                     long requiredVersion,",
           "                                     long seqNo,"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target start line (317) differs from mainline old start line (309)"
-        ],
-        "namespace_only_possible": true,
+        "blockers": [],
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "long fullDocSizeEstimate) {",
@@ -95,7 +93,7 @@
         "new_string": "                                     long seqNo,\n                                     long primaryTerm,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "        public static Item forUpdate(String id,",
           "                                     Symbol[] assignments,",
@@ -106,15 +104,13 @@
           "            usedBytes += RamUsageEstimator.sizeOf(id);",
           "            for (var assignment : assignments) {"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target start line (317) differs from mainline old start line (309)"
-        ],
-        "namespace_only_possible": true,
+        "blockers": [],
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "long fullDocSizeEstimate) {",
@@ -140,7 +136,7 @@
         "new_string": "            long usedBytes = SHALLOW_SIZE;\n            usedBytes += fullDocSizeEstimate;\n            usedBytes += RamUsageEstimator.sizeOf(id);",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "                                     long seqNo,",
           "                                     long primaryTerm,",
@@ -151,15 +147,13 @@
           "                usedBytes += assignment.ramBytesUsed();",
           "            }"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target start line (317) differs from mainline old start line (309)"
-        ],
-        "namespace_only_possible": true,
+        "blockers": [],
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "long fullDocSizeEstimate) {",
@@ -181,28 +175,71 @@
         "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
         "operation_index": 0,
         "edit_type": "replace",
-        "old_string": "        }\n\n        public static long sizeEstimateForUpdate(Stats stats, TableInfo tableInfo) {\n            // if stats are not available we fall back to estimate the size based on\n            // column types. Therefore we need to get the column information.\n            if (stats.isEmpty()) {\n                Collection<Reference> ramAccountedColumns = tableInfo.allColumns();\n                return stats.estimateSizeForColumns(ramAccountedColumns);\n            } else {\n                return stats.averageSizePerRowInBytes();\n            }",
-        "new_string": "        }\n\n        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forInsert(String id,\n                                     List<String> pkValues,\n                                     long autoGeneratedTimestamp,\n                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;\n            usedBytes += RamUsageEstimator.sizeOf(id);\n            for (String pkValue : pkValues) {\n                usedBytes += RamUsageEstimator.sizeOf(pkValue);\n            }\n            if (values != null) {\n                assert insertColumns != null : \"If insertValues are present, insertColumns must be present too\";\n                for (int i = 0; i < values.length; i++) {\n",
+        "old_string": "        }\n\n        public static long sizeEstimateForUpdate(Stats stats, TableInfo tableInfo) {\n            // if stats are not available we fall back to estimate the size based on\n            // column types. Therefore we need to get the column information.\n            if (stats.isEmpty()) {\n                Collection<Reference> ramAccountedColumns = tableInfo.allColumns();\n                return stats.estimateSizeForColumns(ramAccountedColumns);\n            } else {\n                return stats.averageSizePerRowInBytes();\n            }\n        }\n",
+        "new_string": "        }\n\n        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forInsert(String id,",
         "verified": true,
-        "verification_result": "sanitize_resolved:multiline_anchor_reconstructed",
-        "notes": "location offset by 3 lines, but surrounding context matches; no blockers|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "                Translog.UNSET_AUTO_GENERATED_TIMESTAMP,",
           "                usedBytes",
           "            );"
         ],
         "surround_after_3": [
-          "        }",
-          "",
-          "        public static Item forInsert(String id,"
+          "        public static Item forInsert(String id,",
+          "                                     List<String> pkValues,",
+          "                                     long autoGeneratedTimestamp,"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "@Nullable Symbol[] onConflictAssignments,",
+          "long fullDocSizeEstimate) {"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 21,
+          "target_declared_methods_count": 21,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments) {\n            long usedBytes = SHALLOW_SIZE;",
+        "new_string": "                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "        public static Item forInsert(String id,",
+          "                                     List<String> pkValues,",
+          "                                     long autoGeneratedTimestamp,"
+        ],
+        "surround_after_3": [
+          "            usedBytes += RamUsageEstimator.sizeOf(id);",
+          "            for (String pkValue : pkValues) {",
+          "                usedBytes += RamUsageEstimator.sizeOf(pkValue);"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "@Nullable Symbol[] onConflictAssignments,",
@@ -228,7 +265,7 @@
         "new_string": "                usedBytes += fullDocSizeEstimate;\n                for (var assignment : onConflictAssignments) {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Cannot apply mainline patch directly due to location and context mismatch; structural rewrite needed|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "                }",
           "            }",
@@ -239,17 +276,12 @@
           "                }",
           "            }"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_V",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": true,
-        "blockers": [
-          "Detected target surrounding context is empty or does not match mainline context",
-          "Mainline patch location (line 363) differs significantly from detected target location (line 587)",
-          "No matching surrounding lines to anchor the patch",
-          "API drift map is empty but build failed due to API/signature mismatch, indicating structural differences"
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -277,7 +309,7 @@
         "new_string": "    private final long fullDocSizeEstimate;\n\n     * List of values or expressions used to be retrieved from the inserted/updated rows,",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Cannot verify old_string presence at detected target location due to context mismatch|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "    private final List<? extends Symbol> outputs;",
           "",
@@ -288,16 +320,12 @@
           "     * to match with outputs.",
           "     */"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target surrounding context is unrelated to mainline surrounding context",
-          "Mainline patch location (line 52) differs significantly from detected target location (line 20)",
-          "No matching context lines around patch location in target file"
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -323,7 +351,7 @@
         "new_string": "                                       boolean autoCreateIndices,\n                                       List<? extends Symbol> outputs,\n                                       List<Symbol> returnValues,\n                                       long fullDocSizeEstimate) {\n",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "same edit logic applies despite location shift|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "                                       @Nullable ColumnIdent clusteredByColumn,",
           "                                       @Nullable Symbol clusteredBySymbol,",
@@ -334,13 +362,13 @@
           "        assert partitionedBySymbols.stream().noneMatch(s -> s.any(Symbol.IS_COLUMN))",
           "            : \"All references and fields in partitionedBySymbols must be resolved to inputColumns, got: \" + partitionedBySymbols;"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "List<Symbol> returnValues,",
@@ -366,7 +394,7 @@
         "new_string": "        this.fullDocSizeEstimate = fullDocSizeEstimate;\n    ColumnIndexWriterProjection(StreamInput in) throws IOException {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "        this.returnValues = returnValues;",
           "    }",
@@ -377,13 +405,13 @@
           "",
           ""
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "this.fullDocSizeEstimate = fullDocSizeEstimate;"
@@ -408,7 +436,7 @@
         "new_string": "        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n            fullDocSizeEstimate = in.readLong();\n        } else {\n            fullDocSizeEstimate = 0;\n        }\n    }\n    public List<? extends Symbol> outputs() {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Insert version check and fullDocSizeEstimate read logic before outputs() method as in mainline patch|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "",
           "    }",
@@ -419,16 +447,12 @@
           "    }",
           ""
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": true,
-        "blockers": [
-          "Detected target surrounding context differs significantly from mainline pre-patch surrounding context",
-          "Mainline patch location line 153 vs detected target start line 139 indicates location shift",
-          "API drift map is empty but build failed due to API/signature mismatch, indicating structural or location differences"
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -461,10 +485,10 @@
         "operation_index": 1,
         "edit_type": "insert_before",
         "old_string": "    public List<? extends Symbol> outputs() {",
-        "new_string": "    public long fullDocSizeEstimate() {\n        return fullDocSizeEstimate;\n    }\n    public List<? extends Symbol> outputs() {",
+        "new_string": "    public long fullDocSizeEstimate() {\n        return fullDocSizeEstimate;\n    public List<? extends Symbol> outputs() {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Insert fullDocSizeEstimate() getter method before outputs() method as in mainline patch|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "",
           "    }",
@@ -475,16 +499,12 @@
           "    }",
           ""
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": true,
-        "blockers": [
-          "Detected target surrounding context differs significantly from mainline pre-patch surrounding context",
-          "Mainline patch location line 153 vs detected target start line 139 indicates location shift",
-          "API drift map is empty but build failed due to API/signature mismatch, indicating structural or location differences"
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -520,7 +540,7 @@
         "new_string": "               allTargetColumns.equals(that.allTargetColumns) &&\n               Objects.equals(outputs, that.outputs) &&\n               Objects.equals(returnValues, that.returnValues) &&\n               Objects.equals(fullDocSizeEstimate, that.fullDocSizeEstimate);\n    }",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "",
           "        ColumnIndexWriterProjection that = (ColumnIndexWriterProjection) o;",
@@ -531,13 +551,13 @@
           "    @Override",
           "    public int hashCode() {"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "Objects.equals(returnValues, that.returnValues) &&",
@@ -563,7 +583,7 @@
         "new_string": "                            allTargetColumns,\n                            outputs,\n                            returnValues,\n                            fullDocSizeEstimate);\n    }",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "    public int hashCode() {",
           "        return Objects.hash(super.hashCode(),",
@@ -574,13 +594,13 @@
           "    @Override",
           "    public void writeTo(StreamOutput out) throws IOException {"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "fullDocSizeEstimate);"
@@ -605,7 +625,7 @@
         "new_string": "        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {\n            out.writeLong(fullDocSizeEstimate);\n        }\n    public ColumnIndexWriterProjection bind(Function<? super Symbol, Symbol> binder) {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "        }",
           "    }",
@@ -616,13 +636,13 @@
           "            new HashMap<>(onDuplicateKeyAssignments.size());",
           "        for (var assignment : onDuplicateKeyAssignments.entrySet()) {"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "if (out.getVersion().onOrAfter(Version.V_5_10_5)) {",
@@ -648,7 +668,7 @@
         "new_string": "            autoCreateIndices(),\n            outputs,\n            returnValues,\n            fullDocSizeEstimate\n            );",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "            clusteredByIdent(),",
           "            clusteredBySymbol,",
@@ -658,16 +678,13 @@
           "    }",
           "}"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [
-          "Detected target start line (279) differs from mainline old start line (276)",
-          "Surrounding context before patch differs between mainline and target"
-        ],
-        "namespace_only_possible": true,
+        "blockers": [],
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "fullDocSizeEstimate"
@@ -694,7 +711,7 @@
         "new_string": "    private final long fullDocSizeEstimate;\n\n    public UpdateProjection(Symbol uidSymbol,",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Insert field declaration before constructor|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "    @Nullable",
           "    private Long requiredVersion;",
@@ -705,15 +722,12 @@
           "                            Symbol[] assignments,",
           "                            Symbol[] outputs,"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Constructor location differs: mainline at line 52, target at line 60",
-          "Pre-patch surrounding context differs between mainline and target"
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -741,7 +755,7 @@
         "new_string": "                            Symbol[] outputs,\n                            @Nullable Symbol[] returnValues,\n                            @Nullable Long requiredVersion,\n                            long fullDocSizeEstimate) {\n        this.uidSymbol = uidSymbol;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Add new parameter to constructor signature|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "    public UpdateProjection(Symbol uidSymbol,",
           "                            String[] assignmentsColumns,",
@@ -752,15 +766,12 @@
           "        this.assignments = assignments;",
           "        this.returnValues = returnValues;"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [
-          "Constructor location differs: mainline at line 52, target at line 60",
-          "Pre-patch surrounding context differs between mainline and target"
-        ],
+        "blockers": [],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -788,7 +799,7 @@
         "new_string": "        this.fullDocSizeEstimate = fullDocSizeEstimate;\n    public UpdateProjection(StreamInput in) throws IOException {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "        this.requiredVersion = requiredVersion;",
           "    }",
@@ -799,13 +810,13 @@
           "        int assignmentColumnsSize = in.readVInt();",
           "        assignmentsColumns = new String[assignmentColumnsSize];"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "this.fullDocSizeEstimate = fullDocSizeEstimate;"
@@ -827,10 +838,10 @@
         "operation_index": 0,
         "edit_type": "insert_before",
         "old_string": "    public Symbol uidSymbol() {",
-        "new_string": "        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n            this.fullDocSizeEstimate = in.readLong();\n        } else {\n            this.fullDocSizeEstimate = 0;\n        }\n    }\n\n    public long fullDocSizeEstimate() {\n        return fullDocSizeEstimate;\n    }\n\n    public Symbol uidSymbol() {",
+        "new_string": "        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n            this.fullDocSizeEstimate = in.readLong();\n        } else {\n            this.fullDocSizeEstimate = 0;\n        }\n    }\n\n    public long fullDocSizeEstimate() {\n        return fullDocSizeEstimate;\n    public Symbol uidSymbol() {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "        }",
           "    }",
@@ -841,13 +852,13 @@
           "    }",
           ""
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "if (in.getVersion().onOrAfter(Version.V_5_10_5)) {",
@@ -882,7 +893,7 @@
         "new_string": "                out.writeVInt(0);\n        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {\n            out.writeLong(fullDocSizeEstimate);\n        }",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_after|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_after",
         "surround_before_3": [
           "                    Symbol.toStream(returnValues[i], out);",
           "                }",
@@ -893,13 +904,13 @@
           "        }",
           "    }"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "if (out.getVersion().onOrAfter(Version.V_5_10_5)) {",
@@ -927,7 +938,7 @@
         "new_string": "                                      boolean autoCreateIndices,\n                                      List<Symbol> returnValues,\n                                      UUID jobId,\n                                      long fullDocSizeEstimate\n                                      ) {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "                                      boolean ignoreDuplicateKeys,",
           "                                      @Nullable Map<Reference, Symbol> onConflictAssignmentsByRef,",
@@ -938,13 +949,13 @@
           "            txnCtx, nodeCtx, primaryKeyIdents, primaryKeySymbols, clusteredByColumn, routingSymbol);",
           "        assert columnReferences.size() == insertInputs.size()"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "long fullDocSizeEstimate"
@@ -969,7 +980,7 @@
         "new_string": "\n        InputRow insertValues = new InputRow(insertInputs);\n        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {\n            return ShardUpsertRequest.Item.forInsert(\n                id,\n                pkValues,\n                autoGeneratedTimestamp,\n                insertColumns,\n                insertValues.materialize(),\n                onConflictAssignments,\n                fullDocSizeEstimate\n            );\n        };\n",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "            returnValues.isEmpty() ? null : returnValues.toArray(new Symbol[0]),",
           "            jobId",
@@ -980,13 +991,13 @@
           "",
           "        shardingUpsertExecutor = new ShardingUpsertExecutor("
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {",
@@ -1018,7 +1029,7 @@
         "new_string": "            missingAssignmentsColumns,\n            new Object[]{source.value()},\n            null,\n            0\n        );",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "            id,",
           "            pkValues,",
@@ -1029,13 +1040,13 @@
           "        Predicate<UpsertResults> earlyTerminationCondition = results -> failFast && results.containsErrors();",
           "        Function<UpsertResults, Throwable> earlyTerminationExceptionGenerator = UpsertResults::resultsToFailure;"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
@@ -1060,7 +1071,7 @@
         "new_string": "            statement.tableInfo().isPartitioned(),\n            outputs,\n            statement.outputs() == null ? List.of() : statement.outputs(),\n            plannerContext.nodeContext().tableStats().estimatedSizePerRow(statement.tableInfo())\n        );",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "location offset by 3 lines, surroundings match, same edit logic applies|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "            statement.tableInfo().clusteredBy(),",
           "            statement.clusteredBySymbol(),",
@@ -1071,13 +1082,13 @@
           "            statement.subQueryRelation(),",
           "            plannerContext,"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "statement.outputs() == null ? List.of() : statement.outputs(),",
@@ -1100,29 +1111,29 @@
         "hunk_index": 0,
         "target_file": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java",
         "operation_index": 0,
-        "edit_type": "replace",
-        "old_string": "            outputSymbols,\n            returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n            null);\n",
-        "new_string": "            outputSymbols,\n            returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n            null,\n            plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)\n        );\n",
+        "edit_type": "insert_before",
+        "old_string": "        UpdateProjection updateProjection = new UpdateProjection(",
+        "new_string": "\n        UpdateProjection updateProjection = new UpdateProjection(",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "location shifted by 9 lines, surroundings match, same edit logic applies|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
+          "                outputSymbols[i] = new InputColumn(i, returnValues.get(i).valueType());",
+          "            }",
+          "        }"
+        ],
+        "surround_after_3": [
           "            new InputColumn(0, idReference.valueType()),",
           "            assignments.targetNames(),",
           "            assignmentSources,"
         ],
-        "surround_after_3": [
-          "        WhereClause where = detailedQuery.toBoundWhereClause(",
-          "            tableInfo, params, subQueryResults, plannerCtx.transactionContext(), plannerCtx.nodeContext(), plannerCtx.clusterState().metadata());",
-          "        if (where.hasVersions()) {"
-        ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)"
@@ -1141,30 +1152,30 @@
       {
         "hunk_index": 0,
         "target_file": "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java",
-        "operation_index": 0,
-        "edit_type": "insert_before",
-        "old_string": "        UpdateProjection updateProjection = new UpdateProjection(",
-        "new_string": "\n        UpdateProjection updateProjection = new UpdateProjection(",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "            outputSymbols,\n            returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n            null);\n",
+        "new_string": "            outputSymbols,\n            returnValues == null ? null : returnValues.toArray(new Symbol[0]),\n            null,\n            plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)\n        );\n",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|coverage_backfill|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
-          "                outputSymbols[i] = new InputColumn(i, returnValues.get(i).valueType());",
-          "            }",
-          "        }"
-        ],
-        "surround_after_3": [
           "            new InputColumn(0, idReference.valueType()),",
           "            assignments.targetNames(),",
           "            assignmentSources,"
         ],
-        "adaptation_type": "TYPE_V",
+        "surround_after_3": [
+          "        WhereClause where = detailedQuery.toBoundWhereClause(",
+          "            tableInfo, params, subQueryResults, plannerCtx.transactionContext(), plannerCtx.nodeContext(), plannerCtx.clusterState().metadata());",
+          "        if (where.hasVersions()) {"
+        ],
+        "adaptation_type": "TYPE_II",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_II",
         "location_match": false,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)"
@@ -1191,7 +1202,7 @@
         "new_string": "                writerProjection.allTargetColumns().toArray(Reference[]::new),\n                insertValues.materialize(),\n                onConflictAssignments,\n                0\n            );",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_replace",
         "surround_before_3": [
           "                id,",
           "                pkValues,",
@@ -1202,13 +1213,13 @@
           "        var rowShardResolver = new RowShardResolver(",
           "            plannerContext.transactionContext(),"
         ],
-        "adaptation_type": "TYPE_V",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "onConflictAssignments,"
@@ -1235,7 +1246,7 @@
         "new_string": "import io.crate.metadata.table.TableInfo;\nimport java.util.HashMap;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "",
           "import io.crate.metadata.RelationName;",
@@ -1246,13 +1257,13 @@
           "import java.util.Set;",
           ""
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
@@ -1275,7 +1286,7 @@
         "new_string": "    /**\n     * Returns an estimation (avg) size of each row of the table in bytes or if no stats are available\n     * for the given table an estimate (avg) based on the column types of the table.\n     */\n    public long estimatedSizePerRow(TableInfo tableInfo) {\n        Stats stats = tableStats.get(tableInfo.ident());\n        if (stats == null) {\n            // if stats are not available we fall back to estimate the size based on\n            // column types. Therefore we need to get the column information.\n            return Stats.EMPTY.estimateSizeForColumns(tableInfo);\n        } else {\n            return stats.averageSizePerRowInBytes();\n        }\n    }\n\n    public Iterable<ColumnStatsEntry> statsEntries() {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "required_op_insert_before",
         "surround_before_3": [
           "        return tableStats.getOrDefault(relationName, Stats.EMPTY).averageSizePerRowInBytes();",
           "    }",
@@ -1286,13 +1297,13 @@
           "        return () -> entries.stream()",
           "            .flatMap(tableEntry -> {"
         ],
-        "adaptation_type": "TYPE_V",
+        "adaptation_type": "TYPE_I",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_V",
+        "execution_type": "TYPE_I",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": true,
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "public long estimatedSizePerRow(TableInfo tableInfo) {",
@@ -1320,54 +1331,16 @@
       }
     ]
   },
-  "last_plan_signature": "73fc7ad66f7411b2e01491d0ed1b7e2e448da010002d346cae5b742617f4f4c0",
+  "last_plan_signature": "8ff0ef4d71b5fdb0c2f8da1d1d9139c709ec05fe6a3d9d6f33816e6bccef1767",
   "validation_repeated_plan_detected": false,
-  "force_type_v_until_success": true,
-  "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
-  "force_type_v_retry_files": [
-    "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
-    "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
-    "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
-    "server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java",
-    "server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java",
-    "server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java",
-    "server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java",
-    "server/src/main/java/io/crate/planner/operators/InsertFromValues.java",
-    "server/src/main/java/io/crate/statistics/TableStats.java"
-  ],
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
   "token_usage": {
-    "input_tokens": 40529,
-    "output_tokens": 8187,
-    "total_tokens": 48716,
-    "estimated": true,
-    "sources": [
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.type_v_subagent.tiktoken",
-      "planning_agent.provider_usage",
-      "planning_agent.type_v_subagent.tiktoken",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.type_v_subagent.tiktoken",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage",
-      "planning_agent.provider_usage"
-    ]
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
   }
 }

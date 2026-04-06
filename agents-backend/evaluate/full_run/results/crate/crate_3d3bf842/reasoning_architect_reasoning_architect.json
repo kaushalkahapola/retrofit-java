@@ -1,0 +1,248 @@
+{
+  "surgical_plans": {
+    "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java": [
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "old_string": "import io.crate.metadata.table.TableInfo;\nimport io.crate.statistics.Stats;",
+        "new_string": "",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "old_string": "        public static Item forUpdate(String id,",
+        "new_string": "        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forUpdate(String id,",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "old_string": "                                     long seqNo,\n                                     long primaryTerm,\n                                     long sizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;",
+        "new_string": "                                     long seqNo,\n                                     long primaryTerm,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "old_string": "            long usedBytes = SHALLOW_SIZE;\n            usedBytes += sizeEstimate;\n            usedBytes += RamUsageEstimator.sizeOf(id);",
+        "new_string": "            long usedBytes = SHALLOW_SIZE;\n            usedBytes += fullDocSizeEstimate;\n            usedBytes += RamUsageEstimator.sizeOf(id);",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "old_string": "        }\n\n        public static long sizeEstimateForUpdate(Stats stats, TableInfo tableInfo) {\n            // if stats are not available we fall back to estimate the size based on\n            // column types. Therefore we need to get the column information.\n            if (stats.isEmpty()) {\n                Collection<Reference> ramAccountedColumns = tableInfo.allColumns();\n                return stats.estimateSizeForColumns(ramAccountedColumns);\n            } else {\n                return stats.averageSizePerRowInBytes();\n            }\n        }\n",
+        "new_string": "        }\n\n        /// @param fullDocSizeEstimate the expected number of bytes\n        /// the full document has when loaded from disk\n        public static Item forInsert(String id,",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "old_string": "                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments) {\n            long usedBytes = SHALLOW_SIZE;",
+        "new_string": "                                     @Nullable Reference[] insertColumns,\n                                     @Nullable Object[] values,\n                                     @Nullable Symbol[] onConflictAssignments,\n                                     long fullDocSizeEstimate) {\n            long usedBytes = SHALLOW_SIZE;",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java",
+        "old_string": "                for (var assignment : onConflictAssignments) {",
+        "new_string": "                usedBytes += fullDocSizeEstimate;\n                for (var assignment : onConflictAssignments) {",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      }
+    ],
+    "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java": [
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "old_string": "     * List of values or expressions used to be retrieved from the inserted/updated rows,",
+        "new_string": "    private final long fullDocSizeEstimate;\n\n     * List of values or expressions used to be retrieved from the inserted/updated rows,",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "old_string": "                                       boolean autoCreateIndices,\n                                       List<? extends Symbol> outputs,\n                                       List<Symbol> returnValues) {\n",
+        "new_string": "                                       boolean autoCreateIndices,\n                                       List<? extends Symbol> outputs,\n                                       List<Symbol> returnValues,\n                                       long fullDocSizeEstimate) {\n",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "old_string": "    ColumnIndexWriterProjection(StreamInput in) throws IOException {",
+        "new_string": "        this.fullDocSizeEstimate = fullDocSizeEstimate;\n    ColumnIndexWriterProjection(StreamInput in) throws IOException {",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "old_string": "    public List<? extends Symbol> outputs() {",
+        "new_string": "        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n            fullDocSizeEstimate = in.readLong();\n        } else {\n            fullDocSizeEstimate = 0;\n        }\n    }\n    public List<? extends Symbol> outputs() {",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "old_string": "    public List<? extends Symbol> outputs() {",
+        "new_string": "    public long fullDocSizeEstimate() {\n        return fullDocSizeEstimate;\n    public List<? extends Symbol> outputs() {",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "old_string": "               allTargetColumns.equals(that.allTargetColumns) &&\n               Objects.equals(outputs, that.outputs) &&\n               Objects.equals(returnValues, that.returnValues);\n    }",
+        "new_string": "               allTargetColumns.equals(that.allTargetColumns) &&\n               Objects.equals(outputs, that.outputs) &&\n               Objects.equals(returnValues, that.returnValues) &&\n               Objects.equals(fullDocSizeEstimate, that.fullDocSizeEstimate);\n    }",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "old_string": "                            allTargetColumns,\n                            outputs,\n                            returnValues);\n    }",
+        "new_string": "                            allTargetColumns,\n                            outputs,\n                            returnValues,\n                            fullDocSizeEstimate);\n    }",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "old_string": "    public ColumnIndexWriterProjection bind(Function<? super Symbol, Symbol> binder) {",
+        "new_string": "        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {\n            out.writeLong(fullDocSizeEstimate);\n        }\n    public ColumnIndexWriterProjection bind(Function<? super Symbol, Symbol> binder) {",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java",
+        "old_string": "            autoCreateIndices(),\n            outputs,\n            returnValues\n            );",
+        "new_string": "            autoCreateIndices(),\n            outputs,\n            returnValues,\n            fullDocSizeEstimate\n            );",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      }
+    ],
+    "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java": [
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "old_string": "    public UpdateProjection(Symbol uidSymbol,",
+        "new_string": "    private final long fullDocSizeEstimate;\n\n    public UpdateProjection(Symbol uidSymbol,",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "old_string": "                            Symbol[] outputs,\n                            @Nullable Symbol[] returnValues,\n                            @Nullable Long requiredVersion) {\n        this.uidSymbol = uidSymbol;",
+        "new_string": "                            Symbol[] outputs,\n                            @Nullable Symbol[] returnValues,\n                            @Nullable Long requiredVersion,\n                            long fullDocSizeEstimate) {\n        this.uidSymbol = uidSymbol;",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "old_string": "    public UpdateProjection(StreamInput in) throws IOException {",
+        "new_string": "        this.fullDocSizeEstimate = fullDocSizeEstimate;\n    public UpdateProjection(StreamInput in) throws IOException {",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "old_string": "    public Symbol uidSymbol() {",
+        "new_string": "        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n            this.fullDocSizeEstimate = in.readLong();\n        } else {\n            this.fullDocSizeEstimate = 0;\n        }\n    }\n\n    public long fullDocSizeEstimate() {\n        return fullDocSizeEstimate;\n    public Symbol uidSymbol() {",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "old_string": "                out.writeVInt(0);",
+        "new_string": "                out.writeVInt(0);\n        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {\n            out.writeLong(fullDocSizeEstimate);\n        }",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      }
+    ]
+  },
+  "reasoning_context": {
+    "current_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+    "failure_kind": "signature_drift",
+    "build_diagnostics": {
+      "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+      "issues": [
+        {
+          "error_type": "api_or_signature_mismatch",
+          "suggested_action": "replan_and_regenerate_with_api_compatibility",
+          "compiler_errors": []
+        }
+      ],
+      "failed_locations": [],
+      "symbol_errors": [],
+      "signature_errors": [],
+      "primary_failed_symbol": "",
+      "raw_error_preview": "Validation deferred: generator checklist has incomplete hunk tasks. Route back to planning/generation before running build/tests. Incomplete hunks: [{\"mainline_file\": \"server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\", \"target_file\": \"server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java\", \"hunk_index\": 0, \"adaptation_type\": \"TYPE_II\", \"execution_types\": [\"TYPE_I\", \"TYPE_II\"], \"status\": \"failed\", \"reason\": \"generation_contract_failed\", \"todo_steps\": [\"reset_file\", \"apply_edits\", \"capture_diff\", \"intent_check\", \"restore_file\"], \"completed_steps\": [\"reset_file\"], \"error\": \"react_refinement_failed: tool_budget_exceeded:19>12\"}, {\"mainline_file\": \"server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java\", \"target_file\": \"server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java\", \"hunk_index\": 0, \"adaptation_type\": \"TYPE_II\", \"execution_types\": [\"TYPE_I\", \"TYPE_II\"], \"status\": \"failed\", \"reason\": \"deterministic_syntax_failed_no_react\", \"todo_steps\": [\"reset_file\", \"apply_edits\", \"capture_diff\", \"intent_check\", \"restore_file\"], \"completed_steps\": [\"reset_file\"], \"error\": \"post_edit_syntax_failed: CRITICAL: STRUCTURAL SYNTAX ERROR(S) FOUND.\\nThese are parse/structure errors (e.g., braces, separators, malformed blocks) that MUST be fixed before submitting.\\n\\nERRORS:\\n\\n/home/kaushal/retrofit-java/temp_repo_storage/crate/server/src/main/java/io/crate/execution/dsl/projection/C"
+    },
+    "iteration": 1,
+    "surgical_ops": [
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "old_string": "    public UpdateProjection(Symbol uidSymbol,",
+        "new_string": "    private final long fullDocSizeEstimate;\n\n    public UpdateProjection(Symbol uidSymbol,",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "old_string": "                            Symbol[] outputs,\n                            @Nullable Symbol[] returnValues,\n                            @Nullable Long requiredVersion) {\n        this.uidSymbol = uidSymbol;",
+        "new_string": "                            Symbol[] outputs,\n                            @Nullable Symbol[] returnValues,\n                            @Nullable Long requiredVersion,\n                            long fullDocSizeEstimate) {\n        this.uidSymbol = uidSymbol;",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "old_string": "    public UpdateProjection(StreamInput in) throws IOException {",
+        "new_string": "        this.fullDocSizeEstimate = fullDocSizeEstimate;\n    public UpdateProjection(StreamInput in) throws IOException {",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "old_string": "    public Symbol uidSymbol() {",
+        "new_string": "        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {\n            this.fullDocSizeEstimate = in.readLong();\n        } else {\n            this.fullDocSizeEstimate = 0;\n        }\n    }\n\n    public long fullDocSizeEstimate() {\n        return fullDocSizeEstimate;\n    public Symbol uidSymbol() {",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java",
+        "old_string": "                out.writeVInt(0);",
+        "new_string": "                out.writeVInt(0);\n        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {\n            out.writeLong(fullDocSizeEstimate);\n        }",
+        "anchor_verified": true,
+        "verification_method": "exact",
+        "confidence": 0.75
+      }
+    ]
+  },
+  "reasoning_iterations": 1,
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}
