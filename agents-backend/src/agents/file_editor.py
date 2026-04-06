@@ -42,6 +42,13 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.prebuilt import create_react_agent
 
+try:
+    from langgraph.errors import GraphRecursionError
+except ImportError:  # Compatibility fallback for older langgraph versions
+
+    class GraphRecursionError(Exception):
+        pass
+
 from agents.hunk_generator_tools import HunkGeneratorToolkit
 from state import AdaptedHunk, AgentState, FileEdit, SemanticBlueprint
 from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_line
@@ -1590,6 +1597,8 @@ async def _invoke_react_with_backoff(
     for attempt in range(max_attempts):
         try:
             return await editor_agent.ainvoke(payload, config=cfg)
+        except GraphRecursionError:
+            raise
         except Exception as e:
             last_error = e
             err = str(e)
@@ -1609,6 +1618,106 @@ async def _invoke_react_with_backoff(
     if last_error:
         raise last_error
     raise RuntimeError("ReAct invocation failed without explicit exception")
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _to_int_env(name: str, default: int, minimum: int = 0, maximum: int = 100000) -> int:
+    raw = os.getenv(name, "").strip()
+    try:
+        value = int(raw) if raw else int(default)
+    except Exception:
+        value = int(default)
+    return max(minimum, min(maximum, value))
+
+
+def _render_msg_content(content: Any) -> str:
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if text is not None:
+                    parts.append(str(text))
+            else:
+                parts.append(str(item))
+        return "\n".join([p for p in parts if p]).strip()
+    return str(content or "").strip()
+
+
+def _truncate_for_log(text: str, max_chars: int) -> str:
+    t = str(text or "")
+    if max_chars <= 0 or len(t) <= max_chars:
+        return t
+    head = max_chars // 2
+    tail = max_chars - head
+    return t[:head] + "\n... [TRUNCATED] ...\n" + t[-tail:]
+
+
+def _log_react_ai_messages(response: dict[str, Any], target_file: str) -> None:
+    """Log detailed ReAct trace (AI/tool/human) for runtime visibility."""
+    try:
+        if not _env_flag("FILE_EDITOR_LOG_REACT_TRACE", default=True):
+            return
+
+        max_chars = _to_int_env(
+            "FILE_EDITOR_LOG_REACT_MAX_CHARS", default=4000, minimum=200, maximum=50000
+        )
+        show_system = _env_flag("FILE_EDITOR_LOG_REACT_INCLUDE_SYSTEM", default=False)
+
+        messages = (response or {}).get("messages", []) or []
+        if not messages:
+            return
+
+        print(
+            f"    Agent 3: ReAct trace for {target_file} [BEGIN] "
+            f"(messages={len(messages)})"
+        )
+
+        for idx, msg in enumerate(messages, start=1):
+            role = str(getattr(msg, "type", "") or "unknown").strip().lower()
+            if role == "system" and not show_system:
+                continue
+
+            content = _render_msg_content(getattr(msg, "content", ""))
+            rendered = _truncate_for_log(content, max_chars).strip()
+
+            print(f"    Agent 3: [message {idx}] role={role}")
+
+            tool_calls = getattr(msg, "tool_calls", None) or []
+            if tool_calls:
+                for tc_i, tc in enumerate(tool_calls, start=1):
+                    tc_name = str((tc or {}).get("name") or "")
+                    tc_args = (tc or {}).get("args", {})
+                    try:
+                        args_text = json.dumps(tc_args, ensure_ascii=False, default=str)
+                    except Exception:
+                        args_text = str(tc_args)
+                    args_text = _truncate_for_log(args_text, max_chars)
+                    print(
+                        f"    Agent 3:   tool_call[{tc_i}] name={tc_name} args={args_text}"
+                    )
+
+            if rendered:
+                print(rendered)
+
+            if role == "tool":
+                tool_name = str(getattr(msg, "name", "") or "")
+                tool_call_id = str(getattr(msg, "tool_call_id", "") or "")
+                if tool_name or tool_call_id:
+                    print(
+                        f"    Agent 3:   tool_result name={tool_name} call_id={tool_call_id}"
+                    )
+
+        print(f"    Agent 3: ReAct trace for {target_file} [END]")
+    except Exception:
+        # Logging should never break file editing flow.
+        pass
 
 
 def _react_tool_budget_for_complexity(complexity: str) -> int:
@@ -1701,6 +1810,7 @@ async def _run_react_edit_pass(
     current_attempt_trajectory: list[dict[str, Any]],
     extra_retry_context: str = "",
     patch_complexity: str = "REWRITE",
+    type_v_mode: bool = False,
     token_usage: dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
     mapping_hints = []
@@ -1776,7 +1886,27 @@ async def _run_react_edit_pass(
 
     tool_budget = _react_tool_budget_for_complexity(patch_complexity)
     if validation_attempts > 0:
-        tool_budget = max(6, min(tool_budget, 12))
+        if type_v_mode:
+            type_v_retry_cap = _to_int_env(
+                "FILE_EDITOR_REACT_TYPE_V_RETRY_TOOL_BUDGET",
+                default=30,
+                minimum=10,
+                maximum=120,
+            )
+            tool_budget = max(10, min(tool_budget, type_v_retry_cap))
+        else:
+            retry_cap = _to_int_env(
+                "FILE_EDITOR_REACT_RETRY_TOOL_BUDGET",
+                default=12,
+                minimum=6,
+                maximum=120,
+            )
+            tool_budget = max(6, min(tool_budget, retry_cap))
+
+    print(
+        f"    Agent 3: ReAct tool budget for {target_file}: {tool_budget} "
+        f"(retry={validation_attempts}, type_v={type_v_mode}, complexity={patch_complexity})"
+    )
     editor_agent = create_react_agent(llm, toolkit.get_tools())
     try:
         react_recursion = int(os.getenv("FILE_EDITOR_REACT_RECURSION_LIMIT", "40"))
@@ -1803,6 +1933,7 @@ async def _run_react_edit_pass(
                 ]
             },
         )
+        _log_react_ai_messages(response, target_file)
 
         tool_calls_count = 0
         tool_calls_flat: list[tuple[str, Any]] = []
@@ -1812,6 +1943,13 @@ async def _run_react_edit_pass(
                 for tc in m.tool_calls:
                     tool_calls_flat.append((tc.get("name", ""), tc.get("args", {})))
         if tool_calls_count > tool_budget:
+            print(
+                f"    Agent 3: tool budget exceeded for {target_file}: "
+                f"{tool_calls_count}>{tool_budget}. Tool call trace:"
+            )
+            for i, (nm, args) in enumerate(tool_calls_flat, start=1):
+                sig = _tool_call_signature(nm, args)
+                print(f"    Agent 3:   [{i}] {_truncate_for_log(sig, 1000)}")
             return False, f"tool_budget_exceeded:{tool_calls_count}>{tool_budget}"
 
         try:
@@ -1870,6 +2008,11 @@ async def _run_react_edit_pass(
             )
 
         return True, "react_apply_success"
+    except GraphRecursionError as e:
+        print(
+            f"    Agent 3: ReAct recursion limit exceeded for {target_file}: {e}"
+        )
+        return False, f"react_recursion_limit_exceeded:{e}"
     except Exception as e:
         err = str(e)
         if "unsupported value" in err.lower() and "temperature" in err.lower():
@@ -2427,6 +2570,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     current_attempt_trajectory=current_attempt_trajectory,
                     extra_retry_context=apply_reason,
                     patch_complexity=patch_complexity,
+                    type_v_mode=("TYPE_V" in execution_types),
                     token_usage=token_usage,
                 )
                 if not react_ok:
@@ -2451,6 +2595,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 error_context=error_context,
                 current_attempt_trajectory=current_attempt_trajectory,
                 patch_complexity=patch_complexity,
+                type_v_mode=("TYPE_V" in execution_types),
                 token_usage=token_usage,
             )
             if not react_ok:

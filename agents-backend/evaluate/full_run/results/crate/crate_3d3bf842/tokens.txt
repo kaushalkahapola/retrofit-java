@@ -1,7 +1,7 @@
 {
-  "input_tokens": 44668,
-  "output_tokens": 8891,
-  "total_tokens": 53559,
+  "input_tokens": 42922,
+  "output_tokens": 8759,
+  "total_tokens": 51681,
   "messages_with_usage": 2,
   "estimated_messages": 3,
   "tokenizer": {
@@ -12,8 +12,8 @@
   "by_node": {
     "context_analyzer": {
       "input_tokens": 2340,
-      "output_tokens": 553,
-      "total_tokens": 2893,
+      "output_tokens": 572,
+      "total_tokens": 2912,
       "estimated_events": 0,
       "exact_events": 1,
       "sources": [
@@ -31,9 +31,9 @@
       ]
     },
     "planning_agent": {
-      "input_tokens": 42289,
-      "output_tokens": 8338,
-      "total_tokens": 50627,
+      "input_tokens": 40543,
+      "output_tokens": 8187,
+      "total_tokens": 48730,
       "estimated_events": 1,
       "exact_events": 1,
       "sources": [
@@ -52,5 +52,5 @@
       ]
     }
   },
-  "finished_at": "2026-04-06T06:19:27.242451"
+  "finished_at": "2026-04-06T11:09:34.068994"
 }
