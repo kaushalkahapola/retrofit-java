@@ -1,9 +1,9 @@
 # Validation Trace
 
 ## Blueprint Summary
-- **Root Cause**: Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.
-- **Fix Logic**: Apply each source hunk with target-verified context and symbol consistency while preserving behavior.
-- **Dependent APIs**: ['if', 'fullDocSizeEstimate', 'estimation', 'estimate', 'estimatedSizePerRow']
+- **Root Cause**: The vulnerability arises from inaccurate memory usage estimation of document updates and inserts, which can lead to resource exhaustion or denial of service due to under-accounting of the full document size when loaded from disk.
+- **Fix Logic**: Introduce a new parameter 'fullDocSizeEstimate' representing the expected full document size in bytes when loaded from disk, and incorporate this estimate into memory usage calculations for update and insert operations, ensuring more accurate resource accounting and preventing underestimation of memory usage.
+- **Dependent APIs**: ['ColumnIndexWriterProjection.<init>', 'ColumnIndexWriterProjection.fullDocSizeEstimate', 'ColumnIndexWriterProjection.writeTo', 'ColumnIndexWriterProjector.<init>', 'RamUsageEstimator.sizeOf', 'ShardUpsertRequest.Item.forInsert', 'ShardUpsertRequest.Item.forUpdate', 'Symbol.ramBytesUsed', 'UpdateProjection.<init>', 'UpdateProjection.fullDocSizeEstimate', 'UpdateProjection.writeTo', 'estimate', 'estimatedSizePerRow', 'estimation', 'fullDocSizeEstimate', 'if']
 
 ## Hunk Segregation
 - Code files: 18

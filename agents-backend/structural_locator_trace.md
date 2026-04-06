@@ -1,7 +1,7 @@
 # Structural Locator Trace
 
 ## Blueprint Summary
-- **Root Cause**: Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.
+- **Root Cause**: The vulnerability arises from inaccurate memory usage estimation of document updates and inserts, which can lead to resource exhaustion or denial of service due to under-accounting of the full document size when loaded from disk.
 
 ## Hunk Segregation
 - Code files: 10
