@@ -1,7 +1,7 @@
 {
   "semantic_blueprint": {
-    "root_cause_hypothesis": "The vulnerability arises from allowing the addition of sub-columns to a parent column that has an OBJECT(IGNORED) column policy, which can lead to inconsistent or unintended schema states.",
-    "fix_logic": "The patch introduces a check during the addColumn operation to detect if any new column being added is a sub-column of a parent column with an OBJECT(IGNORED) policy. If such a case is detected, it sets a subject flag to prevent or specially handle this scenario.",
+    "root_cause_hypothesis": "The vulnerability arises from allowing the addition of sub-columns to parent columns that have an OBJECT(IGNORED) column policy, which can lead to inconsistent or unsupported table schema states.",
+    "fix_logic": "The patch introduces a check during the addColumn operation to detect if any new column being added is a sub-column of a parent column with an OBJECT(IGNORED) policy. If such a case is detected, it sets a subject flag to prevent or specially handle this scenario, thereby guarding against invalid schema modifications.",
     "dependent_apis": [
       "AddColumnRequest.references()",
       "ColumnIdent.isChildOf(ColumnIdent)",
@@ -12,12 +12,12 @@
       "for",
       "if"
     ],
-    "patch_intent_summary": "Prevent adding sub-columns to parent columns with OBJECT(IGNORED) policy during table alteration to maintain schema integrity.",
+    "patch_intent_summary": "Prevent adding sub-columns to parent columns with OBJECT(IGNORED) policy to maintain schema integrity during ALTER TABLE operations.",
     "hunk_chain": [
       {
         "hunk_index": 1,
         "file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
-        "summary": "Adds logic (+2 lines).",
+        "summary": "Add import for Reference and ColumnPolicy classes needed for the new column policy check.",
         "role": "declaration",
         "connects_to_next": "Prepares next hunk in same file with related context.",
         "global_index": 1
@@ -25,8 +25,8 @@
       {
         "hunk_index": 2,
         "file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
-        "summary": "Adds logic (+9 lines).",
-        "role": "guard",
+        "summary": "Add logic in addColumn method to detect if any new column is a sub-column of an OBJECT(IGNORED) parent column and set a subject flag accordingly.",
+        "role": "core_fix",
         "connects_to_next": "",
         "global_index": 2
       }
@@ -35,8 +35,8 @@
   "patch_diff": "diff --git a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java\nindex 0000000..0000000 100644\n--- a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java\n+++ b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java\n@@ -61,12 +61,14 @@\n import io.crate.execution.support.ChainableActions;\n import io.crate.metadata.GeneratedReference;\n import io.crate.metadata.PartitionName;\n+import io.crate.metadata.Reference;\n import io.crate.metadata.RelationName;\n import io.crate.metadata.table.TableInfo;\n import io.crate.replication.logical.LogicalReplicationService;\n import io.crate.replication.logical.metadata.Publication;\n import io.crate.session.CollectingResultReceiver;\n import io.crate.session.Sessions;\n+import io.crate.sql.tree.ColumnPolicy;\n \n @Singleton\n public class AlterTableClient {\n@@ -121,11 +123,20 @@\n     }\n \n     public CompletableFuture<Long> addColumn(AddColumnRequest addColumnRequest) {\n+        var newReferences = addColumnRequest.references();\n         String subject = null;\n         if (addColumnRequest.pKeyIndices().isEmpty() == false) {\n             subject = \"primary key\";\n         } else if (addColumnRequest.references().stream().anyMatch(ref -> ref instanceof GeneratedReference)) {\n             subject = \"generated\";\n+        } else {\n+            for (Reference newRef : newReferences) {\n+                if (newReferences.stream().anyMatch(r -> r.column().isChildOf(newRef.column()))\n+                    && newRef.columnPolicy().equals(ColumnPolicy.IGNORED)) {\n+                    subject = \"sub column to an OBJECT(IGNORED) parent\";\n+                    break;\n+                }\n+            }\n         }\n         if (subject != null) {\n             String finalSubject = subject;\n",
   "token_usage": {
     "input_tokens": 663,
-    "output_tokens": 280,
-    "total_tokens": 943,
+    "output_tokens": 361,
+    "total_tokens": 1024,
     "estimated": false
   }
 }

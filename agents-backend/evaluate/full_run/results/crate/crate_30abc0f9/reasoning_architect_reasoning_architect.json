@@ -7,20 +7,37 @@
       "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
       "issues": [
         {
-          "error_type": "unknown_build_failure",
-          "suggested_action": "inspect_build_log_and_retry"
+          "error_type": "api_or_signature_mismatch",
+          "suggested_action": "replan_and_regenerate_with_api_compatibility",
+          "compiler_errors": [
+            "[ERROR] /repo/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java:[45,35] error: cannot find symbol",
+            "[ERROR] /repo/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java:[45,35] error: cannot find symbol"
+          ]
         }
       ],
       "failed_locations": [
         {
           "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-          "line": 46
+          "line": 45
+        },
+        {
+          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
+          "line": 45
         }
       ],
-      "symbol_errors": [],
+      "symbol_errors": [
+        {
+          "kind": "class",
+          "name": "Role"
+        },
+        {
+          "kind": "class",
+          "name": "Role"
+        }
+      ],
       "signature_errors": [],
-      "primary_failed_symbol": "",
-      "raw_error_preview": "Build failed: Build failed; deterministic parser could not identify a narrower category."
+      "primary_failed_symbol": "Role",
+      "raw_error_preview": "Build failed: API/signature mismatch in generated patch against target branch. Compiler errors: [ERROR] /repo/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java:[45,35] error: cannot find symbol | [ERROR] /repo/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java:[45,35] error: cannot find symbol"
     },
     "side_files": [],
     "iteration": 2,
@@ -28,9 +45,9 @@
   },
   "reasoning_iterations": 2,
   "token_usage": {
-    "input_tokens": 66704,
-    "output_tokens": 865,
-    "total_tokens": 67569,
+    "input_tokens": 144761,
+    "output_tokens": 920,
+    "total_tokens": 145681,
     "estimated": false,
     "sources": [
       "reasoning_architect.react.aggregate_usage"

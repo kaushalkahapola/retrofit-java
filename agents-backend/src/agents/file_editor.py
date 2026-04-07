@@ -702,11 +702,46 @@ def _apply_edit_deterministically(
         if edit_type == "insert_after" and payload and not payload.startswith("\n"):
             payload = "\n" + payload
 
+        original_resolved_old = resolved_old
         resolved_new = (
             payload + resolved_old
             if edit_type == "insert_before"
             else resolved_old + payload
         )
+
+        # When an insert_before payload starts with `}` (e.g. `} else {`), the planning
+        # agent intends to *transform* the closing brace of the preceding if/else-if block
+        # into an else extension.  But str_replace only replaces resolved_old, leaving the
+        # preceding `}` untouched — giving `} } else {` (syntax error).  Fix: extend
+        # resolved_old backwards to include that preceding `}` line so the replacement is
+        # clean (old `}\n<anchor>` → new `} else {\n...\n}\n<anchor>`).
+        if (
+            edit_type == "insert_before"
+            and payload
+            and payload.lstrip().startswith("}")
+        ):
+            anchor_pos = content.find(resolved_old)
+            if anchor_pos > 0:
+                before = content[:anchor_pos].rstrip("\n")
+                last_nl = before.rfind("\n")
+                preceding_line = before[last_nl + 1 :] if last_nl >= 0 else before
+                if preceding_line.strip() in ("}", "};"):
+                    extended_old = preceding_line + "\n" + resolved_old
+                    if extended_old in content:
+                        resolved_old = extended_old
+                        # Also check whether the payload leaves any blocks unclosed
+                        # (e.g. planning agent forgot the closing `}` for `else {`).
+                        # Count opens/closes in payload after its leading `}` character.
+                        first_close = payload.index("}")
+                        payload_body = payload[first_close + 1 :]
+                        unclosed = payload_body.count("{") - payload_body.count("}")
+                        if unclosed > 0:
+                            first_line = payload.lstrip("\n").split("\n")[0]
+                            indent = " " * (len(first_line) - len(first_line.lstrip()))
+                            closing = (indent + "}\n") * unclosed
+                            resolved_new = payload + closing + original_resolved_old
+                        else:
+                            resolved_new = payload + original_resolved_old
 
     result = toolkit.str_replace_in_file(target_file, resolved_old, resolved_new)
     if result.startswith("SUCCESS"):

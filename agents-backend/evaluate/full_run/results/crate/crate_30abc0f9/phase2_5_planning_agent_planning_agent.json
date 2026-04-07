@@ -28,23 +28,7 @@
         "surrounding_match": true,
         "blockers": [],
         "namespace_only_possible": true,
-        "namespace_changes": [
-          {
-            "from": "io.crate.execution.jobs.kill.KillJobsNodeAction",
-            "to": "io.crate.execution.jobs.kill.KillJobsNodeAction",
-            "reason": "Import added in mainline, same package and class in target"
-          },
-          {
-            "from": "io.crate.execution.jobs.kill.KillJobsNodeRequest",
-            "to": "io.crate.execution.jobs.kill.KillJobsNodeRequest",
-            "reason": "Import added in mainline, same package and class in target"
-          },
-          {
-            "from": "io.crate.execution.jobs.kill.KillResponse",
-            "to": "io.crate.execution.jobs.kill.KillResponse",
-            "reason": "Import added in mainline, same package and class in target"
-          }
-        ],
+        "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
         "protected_symbols": [],
@@ -105,7 +89,7 @@
         "operation_index": 0,
         "edit_type": "insert_before",
         "old_string": "        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);",
-        "new_string": "        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);\n        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);",
+        "new_string": "        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);\n        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);\n        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
         "notes": "required_op_insert_before|sanitize_old_not_found:not_found_single|type_v_repaired|forced_type_v:context_mismatch_with_build_api_or_syntax",
@@ -124,8 +108,11 @@
         "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": true,
-        "blockers": [],
-        "namespace_only_possible": true,
+        "blockers": [
+          "Detected target constructor signature differs from mainline (extra parameters and different order)",
+          "Build failure due to missing symbol 'Role' indicates possible API drift or missing imports"
+        ],
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);"
@@ -158,8 +145,11 @@
         "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": true,
-        "blockers": [],
-        "namespace_only_possible": true,
+        "blockers": [
+          "Detected target constructor signature differs from mainline (extra parameters and different order)",
+          "Build failure due to missing symbol 'Role' indicates possible API drift or missing imports"
+        ],
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);"
@@ -184,7 +174,7 @@
         "new_string": "            killNodeAction,\n            clusterService.localNode().getId(),\n            pageSize,",
         "verified": false,
         "verification_result": "sanitize_old_not_found:not_found_single",
-        "notes": "Surroundings match, location differs by 2 lines, safe to insert same parameters before pageSize|sanitize_old_not_found:not_found_single|sanitize_old_not_found:not_found_single|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "Cannot apply mainline insert due to missing parameters in target method signature|sanitize_old_not_found:not_found_single|sanitize_old_not_found:not_found_single|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "            multiBucketBuilder,",
           "            nodeOperation.downstreamExecutionPhaseId(),",
@@ -200,8 +190,11 @@
         "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": true,
-        "blockers": [],
-        "namespace_only_possible": true,
+        "blockers": [
+          "API signature mismatch: target method does not have parameters killNodeAction and clusterService.localNode().getId()",
+          "Compiler errors indicate missing symbols, suggesting structural or API differences"
+        ],
+        "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
           "clusterService.localNode().getId(),"
@@ -219,7 +212,7 @@
       }
     ]
   },
-  "last_plan_signature": "4031465817cab72b2bb4e4877df500fc162a1f25a4bede838417064ff2727a13",
+  "last_plan_signature": "ad7110dd971f95c98442f56b38dc235a9da1598cf910d62bc495d0532a90743c",
   "validation_repeated_plan_detected": false,
   "force_type_v_until_success": true,
   "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
@@ -227,9 +220,9 @@
     "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java"
   ],
   "token_usage": {
-    "input_tokens": 11414,
-    "output_tokens": 1769,
-    "total_tokens": 13183,
+    "input_tokens": 12481,
+    "output_tokens": 1568,
+    "total_tokens": 14049,
     "estimated": true,
     "sources": [
       "planning_agent.provider_usage",

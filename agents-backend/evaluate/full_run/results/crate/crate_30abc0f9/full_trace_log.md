@@ -43,6 +43,26 @@
   "resolved_new_preview": "            bucketIdx,\n            killNodeAction,\n            clusterService.localNode().getId(),"
 }
 ```
+- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `str_replace_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+  "edit_type": "insert_after",
+  "resolution_reason": "exact",
+  "resolved_old_preview": "import java.util.Iterator;",
+  "resolved_new_preview": "import java.util.Iterator;\nimport java.util.UUID;"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `str_replace_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+  "edit_type": "replace",
+  "resolution_reason": "exact",
+  "resolved_old_preview": "            // Don't trip breaker on transport layer, but instead depend on ram-accounting in PageBucketReceivers\n            // We need to always handle requests to avoid jobs from getting stuck.\n   ",
+  "resolved_new_preview": "            true,"
+}
+```
 
 ### Final Output Diff
 **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java** [replace]
@@ -51,10 +71,10 @@
 <deterministic file-editor diff>
 // --- NEW ---
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-index 3dc1921a76..e1f99a253d 100644
+index 3dc1921a76..44a27baefc 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-@@ -35,8 +35,14 @@ import org.elasticsearch.threadpool.ThreadPool;
+@@ -35,6 +35,9 @@ import org.elasticsearch.threadpool.ThreadPool;
  import io.crate.Streamer;
  import io.crate.data.breaker.RamAccounting;
  import io.crate.execution.dsl.phases.ExecutionPhases;
@@ -63,13 +83,8 @@ index 3dc1921a76..e1f99a253d 100644
 +import io.crate.execution.jobs.kill.KillResponse;
  import io.crate.execution.dsl.phases.NodeOperation;
  import io.crate.execution.jobs.PageBucketReceiver;
-+import io.crate.execution.jobs.kill.KillJobsNodeAction;
-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
-+import io.crate.execution.jobs.kill.KillResponse;
  import io.crate.execution.support.ActionExecutor;
- import io.crate.execution.support.NodeRequest;
- import io.crate.planner.distribution.DistributionInfo;
-@@ -47,6 +53,7 @@ public class DistributingConsumerFactory {
+@@ -47,6 +50,7 @@ public class DistributingConsumerFactory {
      private static final String RESPONSE_EXECUTOR_NAME = ThreadPool.Names.SEARCH;
  
      private final ClusterService clusterService;
@@ -77,7 +92,7 @@ index 3dc1921a76..e1f99a253d 100644
      private final Executor responseExecutor;
      private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
  
-@@ -55,6 +62,8 @@ public class DistributingConsumerFactory {
+@@ -55,6 +59,8 @@ public class DistributingConsumerFactory {
                                         ThreadPool threadPool,
                                         Node node) {
          this.clusterService = clusterService;
@@ -86,7 +101,7 @@ index 3dc1921a76..e1f99a253d 100644
          this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
          this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
      }
-@@ -108,6 +117,8 @@ public class DistributingConsumerFactory {
+@@ -108,6 +114,8 @@ public class DistributingConsumerFactory {
              nodeOperation.downstreamExecutionPhaseId(),
              phaseInputId,
              bucketIdx,
@@ -106,39 +121,20 @@ index 3dc1921a76..e1f99a253d 100644
 <react budget salvage>
 // --- NEW ---
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-index 3dc1921a76..89c0dd153b 100644
+index 3dc1921a76..b0c03b032a 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-@@ -37,10 +37,28 @@ import io.crate.data.breaker.RamAccounting;
- import io.crate.execution.dsl.phases.ExecutionPhases;
- import io.crate.execution.dsl.phases.NodeOperation;
- import io.crate.execution.jobs.PageBucketReceiver;
-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
-+import io.crate.execution.jobs.kill.KillResponse;
+@@ -40,6 +40,9 @@ import io.crate.execution.jobs.PageBucketReceiver;
  import io.crate.execution.support.ActionExecutor;
  import io.crate.execution.support.NodeRequest;
  import io.crate.planner.distribution.DistributionInfo;
++import io.crate.execution.jobs.kill.KillJobsNodeRequest;
++import io.crate.execution.jobs.kill.KillResponse;
++import io.crate.execution.jobs.kill.Role;
  
-+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-+
-+import java.util.List;
-+
-+import org.elasticsearch.cluster.service.ClusterService;
-+import org.elasticsearch.common.inject.Inject;
-+import org.elasticsearch.common.inject.Singleton;
-+import org.elasticsearch.node.Node;
-+import org.elasticsearch.threadpool.ThreadPool;
-+
-+import io.crate.Streamer;
-+import io.crate.data.breaker.RamAccounting;
-+import io.crate.execution.dsl.phases.ExecutionPhases;
-+import io.crate.execution.dsl.phases.NodeOperation;
-+import io.crate.execution.jobs.PageBucketReceiver;
-+
  @Singleton
  public class DistributingConsumerFactory {
- 
-@@ -49,14 +67,17 @@ public class DistributingConsumerFactory {
+@@ -49,14 +52,17 @@ public class DistributingConsumerFactory {
      private final ClusterService clusterService;
      private final Executor responseExecutor;
      private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
@@ -149,15 +145,25 @@ index 3dc1921a76..89c0dd153b 100644
                                         ThreadPool threadPool,
 -                                       Node node) {
 +                                       Node node,
-+                                       KillJobsNodeAction killJobsNodeAction) {
++                                       ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction) {
          this.clusterService = clusterService;
          this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
          this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
-+        this.killNodeAction = killJobsNodeAction;
++        this.killNodeAction = killNodeAction;
      }
  
      public DistributingConsumer create(NodeOperation nodeOperation,
-@@ -110,6 +131,8 @@ public class DistributingConsumerFactory {
+@@ -98,6 +104,9 @@ public class DistributingConsumerFactory {
+                 );
+                 break;
+             default:
++                String reason = "Received data for job=" + jobId + " but there is no job context present. " +
++                    "This can happen due to bad network latency or if individual nodes are unresponsive due to high load";
++                broadcastKill(killNodeAction, jobId, clusterService.localNode().getId(), reason);
+                 throw new UnsupportedOperationException("Can't handle distributionInfo: " + distributionInfo);
+         }
+ 
+@@ -110,10 +119,36 @@ public class DistributingConsumerFactory {
              bucketIdx,
              nodeOperation.downstreamNodes(),
              distributedResultAction,
@@ -166,97 +172,7 @@ index 3dc1921a76..89c0dd153b 100644
              pageSize
          );
      }
-@@ -132,4 +155,28 @@ public class DistributingConsumerFactory {
-         int nodeId = Math.max(server.indexOf(clusterService.localNode().getId()), 0);
-         return nodeId | (phaseInputId << 24);
-     }
-+
-+    /**
-+     * Sends KILL request to all nodes (excluding sender node).
-+     */
-+    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                     UUID jobId,
-+                                     String localNodeId,
-+                                     String reason) {
-+        List<String> excludedNodeIds = List.of(localNodeId);
-+
-+        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
-+            excludedNodeIds,
-+            List.of(jobId),
-+            Role.CRATE_USER.name(),
-+            reason
-+        );
-+        killNodeAction
-+            .execute(killRequest)
-+            .whenComplete((_, t) -> {
-+                if (t != null) {
-+                    LOGGER.debug("Could not kill " + jobId, t);
-+                }
-+            });
-+    }
- }
-```
-
-## Attempt #3
-
-### Final Output Diff
-**server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java** [replace]
-```java
-// --- OLD ---
-<react budget salvage>
-// --- NEW ---
-diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-index 3dc1921a76..3f067491c6 100644
---- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-@@ -37,10 +37,14 @@ import io.crate.data.breaker.RamAccounting;
- import io.crate.execution.dsl.phases.ExecutionPhases;
- import io.crate.execution.dsl.phases.NodeOperation;
- import io.crate.execution.jobs.PageBucketReceiver;
-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
-+import io.crate.execution.jobs.kill.KillResponse;
- import io.crate.execution.support.ActionExecutor;
- import io.crate.execution.support.NodeRequest;
- import io.crate.planner.distribution.DistributionInfo;
  
-+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-+
- @Singleton
- public class DistributingConsumerFactory {
- 
-@@ -49,14 +53,17 @@ public class DistributingConsumerFactory {
-     private final ClusterService clusterService;
-     private final Executor responseExecutor;
-     private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
-+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
- 
-     @Inject
-     public DistributingConsumerFactory(ClusterService clusterService,
-                                        ThreadPool threadPool,
--                                       Node node) {
-+                                       Node node,
-+                                       KillJobsNodeAction killJobsNodeAction) {
-         this.clusterService = clusterService;
-         this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
-         this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
-+        this.killNodeAction = killJobsNodeAction;
-     }
- 
-     public DistributingConsumer create(NodeOperation nodeOperation,
-@@ -110,6 +117,8 @@ public class DistributingConsumerFactory {
-             bucketIdx,
-             nodeOperation.downstreamNodes(),
-             distributedResultAction,
-+            killNodeAction,
-+            clusterService.localNode().getId(),
-             pageSize
-         );
-     }
-@@ -132,4 +141,28 @@ public class DistributingConsumerFactory {
-         int nodeId = Math.max(server.indexOf(clusterService.localNode().getId()), 0);
-         return nodeId | (phaseInputId << 24);
-     }
-+
 +    /**
 +     * Sends KILL request to all nodes (excluding sender node).
 +     */
@@ -280,5 +196,46 @@ index 3dc1921a76..3f067491c6 100644
 +                }
 +            });
 +    }
++
+     /**
+      * @return bucketIdx (= phaseInputID (8bit) | idx of localNode in nodeIds (24bit) )
+      *
+@@ -133,3 +168,4 @@ public class DistributingConsumerFactory {
+         return nodeId | (phaseInputId << 24);
+     }
  }
++
+```
+
+## Attempt #3
+
+### Final Output Diff
+**server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java** [replace]
+```java
+// --- OLD ---
+<react budget salvage>
+// --- NEW ---
+diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
+index 3dc1921a76..40461e0351 100644
+--- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
++++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
+@@ -49,14 +49,17 @@ public class DistributingConsumerFactory {
+     private final ClusterService clusterService;
+     private final Executor responseExecutor;
+     private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
++    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
+ 
+     @Inject
+     public DistributingConsumerFactory(ClusterService clusterService,
+                                        ThreadPool threadPool,
+-                                       Node node) {
++                                       Node node,
++                                       ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction) {
+         this.clusterService = clusterService;
+         this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
+         this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
++        this.killNodeAction = killNodeAction;
+     }
+ 
+     public DistributingConsumer create(NodeOperation nodeOperation,
 ```

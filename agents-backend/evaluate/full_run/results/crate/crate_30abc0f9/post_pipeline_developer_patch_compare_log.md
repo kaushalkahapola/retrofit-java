@@ -259,7 +259,7 @@ Developer -> Generated (Unified Diff)
 ### server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 
 - Developer hunks: 4
-- Generated hunks: 4
+- Generated hunks: 1
 
 #### Hunk 1
 
@@ -280,43 +280,59 @@ Developer
 
 Generated
 ```diff
-@@ -37,10 +37,14 @@
- import io.crate.execution.dsl.phases.ExecutionPhases;
- import io.crate.execution.dsl.phases.NodeOperation;
- import io.crate.execution.jobs.PageBucketReceiver;
-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
-+import io.crate.execution.jobs.kill.KillResponse;
- import io.crate.execution.support.ActionExecutor;
- import io.crate.execution.support.NodeRequest;
- import io.crate.planner.distribution.DistributionInfo;
+@@ -49,14 +49,17 @@
+     private final ClusterService clusterService;
+     private final Executor responseExecutor;
+     private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
++    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
  
-+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-+
- @Singleton
- public class DistributingConsumerFactory {
+     @Inject
+     public DistributingConsumerFactory(ClusterService clusterService,
+                                        ThreadPool threadPool,
+-                                       Node node) {
++                                       Node node,
++                                       ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction) {
+         this.clusterService = clusterService;
+         this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
+         this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
++        this.killNodeAction = killNodeAction;
+     }
  
+     public DistributingConsumer create(NodeOperation nodeOperation,
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,10 +1,15 @@-@@ -37,6 +37,9 @@
-+@@ -37,10 +37,14 @@
-  import io.crate.execution.dsl.phases.ExecutionPhases;
-  import io.crate.execution.dsl.phases.NodeOperation;
-  import io.crate.execution.jobs.PageBucketReceiver;
+--- developer+++ generated@@ -1,10 +1,19 @@-@@ -37,6 +37,9 @@
+- import io.crate.execution.dsl.phases.ExecutionPhases;
+- import io.crate.execution.dsl.phases.NodeOperation;
+- import io.crate.execution.jobs.PageBucketReceiver;
 -+import io.crate.execution.jobs.kill.KillJobsNodeAction;
- +import io.crate.execution.jobs.kill.KillJobsNodeRequest;
- +import io.crate.execution.jobs.kill.KillResponse;
-  import io.crate.execution.support.ActionExecutor;
-  import io.crate.execution.support.NodeRequest;
-  import io.crate.planner.distribution.DistributionInfo;
+-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
+-+import io.crate.execution.jobs.kill.KillResponse;
+- import io.crate.execution.support.ActionExecutor;
+- import io.crate.execution.support.NodeRequest;
+- import io.crate.planner.distribution.DistributionInfo;
++@@ -49,14 +49,17 @@
++     private final ClusterService clusterService;
++     private final Executor responseExecutor;
++     private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
+++    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
 + 
-++import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-++
-+ @Singleton
-+ public class DistributingConsumerFactory {
++     @Inject
++     public DistributingConsumerFactory(ClusterService clusterService,
++                                        ThreadPool threadPool,
++-                                       Node node) {
+++                                       Node node,
+++                                       ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction) {
++         this.clusterService = clusterService;
++         this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
++         this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
+++        this.killNodeAction = killNodeAction;
++     }
 + 
++     public DistributingConsumer create(NodeOperation nodeOperation,
 
 ```
 
@@ -337,50 +353,20 @@ Developer
 
 Generated
 ```diff
-@@ -49,14 +53,17 @@
-     private final ClusterService clusterService;
-     private final Executor responseExecutor;
-     private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
-+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
- 
-     @Inject
-     public DistributingConsumerFactory(ClusterService clusterService,
-                                        ThreadPool threadPool,
--                                       Node node) {
-+                                       Node node,
-+                                       KillJobsNodeAction killJobsNodeAction) {
-         this.clusterService = clusterService;
-         this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
-         this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
-+        this.killNodeAction = killJobsNodeAction;
-     }
- 
-     public DistributingConsumer create(NodeOperation nodeOperation,
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,4 +1,4 @@-@@ -49,6 +52,7 @@
-+@@ -49,14 +53,17 @@
-      private final ClusterService clusterService;
-      private final Executor responseExecutor;
-      private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
-@@ -6,3 +6,14 @@  
-      @Inject
-      public DistributingConsumerFactory(ClusterService clusterService,
-+                                        ThreadPool threadPool,
-+-                                       Node node) {
-++                                       Node node,
-++                                       KillJobsNodeAction killJobsNodeAction) {
-+         this.clusterService = clusterService;
-+         this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
-+         this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
-++        this.killNodeAction = killJobsNodeAction;
-+     }
-+ 
-+     public DistributingConsumer create(NodeOperation nodeOperation,
-
+--- developer+++ generated@@ -1,8 +1 @@-@@ -49,6 +52,7 @@
+-     private final ClusterService clusterService;
+-     private final Executor responseExecutor;
+-     private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
+-+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
+- 
+-     @Inject
+-     public DistributingConsumerFactory(ClusterService clusterService,
++*No hunk*
 ```
 
 #### Hunk 3
@@ -400,37 +386,20 @@ Developer
 
 Generated
 ```diff
-@@ -110,6 +117,8 @@
-             bucketIdx,
-             nodeOperation.downstreamNodes(),
-             distributedResultAction,
-+            killNodeAction,
-+            clusterService.localNode().getId(),
-             pageSize
-         );
-     }
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,8 +1,9 @@-@@ -57,6 +61,7 @@
+--- developer+++ generated@@ -1,8 +1 @@-@@ -57,6 +61,7 @@
 -         this.clusterService = clusterService;
 -         this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
 -         this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
 -+        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);
-+@@ -110,6 +117,8 @@
-+             bucketIdx,
-+             nodeOperation.downstreamNodes(),
-+             distributedResultAction,
-++            killNodeAction,
-++            clusterService.localNode().getId(),
-+             pageSize
-+         );
-      }
+-     }
 - 
 -     public DistributingConsumer create(NodeOperation nodeOperation,
-
++*No hunk*
 ```
 
 #### Hunk 4
@@ -451,41 +420,12 @@ Developer
 
 Generated
 ```diff
-@@ -132,4 +141,28 @@
-         int nodeId = Math.max(server.indexOf(clusterService.localNode().getId()), 0);
-         return nodeId | (phaseInputId << 24);
-     }
-+
-+    /**
-+     * Sends KILL request to all nodes (excluding sender node).
-+     */
-+    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                     UUID jobId,
-+                                     String localNodeId,
-+                                     String reason) {
-+        List<String> excludedNodeIds = Collections.singletonList(localNodeId);
-+
-+        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
-+            excludedNodeIds,
-+            List.of(jobId),
-+            Role.CRATE_USER.name(),
-+            reason
-+        );
-+        killNodeAction
-+            .execute(killRequest)
-+            .whenComplete((_, t) -> {
-+                if (t != null) {
-+                    LOGGER.debug("Could not kill " + jobId, t);
-+                }
-+            });
-+    }
- }
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,9 +1,29 @@-@@ -110,6 +115,8 @@
+--- developer+++ generated@@ -1,9 +1 @@-@@ -110,6 +115,8 @@
 -             bucketIdx,
 -             nodeOperation.downstreamNodes(),
 -             distributedResultAction,
@@ -493,36 +433,8 @@ Developer -> Generated (Unified Diff)
 -+            clusterService.localNode().getId(),
 -             pageSize
 -         );
-+@@ -132,4 +141,28 @@
-+         int nodeId = Math.max(server.indexOf(clusterService.localNode().getId()), 0);
-+         return nodeId | (phaseInputId << 24);
-      }
-++
-++    /**
-++     * Sends KILL request to all nodes (excluding sender node).
-++     */
-++    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-++                                     UUID jobId,
-++                                     String localNodeId,
-++                                     String reason) {
-++        List<String> excludedNodeIds = Collections.singletonList(localNodeId);
-++
-++        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
-++            excludedNodeIds,
-++            List.of(jobId),
-++            Role.CRATE_USER.name(),
-++            reason
-++        );
-++        killNodeAction
-++            .execute(killRequest)
-++            .whenComplete((_, t) -> {
-++                if (t != null) {
-++                    LOGGER.debug("Could not kill " + jobId, t);
-++                }
-++            });
-++    }
-+ }
-
+-     }
++*No hunk*
 ```
 
 
@@ -749,25 +661,10 @@ Developer -> Generated (Unified Diff)
 ## Full Generated Patch (Agent-Only, code-only)
 ```diff
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-index 3dc1921a76..3f067491c6 100644
+index 3dc1921a76..40461e0351 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-@@ -37,10 +37,14 @@ import io.crate.data.breaker.RamAccounting;
- import io.crate.execution.dsl.phases.ExecutionPhases;
- import io.crate.execution.dsl.phases.NodeOperation;
- import io.crate.execution.jobs.PageBucketReceiver;
-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
-+import io.crate.execution.jobs.kill.KillResponse;
- import io.crate.execution.support.ActionExecutor;
- import io.crate.execution.support.NodeRequest;
- import io.crate.planner.distribution.DistributionInfo;
- 
-+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-+
- @Singleton
- public class DistributingConsumerFactory {
- 
-@@ -49,14 +53,17 @@ public class DistributingConsumerFactory {
+@@ -49,14 +49,17 @@ public class DistributingConsumerFactory {
      private final ClusterService clusterService;
      private final Executor responseExecutor;
      private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
@@ -778,77 +675,24 @@ index 3dc1921a76..3f067491c6 100644
                                         ThreadPool threadPool,
 -                                       Node node) {
 +                                       Node node,
-+                                       KillJobsNodeAction killJobsNodeAction) {
++                                       ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction) {
          this.clusterService = clusterService;
          this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
          this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
-+        this.killNodeAction = killJobsNodeAction;
++        this.killNodeAction = killNodeAction;
      }
  
      public DistributingConsumer create(NodeOperation nodeOperation,
-@@ -110,6 +117,8 @@ public class DistributingConsumerFactory {
-             bucketIdx,
-             nodeOperation.downstreamNodes(),
-             distributedResultAction,
-+            killNodeAction,
-+            clusterService.localNode().getId(),
-             pageSize
-         );
-     }
-@@ -132,4 +141,28 @@ public class DistributingConsumerFactory {
-         int nodeId = Math.max(server.indexOf(clusterService.localNode().getId()), 0);
-         return nodeId | (phaseInputId << 24);
-     }
-+
-+    /**
-+     * Sends KILL request to all nodes (excluding sender node).
-+     */
-+    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                     UUID jobId,
-+                                     String localNodeId,
-+                                     String reason) {
-+        List<String> excludedNodeIds = Collections.singletonList(localNodeId);
-+
-+        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
-+            excludedNodeIds,
-+            List.of(jobId),
-+            Role.CRATE_USER.name(),
-+            reason
-+        );
-+        killNodeAction
-+            .execute(killRequest)
-+            .whenComplete((_, t) -> {
-+                if (t != null) {
-+                    LOGGER.debug("Could not kill " + jobId, t);
-+                }
-+            });
-+    }
- }
 
 ```
 
 ## Full Generated Patch (Final Effective, code-only)
 ```diff
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-index 3dc1921a76..3f067491c6 100644
+index 3dc1921a76..40461e0351 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-@@ -37,10 +37,14 @@ import io.crate.data.breaker.RamAccounting;
- import io.crate.execution.dsl.phases.ExecutionPhases;
- import io.crate.execution.dsl.phases.NodeOperation;
- import io.crate.execution.jobs.PageBucketReceiver;
-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
-+import io.crate.execution.jobs.kill.KillResponse;
- import io.crate.execution.support.ActionExecutor;
- import io.crate.execution.support.NodeRequest;
- import io.crate.planner.distribution.DistributionInfo;
- 
-+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-+
- @Singleton
- public class DistributingConsumerFactory {
- 
-@@ -49,14 +53,17 @@ public class DistributingConsumerFactory {
+@@ -49,14 +49,17 @@ public class DistributingConsumerFactory {
      private final ClusterService clusterService;
      private final Executor responseExecutor;
      private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
@@ -859,52 +703,14 @@ index 3dc1921a76..3f067491c6 100644
                                         ThreadPool threadPool,
 -                                       Node node) {
 +                                       Node node,
-+                                       KillJobsNodeAction killJobsNodeAction) {
++                                       ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction) {
          this.clusterService = clusterService;
          this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
          this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
-+        this.killNodeAction = killJobsNodeAction;
++        this.killNodeAction = killNodeAction;
      }
  
      public DistributingConsumer create(NodeOperation nodeOperation,
-@@ -110,6 +117,8 @@ public class DistributingConsumerFactory {
-             bucketIdx,
-             nodeOperation.downstreamNodes(),
-             distributedResultAction,
-+            killNodeAction,
-+            clusterService.localNode().getId(),
-             pageSize
-         );
-     }
-@@ -132,4 +141,28 @@ public class DistributingConsumerFactory {
-         int nodeId = Math.max(server.indexOf(clusterService.localNode().getId()), 0);
-         return nodeId | (phaseInputId << 24);
-     }
-+
-+    /**
-+     * Sends KILL request to all nodes (excluding sender node).
-+     */
-+    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                     UUID jobId,
-+                                     String localNodeId,
-+                                     String reason) {
-+        List<String> excludedNodeIds = Collections.singletonList(localNodeId);
-+
-+        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
-+            excludedNodeIds,
-+            List.of(jobId),
-+            Role.CRATE_USER.name(),
-+            reason
-+        );
-+        killNodeAction
-+            .execute(killRequest)
-+            .whenComplete((_, t) -> {
-+                if (t != null) {
-+                    LOGGER.debug("Could not kill " + jobId, t);
-+                }
-+            });
-+    }
- }
 
 ```
 ## Full Developer Backport Patch (full commit diff)

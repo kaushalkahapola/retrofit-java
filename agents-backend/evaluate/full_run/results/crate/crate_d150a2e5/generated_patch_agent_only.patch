@@ -1,1 +1,34 @@
-
+diff --git a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java
+index 61c17be1a7..7c36a25099 100644
+--- a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java
++++ b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java
+@@ -67,6 +67,8 @@ import io.crate.metadata.PartitionName;
+ import io.crate.metadata.RelationName;
+ import io.crate.metadata.table.TableInfo;
+ import io.crate.replication.logical.LogicalReplicationService;
++import io.crate.metadata.Reference;
++import io.crate.sql.tree.ColumnPolicy;
+ import io.crate.replication.logical.metadata.Publication;
+ 
+ @Singleton
+@@ -122,11 +124,20 @@ public class AlterTableOperation {
+     }
+ 
+     public CompletableFuture<Long> addColumn(AddColumnRequest addColumnRequest) {
++        var newReferences = addColumnRequest.references();
+         String subject = null;
+         if (addColumnRequest.pKeyIndices().isEmpty() == false) {
+             subject = "primary key";
+         } else if (addColumnRequest.references().stream().anyMatch(ref -> ref instanceof GeneratedReference)) {
+             subject = "generated";
++        } else {
++            for (Reference newRef : newReferences) {
++                if (newReferences.stream().anyMatch(r -> r.column().isChildOf(newRef.column()))
++                    && newRef.columnPolicy().equals(ColumnPolicy.IGNORED)) {
++                    subject = "sub column to an OBJECT(IGNORED) parent";
++                    break;
++                }
++            }
+         }
+         if (subject != null) {
+             String finalSubject = subject;
