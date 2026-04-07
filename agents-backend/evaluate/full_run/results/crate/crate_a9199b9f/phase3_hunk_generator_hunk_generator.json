@@ -3,11 +3,11 @@
     {
       "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
       "mainline_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-      "old_string": "<line-based ReAct agent diff>",
-      "new_string": "diff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java\nindex 42786e0c19..0406a9d773 100644\n--- a/server/src/main/java/io/crate/planner/operators/Collect.java\n+++ b/server/src/main/java/io/crate/planner/operators/Collect.java\n@@ -109,6 +109,14 @@ public class Collect implements LogicalPlan {\n         this.detailedQuery = detailedQuery;\n     }\n \n+    /// @return a new Collect operator with changed outputs\n+    public Collect withOutputs(List<Symbol> newOutputs) {\n+        Collect collect = new Collect(relation, newOutputs, immutableWhere);\n+        collect.mutableBoundWhere = mutableBoundWhere;\n+        collect.detailedQuery = detailedQuery;\n+        return collect;\n+    }\n+\n     public Collect(AbstractTableRelation<?> relation,\n                    List<Symbol> outputs,\n                    WhereClause where) {\n@@ -345,7 +353,7 @@ public class Collect implements LogicalPlan {\n         if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {\n             return this;\n         }\n-        return new Collect(relation, List.copyOf(newOutputs), immutableWhere);\n+        return withOutputs(List.copyOf(newOutputs));\n     }\n \n     @Nullable\n@@ -384,11 +392,7 @@ public class Collect implements LogicalPlan {\n         newOutputs.add(0, fetchMarker);\n         return new FetchRewrite(\n             replacedOutputs,\n-            new Collect(\n-                relation,\n-                newOutputs,\n-                immutableWhere\n-            )\n+            withOutputs(newOutputs)\n         );\n     }",
+      "old_string": "<mainline patch fast path>",
+      "new_string": "diff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java\nindex 42786e0c19..97aba6cd76 100644\n--- a/server/src/main/java/io/crate/planner/operators/Collect.java\n+++ b/server/src/main/java/io/crate/planner/operators/Collect.java\n@@ -123,6 +123,14 @@ public class Collect implements LogicalPlan {\n         this.tableInfo = relation.tableInfo();\n     }\n \n+    /// @return a new Collect operator with changed outputs\n+    public Collect withOutputs(List<Symbol> newOutputs) {\n+        Collect collect = new Collect(relation, newOutputs, immutableWhere);\n+        collect.mutableBoundWhere = mutableBoundWhere;\n+        collect.detailedQuery = detailedQuery;\n+        return collect;\n+    }\n+\n     @Override\n     public ExecutionPlan build(DependencyCarrier executor,\n                                PlannerContext plannerContext,\n@@ -345,7 +353,7 @@ public class Collect implements LogicalPlan {\n         if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {\n             return this;\n         }\n-        return new Collect(relation, List.copyOf(newOutputs), immutableWhere);\n+        return withOutputs(List.copyOf(newOutputs));\n     }\n \n     @Nullable\n@@ -382,14 +390,7 @@ public class Collect implements LogicalPlan {\n             return null;\n         }\n         newOutputs.add(0, fetchMarker);\n-        return new FetchRewrite(\n-            replacedOutputs,\n-            new Collect(\n-                relation,\n-                newOutputs,\n-                immutableWhere\n-            )\n-        );\n+        return new FetchRewrite(replacedOutputs, withOutputs(newOutputs));\n     }\n \n     @Override",
       "edit_type": "replace",
       "verified": true,
-      "verification_result": "ReAct agent applied",
+      "verification_result": "mainline_fast_path_ok (TYPE I)",
       "applied": true,
       "apply_result": "SUCCESS"
     }
@@ -17,223 +17,40 @@
       {
         "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
         "mainline_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "old_string": "<line-based ReAct agent diff>",
-        "new_string": "diff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java\nindex 42786e0c19..0406a9d773 100644\n--- a/server/src/main/java/io/crate/planner/operators/Collect.java\n+++ b/server/src/main/java/io/crate/planner/operators/Collect.java\n@@ -109,6 +109,14 @@ public class Collect implements LogicalPlan {\n         this.detailedQuery = detailedQuery;\n     }\n \n+    /// @return a new Collect operator with changed outputs\n+    public Collect withOutputs(List<Symbol> newOutputs) {\n+        Collect collect = new Collect(relation, newOutputs, immutableWhere);\n+        collect.mutableBoundWhere = mutableBoundWhere;\n+        collect.detailedQuery = detailedQuery;\n+        return collect;\n+    }\n+\n     public Collect(AbstractTableRelation<?> relation,\n                    List<Symbol> outputs,\n                    WhereClause where) {\n@@ -345,7 +353,7 @@ public class Collect implements LogicalPlan {\n         if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {\n             return this;\n         }\n-        return new Collect(relation, List.copyOf(newOutputs), immutableWhere);\n+        return withOutputs(List.copyOf(newOutputs));\n     }\n \n     @Nullable\n@@ -384,11 +392,7 @@ public class Collect implements LogicalPlan {\n         newOutputs.add(0, fetchMarker);\n         return new FetchRewrite(\n             replacedOutputs,\n-            new Collect(\n-                relation,\n-                newOutputs,\n-                immutableWhere\n-            )\n+            withOutputs(newOutputs)\n         );\n     }",
+        "old_string": "<mainline patch fast path>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java\nindex 42786e0c19..97aba6cd76 100644\n--- a/server/src/main/java/io/crate/planner/operators/Collect.java\n+++ b/server/src/main/java/io/crate/planner/operators/Collect.java\n@@ -123,6 +123,14 @@ public class Collect implements LogicalPlan {\n         this.tableInfo = relation.tableInfo();\n     }\n \n+    /// @return a new Collect operator with changed outputs\n+    public Collect withOutputs(List<Symbol> newOutputs) {\n+        Collect collect = new Collect(relation, newOutputs, immutableWhere);\n+        collect.mutableBoundWhere = mutableBoundWhere;\n+        collect.detailedQuery = detailedQuery;\n+        return collect;\n+    }\n+\n     @Override\n     public ExecutionPlan build(DependencyCarrier executor,\n                                PlannerContext plannerContext,\n@@ -345,7 +353,7 @@ public class Collect implements LogicalPlan {\n         if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {\n             return this;\n         }\n-        return new Collect(relation, List.copyOf(newOutputs), immutableWhere);\n+        return withOutputs(List.copyOf(newOutputs));\n     }\n \n     @Nullable\n@@ -382,14 +390,7 @@ public class Collect implements LogicalPlan {\n             return null;\n         }\n         newOutputs.add(0, fetchMarker);\n-        return new FetchRewrite(\n-            replacedOutputs,\n-            new Collect(\n-                relation,\n-                newOutputs,\n-                immutableWhere\n-            )\n-        );\n+        return new FetchRewrite(replacedOutputs, withOutputs(newOutputs));\n     }\n \n     @Override",
         "edit_type": "replace",
         "verified": true,
-        "verification_result": "ReAct agent applied",
+        "verification_result": "mainline_fast_path_ok (TYPE I)",
         "applied": true,
         "apply_result": "SUCCESS"
       }
     ]
   ],
   "agent_trajectory_edits": [
-    [
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "center_line": 120,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "center_line": 130,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "center_line": 350,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "center_line": 390,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "center_line": 110,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "center_line": 90,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "search_text": "withOutputs"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "search_text": "pruneOutputsExcept"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "grep_in_file",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "search_text": "rewriteToFetch"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "get_method_boundaries",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "method_signature": "public LogicalPlan pruneOutputsExcept(SequencedCollection<Symbol> outputsToKeep)"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "center_line": 336,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "center_line": 348,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "center_line": 385,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "center_line": 100,
-          "radius": 15
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "get_exact_lines",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "start_line": 353,
-          "end_line": 393
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "old_string": "    @Nullable\n    @Override\n    public FetchRewrite rewriteToFetch(Collection<Symbol> usedColumns) {\n        if (!(tableInfo instanceof DocTableInfo)) {\n            return null;\n        }\n        ArrayList<Symbol> newOutputs = new ArrayList<>();\n        LinkedHashMap<Symbol, Symbol> replacedOutputs = new LinkedHashMap<>();\n        ArrayList<Reference> refsToFetch = new ArrayList<>();\n        FetchMarker fetchMarker = new FetchMarker(relation.relationName(), refsToFetch);\n        for (int i = 0; i < outputs.size(); i++) {\n            Symbol output = outputs.get(i);\n            if (output.hasColumn(SysColumns.SCORE)) {\n                newOutputs.add(output);\n                replacedOutputs.put(output, output);\n            } else if (!output.any(Symbol.IS_COLUMN)) {\n                newOutputs.add(output);\n                replacedOutputs.put(output, output);\n            } else if (Symbols.any(usedColumns, (Predicate<? super Symbol>) output::equals)) {\n                newOutputs.add(output);\n                replacedOutputs.put(output, output);\n            } else {\n                Symbol outputWithFetchStub = RefReplacer.replaceRefs(output, ref -> {\n                    Reference sourceLookup = DocReferences.toDocLookup(ref);\n                    refsToFetch.add(sourceLookup);\n                    return new FetchStub(fetchMarker, sourceLookup);\n                });\n                replacedOutputs.put(output, outputWithFetchStub);\n            }\n        }\n        if (newOutputs.size() == outputs.size()) {\n            return null;\n        }\n        newOutputs.add(0, fetchMarker);\n        return new FetchRewrite(\n            replacedOutputs,\n            new Collect(\n                relation,\n                newOutputs,\n                immutableWhere\n            )\n        );\n    }",
-          "new_string": "    @Nullable\n    @Override\n    public FetchRewrite rewriteToFetch(Collection<Symbol> usedColumns) {\n        if (!(tableInfo instanceof DocTableInfo)) {\n            return null;\n        }\n        ArrayList<Symbol> newOutputs = new ArrayList<>();\n        LinkedHashMap<Symbol, Symbol> replacedOutputs = new LinkedHashMap<>();\n        ArrayList<Reference> refsToFetch = new ArrayList<>();\n        FetchMarker fetchMarker = new FetchMarker(relation.relationName(), refsToFetch);\n        for (int i = 0; i < outputs.size(); i++) {\n            Symbol output = outputs.get(i);\n            if (output.hasColumn(SysColumns.SCORE)) {\n                newOutputs.add(output);\n                replacedOutputs.put(output, output);\n            } else if (!output.any(Symbol.IS_COLUMN)) {\n                newOutputs.add(output);\n                replacedOutputs.put(output, output);\n            } else if (Symbols.any(usedColumns, (Predicate<? super Symbol>) output::equals)) {\n                newOutputs.add(output);\n                replacedOutputs.put(output, output);\n            } else {\n                Symbol outputWithFetchStub = RefReplacer.replaceRefs(output, ref -> {\n                    Reference sourceLookup = DocReferences.toDocLookup(ref);\n                    refsToFetch.add(sourceLookup);\n                    return new FetchStub(fetchMarker, sourceLookup);\n                });\n                replacedOutputs.put(output, outputWithFetchStub);\n            }\n        }\n        if (newOutputs.size() == outputs.size()) {\n            return null;\n        }\n        newOutputs.add(0, fetchMarker);\n        return new FetchRewrite(\n            replacedOutputs,\n            withOutputs(newOutputs)\n        );\n    }"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "get_exact_lines",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "start_line": 336,
-          "end_line": 349
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "old_string": "    @Override\n    public LogicalPlan pruneOutputsExcept(SequencedCollection<Symbol> outputsToKeep) {\n        LinkedHashSet<Symbol> newOutputs = new LinkedHashSet<>();\n        for (Symbol outputToKeep : outputsToKeep) {\n            Symbols.intersection(outputToKeep, outputs, needle -> {\n                int index = outputs.indexOf(needle);\n                assert index != -1 : \"Consumer is called only when intersection is found\";\n                newOutputs.add(outputs.get(index));\n            });\n        }\n        if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {\n            return this;\n        }\n        return new Collect(relation, List.copyOf(newOutputs), immutableWhere);\n    }",
-          "new_string": "    @Override\n    public LogicalPlan pruneOutputsExcept(SequencedCollection<Symbol> outputsToKeep) {\n        LinkedHashSet<Symbol> newOutputs = new LinkedHashSet<>();\n        for (Symbol outputToKeep : outputsToKeep) {\n            Symbols.intersection(outputToKeep, outputs, needle -> {\n                int index = outputs.indexOf(needle);\n                assert index != -1 : \"Consumer is called only when intersection is found\";\n                newOutputs.add(outputs.get(index));\n            });\n        }\n        if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {\n            return this;\n        }\n        return withOutputs(List.copyOf(newOutputs));\n    }"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "read_file_window",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "center_line": 110,
-          "radius": 10
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "edit_file",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java",
-          "old_string": "    }",
-          "new_string": "    }\n\n    /// @return a new Collect operator with changed outputs\n    public Collect withOutputs(List<Symbol> newOutputs) {\n        Collect collect = new Collect(relation, newOutputs, immutableWhere);\n        collect.mutableBoundWhere = mutableBoundWhere;\n        collect.detailedQuery = detailedQuery;\n        return collect;\n    }"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "check_java_syntax",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "git_diff_file",
-        "args": {
-          "file_path": "server/src/main/java/io/crate/planner/operators/Collect.java"
-        }
-      },
-      {
-        "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-        "tool": "verify_guidelines",
-        "args": {
-          "diff_text": "diff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java\nindex 42786e0c19..0406a9d773 100644\n--- a/server/src/main/java/io/crate/planner/operators/Collect.java\n+++ b/server/src/main/java/io/crate/planner/operators/Collect.java\n@@ -109,6 +109,14 @@ public class Collect implements LogicalPlan {\n         this.detailedQuery = detailedQuery;\n     }\n \n+    \u0000200;return new Collect(relation, List.copyOf(newOutputs), immutableWhere);\n+    }\n+\n+    @Nullable\n+    @Override\n+    public FetchRewrite rewriteToFetch(Collection<Symbol> usedColumns) {\n+        if (!(tableInfo instanceof DocTableInfo)) {\n+            return null;\n+        }\n+        ArrayList<Symbol> newOutputs = new ArrayList<>();\n+        LinkedHashMap<Symbol, Symbol> replacedOutputs = new LinkedHashMap<>();\n+        ArrayList<Reference> refsToFetch = new ArrayList<>();\n+        FetchMarker fetchMarker = new FetchMarker(relation.relationName(), refsToFetch);\n+        for (int i = 0; i < outputs.size(); i++) {\n+            Symbol output = outputs.get(i);\n+            if (output.hasColumn(SysColumns.SCORE)) {\n+                newOutputs.add(output);\n+                replacedOutputs.put(output, output);\n+            } else if (!output.any(Symbol.IS_COLUMN)) {\n+                newOutputs.add(output);\n+                replacedOutputs.put(output, output);\n+            } else if (Symbols.any(usedColumns, (Predicate<? super Symbol>) output::equals)) {\n+                newOutputs.add(output);\n+                replacedOutputs.put(output, output);\n+            } else {\n+                Symbol outputWithFetchStub = RefReplacer.replaceRefs(output, ref -> {\n+                    Reference sourceLookup = DocReferences.toDocLookup(ref);\n+                    refsToFetch.add(sourceLookup);\n+                    return new FetchStub(fetchMarker, sourceLookup);\n+                });\n+                replacedOutputs.put(output, outputWithFetchStub);\n+            }\n+        }\n+        if (newOutputs.size() == outputs.size()) {\n+            return null;\n+        }\n+        newOutputs.add(0, fetchMarker);\n+        return new FetchRewrite(\n+            replacedOutputs,\n+            withOutputs(newOutputs)\n+        );\n+    }\n+\n+    @Override\n+    public Map<LogicalPlan, SelectSymbol> dependencies() {\n+        return Map.of();\n+    }\n+\n+    @Override\n+    public String toString() {\n+        return \"Collect{\" +\n+               tableInfo.ident() +\n+               \", [\" + Lists.joinOn(\", \", outputs, Symbol::toString) +\n+               \"], \" + immutableWhere +\n+               \"}\";\n+    }\n+\n+    @Override\n+    public int hashCode() {\n+        return Objects.hash(relation, outputs, immutableWhere);\n+    }\n+\n+    @Override\n+    public boolean equals(Object o) {\n+        if (this == o) return true;\n+        if (o == null || getClass() != o.getClass()) return false;\n+        Collect collect = (Collect) o;\n+        return relation.equals(collect.relation) &&\n+               outputs.equals(collect.outputs) &&\n+               immutableWhere.equals(collect.immutableWhere);\n+    }\n+\n+    public List<Symbol> outputs() {\n+        return outputs;\n+    }\n+\n+    public List<AbstractTableRelation<?>> baseTables() {\n+        return baseTables;\n+    }\n+\n+    public AbstractTableRelation<?> relation() {\n+        return relation;\n+    }\n+\n+    public TableInfo tableInfo() {\n+        return tableInfo;\n+    }\n+\n+    public WhereClause immutableWhere() {\n+        return immutableWhere;\n+    }\n+\n+    public WhereClause mutableBoundWhere() {\n+        return mutableBoundWhere;\n+    }\n+\n+    public DetailedQuery detailedQuery() {\n+        return detailedQuery;\n+    }\n+\n+    @Override\n+    public <C, R> R accept(LogicalPlanVisitor<C, R> visitor, C context) {\n+        return visitor.visitCollect(this, context);\n+    }\n+\n+    @Override\n+    public <C, R> R accept(PlanVisitor<C, R> visitor, C context) {\n+        return visitor.visitCollect(this, context);\n+    }\n+\n+    @Override\n+    public String toString() {\n+        return \"Collect{\" +\n+               tableInfo.ident() +\n+               \", [\" + Lists.joinOn(\", \", outputs, Symbol::toString) +\n+               \"], \" + immutableWhere +\n+               \"}\";\n+    }\n+\n+    @Override\n+    public int hashCode() {\n+        return Objects.hash(relation, outputs, immutableWhere);\n+    }\n+\n+    @Override\n+    public boolean equals(Object o) {\n+        if (this == o) return true;\n+        if (o == null || getClass() != o.getClass()) return false;\n+        Collect collect = (Collect) o;\n+        return relation.equals(collect.relation) &&\n+               outputs.equals(collect.outputs) &&\n+               immutableWhere.equals(collect.immutableWhere);\n+    }\n+\n+    public List<Symbol> outputs() {\n+        return outputs;\n+    }\n+\n+    public List<AbstractTableRelation<?>> baseTables() {\n+        return baseTables;\n+    }\n+\n+    public AbstractTableRelation<?> relation() {\n+        return relation;\n+    }\n+\n+    public TableInfo tableInfo() {\n+        return tableInfo;\n+    }\n+\n+    public WhereClause immutableWhere() {\n+        return immutableWhere;\n+    }\n+\n+    public WhereClause mutableBoundWhere() {\n+        return mutableBoundWhere;\n+    }\n+\n+    public DetailedQuery detailedQuery() {\n+        return detailedQuery;\n+    }\n+\n+    @Override\n+    public <C, R> R accept(LogicalPlanVisitor<C, R> visitor, C context) {\n+        return visitor.visitCollect(this, context);\n+    }\n+\n+    @Override\n+    public <C, R> R accept(PlanVisitor<C, R> visitor, C context) {\n+        return visitor.visitCollect(this, context);\n+    }\n"
-        }
-      }
-    ]
+    []
   ],
   "adapted_code_hunks": [
     {
       "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
       "mainline_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
-      "hunk_text": "diff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java\nindex 42786e0c19..0406a9d773 100644\n--- a/server/src/main/java/io/crate/planner/operators/Collect.java\n+++ b/server/src/main/java/io/crate/planner/operators/Collect.java\n@@ -109,6 +109,14 @@ public class Collect implements LogicalPlan {\n         this.detailedQuery = detailedQuery;\n     }\n \n+    /// @return a new Collect operator with changed outputs\n+    public Collect withOutputs(List<Symbol> newOutputs) {\n+        Collect collect = new Collect(relation, newOutputs, immutableWhere);\n+        collect.mutableBoundWhere = mutableBoundWhere;\n+        collect.detailedQuery = detailedQuery;\n+        return collect;\n+    }\n+\n     public Collect(AbstractTableRelation<?> relation,\n                    List<Symbol> outputs,\n                    WhereClause where) {\n@@ -345,7 +353,7 @@ public class Collect implements LogicalPlan {\n         if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {\n             return this;\n         }\n-        return new Collect(relation, List.copyOf(newOutputs), immutableWhere);\n+        return withOutputs(List.copyOf(newOutputs));\n     }\n \n     @Nullable\n@@ -384,11 +392,7 @@ public class Collect implements LogicalPlan {\n         newOutputs.add(0, fetchMarker);\n         return new FetchRewrite(\n             replacedOutputs,\n-            new Collect(\n-                relation,\n-                newOutputs,\n-                immutableWhere\n-            )\n+            withOutputs(newOutputs)\n         );\n     }\n \n",
-      "insertion_line": 109,
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java\nindex 42786e0c19..97aba6cd76 100644\n--- a/server/src/main/java/io/crate/planner/operators/Collect.java\n+++ b/server/src/main/java/io/crate/planner/operators/Collect.java\n@@ -123,6 +123,14 @@ public class Collect implements LogicalPlan {\n         this.tableInfo = relation.tableInfo();\n     }\n \n+    /// @return a new Collect operator with changed outputs\n+    public Collect withOutputs(List<Symbol> newOutputs) {\n+        Collect collect = new Collect(relation, newOutputs, immutableWhere);\n+        collect.mutableBoundWhere = mutableBoundWhere;\n+        collect.detailedQuery = detailedQuery;\n+        return collect;\n+    }\n+\n     @Override\n     public ExecutionPlan build(DependencyCarrier executor,\n                                PlannerContext plannerContext,\n@@ -345,7 +353,7 @@ public class Collect implements LogicalPlan {\n         if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {\n             return this;\n         }\n-        return new Collect(relation, List.copyOf(newOutputs), immutableWhere);\n+        return withOutputs(List.copyOf(newOutputs));\n     }\n \n     @Nullable\n@@ -382,14 +390,7 @@ public class Collect implements LogicalPlan {\n             return null;\n         }\n         newOutputs.add(0, fetchMarker);\n-        return new FetchRewrite(\n-            replacedOutputs,\n-            new Collect(\n-                relation,\n-                newOutputs,\n-                immutableWhere\n-            )\n-        );\n+        return new FetchRewrite(replacedOutputs, withOutputs(newOutputs));\n     }\n \n     @Override\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "validation_repeated_patch_detected": false,
+  "validation_repeated_plan_detected": false,
+  "best_effort_adapted_code_hunks": [
+    {
+      "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
+      "mainline_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java\nindex 42786e0c19..97aba6cd76 100644\n--- a/server/src/main/java/io/crate/planner/operators/Collect.java\n+++ b/server/src/main/java/io/crate/planner/operators/Collect.java\n@@ -123,6 +123,14 @@ public class Collect implements LogicalPlan {\n         this.tableInfo = relation.tableInfo();\n     }\n \n+    /// @return a new Collect operator with changed outputs\n+    public Collect withOutputs(List<Symbol> newOutputs) {\n+        Collect collect = new Collect(relation, newOutputs, immutableWhere);\n+        collect.mutableBoundWhere = mutableBoundWhere;\n+        collect.detailedQuery = detailedQuery;\n+        return collect;\n+    }\n+\n     @Override\n     public ExecutionPlan build(DependencyCarrier executor,\n                                PlannerContext plannerContext,\n@@ -345,7 +353,7 @@ public class Collect implements LogicalPlan {\n         if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {\n             return this;\n         }\n-        return new Collect(relation, List.copyOf(newOutputs), immutableWhere);\n+        return withOutputs(List.copyOf(newOutputs));\n     }\n \n     @Nullable\n@@ -382,14 +390,7 @@ public class Collect implements LogicalPlan {\n             return null;\n         }\n         newOutputs.add(0, fetchMarker);\n-        return new FetchRewrite(\n-            replacedOutputs,\n-            new Collect(\n-                relation,\n-                newOutputs,\n-                immutableWhere\n-            )\n-        );\n+        return new FetchRewrite(replacedOutputs, withOutputs(newOutputs));\n     }\n \n     @Override\n",
+      "insertion_line": 1,
       "intent_verified": true,
       "file_operation": "MODIFIED",
       "old_target_file": null,
@@ -247,9 +64,12 @@
       "mainline_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
       "target_file": "server/src/main/java/io/crate/planner/operators/Collect.java",
       "hunk_index": 0,
-      "adaptation_type": "TYPE_I",
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
       "status": "success",
-      "reason": "generated_and_validated",
+      "reason": "mainline_fast_path",
       "todo_steps": [
         "reset_file",
         "apply_edits",
@@ -266,14 +86,15 @@
       ]
     }
   ],
-  "generated_patch_hash": "ca36a2f9403dbf10d15045e06fd98c3e82a43db214dcf6b62b347fb983866ea6",
+  "generated_patch_hash": "d919612859906378b6e4f6b8fdda40c0c5869f54dac11623863e9a5e1d429a16",
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
   "token_usage": {
-    "input_tokens": 500,
-    "output_tokens": 1,
-    "total_tokens": 501,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
     "estimated": false,
-    "sources": [
-      "file_editor.intent.provider_usage"
-    ]
+    "sources": []
   }
 }

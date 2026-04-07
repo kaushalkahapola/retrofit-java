@@ -1,0 +1,244 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import io.crate.execution.support.ActionExecutor;",
+        "new_string": "import io.crate.execution.jobs.kill.KillJobsNodeAction;\nimport io.crate.execution.jobs.kill.KillJobsNodeRequest;\nimport io.crate.execution.jobs.kill.KillResponse;\nimport io.crate.execution.support.ActionExecutor;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "import io.crate.execution.dsl.phases.ExecutionPhases;",
+          "import io.crate.execution.dsl.phases.NodeOperation;",
+          "import io.crate.execution.jobs.PageBucketReceiver;"
+        ],
+        "surround_after_3": [
+          "import io.crate.execution.support.NodeRequest;",
+          "import io.crate.planner.distribution.DistributionInfo;",
+          ""
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [
+          {
+            "from": "io.crate.execution.jobs.kill.KillJobsNodeAction",
+            "to": "io.crate.execution.jobs.kill.KillJobsNodeAction",
+            "reason": "Import added in mainline, same package and class in target"
+          },
+          {
+            "from": "io.crate.execution.jobs.kill.KillJobsNodeRequest",
+            "to": "io.crate.execution.jobs.kill.KillJobsNodeRequest",
+            "reason": "Import added in mainline, same package and class in target"
+          },
+          {
+            "from": "io.crate.execution.jobs.kill.KillResponse",
+            "to": "io.crate.execution.jobs.kill.KillResponse",
+            "reason": "Import added in mainline, same package and class in target"
+          }
+        ],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 2,
+          "target_declared_methods_count": 2,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "    private final ThreadPool threadPool;",
+        "new_string": "    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\n    private final ThreadPool threadPool;",
+        "verified": false,
+        "verification_result": "sanitize_old_not_found:not_found_single",
+        "notes": "required_op_insert_before|sanitize_old_not_found:not_found_single|sanitize_old_not_found:not_found_single|sanitize_old_not_found:not_found_single|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "",
+          "    private static final String RESPONSE_EXECUTOR_NAME = ThreadPool.Names.SEARCH;",
+          ""
+        ],
+        "surround_after_3": [
+          "    private final ThreadPool threadPool;",
+          "",
+          "    @Inject"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          "private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 2,
+          "target_declared_methods_count": 2,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);",
+        "new_string": "        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);\n        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before|sanitize_old_not_found:not_found_single|type_v_repaired|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "                                       Node node) {",
+          "        this.clusterService = clusterService;",
+          "        this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);"
+        ],
+        "surround_after_3": [
+          "    }",
+          "",
+          "    public DistributingConsumer create(NodeOperation nodeOperation,"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          "this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 2,
+          "target_declared_methods_count": 2,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
+        "operation_index": 1,
+        "edit_type": "insert_before",
+        "old_string": "",
+        "new_string": "",
+        "verified": false,
+        "verification_result": "sanitize_old_not_found:empty",
+        "notes": "required_op_insert_before|coverage_backfill|type_v_repaired|sanitize_old_not_found:empty|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [],
+        "surround_after_3": [],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          "this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 2,
+          "target_declared_methods_count": 2,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "            pageSize,",
+        "new_string": "            killNodeAction,\n            clusterService.localNode().getId(),\n            pageSize,",
+        "verified": false,
+        "verification_result": "sanitize_old_not_found:not_found_single",
+        "notes": "Surroundings match, location differs by 2 lines, safe to insert same parameters before pageSize|sanitize_old_not_found:not_found_single|sanitize_old_not_found:not_found_single|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "            multiBucketBuilder,",
+          "            nodeOperation.downstreamExecutionPhaseId(),",
+          "            phaseInputId,"
+        ],
+        "surround_after_3": [
+          "",
+          "    /**",
+          "     * @return bucketIdx (= phaseInputID (8bit) | idx of localNode in nodeIds (24bit) )"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          "clusterService.localNode().getId(),"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 2,
+          "target_declared_methods_count": 2,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ]
+  },
+  "last_plan_signature": "4031465817cab72b2bb4e4877df500fc162a1f25a4bede838417064ff2727a13",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": true,
+  "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
+  "force_type_v_retry_files": [
+    "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java"
+  ],
+  "token_usage": {
+    "input_tokens": 11414,
+    "output_tokens": 1769,
+    "total_tokens": 13183,
+    "estimated": true,
+    "sources": [
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken",
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken",
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken"
+    ]
+  }
+}

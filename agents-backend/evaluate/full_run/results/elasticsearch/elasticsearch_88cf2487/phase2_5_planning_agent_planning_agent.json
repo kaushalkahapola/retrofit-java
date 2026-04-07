@@ -47,10 +47,10 @@
         "operation_index": 0,
         "edit_type": "replace",
         "old_string": "            }\n            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n            }",
-        "new_string": "            }\n            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                builder.startObject(CACHE_EVICTIONS_HISTORY);\n                cacheEvictionsHistory.toXContent(builder, params);",
+        "new_string": "            }\n            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n                builder.startObject(CACHE_EVICTIONS_HISTORY);\n                cacheEvictionsHistory.toXContent(builder, params);",
         "verified": true,
-        "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "verification_result": "sanitize_resolved:multiline_anchor_reconstructed",
+        "notes": "required_op_replace|required_replace_enforced",
         "surround_before_3": [
           "            ob.field(COMPILATION_LIMIT_TRIGGERED, compilationLimitTriggered);",
           "            if (compilationsHistory != null && compilationsHistory.areTimingsEmpty() == false) {",
@@ -85,10 +85,11 @@
       }
     ]
   },
-  "last_plan_signature": "4d315c8ec0d330383eae77a142a009e955d78a2ba52dcc34e6fa9ff35daf5679",
+  "last_plan_signature": "393afb1290c68635367a185b834c0a7e84562b3ea04f71bc8c7c9c3245d6948a",
   "validation_repeated_plan_detected": false,
   "force_type_v_until_success": false,
   "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
   "token_usage": {
     "input_tokens": 0,
     "output_tokens": 0,

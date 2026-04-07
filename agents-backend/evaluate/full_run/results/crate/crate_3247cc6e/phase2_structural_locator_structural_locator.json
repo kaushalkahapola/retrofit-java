@@ -4,13 +4,23 @@
     "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java": [
       {
         "hunk_index": 1,
-        "mainline_method": "hunk_1",
+        "mainline_method": "terminatePartial",
         "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
-        "target_method": null,
-        "start_line": null,
-        "end_line": null,
-        "code_snippet": ""
+        "target_method": "terminatePartial",
+        "start_line": 162,
+        "end_line": 162,
+        "code_snippet": "        Object value = args[0].value();\n        if (value != null) {\n            state.add(value);\n        }\n        return state;\n    }\n\n    @Override\n    public HllState reduce(RamAccounting ramAccounting, HllState state1, HllState state2) {\n        if (state1.isInitialized() == false) {\n            return state2;\n        }\n        if (state2.isInitialized()) {\n            state1.merge(state2);\n        }\n        return state1;\n    }\n\n    @Override\n    public Long terminatePartial(RamAccounting ramAccounting, HllState state) {\n        if (state.isInitialized()) {\n            return state.value();\n        }\n        return null;\n    }\n\n\n\n    @Nullable\n    @Override\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       Version shardCreatedVersion,\n                                                       List<Literal<?>> optionalParams) {\n        if (aggregationReferences.stream().anyMatch(x -> x != null && !x.hasDocValues())) {\n            return null;\n        }\n\n        final int precision;\n        if (optionalParams.isEmpty()) {",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
       }
     ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
   }
 }

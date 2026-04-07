@@ -1,13 +1,100 @@
 {
+  "adapted_file_edits": [
+    {
+      "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+      "mainline_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+      "old_string": "<mainline patch fast path>",
+      "new_string": "diff --git a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java\nindex 4f6f01847f..50a9b41bbf 100644\n--- a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java\n+++ b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java\n@@ -159,10 +159,7 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog\n \n     @Override\n     public Long terminatePartial(RamAccounting ramAccounting, HllState state) {\n-        if (state.isInitialized()) {\n-            return state.value();\n-        }\n-        return null;\n+        return state.isInitialized() ? state.value() : 0L;\n     }",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "mainline_fast_path_ok (TYPE I)",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    }
+  ],
+  "all_adapted_file_edits": [
+    [
+      {
+        "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+        "mainline_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+        "old_string": "<mainline patch fast path>",
+        "new_string": "diff --git a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java\nindex 4f6f01847f..50a9b41bbf 100644\n--- a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java\n+++ b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java\n@@ -159,10 +159,7 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog\n \n     @Override\n     public Long terminatePartial(RamAccounting ramAccounting, HllState state) {\n-        if (state.isInitialized()) {\n-            return state.value();\n-        }\n-        return null;\n+        return state.isInitialized() ? state.value() : 0L;\n     }",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "mainline_fast_path_ok (TYPE I)",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      }
+    ]
+  ],
+  "agent_trajectory_edits": [
+    []
+  ],
   "adapted_code_hunks": [
     {
       "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
       "mainline_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
-      "hunk_text": "@@ -167,10 +167,7 @@\n \n     @Override\n     public Long terminatePartial(RamAccounting ramAccounting, HllState state) {\n-        if (state.isInitialized()) {\n-            return state.value();\n-        }\n-        return null;\n+        return state.isInitialized() ? state.value() : 0L;\n     }\n \n \n",
-      "insertion_line": 167,
+      "hunk_text": "diff --git a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java\nindex 4f6f01847f..50a9b41bbf 100644\n--- a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java\n+++ b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java\n@@ -159,10 +159,7 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog\n \n     @Override\n     public Long terminatePartial(RamAccounting ramAccounting, HllState state) {\n-        if (state.isInitialized()) {\n-            return state.value();\n-        }\n-        return null;\n+        return state.isInitialized() ? state.value() : 0L;\n     }\n \n \n",
+      "insertion_line": 1,
       "intent_verified": true,
-      "file_operation": "MODIFIED"
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     }
   ],
-  "adapted_test_hunks": []
+  "validation_repeated_patch_detected": false,
+  "validation_repeated_plan_detected": false,
+  "best_effort_adapted_code_hunks": [
+    {
+      "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+      "mainline_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+      "hunk_text": "diff --git a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java\nindex 4f6f01847f..50a9b41bbf 100644\n--- a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java\n+++ b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java\n@@ -159,10 +159,7 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog\n \n     @Override\n     public Long terminatePartial(RamAccounting ramAccounting, HllState state) {\n-        if (state.isInitialized()) {\n-            return state.value();\n-        }\n-        return null;\n+        return state.isInitialized() ? state.value() : 0L;\n     }\n \n \n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+      "target_file": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "mainline_fast_path",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    }
+  ],
+  "generated_patch_hash": "085fb9842483e5e947ba47b388bf47ce90ff0dde359d4f8e4b633daed8e10917",
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
 }

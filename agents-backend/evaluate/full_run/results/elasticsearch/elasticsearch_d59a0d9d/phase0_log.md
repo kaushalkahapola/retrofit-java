@@ -3,7 +3,7 @@
 - Mainline commit: d59a0d9d44fb0cf553cb33a7a5e0da1f0b541c6b
 - Backport commit: 55ac92975e6ec0d714cfaa80d2d4a883bed9b78e
 - Java-only files for agentic phases: 2
-- Developer auxiliary hunks (test + non-Java): 5
+- Developer auxiliary hunks (test + non-Java): 4
 
 ## Commit Pair Consistency
 - Pair mismatch: False

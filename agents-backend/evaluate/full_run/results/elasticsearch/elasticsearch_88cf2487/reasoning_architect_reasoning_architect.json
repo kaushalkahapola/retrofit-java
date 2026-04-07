@@ -1,0 +1,29 @@
+{
+  "surgical_plans": {},
+  "reasoning_context": {
+    "current_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+    "failure_kind": "anchor_not_found",
+    "build_diagnostics": {
+      "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+      "issues": [],
+      "failed_locations": [],
+      "symbol_errors": [],
+      "signature_errors": [],
+      "primary_failed_symbol": "",
+      "raw_error_preview": "Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors."
+    },
+    "side_files": [],
+    "iteration": 1,
+    "surgical_ops": []
+  },
+  "reasoning_iterations": 1,
+  "token_usage": {
+    "input_tokens": 48227,
+    "output_tokens": 595,
+    "total_tokens": 48822,
+    "estimated": false,
+    "sources": [
+      "reasoning_architect.react.aggregate_usage"
+    ]
+  }
+}

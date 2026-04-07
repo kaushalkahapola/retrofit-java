@@ -1,0 +1,25 @@
+{
+  "input_tokens": 75,
+  "output_tokens": 0,
+  "total_tokens": 75,
+  "messages_with_usage": 0,
+  "estimated_messages": 1,
+  "tokenizer": {
+    "model": "gpt-4.1-mini",
+    "library": "tiktoken",
+    "available": true
+  },
+  "by_node": {
+    "phase_0_optimistic": {
+      "input_tokens": 75,
+      "output_tokens": 0,
+      "total_tokens": 75,
+      "estimated_events": 1,
+      "exact_events": 0,
+      "sources": [
+        "estimated_from_message_chars"
+      ]
+    }
+  },
+  "finished_at": "2026-04-07T04:37:01.029542"
+}

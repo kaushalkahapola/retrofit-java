@@ -1,6 +1,6 @@
 # Post-Pipeline Developer Patch Comparison
 
-**Exact Developer Patch (code-only)**: False
+**Exact Developer Patch (code-only)**: True
 
 **Comparison Method**: file_state
 
@@ -15,7 +15,7 @@
 
 ## File State Comparison
 - Compared files: ['server/src/main/java/io/crate/planner/operators/Collect.java']
-- Mismatched files: ['server/src/main/java/io/crate/planner/operators/Collect.java']
+- Mismatched files: []
 - Error: None
 
 ## Comparison Scope
@@ -53,8 +53,8 @@ Developer
 
 Generated
 ```diff
-@@ -109,6 +109,14 @@
-         this.detailedQuery = detailedQuery;
+@@ -123,6 +123,14 @@
+         this.tableInfo = relation.tableInfo();
      }
  
 +    /// @return a new Collect operator with changed outputs
@@ -65,30 +65,15 @@ Generated
 +        return collect;
 +    }
 +
-     public Collect(AbstractTableRelation<?> relation,
-                    List<Symbol> outputs,
-                    WhereClause where) {
+     @Override
+     public ExecutionPlan build(DependencyCarrier executor,
+                                PlannerContext plannerContext,
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,5 +1,5 @@-@@ -123,6 +123,14 @@
--         this.tableInfo = relation.tableInfo();
-+@@ -109,6 +109,14 @@
-+         this.detailedQuery = detailedQuery;
-      }
-  
- +    /// @return a new Collect operator with changed outputs
-@@ -10,6 +10,6 @@ +        return collect;
- +    }
- +
--     @Override
--     public ExecutionPlan build(DependencyCarrier executor,
--                                PlannerContext plannerContext,
-+     public Collect(AbstractTableRelation<?> relation,
-+                    List<Symbol> outputs,
-+                    WhereClause where) {
+(No textual difference)
 
 ```
 
@@ -153,45 +138,28 @@ Developer
 
 Generated
 ```diff
-@@ -384,11 +392,7 @@
+@@ -382,14 +390,7 @@
+             return null;
+         }
          newOutputs.add(0, fetchMarker);
-         return new FetchRewrite(
-             replacedOutputs,
+-        return new FetchRewrite(
+-            replacedOutputs,
 -            new Collect(
 -                relation,
 -                newOutputs,
 -                immutableWhere
 -            )
-+            withOutputs(newOutputs)
-         );
+-        );
++        return new FetchRewrite(replacedOutputs, withOutputs(newOutputs));
      }
  
+     @Override
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,16 +1,13 @@-@@ -382,14 +390,7 @@
--             return null;
--         }
-+@@ -384,11 +392,7 @@
-          newOutputs.add(0, fetchMarker);
---        return new FetchRewrite(
---            replacedOutputs,
-+         return new FetchRewrite(
-+             replacedOutputs,
- -            new Collect(
- -                relation,
- -                newOutputs,
- -                immutableWhere
- -            )
---        );
--+        return new FetchRewrite(replacedOutputs, withOutputs(newOutputs));
-++            withOutputs(newOutputs)
-+         );
-      }
-  
--     @Override
+(No textual difference)
 
 ```
 
@@ -200,11 +168,11 @@ Developer -> Generated (Unified Diff)
 ## Full Generated Patch (Agent-Only, code-only)
 ```diff
 diff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java
-index 42786e0c19..0406a9d773 100644
+index 42786e0c19..97aba6cd76 100644
 --- a/server/src/main/java/io/crate/planner/operators/Collect.java
 +++ b/server/src/main/java/io/crate/planner/operators/Collect.java
-@@ -109,6 +109,14 @@ public class Collect implements LogicalPlan {
-         this.detailedQuery = detailedQuery;
+@@ -123,6 +123,14 @@ public class Collect implements LogicalPlan {
+         this.tableInfo = relation.tableInfo();
      }
  
 +    /// @return a new Collect operator with changed outputs
@@ -215,9 +183,9 @@ index 42786e0c19..0406a9d773 100644
 +        return collect;
 +    }
 +
-     public Collect(AbstractTableRelation<?> relation,
-                    List<Symbol> outputs,
-                    WhereClause where) {
+     @Override
+     public ExecutionPlan build(DependencyCarrier executor,
+                                PlannerContext plannerContext,
 @@ -345,7 +353,7 @@ public class Collect implements LogicalPlan {
          if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {
              return this;
@@ -227,30 +195,33 @@ index 42786e0c19..0406a9d773 100644
      }
  
      @Nullable
-@@ -384,11 +392,7 @@ public class Collect implements LogicalPlan {
+@@ -382,14 +390,7 @@ public class Collect implements LogicalPlan {
+             return null;
+         }
          newOutputs.add(0, fetchMarker);
-         return new FetchRewrite(
-             replacedOutputs,
+-        return new FetchRewrite(
+-            replacedOutputs,
 -            new Collect(
 -                relation,
 -                newOutputs,
 -                immutableWhere
 -            )
-+            withOutputs(newOutputs)
-         );
+-        );
++        return new FetchRewrite(replacedOutputs, withOutputs(newOutputs));
      }
  
+     @Override
 
 ```
 
 ## Full Generated Patch (Final Effective, code-only)
 ```diff
 diff --git a/server/src/main/java/io/crate/planner/operators/Collect.java b/server/src/main/java/io/crate/planner/operators/Collect.java
-index 42786e0c19..0406a9d773 100644
+index 42786e0c19..97aba6cd76 100644
 --- a/server/src/main/java/io/crate/planner/operators/Collect.java
 +++ b/server/src/main/java/io/crate/planner/operators/Collect.java
-@@ -109,6 +109,14 @@ public class Collect implements LogicalPlan {
-         this.detailedQuery = detailedQuery;
+@@ -123,6 +123,14 @@ public class Collect implements LogicalPlan {
+         this.tableInfo = relation.tableInfo();
      }
  
 +    /// @return a new Collect operator with changed outputs
@@ -261,9 +232,9 @@ index 42786e0c19..0406a9d773 100644
 +        return collect;
 +    }
 +
-     public Collect(AbstractTableRelation<?> relation,
-                    List<Symbol> outputs,
-                    WhereClause where) {
+     @Override
+     public ExecutionPlan build(DependencyCarrier executor,
+                                PlannerContext plannerContext,
 @@ -345,7 +353,7 @@ public class Collect implements LogicalPlan {
          if (newOutputs.size() == outputs.size() && newOutputs.containsAll(outputs)) {
              return this;
@@ -273,19 +244,22 @@ index 42786e0c19..0406a9d773 100644
      }
  
      @Nullable
-@@ -384,11 +392,7 @@ public class Collect implements LogicalPlan {
+@@ -382,14 +390,7 @@ public class Collect implements LogicalPlan {
+             return null;
+         }
          newOutputs.add(0, fetchMarker);
-         return new FetchRewrite(
-             replacedOutputs,
+-        return new FetchRewrite(
+-            replacedOutputs,
 -            new Collect(
 -                relation,
 -                newOutputs,
 -                immutableWhere
 -            )
-+            withOutputs(newOutputs)
-         );
+-        );
++        return new FetchRewrite(replacedOutputs, withOutputs(newOutputs));
      }
  
+     @Override
 
 ```
 ## Full Developer Backport Patch (full commit diff)

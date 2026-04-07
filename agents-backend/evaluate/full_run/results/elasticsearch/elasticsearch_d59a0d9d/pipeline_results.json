@@ -4,60 +4,12 @@
   "mainline_commit": "d59a0d9d44fb0cf553cb33a7a5e0da1f0b541c6b",
   "backport_commit": "55ac92975e6ec0d714cfaa80d2d4a883bed9b78e",
   "run_mode": "full",
-  "timestamp": "2026-04-04T10:34:40.793346",
+  "timestamp": "2026-04-07T04:20:29.463801",
   "phases": {
-    "phase0": {
+    "phase0_cache": {
       "phase_0_optimistic": {
-        "node": "phase_0_optimistic",
         "outputs": {
-          "patch_analysis": [
-            "FileChange(file_path='server/src/main/java/org/elasticsearch/ingest/IngestService.java', change_type='MODIFIED', added_lines=['String tag = processor.getTag();', 'if (tag != null && tag.isEmpty()) {', 'tag = null; // it simplifies the rest of the logic slightly to coalesce to null', '}', '', 'String pipelineName = null;', 'pipelineName = pipelineProcessor.getPipelineTemplate().newInstance(Map.of()).execute();', '', \"// if there's a tag, OR if it's a pipeline processor, then the processor name is a compound thing,\", \"// BUT if neither of those apply, then it's just the type -- so we can return the type itself without\", '// allocating a new String object', 'if (tag == null && pipelineName == null) {', 'return processor.getType();', '} else {', 'StringBuilder sb = new StringBuilder(5);', 'sb.append(processor.getType());', 'if (pipelineName != null) {', 'sb.append(\":\");', 'sb.append(pipelineName);', '}', 'if (tag != null) {', 'sb.append(\":\");', 'sb.append(tag);', '}', 'return sb.toString();'], removed_lines=['StringBuilder sb = new StringBuilder(5);', 'sb.append(processor.getType());', 'String pipelineName = pipelineProcessor.getPipelineTemplate().newInstance(Map.of()).execute();', 'sb.append(\":\");', 'sb.append(pipelineName);', 'String tag = processor.getTag();', 'if (tag != null && tag.isEmpty() == false) {', 'sb.append(\":\");', 'sb.append(tag);', 'return sb.toString();'], is_test_file=False, previous_file_path=None)",
-            "FileChange(file_path='server/src/main/java/org/elasticsearch/ingest/IngestStats.java', change_type='MODIFIED', added_lines=['import java.util.function.Function;', \"// while reading the processors, we're going to encounter identical name and type strings *repeatedly*\", \"// it's advantageous to discard the endless copies of the same strings and canonical-ize them to keep our\", '// heap usage under control. note: this map is key to key, because of the limitations of the set interface.', 'final Map<String, String> namesAndTypesCache = new HashMap<>();', '', '// pass these name and type through the local names and types cache to canonical-ize them', 'processorName = namesAndTypesCache.computeIfAbsent(processorName, Function.identity());', 'processorType = namesAndTypesCache.computeIfAbsent(processorType, Function.identity());'], removed_lines=[], is_test_file=False, previous_file_path=None)"
-          ],
-          "patch_diff": "From d59a0d9d44fb0cf553cb33a7a5e0da1f0b541c6b Mon Sep 17 00:00:00 2001\nFrom: Joe Gallo <joe.gallo@elastic.co>\nDate: Fri, 14 Feb 2025 12:38:00 -0500\nSubject: [PATCH] Canonicalize processor names and types in IngestStats\n (#122610)\n\n---\n docs/changelog/122610.yaml                    |  5 +++\n .../elasticsearch/ingest/IngestService.java   | 35 +++++++++++++------\n .../org/elasticsearch/ingest/IngestStats.java |  9 +++++\n .../ingest/IngestServiceTests.java            |  2 +-\n .../ingest/IngestStatsTests.java              | 28 +++++++++++++++\n 5 files changed, 68 insertions(+), 11 deletions(-)\n create mode 100644 docs/changelog/122610.yaml\n\ndiff --git a/docs/changelog/122610.yaml b/docs/changelog/122610.yaml\nnew file mode 100644\nindex 00000000000..57977e703c0\n--- /dev/null\n+++ b/docs/changelog/122610.yaml\n@@ -0,0 +1,5 @@\n+pr: 122610\n+summary: Canonicalize processor names and types in `IngestStats`\n+area: Ingest Node\n+type: bug\n+issues: []\ndiff --git a/server/src/main/java/org/elasticsearch/ingest/IngestService.java b/server/src/main/java/org/elasticsearch/ingest/IngestService.java\nindex 4c61a41f7cf..86e29fd5cb2 100644\n--- a/server/src/main/java/org/elasticsearch/ingest/IngestService.java\n+++ b/server/src/main/java/org/elasticsearch/ingest/IngestService.java\n@@ -1195,20 +1195,35 @@ public class IngestService implements ClusterStateApplier, ReportingService<Inge\n         if (processor instanceof ConditionalProcessor conditionalProcessor) {\n             processor = conditionalProcessor.getInnerProcessor();\n         }\n-        StringBuilder sb = new StringBuilder(5);\n-        sb.append(processor.getType());\n \n+        String tag = processor.getTag();\n+        if (tag != null && tag.isEmpty()) {\n+            tag = null; // it simplifies the rest of the logic slightly to coalesce to null\n+        }\n+\n+        String pipelineName = null;\n         if (processor instanceof PipelineProcessor pipelineProcessor) {\n-            String pipelineName = pipelineProcessor.getPipelineTemplate().newInstance(Map.of()).execute();\n-            sb.append(\":\");\n-            sb.append(pipelineName);\n+            pipelineName = pipelineProcessor.getPipelineTemplate().newInstance(Map.of()).execute();\n         }\n-        String tag = processor.getTag();\n-        if (tag != null && tag.isEmpty() == false) {\n-            sb.append(\":\");\n-            sb.append(tag);\n+\n+        // if there's a tag, OR if it's a pipeline processor, then the processor name is a compound thing,\n+        // BUT if neither of those apply, then it's just the type -- so we can return the type itself without\n+        // allocating a new String object\n+        if (tag == null && pipelineName == null) {\n+            return processor.getType();\n+        } else {\n+            StringBuilder sb = new StringBuilder(5);\n+            sb.append(processor.getType());\n+            if (pipelineName != null) {\n+                sb.append(\":\");\n+                sb.append(pipelineName);\n+            }\n+            if (tag != null) {\n+                sb.append(\":\");\n+                sb.append(tag);\n+            }\n+            return sb.toString();\n         }\n-        return sb.toString();\n     }\n \n     /**\ndiff --git a/server/src/main/java/org/elasticsearch/ingest/IngestStats.java b/server/src/main/java/org/elasticsearch/ingest/IngestStats.java\nindex da1b99f4f07..9f403ca9300 100644\n--- a/server/src/main/java/org/elasticsearch/ingest/IngestStats.java\n+++ b/server/src/main/java/org/elasticsearch/ingest/IngestStats.java\n@@ -31,6 +31,7 @@ import java.util.Iterator;\n import java.util.List;\n import java.util.Map;\n import java.util.concurrent.TimeUnit;\n+import java.util.function.Function;\n \n public record IngestStats(Stats totalStats, List<PipelineStat> pipelineStats, Map<String, List<ProcessorStat>> processorStats)\n     implements\n@@ -57,6 +58,11 @@ public record IngestStats(Stats totalStats, List<PipelineStat> pipelineStats, Ma\n      * Read from a stream.\n      */\n     public static IngestStats read(StreamInput in) throws IOException {\n+        // while reading the processors, we're going to encounter identical name and type strings *repeatedly*\n+        // it's advantageous to discard the endless copies of the same strings and canonical-ize them to keep our\n+        // heap usage under control. note: this map is key to key, because of the limitations of the set interface.\n+        final Map<String, String> namesAndTypesCache = new HashMap<>();\n+\n         var stats = readStats(in);\n         var size = in.readVInt();\n         if (stats == Stats.IDENTITY && size == 0) {\n@@ -76,6 +82,9 @@ public record IngestStats(Stats totalStats, List<PipelineStat> pipelineStats, Ma\n                 var processorName = in.readString();\n                 var processorType = in.readString();\n                 var processorStat = readStats(in);\n+                // pass these name and type through the local names and types cache to canonical-ize them\n+                processorName = namesAndTypesCache.computeIfAbsent(processorName, Function.identity());\n+                processorType = namesAndTypesCache.computeIfAbsent(processorType, Function.identity());\n                 processorStatsPerPipeline.add(new ProcessorStat(processorName, processorType, processorStat));\n             }\n             processorStats.put(pipelineId, Collections.unmodifiableList(processorStatsPerPipeline));\ndiff --git a/server/src/test/java/org/elasticsearch/ingest/IngestServiceTests.java b/server/src/test/java/org/elasticsearch/ingest/IngestServiceTests.java\nindex bd4c5232a8e..eb561453595 100644\n--- a/server/src/test/java/org/elasticsearch/ingest/IngestServiceTests.java\n+++ b/server/src/test/java/org/elasticsearch/ingest/IngestServiceTests.java\n@@ -2181,7 +2181,7 @@ public class IngestServiceTests extends ESTestCase {\n         Processor processor = mock(Processor.class);\n         String name = randomAlphaOfLength(10);\n         when(processor.getType()).thenReturn(name);\n-        assertThat(IngestService.getProcessorName(processor), equalTo(name));\n+        assertThat(IngestService.getProcessorName(processor), sameInstance(name));\n         String tag = randomAlphaOfLength(10);\n         when(processor.getTag()).thenReturn(tag);\n         assertThat(IngestService.getProcessorName(processor), equalTo(name + \":\" + tag));\ndiff --git a/server/src/test/java/org/elasticsearch/ingest/IngestStatsTests.java b/server/src/test/java/org/elasticsearch/ingest/IngestStatsTests.java\nindex d9189c56e66..8babb8bb9d3 100644\n--- a/server/src/test/java/org/elasticsearch/ingest/IngestStatsTests.java\n+++ b/server/src/test/java/org/elasticsearch/ingest/IngestStatsTests.java\n@@ -19,6 +19,7 @@ import java.util.List;\n import java.util.Map;\n \n import static org.hamcrest.Matchers.containsInAnyOrder;\n+import static org.hamcrest.Matchers.is;\n import static org.hamcrest.Matchers.sameInstance;\n \n public class IngestStatsTests extends ESTestCase {\n@@ -37,6 +38,33 @@ public class IngestStatsTests extends ESTestCase {\n         assertThat(serializedStats, sameInstance(IngestStats.IDENTITY));\n     }\n \n+    public void testProcessorNameAndTypeIdentitySerialization() throws IOException {\n+        IngestStats.Builder builder = new IngestStats.Builder();\n+        builder.addPipelineMetrics(\"pipeline_id\", new IngestPipelineMetric());\n+        builder.addProcessorMetrics(\"pipeline_id\", \"set\", \"set\", new IngestMetric());\n+        builder.addProcessorMetrics(\"pipeline_id\", \"set:foo\", \"set\", new IngestMetric());\n+        builder.addProcessorMetrics(\"pipeline_id\", \"set:bar\", \"set\", new IngestMetric());\n+        builder.addTotalMetrics(new IngestMetric());\n+\n+        IngestStats serializedStats = serialize(builder.build());\n+        List<IngestStats.ProcessorStat> processorStats = serializedStats.processorStats().get(\"pipeline_id\");\n+\n+        // these are just table stakes\n+        assertThat(processorStats.get(0).name(), is(\"set\"));\n+        assertThat(processorStats.get(0).type(), is(\"set\"));\n+        assertThat(processorStats.get(1).name(), is(\"set:foo\"));\n+        assertThat(processorStats.get(1).type(), is(\"set\"));\n+        assertThat(processorStats.get(2).name(), is(\"set:bar\"));\n+        assertThat(processorStats.get(2).type(), is(\"set\"));\n+\n+        // this is actually interesting, though -- we're canonical-izing these strings to keep our heap usage under control\n+        final String set = processorStats.get(0).name();\n+        assertThat(processorStats.get(0).name(), sameInstance(set));\n+        assertThat(processorStats.get(0).type(), sameInstance(set));\n+        assertThat(processorStats.get(1).type(), sameInstance(set));\n+        assertThat(processorStats.get(2).type(), sameInstance(set));\n+    }\n+\n     public void testStatsMerge() {\n         var first = randomStats();\n         var second = randomStats();\n-- \n2.53.0\n\n",
           "fast_path_success": true,
-          "implementation_plan": {
-            "patch_intent": "Direct Backport (Phase 0 Fast-Path)",
-            "compatibility_analysis": {
-              "java_version_differences": "Unknown (Optimistic)",
-              "refactoring_notes": "None",
-              "missing_dependencies": []
-            },
-            "file_mappings": [
-              {
-                "source_file": "server/src/main/java/org/elasticsearch/ingest/IngestService.java",
-                "target_file": "server/src/main/java/org/elasticsearch/ingest/IngestService.java",
-                "confidence": 1.0,
-                "reasoning": "Phase 0 Optimistic Patch \u2014 git apply and tests passed."
-              },
-              {
-                "source_file": "server/src/main/java/org/elasticsearch/ingest/IngestStats.java",
-                "target_file": "server/src/main/java/org/elasticsearch/ingest/IngestStats.java",
-                "confidence": 1.0,
-                "reasoning": "Phase 0 Optimistic Patch \u2014 git apply and tests passed."
-              }
-            ],
-            "steps": [
-              {
-                "step_id": 1,
-                "description": "Apply patch directly \u2014 clean git apply.",
-                "file_path": "server/src/main/java/org/elasticsearch/ingest/IngestService.java",
-                "action": "apply_patch_hunk",
-                "start_line": null,
-                "end_line": null,
-                "target_context": null
-              },
-              {
-                "step_id": 2,
-                "description": "Apply patch directly \u2014 clean git apply.",
-                "file_path": "server/src/main/java/org/elasticsearch/ingest/IngestStats.java",
-                "action": "apply_patch_hunk",
-                "start_line": null,
-                "end_line": null,
-                "target_context": null
-              }
-            ]
-          },
           "phase_0_test_targets": {
             "test_targets": [
               "server:org.elasticsearch.ingest.IngestServiceTests",
@@ -211,58 +163,15 @@
       }
     }
   },
-  "pair_consistency": {
-    "mainline_java_files": [
-      "server/src/main/java/org/elasticsearch/ingest/IngestService.java",
-      "server/src/main/java/org/elasticsearch/ingest/IngestStats.java"
-    ],
-    "developer_java_files": [
-      "server/src/main/java/org/elasticsearch/ingest/IngestService.java",
-      "server/src/main/java/org/elasticsearch/ingest/IngestStats.java"
-    ],
-    "overlap_java_files": [
-      "server/src/main/java/org/elasticsearch/ingest/IngestService.java",
-      "server/src/main/java/org/elasticsearch/ingest/IngestStats.java"
-    ],
-    "overlap_ratio_mainline": 1.0,
-    "pair_mismatch": false,
-    "reason": "scope_overlap_ok"
+  "status": "completed",
+  "cache_decision": {
+    "phase0_cache_used": true,
+    "phase0_fast_path_success": true,
+    "agentic_workflow_skipped": true
   },
-  "exact_developer_patch": false,
+  "exact_developer_patch": null,
   "developer_patch_comparison": {
-    "comparison_method": "file_state",
-    "compared_files": [
-      "server/src/main/java/org/elasticsearch/ingest/IngestService.java",
-      "server/src/main/java/org/elasticsearch/ingest/IngestStats.java"
-    ],
-    "mismatched_files": [
-      "server/src/main/java/org/elasticsearch/ingest/IngestStats.java"
-    ],
-    "developer_files": [
-      "server/src/main/java/org/elasticsearch/ingest/IngestService.java",
-      "server/src/main/java/org/elasticsearch/ingest/IngestStats.java"
-    ],
-    "generated_files": [
-      "server/src/main/java/org/elasticsearch/ingest/IngestService.java"
-    ],
-    "pair_consistency": {
-      "mainline_java_files": [
-        "server/src/main/java/org/elasticsearch/ingest/IngestService.java",
-        "server/src/main/java/org/elasticsearch/ingest/IngestStats.java"
-      ],
-      "developer_java_files": [
-        "server/src/main/java/org/elasticsearch/ingest/IngestService.java",
-        "server/src/main/java/org/elasticsearch/ingest/IngestStats.java"
-      ],
-      "overlap_java_files": [
-        "server/src/main/java/org/elasticsearch/ingest/IngestService.java",
-        "server/src/main/java/org/elasticsearch/ingest/IngestStats.java"
-      ],
-      "overlap_ratio_mainline": 1.0,
-      "pair_mismatch": false,
-      "reason": "scope_overlap_ok"
-    },
-    "error": null
-  },
-  "status": "completed"
+    "skipped": true,
+    "reason": "Skipped: cached Phase 0 fast-path success."
+  }
 }

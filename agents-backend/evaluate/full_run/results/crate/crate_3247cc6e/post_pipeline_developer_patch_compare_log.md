@@ -1,59 +1,33 @@
 # Post-Pipeline Developer Patch Comparison
 
-**Exact Developer Patch (code-only)**: False
+**Exact Developer Patch (code-only)**: True
 
 **Comparison Method**: file_state
 
+## Commit Pair Consistency
+- Pair mismatch: False
+- Reason: scope_overlap_ok
+- Mainline Java files: ['extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java']
+- Developer Java files: ['extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java']
+- Overlap Java files: ['extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java']
+- Overlap ratio (mainline): 1.0
+- Compare files scope used: ['extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java']
+
 ## File State Comparison
-- Compared files: ['docs/appendices/release-notes/6.1.3.rst', 'extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java']
-- Mismatched files: ['docs/appendices/release-notes/6.1.3.rst']
+- Compared files: ['extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java']
+- Mismatched files: []
 - Error: None
 
-## Hunk-by-Hunk Comparison
+## Comparison Scope
+- Agent-only patch: code hunks produced by Agent 3
+- Final effective patch: agent code hunks + developer auxiliary hunks (still code-only for this report)
 
-### docs/appendices/release-notes/6.1.3.rst
-
-#### Hunk 1
-
-Developer
-```diff
-@@ -46,6 +46,10 @@
- Fixes
- =====
- 
-+- Changed :ref:`hyperloglog_distinct <aggregation-hyperloglog-distinct>` to return
-+  ``0`` instead of ``NULL`` if using a ``FILTER`` clause that doesn't match any
-+  records - to be consistent with a global ``WHERE`` and ``COUNT``.
-+
- - Fixed a regression introduced in :ref:`version_6.1.0` that could lead to
-   mixing partial success results with error message in the response from the
-   ``HTTP`` endpoint.
-
-```
-
-Generated
-```diff
-*No hunk*
-```
-
-Developer -> Generated (Unified Diff)
-```diff
---- developer+++ generated@@ -1,11 +1 @@-@@ -46,6 +46,10 @@
-- Fixes
-- =====
-- 
--+- Changed :ref:`hyperloglog_distinct <aggregation-hyperloglog-distinct>` to return
--+  ``0`` instead of ``NULL`` if using a ``FILTER`` clause that doesn't match any
--+  records - to be consistent with a global ``WHERE`` and ``COUNT``.
--+
-- - Fixed a regression introduced in :ref:`version_6.1.0` that could lead to
--   mixing partial success results with error message in the response from the
--   ``HTTP`` endpoint.
-+*No hunk*
-```
-
+## Agent-Only Hunk Comparison (code files)
 
 ### extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
+
+- Developer hunks: 1
+- Generated hunks: 1
 
 #### Hunk 1
 
@@ -76,7 +50,7 @@ Developer
 
 Generated
 ```diff
-@@ -167,10 +167,7 @@
+@@ -159,10 +159,7 @@
  
      @Override
      public Long terminatePartial(RamAccounting ramAccounting, HllState state) {
@@ -93,22 +67,40 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,4 +1,4 @@-@@ -159,10 +159,7 @@
-+@@ -167,10 +167,7 @@
-  
-      @Override
-      public Long terminatePartial(RamAccounting ramAccounting, HllState state) {
+(No textual difference)
 
 ```
 
 
 
-## Full Generated Patch (code-only)
+## Full Generated Patch (Agent-Only, code-only)
 ```diff
 diff --git a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
+index 4f6f01847f..50a9b41bbf 100644
 --- a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
 +++ b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
-@@ -167,10 +167,7 @@
+@@ -159,10 +159,7 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
+ 
+     @Override
+     public Long terminatePartial(RamAccounting ramAccounting, HllState state) {
+-        if (state.isInitialized()) {
+-            return state.value();
+-        }
+-        return null;
++        return state.isInitialized() ? state.value() : 0L;
+     }
+ 
+ 
+
+```
+
+## Full Generated Patch (Final Effective, code-only)
+```diff
+diff --git a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
+index 4f6f01847f..50a9b41bbf 100644
+--- a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
++++ b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
+@@ -159,10 +159,7 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
  
      @Override
      public Long terminatePartial(RamAccounting ramAccounting, HllState state) {
