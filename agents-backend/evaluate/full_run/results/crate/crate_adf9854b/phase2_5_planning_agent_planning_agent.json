@@ -1,0 +1,186 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/io/crate/role/PrivilegesModifier.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "\n            if (affectedCount > 0) {\n                roles.put(userName, role.with(privileges));\n            }",
+        "new_string": "\n            if (affectedCount > 0) {\n                roles.put(userName, role.with(new RolePrivileges(privileges)));\n            }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "                affectedCount++;",
+          "                privileges.add(newPrivilege);",
+          "            }"
+        ],
+        "surround_after_3": [
+          "        }",
+          "",
+          "        return affectedCount;"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "roles.put(userName, role.with(new RolePrivileges(privileges)));"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 4,
+          "target_declared_methods_count": 4,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "                }\n            }\n            newRoles.put(entry.getKey(), role.with(privileges));\n        }",
+        "new_string": "                }\n            }\n            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n        }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "                    privilegesChanged = true;",
+          "                } else {",
+          "                    privileges.add(privilege);"
+        ],
+        "surround_after_3": [
+          "",
+          "        if (privilegesChanged) {",
+          "            return new RolesMetadata(newRoles);"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 4,
+          "target_declared_methods_count": 4,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "                }\n            }\n            newRoles.put(role.name(), role.with(updatedPrivileges));\n        }",
+        "new_string": "                }\n            }\n            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n        }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "                    affectedPrivileges++;",
+          "                } else {",
+          "                    updatedPrivileges.add(privilege);"
+        ],
+        "surround_after_3": [
+          "        mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));",
+          "        return affectedPrivileges;",
+          "    }"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 4,
+          "target_declared_methods_count": 4,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 3,
+        "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "                }\n            }\n            newRoles.put(user, role.with(updatedPrivileges));\n        }",
+        "new_string": "                }\n            }\n            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n        }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace",
+        "surround_before_3": [
+          "                    }",
+          "                } else {",
+          "                    updatedPrivileges.add(privilege);"
+        ],
+        "surround_after_3": [
+          "        return new RolesMetadata(newRoles);",
+          "    }",
+          "}"
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 4,
+          "target_declared_methods_count": 4,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ]
+  },
+  "last_plan_signature": "dc858744f74ce5fd8f00ef4ff93ad4fc6ea23070bf897ea2529c48f6076e38b0",
+  "validation_repeated_plan_detected": true,
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

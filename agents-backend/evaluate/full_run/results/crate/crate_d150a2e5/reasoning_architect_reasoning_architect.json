@@ -1,0 +1,29 @@
+{
+  "surgical_plans": {},
+  "reasoning_context": {
+    "current_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+    "failure_kind": "anchor_not_found",
+    "build_diagnostics": {
+      "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+      "issues": [],
+      "failed_locations": [],
+      "symbol_errors": [],
+      "signature_errors": [],
+      "primary_failed_symbol": "",
+      "raw_error_preview": "Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors."
+    },
+    "side_files": [],
+    "iteration": 2,
+    "surgical_ops": []
+  },
+  "reasoning_iterations": 2,
+  "token_usage": {
+    "input_tokens": 208072,
+    "output_tokens": 915,
+    "total_tokens": 208987,
+    "estimated": false,
+    "sources": [
+      "reasoning_architect.react.aggregate_usage"
+    ]
+  }
+}

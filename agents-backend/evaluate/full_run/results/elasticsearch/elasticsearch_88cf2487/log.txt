@@ -3,7 +3,7 @@ project=elasticsearch
 mainline_commit=88cf2487e7deb38686870e40bf08b2b729b7d848
 backport_commit=223d50f0524d3d3e9a19f18a3b146212ff830042
 mode=full
-started_at=2026-04-07T04:02:14.670786
+started_at=2026-04-07T05:47:45.258403
 ----------------------------------------
 Running full workflow graph
 Completed node=context_analyzer
@@ -61,26 +61,25 @@ LLM Provider: azure, Model: gpt-4.1-mini, Temperature: 0
 Reasoning Architect: file=server/src/main/java/org/elasticsearch/script/ScriptStats.java related_files=1 method_hints=3
 
 [LLM OUTPUT BEGIN]
-<thinking>There is an API drift in the toXContentChunked method of ScriptStats.java: the field key used for cacheEvictionsHistory is mistakenly COMPILATIONS_HISTORY instead of CACHE_EVICTIONS_HISTORY. This is a clear bug causing incorrect serialization. The fix is to change the key on line 202 to CACHE_EVICTIONS_HISTORY. This is a minimal fix localized to ScriptStats.java. No cascading changes are needed in related files.</thinking>
-[DIAGNOSIS] The root cause is a copy-paste error in the toXContentChunked method of ScriptStats.java where cacheEvictionsHistory is serialized with the wrong field key COMPILATIONS_HISTORY instead of CACHE_EVICTIONS_HISTORY. This causes API drift and likely runtime errors or incorrect output. The sphere of influence is limited to ScriptStats.java.
-
+<thinking>Root cause appears to be a copy-paste error in the toXContentChunked method where the cacheEvictionsHistory is serialized with the wrong field name COMPILATIONS_HISTORY instead of CACHE_EVICTIONS_HISTORY. This is a signature drift in the field usage in the serialization method. The fix is to correct the field name constant used in line 202. The rest of the class and related methods appear consistent and do not require changes.</thinking>
+[DIAGNOSIS] The root cause is an API drift in the toXContentChunked method: the cacheEvictionsHistory is serialized with the wrong field name constant COMPILATIONS_HISTORY instead of CACHE_EVICTIONS_HISTORY. This affects the JSON output structure. The sphere of influence is limited to server/src/main/java/org/elasticsearch/script/ScriptStats.java, specifically the toXContentChunked method and the Fields inner class constants.
 [PLAN]
 ```json
 [
   {
     "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
     "old_string": "ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);",
-    "new_string": "ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);",
+    "new_string": "ob.xContentObject(CACHE_EVICTIONS, cacheEvictionsHistory);",
     "anchor_verified": true,
     "verification_method": "exact",
     "confidence": 0.95
   }
 ]
 ```
-[CONFIDENCE] high - The fix is a straightforward correction of a field constant usage verified in the file and consistent with the rest of the code.
+[CONFIDENCE] high - The fix is a straightforward correction of a field name constant in a single line, verified by exact string match and consistent with the rest of the class.
 [LLM OUTPUT END]
 
-Reasoning Architect: ReAct trace for server/src/main/java/org/elasticsearch/script/ScriptStats.java [BEGIN] (messages=26)
+Reasoning Architect: ReAct trace for server/src/main/java/org/elasticsearch/script/ScriptStats.java [BEGIN] (messages=34)
 Reasoning Architect: [message 1] role=human
 Diagnose the failure completely and submit a clean surgical plan. Start with diagnose_api_drift. Verify every anchor. Handle cascading changes across related files if needed. Primary file: server/src/main/java/org/elasticsearch/script/ScriptStats.java
 
@@ -96,7 +95,7 @@ Reasoning Architect: [message 2] role=ai
 Reasoning Architect:   tool_call[1] name=diagnose_api_drift args={}
 Reasoning Architect: [message 3] role=tool
 {"kind": "unknown", "confidence": 0.0, "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java", "failed_symbol": "", "candidate_files": [], "candidate_methods": [], "old_signature": "", "new_signature": "", "param_diff": [], "side_files": [], "parent_class": "", "parent_file": "", "suggested_strategy": "escalate_to_full_react", "evidence": ["No deterministic diagnosis found. Build error: Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors."]}
-Reasoning Architect:   tool_result name=diagnose_api_drift call_id=call_kDnCpv1vaeSIFivUIHpwUP82
+Reasoning Architect:   tool_result name=diagnose_api_drift call_id=call_wfEJ6GqXouOGYEb0y0cpM28o
 Reasoning Architect: [message 4] role=ai
 Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 20, "radius": 20}
 Reasoning Architect: [message 5] role=tool
@@ -143,7 +142,7 @@ Showing lines 1-40  (center=20, radius=20):
      38:  * @param contextStats               A list of different {@link ScriptContextStats}
      39:  * @param compilations               Total number of compilations.
      40:  * @param cacheEvictions             Total number of evictions.
-Reasoning Architect:   tool_result name=read_target_code_window call_id=call_ZwJrZhNbAa8vRUSmJk9tIMLY
+Reasoning Architect:   tool_result name=read_target_code_window call_id=call_qZAohDjhSx0KOA1aOLinSKYA
 Reasoning Architect: [message 6] role=ai
 Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 100, "radius": 20}
 Reasoning Architect: [message 7] role=tool
@@ -191,14 +190,82 @@ Showing lines 80-120  (center=100, radius=20):
     118:             context.getCompilationLimitTriggered(),
     119:             context.getCompilationsHistory(),
     120:             context.getCacheEvictionsHistory()
-Reasoning Architect:   tool_result name=read_target_code_window call_id=call_HjFIn1kghNy1KHR79KH66ah7
+Reasoning Architect:   tool_result name=read_target_code_window call_id=call_tOcYNpfkfw7L6FKxzAuB0D91
 Reasoning Architect: [message 8] role=ai
-Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 150, "radius": 20}
+Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 115, "radius": 20}
 Reasoning Architect: [message 9] role=tool
 [read_file_window] server/src/main/java/org/elasticsearch/script/ScriptStats.java  (total lines: 215)
-Showing lines 130-170  (center=150, radius=20):
+Showing lines 95-135  (center=115, radius=20):
 
+     95:     public static ScriptStats read(List<ScriptContextStats> contextStats) {
+     96:         long compilations = 0;
+     97:         long cacheEvictions = 0;
+     98:         long compilationLimitTriggered = 0;
+     99:         for (var stats : contextStats) {
+    100:             compilations += stats.getCompilations();
+    101:             cacheEvictions += stats.getCacheEvictions();
+    102:             compilationLimitTriggered += stats.getCompilationLimitTriggered();
+    103:         }
+    104:         return new ScriptStats(
+    105:             contextStats.stream().sorted(ScriptContextStats::compareTo).toList(),
+    106:             compilations,
+    107:             cacheEvictions,
+    108:             compilationLimitTriggered,
+    109:             new TimeSeries(compilations),
+    110:             new TimeSeries(cacheEvictions)
+    111:         );
+    112:     }
+    113: 
+    114:     public static ScriptStats read(ScriptContextStats context) {
+ >  115:         return new ScriptStats(
+    116:             context.getCompilations(),
+    117:             context.getCacheEvictions(),
+    118:             context.getCompilationLimitTriggered(),
+    119:             context.getCompilationsHistory(),
+    120:             context.getCacheEvictionsHistory()
+    121:         );
+    122:     }
+    123: 
+    124:     public static ScriptStats read(StreamInput in) throws IOException {
+    125:         TimeSeries compilationsHistory;
+    126:         TimeSeries cacheEvictionsHistory;
+    127:         long compilations;
+    128:         long cacheEvictions;
+    129:         if (in.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {
     130:             compilationsHistory = new TimeSeries(in);
+    131:             cacheEvictionsHistory = new TimeSeries(in);
+    132:             compilations = compilationsHistory.total;
+    133:             cacheEvictions = cacheEvictionsHistory.total;
+    134:         } else {
+    135:             compilations = in.readVLong();
+Reasoning Architect:   tool_result name=read_target_code_window call_id=call_BSLEQiAeb8IQBTAKdUGBsYfx
+Reasoning Architect: [message 10] role=ai
+Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 130, "radius": 20}
+Reasoning Architect: [message 11] role=tool
+[read_file_window] server/src/main/java/org/elasticsearch/script/ScriptStats.java  (total lines: 215)
+Showing lines 110-150  (center=130, radius=20):
+
+    110:             new TimeSeries(cacheEvictions)
+    111:         );
+    112:     }
+    113: 
+    114:     public static ScriptStats read(ScriptContextStats context) {
+    115:         return new ScriptStats(
+    116:             context.getCompilations(),
+    117:             context.getCacheEvictions(),
+    118:             context.getCompilationLimitTriggered(),
+    119:             context.getCompilationsHistory(),
+    120:             context.getCacheEvictionsHistory()
+    121:         );
+    122:     }
+    123: 
+    124:     public static ScriptStats read(StreamInput in) throws IOException {
+    125:         TimeSeries compilationsHistory;
+    126:         TimeSeries cacheEvictionsHistory;
+    127:         long compilations;
+    128:         long cacheEvictions;
+    129:         if (in.getTransportVersion().onOrAfter(TransportVersions.V_8_1_0)) {
+ >  130:             compilationsHistory = new TimeSeries(in);
     131:             cacheEvictionsHistory = new TimeSeries(in);
     132:             compilations = compilationsHistory.total;
     133:             cacheEvictions = cacheEvictionsHistory.total;
@@ -218,7 +285,25 @@ Showing lines 130-170  (center=150, radius=20):
     147:             compilationsHistory,
     148:             cacheEvictionsHistory
     149:         );
- >  150:     }
+    150:     }
+Reasoning Architect:   tool_result name=read_target_code_window call_id=call_uFkhVVby68QI0YAtp30yqGNI
+Reasoning Architect: [message 12] role=ai
+Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 160, "radius": 20}
+Reasoning Architect: [message 13] role=tool
+[read_file_window] server/src/main/java/org/elasticsearch/script/ScriptStats.java  (total lines: 215)
+Showing lines 140-180  (center=160, radius=20):
+
+    140:         var compilationLimitTriggered = in.readVLong();
+    141:         var contextStats = in.readCollectionAsList(ScriptContextStats::read);
+    142:         return new ScriptStats(
+    143:             contextStats,
+    144:             compilations,
+    145:             cacheEvictions,
+    146:             compilationLimitTriggered,
+    147:             compilationsHistory,
+    148:             cacheEvictionsHistory
+    149:         );
+    150:     }
     151: 
     152:     @Override
     153:     public void writeTo(StreamOutput out) throws IOException {
@@ -228,7 +313,7 @@ Showing lines 130-170  (center=150, radius=20):
     157:         } else {
     158:             out.writeVLong(compilations);
     159:             out.writeVLong(cacheEvictions);
-    160:         }
+ >  160:         }
     161:         out.writeVLong(compilationLimitTriggered);
     162:         out.writeCollection(contextStats);
     163:     }
@@ -239,10 +324,20 @@ Showing lines 130-170  (center=150, radius=20):
     168: 
     169:     public long getCompilations() {
     170:         return compilations;
-Reasoning Architect:   tool_result name=read_target_code_window call_id=call_I84udQKG8VYO6t9bgFtyurd4
-Reasoning Architect: [message 10] role=ai
+    171:     }
+    172: 
+    173:     public long getCacheEvictions() {
+    174:         return cacheEvictions;
+    175:     }
+    176: 
+    177:     public long getCompilationLimitTriggered() {
+    178:         return compilationLimitTriggered;
+    179:     }
+    180:
+Reasoning Architect:   tool_result name=read_target_code_window call_id=call_UJLTIigJlUzDcx2O1MqcqGzj
+Reasoning Architect: [message 14] role=ai
 Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 200, "radius": 20}
-Reasoning Architect: [message 11] role=tool
+Reasoning Architect: [message 15] role=tool
 [read_file_window] server/src/main/java/org/elasticsearch/script/ScriptStats.java  (total lines: 215)
 Showing lines 180-215  (center=200, radius=20):
 
@@ -282,67 +377,199 @@ Showing lines 180-215  (center=200, radius=20):
     213:         static final String COMPILATION_LIMIT_TRIGGERED = "compilation_limit_triggered";
     214:     }
     215: }
-Reasoning Architect:   tool_result name=read_target_code_window call_id=call_JKpCa1B6CxxlZTFgUrJzeHh2
-Reasoning Architect: [message 12] role=ai
+Reasoning Architect:   tool_result name=read_target_code_window call_id=call_WnPcssrdmDP03lcGoE1spftb
+Reasoning Architect: [message 16] role=ai
 Reasoning Architect:   tool_call[1] name=grep_in_target_file args={"search_text": "COMPILATION_LIMIT_TRIGGERED"}
-Reasoning Architect: [message 13] role=tool
+Reasoning Architect: [message 17] role=tool
 [grep_in_file] Matches for 'COMPILATION_LIMIT_TRIGGERED' in server/src/main/java/org/elasticsearch/script/ScriptStats.java:
 
   Line    31: import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;
   Line   197:             ob.field(COMPILATION_LIMIT_TRIGGERED, compilationLimitTriggered);
   Line   213:         static final String COMPILATION_LIMIT_TRIGGERED = "compilation_limit_triggered";
-Reasoning Architect:   tool_result name=grep_in_target_file call_id=call_09vYpN1VvGDfc1RGiSlnX2O4
-Reasoning Architect: [message 14] role=ai
-Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 190, "radius": 20}
-Reasoning Architect: [message 15] role=tool
-[read_file_window] server/src/main/java/org/elasticsearch/script/ScriptStats.java  (total lines: 215)
-Showing lines 170-210  (center=190, radius=20):
+Reasoning Architect:   tool_result name=grep_in_target_file call_id=call_UuUvYznBz6wGw12ptD74gPBK
+Reasoning Architect: [message 18] role=ai
+Reasoning Architect:   tool_call[1] name=grep_in_target_file args={"search_text": "compilationLimitTriggered"}
+Reasoning Architect: [message 19] role=tool
+[grep_in_file] Matches for 'compilationLimitTriggered' in server/src/main/java/org/elasticsearch/script/ScriptStats.java:
 
-    170:         return compilations;
-    171:     }
-    172: 
-    173:     public long getCacheEvictions() {
-    174:         return cacheEvictions;
-    175:     }
-    176: 
-    177:     public long getCompilationLimitTriggered() {
-    178:         return compilationLimitTriggered;
-    179:     }
-    180: 
-    181:     public ScriptCacheStats toScriptCacheStats() {
-    182:         if (contextStats.isEmpty()) {
-    183:             return new ScriptCacheStats(this);
-    184:         }
-    185:         Map<String, ScriptStats> contexts = Maps.newMapWithExpectedSize(contextStats.size());
-    186:         for (ScriptContextStats contextStats : contextStats) {
-    187:             contexts.put(contextStats.getContext(), ScriptStats.read(contextStats));
-    188:         }
-    189:         return new ScriptCacheStats(contexts);
- >  190:     }
-    191: 
-    192:     @Override
-    193:     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {
-    194:         return ChunkedToXContent.builder(params).object(SCRIPT_STATS, ob -> {
-    195:             ob.field(COMPILATIONS, compilations);
-    196:             ob.field(CACHE_EVICTIONS, cacheEvictions);
-    197:             ob.field(COMPILATION_LIMIT_TRIGGERED, compilationLimitTriggered);
-    198:             if (compilationsHistory != null && compilationsHistory.areTimingsEmpty() == false) {
-    199:                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
-    200:             }
-    201:             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
-    202:                 ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);
-    203:             }
-    204:             ob.array(CONTEXTS, contextStats.iterator());
-    205:         });
-    206:     }
-    207: 
-    208:     static final class Fields {
-    209:         static final String SCRIPT_STATS = "script";
-    210:         static final String CONTEXTS = "contexts";
-Reasoning Architect:   tool_result name=read_target_code_window call_id=call_FX3msH8YsiebtpIJUgz3wV7V
-Reasoning Architect: [message 16] role=ai
+  Line    41:  * @param compilationLimitTriggered  Total number of times that the compilation time has been reached.
+  Line    49:     long compilationLimitTriggered,
+  Line    59:         long compilationLimitTriggered,
+  Line    67:             compilationLimitTriggered,
+  Line    89:             first.compilationLimitTriggered + second.compilationLimitTriggered,
+  Line    98:         long compilationLimitTriggered = 0;
+  Line   102:             compilationLimitTriggered += stats.getCompilationLimitTriggered();
+  Line   108:             compilationLimitTriggered,
+  Line   140:         var compilationLimitTriggered = in.readVLong();
+  Line   146:             compilationLimitTriggered,
+  Line   161:         out.writeVLong(compilationLimitTriggered);
+  Line   178:         return compilationLimitTriggered;
+  Line   197:             ob.field(COMPILATION_LIMIT_TRIGGERED, compilationLimitTriggered);
+Reasoning Architect:   tool_result name=grep_in_target_file call_id=call_yNxYZYCkhQki1HnlTsoriavf
+Reasoning Architect: [message 20] role=ai
+Reasoning Architect:   tool_call[1] name=grep_in_target_file args={"search_text": "compilationLimitTriggered", "max_results": 10}
+Reasoning Architect: [message 21] role=tool
+[grep_in_file] Matches for 'compilationLimitTriggered' in server/src/main/java/org/elasticsearch/script/ScriptStats.java:
+
+  Line    41:  * @param compilationLimitTriggered  Total number of times that the compilation time has been reached.
+  Line    49:     long compilationLimitTriggered,
+  Line    59:         long compilationLimitTriggered,
+  Line    67:             compilationLimitTriggered,
+  Line    89:             first.compilationLimitTriggered + second.compilationLimitTriggered,
+  Line    98:         long compilationLimitTriggered = 0;
+  Line   102:             compilationLimitTriggered += stats.getCompilationLimitTriggered();
+  Line   108:             compilationLimitTriggered,
+  Line   140:         var compilationLimitTriggered = in.readVLong();
+  Line   146:             compilationLimitTriggered,
+  ... (truncated at 10 results)
+Reasoning Architect:   tool_result name=grep_in_target_file call_id=call_thWz5STMRwAXrNr34bAPnCbP
+Reasoning Architect: [message 22] role=ai
+Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 40, "radius": 20}
+Reasoning Architect: [message 23] role=tool
+[read_file_window] server/src/main/java/org/elasticsearch/script/ScriptStats.java  (total lines: 215)
+Showing lines 20-60  (center=40, radius=20):
+
+     20: import java.io.IOException;
+     21: import java.util.ArrayList;
+     22: import java.util.HashMap;
+     23: import java.util.Iterator;
+     24: import java.util.List;
+     25: import java.util.Map;
+     26: import java.util.Objects;
+     27: 
+     28: import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;
+     29: import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;
+     30: import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;
+     31: import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;
+     32: import static org.elasticsearch.script.ScriptStats.Fields.CONTEXTS;
+     33: import static org.elasticsearch.script.ScriptStats.Fields.SCRIPT_STATS;
+     34: 
+     35: /**
+     36:  * Record object that holds global statistics of the scripts in a node.
+     37:  *
+     38:  * @param contextStats               A list of different {@link ScriptContextStats}
+     39:  * @param compilations               Total number of compilations.
+ >   40:  * @param cacheEvictions             Total number of evictions.
+     41:  * @param compilationLimitTriggered  Total number of times that the compilation time has been reached.
+     42:  * @param compilationsHistory        Historical information of the compilations in timeseries format.
+     43:  * @param cacheEvictionsHistory      Historical information of the evictions in timeseries format.
+     44:  */
+     45: public record ScriptStats(
+     46:     List<ScriptContextStats> contextStats,
+     47:     long compilations,
+     48:     long cacheEvictions,
+     49:     long compilationLimitTriggered,
+     50:     TimeSeries compilationsHistory,
+     51:     TimeSeries cacheEvictionsHistory
+     52: ) implements Writeable, ChunkedToXContent {
+     53: 
+     54:     public static final ScriptStats IDENTITY = new ScriptStats(0, 0, 0, new TimeSeries(0), new TimeSeries(0));
+     55: 
+     56:     public ScriptStats(
+     57:         long compilations,
+     58:         long cacheEvictions,
+     59:         long compilationLimitTriggered,
+     60:         TimeSeries compilationsHistory,
+Reasoning Architect:   tool_result name=read_target_code_window call_id=call_0XtsWUKCEXLZK4RVgNsNrmEg
+Reasoning Architect: [message 24] role=ai
+Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 50, "radius": 20}
+Reasoning Architect: [message 25] role=tool
+[read_file_window] server/src/main/java/org/elasticsearch/script/ScriptStats.java  (total lines: 215)
+Showing lines 30-70  (center=50, radius=20):
+
+     30: import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;
+     31: import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;
+     32: import static org.elasticsearch.script.ScriptStats.Fields.CONTEXTS;
+     33: import static org.elasticsearch.script.ScriptStats.Fields.SCRIPT_STATS;
+     34: 
+     35: /**
+     36:  * Record object that holds global statistics of the scripts in a node.
+     37:  *
+     38:  * @param contextStats               A list of different {@link ScriptContextStats}
+     39:  * @param compilations               Total number of compilations.
+     40:  * @param cacheEvictions             Total number of evictions.
+     41:  * @param compilationLimitTriggered  Total number of times that the compilation time has been reached.
+     42:  * @param compilationsHistory        Historical information of the compilations in timeseries format.
+     43:  * @param cacheEvictionsHistory      Historical information of the evictions in timeseries format.
+     44:  */
+     45: public record ScriptStats(
+     46:     List<ScriptContextStats> contextStats,
+     47:     long compilations,
+     48:     long cacheEvictions,
+     49:     long compilationLimitTriggered,
+ >   50:     TimeSeries compilationsHistory,
+     51:     TimeSeries cacheEvictionsHistory
+     52: ) implements Writeable, ChunkedToXContent {
+     53: 
+     54:     public static final ScriptStats IDENTITY = new ScriptStats(0, 0, 0, new TimeSeries(0), new TimeSeries(0));
+     55: 
+     56:     public ScriptStats(
+     57:         long compilations,
+     58:         long cacheEvictions,
+     59:         long compilationLimitTriggered,
+     60:         TimeSeries compilationsHistory,
+     61:         TimeSeries cacheEvictionsHistory
+     62:     ) {
+     63:         this(
+     64:             List.of(),
+     65:             compilations,
+     66:             cacheEvictions,
+     67:             compilationLimitTriggered,
+     68:             Objects.requireNonNullElseGet(compilationsHistory, () -> new TimeSeries(compilations)),
+     69:             Objects.requireNonNullElseGet(cacheEvictionsHistory, () -> new TimeSeries(cacheEvictions))
+     70:         );
+Reasoning Architect:   tool_result name=read_target_code_window call_id=call_sulROSadT8YgwKA8LEsePQhZ
+Reasoning Architect: [message 26] role=ai
+Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 70, "radius": 20}
+Reasoning Architect: [message 27] role=tool
+[read_file_window] server/src/main/java/org/elasticsearch/script/ScriptStats.java  (total lines: 215)
+Showing lines 50-90  (center=70, radius=20):
+
+     50:     TimeSeries compilationsHistory,
+     51:     TimeSeries cacheEvictionsHistory
+     52: ) implements Writeable, ChunkedToXContent {
+     53: 
+     54:     public static final ScriptStats IDENTITY = new ScriptStats(0, 0, 0, new TimeSeries(0), new TimeSeries(0));
+     55: 
+     56:     public ScriptStats(
+     57:         long compilations,
+     58:         long cacheEvictions,
+     59:         long compilationLimitTriggered,
+     60:         TimeSeries compilationsHistory,
+     61:         TimeSeries cacheEvictionsHistory
+     62:     ) {
+     63:         this(
+     64:             List.of(),
+     65:             compilations,
+     66:             cacheEvictions,
+     67:             compilationLimitTriggered,
+     68:             Objects.requireNonNullElseGet(compilationsHistory, () -> new TimeSeries(compilations)),
+     69:             Objects.requireNonNullElseGet(cacheEvictionsHistory, () -> new TimeSeries(cacheEvictions))
+ >   70:         );
+     71:     }
+     72: 
+     73:     public static ScriptStats merge(ScriptStats first, ScriptStats second) {
+     74:         var mergedScriptContextStats = List.<ScriptContextStats>of();
+     75: 
+     76:         if (first.contextStats.isEmpty() == false || second.contextStats.isEmpty() == false) {
+     77:             var mapToCollectMergedStats = new HashMap<String, ScriptContextStats>();
+     78: 
+     79:             first.contextStats.forEach(cs -> mapToCollectMergedStats.merge(cs.context(), cs, ScriptContextStats::merge));
+     80:             second.contextStats.forEach(cs -> mapToCollectMergedStats.merge(cs.context(), cs, ScriptContextStats::merge));
+     81: 
+     82:             mergedScriptContextStats = new ArrayList<>(mapToCollectMergedStats.values());
+     83:         }
+     84: 
+     85:         return new ScriptStats(
+     86:             mergedScriptContextStats,
+     87:             first.compilations + second.compilations,
+     88:             first.cacheEvictions + second.cacheEvictions,
+     89:             first.compilationLimitTriggered + second.compilationLimitTriggered,
+     90:             TimeSeries.merge(first.compilationsHistory, second.compilationsHistory),
+Reasoning Architect:   tool_result name=read_target_code_window call_id=call_v9rs96E0DFPPzay88D4S6jE9
+Reasoning Architect: [message 28] role=ai
 Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 200, "radius": 10}
-Reasoning Architect: [message 17] role=tool
+Reasoning Architect: [message 29] role=tool
 [read_file_window] server/src/main/java/org/elasticsearch/script/ScriptStats.java  (total lines: 215)
 Showing lines 190-210  (center=200, radius=10):
 
@@ -367,13 +594,18 @@ Showing lines 190-210  (center=200, radius=10):
     208:     static final class Fields {
     209:         static final String SCRIPT_STATS = "script";
     210:         static final String CONTEXTS = "contexts";
-Reasoning Architect:   tool_result name=read_target_code_window call_id=call_qAlC6Hi7InBcemzifzWGTVlO
-Reasoning Architect: [message 18] role=ai
-Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 202, "radius": 5}
-Reasoning Architect: [message 19] role=tool
+Reasoning Architect:   tool_result name=read_target_code_window call_id=call_ZYZSraCEyqq7R8VplDALIIny
+Reasoning Architect: [message 30] role=ai
+Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 202, "radius": 10}
+Reasoning Architect: [message 31] role=tool
 [read_file_window] server/src/main/java/org/elasticsearch/script/ScriptStats.java  (total lines: 215)
-Showing lines 197-207  (center=202, radius=5):
+Showing lines 192-212  (center=202, radius=10):
 
+    192:     @Override
+    193:     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {
+    194:         return ChunkedToXContent.builder(params).object(SCRIPT_STATS, ob -> {
+    195:             ob.field(COMPILATIONS, compilations);
+    196:             ob.field(CACHE_EVICTIONS, cacheEvictions);
     197:             ob.field(COMPILATION_LIMIT_TRIGGERED, compilationLimitTriggered);
     198:             if (compilationsHistory != null && compilationsHistory.areTimingsEmpty() == false) {
     199:                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
@@ -384,142 +616,54 @@ Showing lines 197-207  (center=202, radius=5):
     204:             ob.array(CONTEXTS, contextStats.iterator());
     205:         });
     206:     }
-    207:
-Reasoning Architect:   tool_result name=read_target_code_window call_id=call_kzVoYpZKSCt1IeKowJYaQNfl
-Reasoning Architect: [message 20] role=ai
-Reasoning Architect:   tool_call[1] name=read_repo_code_window args={"file_path": "server/src/main/java/org/elasticsearch/script/ScriptContextStats.java", "center_line": 100, "radius": 20}
-Reasoning Architect: [message 21] role=tool
-[read_file_window] server/src/main/java/org/elasticsearch/script/ScriptContextStats.java  (total lines: 174)
-Showing lines 80-120  (center=100, radius=20):
+    207: 
+    208:     static final class Fields {
+    209:         static final String SCRIPT_STATS = "script";
+    210:         static final String CONTEXTS = "contexts";
+    211:         static final String COMPILATIONS = "compilations";
+    212:         static final String CACHE_EVICTIONS = "cache_evictions";Completed node=reasoning_architect
 
-     80:             compilationLimitTriggered
-     81:         );
-     82:     }
-     83: 
-     84:     public static ScriptContextStats merge(ScriptContextStats first, ScriptContextStats second) {
-     85:         assert first.context.equals(second.context) : "To merge 2 ScriptContextStats both of them must have the same context.";
-     86:         return new ScriptContextStats(
-     87:             first.context,
-     88:             first.compilations + second.compilations,
-     89:             TimeSeries.merge(first.compilationsHistory, second.compilationsHistory),
-     90:             first.cacheEvictions + second.cacheEvictions,
-     91:             TimeSeries.merge(first.cacheEvictionsHistory, second.cacheEvictionsHistory),
-     92:             first.compilationLimitTriggered + second.compilationLimitTriggered
-     93:         );
-     94:     }
-     95: 
-     96:     @Override
-     97:     public void writeTo(StreamOutput out) throws IOException {
-     98:         out.writeString(context);
-     99:         out.writeVLong(compilations);
- >  100:         out.writeVLong(cacheEvictions);
-    101:         out.writeVLong(compilationLimitTriggered);
-    102:         if (out.getTransportVersion().onOrAfter(TransportVersions.V_8_0_0)) {
-    103:             compilationsHistory.writeTo(out);
-    104:             cacheEvictionsHistory.writeTo(out);
-    105:         }
-    106:     }
-    107: 
-    108:     public String getContext() {
-    109:         return context;
-    110:     }
-    111: 
-    112:     public long getCompilations() {
-    113:         return compilations;
-    114:     }
-    115: 
-    116:     public TimeSeries getCompilationsHistory() {
-    117:         return compilationsHistory;
-    118:     }
-    119: 
-    120:     public long getCacheEvictions() {
-Reasoning Architect:   tool_result name=read_repo_code_window call_id=call_yifinB6vZhR6xizT0kTf4Qf1
-Reasoning Architect: [message 22] role=ai
-Reasoning Architect:   tool_call[1] name=read_repo_code_window args={"file_path": "server/src/main/java/org/elasticsearch/script/ScriptContextStats.java", "center_line": 140, "radius": 20}
-Reasoning Architect: [message 23] role=tool
-[read_file_window] server/src/main/java/org/elasticsearch/script/ScriptContextStats.java  (total lines: 174)
-Showing lines 120-160  (center=140, radius=20):
+Reasoning Architect:   tool_result name=read_target_code_window call_id=call_0Og7VVzWj0gv6Opw7gCvQ60i
+Reasoning Architect: [message 32] role=ai
+Reasoning Architect:   tool_call[1] name=read_target_code_window args={"center_line": 210, "radius": 10}
+Reasoning Architect: [message 33] role=tool
+[read_file_window] server/src/main/java/org/elasticsearch/script/ScriptStats.java  (total lines: 215)
+Showing lines 200-215  (center=210, radius=10):
 
-    120:     public long getCacheEvictions() {
-    121:         return cacheEvictions;
-    122:     }
-    123: 
-    124:     public TimeSeries getCacheEvictionsHistory() {
-    125:         return cacheEvictionsHistory;
-    126:     }
-    127: 
-    128:     public long getCompilationLimitTriggered() {
-    129:         return compilationLimitTriggered;
-    130:     }
-    131: 
-    132:     @Override
-    133:     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-    134:         builder.startObject();
-    135:         builder.field(Fields.CONTEXT, getContext());
-    136:         builder.field(Fields.COMPILATIONS, getCompilations());
-    137: 
-    138:         TimeSeries series = getCompilationsHistory();
-    139:         if (series != null && series.areTimingsEmpty() == false) {
- >  140:             builder.startObject(Fields.COMPILATIONS_HISTORY);
-    141:             series.toXContent(builder, params);
-    142:             builder.endObject();
-    143:         }
-    144: 
-    145:         builder.field(Fields.CACHE_EVICTIONS, getCacheEvictions());
-    146:         series = getCacheEvictionsHistory();
-    147:         if (series != null && series.areTimingsEmpty() == false) {
-    148:             builder.startObject(Fields.CACHE_EVICTIONS_HISTORY);
-    149:             series.toXContent(builder, params);
-    150:             builder.endObject();
-    151:         }
-    152: 
-    153:         builder.field(Fields.COMPILATION_LIMIT_TRIGGERED, getCompilationLimitTriggered());
-    154:         builder.endObject();
-    155:         return builder;
-    156:     }
-    157: 
-    158:     @Override
-    159:     public int compareTo(ScriptContextStats o) {
-    160:         return this.context.compareTo(o.context);Completed node=reasoning_architect
-
-Reasoning Architect:   tool_result name=read_repo_code_window call_id=call_TLQTC9MPXKIjIN03mmF1AVKj
-Reasoning Architect: [message 24] role=ai
-Reasoning Architect:   tool_call[1] name=grep_in_target_file args={"search_text": "cacheEvictionsHistory"}
-Reasoning Architect: [message 25] role=tool
-[grep_in_file] Matches for 'cacheEvictionsHistory' in server/src/main/java/org/elasticsearch/script/ScriptStats.java:
-
-  Line    43:  * @param cacheEvictionsHistory      Historical information of the evictions in timeseries format.
-  Line    51:     TimeSeries cacheEvictionsHistory
-  Line    61:         TimeSeries cacheEvictionsHistory
-  Line    69:             Objects.requireNonNullElseGet(cacheEvictionsHistory, () -> new TimeSeries(cacheEvictions))
-  Line    91:             TimeSeries.merge(first.cacheEvictionsHistory, second.cacheEvictionsHistory)
-  Line   126:         TimeSeries cacheEvictionsHistory;
-  Line   131:             cacheEvictionsHistory = new TimeSeries(in);
-  Line   133:             cacheEvictions = cacheEvictionsHistory.total;
-  Line   138:             cacheEvictionsHistory = new TimeSeries(cacheEvictions);
-  Line   148:             cacheEvictionsHistory
-  Line   156:             cacheEvictionsHistory.writeTo(out);
-  Line   201:             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
-  Line   202:                 ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);
-Reasoning Architect:   tool_result name=grep_in_target_file call_id=call_YtffNRxqLkceCfJVqwSt7q2G
-Reasoning Architect: [message 26] role=ai
-<thinking>There is an API drift in the toXContentChunked method of ScriptStats.java: the field key used for cacheEvictionsHistory is mistakenly COMPILATIONS_HISTORY instead of CACHE_EVICTIONS_HISTORY. This is a clear bug causing incorrect serialization. The fix is to change the key on line 202 to CACHE_EVICTIONS_HISTORY. This is a minimal fix localized to ScriptStats.java. No cascading changes are needed in related files.</thinking>
-[DIAGNOSIS] The root cause is a copy-paste error in the toXContentChunked method of ScriptStats.java where cacheEvictionsHistory is serialized with the wrong field key COMPILATIONS_HISTORY instead of CACHE_EVICTIONS_HISTORY. This causes API drift and likely runtime errors or incorrect output. The sphere of influence is limited to ScriptStats.java.
-
+    200:             }
+    201:             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
+    202:                 ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);
+    203:             }
+    204:             ob.array(CONTEXTS, contextStats.iterator());
+    205:         });
+    206:     }
+    207: 
+    208:     static final class Fields {
+    209:         static final String SCRIPT_STATS = "script";
+ >  210:         static final String CONTEXTS = "contexts";
+    211:         static final String COMPILATIONS = "compilations";
+    212:         static final String CACHE_EVICTIONS = "cache_evictions";
+    213:         static final String COMPILATION_LIMIT_TRIGGERED = "compilation_limit_triggered";
+    214:     }
+    215: }
+Reasoning Architect:   tool_result name=read_target_code_window call_id=call_8Izp9XKKLVow3P5EuZjmbM8x
+Reasoning Architect: [message 34] role=ai
+<thinking>Root cause appears to be a copy-paste error in the toXContentChunked method where the cacheEvictionsHistory is serialized with the wrong field name COMPILATIONS_HISTORY instead of CACHE_EVICTIONS_HISTORY. This is a signature drift in the field usage in the serialization method. The fix is to correct the field name constant used in line 202. The rest of the class and related methods appear consistent and do not require changes.</thinking>
+[DIAGNOSIS] The root cause is an API drift in the toXContentChunked method: the cacheEvictionsHistory is serialized with the wrong field name constant COMPILATIONS_HISTORY instead of CACHE_EVICTIONS_HISTORY. This affects the JSON output structure. The sphere of influence is limited to server/src/main/java/org/elasticsearch/script/ScriptStats.java, specifically the toXContentChunked method and the Fields inner class constants.
 [PLAN]
 ```json
 [
   {
     "target_file": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
     "old_string": "ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);",
-    "new_string": "ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);",
+    "new_string": "ob.xContentObject(CACHE_EVICTIONS, cacheEvictionsHistory);",
     "anchor_verified": true,
     "verification_method": "exact",
     "confidence": 0.95
   }
 ]
 ```
-[CONFIDENCE] high - The fix is a straightforward correction of a field constant usage verified in the file and consistent with the rest of the code.
+[CONFIDENCE] high - The fix is a straightforward correction of a field name constant in a single line, verified by exact string match and consistent with the rest of the class.
 Reasoning Architect: ReAct trace for server/src/main/java/org/elasticsearch/script/ScriptStats.java [END]
   Completed: reasoning_architect
 Agent 3 (File Editor): Starting direct file-edit workflow...
@@ -581,16 +725,16 @@ Showing lines 15-35  (center=25, radius=10):
      33: import static org.elasticsearch.script.ScriptStats.Fields.SCRIPT_STATS;
      34: 
      35: /**
-    Agent 3:   tool_result name=read_file_window call_id=call_kRnKRKXNSiSMPh1ldBVAoty8
+    Agent 3:   tool_result name=read_file_window call_id=call_AwNJu16JPNsuqVHRK31Zt18r
     Agent 3: [message 5] role=ai
-    Agent 3:   tool_call[1] name=edit_file args={"file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java", "old_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;\nimport static org.elasticsearch.script.ScriptStats.Fields.CONTEXTS;\nimport static org.elasticsearch.script.ScriptStats.Fields.SCRIPT_STATS;\n", "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;\nimport static org.elasticsearch.script.ScriptStats.Fields.CONTEXTS;\nimport static org.elasticsearch.script.ScriptStats.Fields.SCRIPT_STATS;\n", "replace_all": false}
+    Agent 3:   tool_call[1] name=edit_file args={"file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java", "old_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;\nimport static org.elasticsearch.script.ScriptStats.Fields.CONTEXTS;\nimport static org.elasticsearch.script.ScriptStats.Fields.SCRIPT_STATS;", "new_string": "import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;\nimport static org.elasticsearch.script.ScriptStats.Fields.CONTEXTS;\nimport static org.elasticsearch.script.ScriptStats.Fields.SCRIPT_STATS;", "replace_all": false}
     Agent 3: [message 6] role=tool
 SUCCESS: edit_file replaced 6 lines with 7 lines in 'server/src/main/java/org/elasticsearch/script/ScriptStats.java'. Line delta: -1. Verified on disk using claw_file_editor logic.
-    Agent 3:   tool_result name=edit_file call_id=call_cJ94a01nrwLnHObGXG8c3SlhCompleted node=hunk_generator
+    Agent 3:   tool_result name=edit_file call_id=call_K2buiU0IJveOPS07jxtmceJ3
+    Agent 3: [message 7] role=aiCompleted node=hunk_generator
 Completed node=validation
 Workflow completed successfully
 
-    Agent 3: [message 7] role=ai
     Agent 3:   tool_call[1] name=read_file_window args={"file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java", "center_line": 210, "radius": 10}
     Agent 3: [message 8] role=tool
 [read_file_window] server/src/main/java/org/elasticsearch/script/ScriptStats.java  (total lines: 216)
@@ -613,32 +757,32 @@ Showing lines 200-216  (center=210, radius=10):
     214:         static final String COMPILATION_LIMIT_TRIGGERED = "compilation_limit_triggered";
     215:     }
     216: }
-    Agent 3:   tool_result name=read_file_window call_id=call_dWogMuMCVrCPNP3vFOrp8gkp
+    Agent 3:   tool_result name=read_file_window call_id=call_ia4vb68YIi8xpSUJq3eQjlyp
     Agent 3: [message 9] role=ai
     Agent 3:   tool_call[1] name=edit_file args={"file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java", "old_string": "if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n            }", "new_string": "if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n            }", "replace_all": false}
     Agent 3: [message 10] role=tool
 SUCCESS: edit_file replaced 3 lines with 3 lines in 'server/src/main/java/org/elasticsearch/script/ScriptStats.java'. Line delta: 0. Verified on disk using claw_file_editor logic.
-    Agent 3:   tool_result name=edit_file call_id=call_ubmcul1j8YYSe9PBR3He7DWf
+    Agent 3:   tool_result name=edit_file call_id=call_gm7IEpF4lDYRZ3mlfvEmCdUo
     Agent 3: [message 11] role=ai
     Agent 3:   tool_call[1] name=check_java_syntax args={"file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java"}
     Agent 3: [message 12] role=tool
 {"success": true, "syntax_valid": true, "error_class": "non_structural", "output": "PASSED: No structural syntax errors found. Non-structural compile issues ignored: 57."}
-    Agent 3:   tool_result name=check_java_syntax call_id=call_NI1oiLJi27durmZx4M0LXyeV
+    Agent 3:   tool_result name=check_java_syntax call_id=call_UbjYcBaLAAW8ocAoWMnc11jX
     Agent 3: [message 13] role=ai
     Agent 3:   tool_call[1] name=git_diff_file args={"file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java"}
     Agent 3: [message 14] role=tool
 diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
-index f24052ef7e3..e085eb50ffb 100644
+index f24052ef7e3..f4b62ad687b 100644
 --- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java
 +++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
-@@ -25,6 +25,7 @@ import java.util.List;
- import java.util.Map;
+@@ -26,6 +26,7 @@ import java.util.Map;
  import java.util.Objects;
  
-+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
  import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;
++import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
  import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;
  import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;
+ import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;
 @@ -199,7 +200,7 @@ public record ScriptStats(
                  ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
              }
@@ -648,12 +792,12 @@ index f24052ef7e3..e085eb50ffb 100644
              }
              ob.array(CONTEXTS, contextStats.iterator());
          });
-    Agent 3:   tool_result name=git_diff_file call_id=call_gsgBRSfMgOHhRtFa97mmMRnQ
+    Agent 3:   tool_result name=git_diff_file call_id=call_J0BG7RCU9j4lgknJffFUKSV8
     Agent 3: [message 15] role=ai
-    Agent 3:   tool_call[1] name=verify_guidelines args={"diff_text": "diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\nindex f24052ef7e3..e085eb50ffb 100644\n--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n+++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n@@ -25,6 +25,7 @@ import java.util.List;\n import java.util.Map;\n import java.util.Objects;\n \n+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\n import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\n import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n@@ -199,7 +200,7 @@ public record ScriptStats(\n                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n             }\n             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n             }\n             ob.array(CONTEXTS, contextStats.iterator());\n         });\n"}
+    Agent 3:   tool_call[1] name=verify_guidelines args={"diff_text": "diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\nindex f24052ef7e3..f4b62ad687b 100644\n--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n+++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java\n@@ -26,6 +26,7 @@ import java.util.Map;\n import java.util.Objects;\n \n import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\n+import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\n import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n import static org.elasticsearch.script.ScriptStats.Fields.COMPILATION_LIMIT_TRIGGERED;\n@@ -199,7 +200,7 @@ public record ScriptStats(\n                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);\n             }\n             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n+                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n             }\n             ob.array(CONTEXTS, contextStats.iterator());\n         });\n"}
     Agent 3: [message 16] role=tool
 ALL_GOOD
-    Agent 3:   tool_result name=verify_guidelines call_id=call_33RvOTJzAbcmw56njLt6u7J5
+    Agent 3:   tool_result name=verify_guidelines call_id=call_T1DzI7CaM1xcePr3GrdOHce1
     Agent 3: [message 17] role=ai
 DONE
     Agent 3: ReAct trace for server/src/main/java/org/elasticsearch/script/ScriptStats.java [END]
@@ -668,7 +812,7 @@ YES
   Completed: hunk_generator
 Agent 4 (Validation): Starting 'Prove Red, Make Green' loop...
   Agent 4: Evaluation full-workflow mode (apply -> build -> relevant tests)...
-  Validation: server/src/main/java/org/elasticsearch/script/ScriptStats.java - applying 1 hunk(s) one by one in bottom-to-top order: [25]
+  Validation: server/src/main/java/org/elasticsearch/script/ScriptStats.java - applying 1 hunk(s) one by one in bottom-to-top order: [26]
   Validation: docs/changelog/123384.yaml - applying 1 hunk(s) one by one in bottom-to-top order: [1]
   Validation: server/src/test/java/org/elasticsearch/script/ScriptStatsTests.java - applying 1 hunk(s) one by one in bottom-to-top order: [78]
   Validation: ADDED operation for docs/changelog/123384.yaml

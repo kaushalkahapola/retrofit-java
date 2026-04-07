@@ -7,35 +7,30 @@
       "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
       "issues": [
         {
-          "error_type": "api_or_signature_mismatch",
-          "suggested_action": "replan_and_regenerate_with_api_compatibility",
-          "compiler_errors": []
+          "error_type": "unknown_build_failure",
+          "suggested_action": "inspect_build_log_and_retry"
         }
       ],
       "failed_locations": [
         {
           "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-          "line": 113
-        },
-        {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-          "line": 113
+          "line": 46
         }
       ],
       "symbol_errors": [],
       "signature_errors": [],
       "primary_failed_symbol": "",
-      "raw_error_preview": "Build failed: API/signature mismatch in generated patch against target branch."
+      "raw_error_preview": "Build failed: Build failed; deterministic parser could not identify a narrower category."
     },
     "side_files": [],
-    "iteration": 1,
+    "iteration": 2,
     "surgical_ops": []
   },
-  "reasoning_iterations": 1,
+  "reasoning_iterations": 2,
   "token_usage": {
-    "input_tokens": 116713,
-    "output_tokens": 1081,
-    "total_tokens": 117794,
+    "input_tokens": 66704,
+    "output_tokens": 865,
+    "total_tokens": 67569,
     "estimated": false,
     "sources": [
       "reasoning_architect.react.aggregate_usage"

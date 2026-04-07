@@ -1,0 +1,74 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "getProfileBreakdown",
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "target_method": "getProfileBreakdown",
+        "start_line": 18,
+        "end_line": 18,
+        "code_snippet": "/*\n * Licensed to Elasticsearch under one or more contributor\n * license agreements. See the NOTICE file distributed with\n * this work for additional information regarding copyright\n * ownership. Elasticsearch licenses this file to you under\n * the Apache License, Version 2.0 (the \"License\"); you may\n * not use this file except in compliance with the License.\n * You may obtain a copy of the License at\n *\n *    http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing,\n * software distributed under the License is distributed on an\n * \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY\n * KIND, either express or implied.  See the License for the\n * specific language governing permissions and limitations\n * under the License.\n */\n\npackage org.elasticsearch.search.profile.query;\n\nimport org.apache.lucene.search.Query;\nimport org.elasticsearch.search.profile.AbstractProfiler;\n\n/**\n * This class acts as a thread-local storage for profiling a query.  It also\n * builds a representation of the query tree which is built constructed\n * \"online\" as the weights are wrapped by ContextIndexSearcher.  This allows us\n * to know the relationship between nodes in tree without explicitly\n * walking the tree or pre-wrapping everything\n *\n * A Profiler is associated with every Search, not per Search-Request. E.g. a\n * request may execute two searches (query + global agg).  A Profiler just\n * represents one of those\n */\npublic final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown, Query> {\n\n    public QueryProfiler() {",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "createProfileBreakdown",
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "target_method": "createProfileBreakdown",
+        "start_line": 41,
+        "end_line": 41,
+        "code_snippet": "\nimport org.apache.lucene.search.Query;\nimport org.elasticsearch.search.profile.AbstractProfiler;\n\n/**\n * This class acts as a thread-local storage for profiling a query.  It also\n * builds a representation of the query tree which is built constructed\n * \"online\" as the weights are wrapped by ContextIndexSearcher.  This allows us\n * to know the relationship between nodes in tree without explicitly\n * walking the tree or pre-wrapping everything\n *\n * A Profiler is associated with every Search, not per Search-Request. E.g. a\n * request may execute two searches (query + global agg).  A Profiler just\n * represents one of those\n */\npublic final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown, Query> {\n\n    public QueryProfiler() {\n        super(new InternalQueryProfileTree());\n    }\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "getTree",
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "target_method": "getTree",
+        "start_line": 9,
+        "end_line": 9,
+        "code_snippet": "/*\n * Licensed to Elasticsearch under one or more contributor\n * license agreements. See the NOTICE file distributed with\n * this work for additional information regarding copyright\n * ownership. Elasticsearch licenses this file to you under\n * the Apache License, Version 2.0 (the \"License\"); you may\n * not use this file except in compliance with the License.\n * You may obtain a copy of the License at\n *\n *    http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing,\n * software distributed under the License is distributed on an\n * \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY\n * KIND, either express or implied.  See the License for the\n * specific language governing permissions and limitations\n * under the License.\n */\n\npackage org.elasticsearch.search.profile.query;\n\nimport org.apache.lucene.search.Query;\nimport org.elasticsearch.search.profile.AbstractProfiler;\n\n/**\n * This class acts as a thread-local storage for profiling a query.  It also\n * builds a representation of the query tree which is built constructed\n * \"online\" as the weights are wrapped by ContextIndexSearcher.  This allows us\n * to know the relationship between nodes in tree without explicitly",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "getTypeFromElement",
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "target_method": "getTypeFromElement",
+        "start_line": 41,
+        "end_line": 41,
+        "code_snippet": "\nimport org.apache.lucene.search.Query;\nimport org.elasticsearch.search.profile.AbstractProfiler;\n\n/**\n * This class acts as a thread-local storage for profiling a query.  It also\n * builds a representation of the query tree which is built constructed\n * \"online\" as the weights are wrapped by ContextIndexSearcher.  This allows us\n * to know the relationship between nodes in tree without explicitly\n * walking the tree or pre-wrapping everything\n *\n * A Profiler is associated with every Search, not per Search-Request. E.g. a\n * request may execute two searches (query + global agg).  A Profiler just\n * represents one of those\n */\npublic final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown, Query> {\n\n    public QueryProfiler() {\n        super(new InternalQueryProfileTree());\n    }\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 5,
+        "mainline_method": "getDescriptionFromElement",
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "target_method": "getDescriptionFromElement",
+        "start_line": 41,
+        "end_line": 41,
+        "code_snippet": "\nimport org.apache.lucene.search.Query;\nimport org.elasticsearch.search.profile.AbstractProfiler;\n\n/**\n * This class acts as a thread-local storage for profiling a query.  It also\n * builds a representation of the query tree which is built constructed\n * \"online\" as the weights are wrapped by ContextIndexSearcher.  This allows us\n * to know the relationship between nodes in tree without explicitly\n * walking the tree or pre-wrapping everything\n *\n * A Profiler is associated with every Search, not per Search-Request. E.g. a\n * request may execute two searches (query + global agg).  A Profiler just\n * represents one of those\n */\npublic final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown, Query> {\n\n    public QueryProfiler() {\n        super(new InternalQueryProfileTree());\n    }\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      }
+    ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
+  }
+}

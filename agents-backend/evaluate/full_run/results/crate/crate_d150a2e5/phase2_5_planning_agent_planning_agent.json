@@ -176,7 +176,7 @@
     ]
   },
   "last_plan_signature": "dd5206e3e17aed496ad81390fceba49e0ef17a63a60eca8cb63480749fc0734b",
-  "validation_repeated_plan_detected": false,
+  "validation_repeated_plan_detected": true,
   "force_type_v_until_success": false,
   "force_type_v_reason": "",
   "force_type_v_retry_files": [],

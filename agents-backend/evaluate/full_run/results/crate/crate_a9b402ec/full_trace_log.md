@@ -6,7 +6,7 @@
 **server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java** [replace]
 ```java
 // --- OLD ---
-<developer patch fast path>
+<mainline patch fast path>
 // --- NEW ---
 diff --git a/server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java b/server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java
 index e4348bc0f0..89c80decef 100644

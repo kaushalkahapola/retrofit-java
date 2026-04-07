@@ -2661,10 +2661,18 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 task_entry["reason"] = "mainline_fast_path"
                 continue
         else:
+            _mfp_reason = _mfp.get("reason", "unknown")
             print(
                 f"    Agent 3: Mainline fast path skipped for {target_file}: "
-                f"{_mfp.get('reason', 'unknown')}"
+                f"{_mfp_reason}"
             )
+            # If the fast path applied some hunks but not all (partial_apply), the
+            # file is left dirty.  Reset it now so that plan-preflight and any
+            # subsequent deterministic / ReAct edits always start from a clean HEAD
+            # state.  Without this reset, the preflight sees partially-modified
+            # content and can produce wildly incorrect plans.
+            if "partial_apply" in _mfp_reason:
+                _git_reset_file(target_repo_path, target_file)
 
         if deterministic_only and target_file.lower().endswith(".java"):
             try:

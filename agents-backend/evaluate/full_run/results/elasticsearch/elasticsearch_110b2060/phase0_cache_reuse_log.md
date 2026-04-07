@@ -1,0 +1,5 @@
+# Phase 0 Cache Reuse
+
+- Cache file: /home/kaushal/retrofit-java/agents-backend/evaluate/full_run/phase0_cache/elasticsearch_88f07a84fc4b_110b2060a15d.json
+- Reused targets: {'test_targets': ['x-pack/plugin/deprecation:org.elasticsearch.xpack.deprecation.NodeDeprecationChecksTests', 'x-pack/plugin/logsdb:org.elasticsearch.xpack.logsdb.LogsIndexModeCustomSettingsIT'], 'source_modules': ['x-pack/plugin/deprecation'], 'all_modules': ['x-pack/plugin/deprecation', 'x-pack/plugin/logsdb'], 'raw': {'source': 'changed_files', 'changed_files': ['x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java', 'x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java', 'x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java', 'x-pack/plugin/deprecation/src/test/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecksTests.java', 'x-pack/plugin/logsdb/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/LogsIndexModeCustomSettingsIT.java']}}
+- Reused baseline mode: elasticsearch-helper-script

@@ -1,63 +1,109 @@
 {
-  "adapted_file_edits": [
-    {
-      "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
-      "mainline_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
-      "old_string": "<developer patch fast path>",
-      "new_string": "diff --git a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java\nindex 61c17be1a7..23b92d9393 100644\n--- a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java\n+++ b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java\n@@ -53,8 +53,6 @@ import org.jetbrains.annotations.Nullable;\n import org.jetbrains.annotations.VisibleForTesting;\n \n import io.crate.action.FutureActionListener;\n-import io.crate.session.CollectingResultReceiver;\n-import io.crate.session.Sessions;\n import io.crate.analyze.AnalyzedAlterTableRenameTable;\n import io.crate.analyze.BoundAlterTable;\n import io.crate.data.Row;\n@@ -64,10 +62,14 @@ import io.crate.execution.support.ChainableAction;\n import io.crate.execution.support.ChainableActions;\n import io.crate.metadata.GeneratedReference;\n import io.crate.metadata.PartitionName;\n+import io.crate.metadata.Reference;\n import io.crate.metadata.RelationName;\n import io.crate.metadata.table.TableInfo;\n import io.crate.replication.logical.LogicalReplicationService;\n import io.crate.replication.logical.metadata.Publication;\n+import io.crate.session.CollectingResultReceiver;\n+import io.crate.session.Sessions;\n+import io.crate.sql.tree.ColumnPolicy;\n \n @Singleton\n public class AlterTableOperation {\n@@ -122,11 +124,20 @@ public class AlterTableOperation {\n     }\n \n     public CompletableFuture<Long> addColumn(AddColumnRequest addColumnRequest) {\n+        var newReferences = addColumnRequest.references();\n         String subject = null;\n         if (addColumnRequest.pKeyIndices().isEmpty() == false) {\n             subject = \"primary key\";\n         } else if (addColumnRequest.references().stream().anyMatch(ref -> ref instanceof GeneratedReference)) {\n             subject = \"generated\";\n+        } else {\n+            for (Reference newRef : newReferences) {\n+                if (newReferences.stream().anyMatch(r -> r.column().isChildOf(newRef.column()))\n+                    && newRef.columnPolicy().equals(ColumnPolicy.IGNORED)) {\n+                    subject = \"sub column to an OBJECT(IGNORED) parent\";\n+                    break;\n+                }\n+            }\n         }\n         if (subject != null) {\n             String finalSubject = subject;",
-      "edit_type": "replace",
-      "verified": true,
-      "verification_result": "developer_fast_path_ok",
-      "applied": true,
-      "apply_result": "SUCCESS"
-    }
-  ],
+  "adapted_file_edits": [],
   "all_adapted_file_edits": [
+    [],
+    [],
+    []
+  ],
+  "agent_trajectory_edits": [
+    [],
     [
       {
         "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
-        "mainline_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
-        "old_string": "<developer patch fast path>",
-        "new_string": "diff --git a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java\nindex 61c17be1a7..23b92d9393 100644\n--- a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java\n+++ b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java\n@@ -53,8 +53,6 @@ import org.jetbrains.annotations.Nullable;\n import org.jetbrains.annotations.VisibleForTesting;\n \n import io.crate.action.FutureActionListener;\n-import io.crate.session.CollectingResultReceiver;\n-import io.crate.session.Sessions;\n import io.crate.analyze.AnalyzedAlterTableRenameTable;\n import io.crate.analyze.BoundAlterTable;\n import io.crate.data.Row;\n@@ -64,10 +62,14 @@ import io.crate.execution.support.ChainableAction;\n import io.crate.execution.support.ChainableActions;\n import io.crate.metadata.GeneratedReference;\n import io.crate.metadata.PartitionName;\n+import io.crate.metadata.Reference;\n import io.crate.metadata.RelationName;\n import io.crate.metadata.table.TableInfo;\n import io.crate.replication.logical.LogicalReplicationService;\n import io.crate.replication.logical.metadata.Publication;\n+import io.crate.session.CollectingResultReceiver;\n+import io.crate.session.Sessions;\n+import io.crate.sql.tree.ColumnPolicy;\n \n @Singleton\n public class AlterTableOperation {\n@@ -122,11 +124,20 @@ public class AlterTableOperation {\n     }\n \n     public CompletableFuture<Long> addColumn(AddColumnRequest addColumnRequest) {\n+        var newReferences = addColumnRequest.references();\n         String subject = null;\n         if (addColumnRequest.pKeyIndices().isEmpty() == false) {\n             subject = \"primary key\";\n         } else if (addColumnRequest.references().stream().anyMatch(ref -> ref instanceof GeneratedReference)) {\n             subject = \"generated\";\n+        } else {\n+            for (Reference newRef : newReferences) {\n+                if (newReferences.stream().anyMatch(r -> r.column().isChildOf(newRef.column()))\n+                    && newRef.columnPolicy().equals(ColumnPolicy.IGNORED)) {\n+                    subject = \"sub column to an OBJECT(IGNORED) parent\";\n+                    break;\n+                }\n+            }\n         }\n         if (subject != null) {\n             String finalSubject = subject;",
-        "edit_type": "replace",
-        "verified": true,
-        "verification_result": "developer_fast_path_ok",
-        "applied": true,
-        "apply_result": "SUCCESS"
+        "tool": "str_replace_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "edit_type": "insert_before",
+          "resolution_reason": "exact",
+          "resolved_old_preview": "import io.crate.metadata.RelationName;",
+          "resolved_new_preview": "import io.crate.metadata.Reference;\nimport io.crate.metadata.RelationName;"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "tool": "str_replace_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "edit_type": "insert_before",
+          "resolution_reason": "exact",
+          "resolved_old_preview": "@Singleton",
+          "resolved_new_preview": "import io.crate.sql.tree.ColumnPolicy;\n@Singleton"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "tool": "str_replace_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "edit_type": "insert_before",
+          "resolution_reason": "exact",
+          "resolved_old_preview": "        String subject = null;",
+          "resolved_new_preview": "        var newReferences = addColumnRequest.references();\n        String subject = null;"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "tool": "str_replace_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "edit_type": "insert_before",
+          "resolution_reason": "exact",
+          "resolved_old_preview": "        if (subject != null) {",
+          "resolved_new_preview": "        } else {\n            for (Reference newRef : newReferences) {\n                if (newReferences.stream().anyMatch(r -> r.column().isChildOf(newRef.column()))\n                    && newRef.colu"
+        }
+      }
+    ],
+    [
+      {
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "tool": "str_replace_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "edit_type": "insert_before",
+          "resolution_reason": "exact",
+          "resolved_old_preview": "import io.crate.metadata.RelationName;",
+          "resolved_new_preview": "import io.crate.metadata.Reference;\nimport io.crate.metadata.RelationName;"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "tool": "str_replace_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "edit_type": "insert_before",
+          "resolution_reason": "exact",
+          "resolved_old_preview": "@Singleton",
+          "resolved_new_preview": "import io.crate.sql.tree.ColumnPolicy;\n@Singleton"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "tool": "str_replace_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "edit_type": "insert_before",
+          "resolution_reason": "exact",
+          "resolved_old_preview": "        String subject = null;",
+          "resolved_new_preview": "        var newReferences = addColumnRequest.references();\n        String subject = null;"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+        "tool": "str_replace_in_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "edit_type": "insert_before",
+          "resolution_reason": "exact",
+          "resolved_old_preview": "        if (subject != null) {",
+          "resolved_new_preview": "        } else {\n            for (Reference newRef : newReferences) {\n                if (newReferences.stream().anyMatch(r -> r.column().isChildOf(newRef.column()))\n                    && newRef.colu"
+        }
       }
     ]
   ],
-  "agent_trajectory_edits": [
-    []
-  ],
-  "adapted_code_hunks": [
-    {
-      "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
-      "mainline_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
-      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java\nindex 61c17be1a7..23b92d9393 100644\n--- a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java\n+++ b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java\n@@ -53,8 +53,6 @@ import org.jetbrains.annotations.Nullable;\n import org.jetbrains.annotations.VisibleForTesting;\n \n import io.crate.action.FutureActionListener;\n-import io.crate.session.CollectingResultReceiver;\n-import io.crate.session.Sessions;\n import io.crate.analyze.AnalyzedAlterTableRenameTable;\n import io.crate.analyze.BoundAlterTable;\n import io.crate.data.Row;\n@@ -64,10 +62,14 @@ import io.crate.execution.support.ChainableAction;\n import io.crate.execution.support.ChainableActions;\n import io.crate.metadata.GeneratedReference;\n import io.crate.metadata.PartitionName;\n+import io.crate.metadata.Reference;\n import io.crate.metadata.RelationName;\n import io.crate.metadata.table.TableInfo;\n import io.crate.replication.logical.LogicalReplicationService;\n import io.crate.replication.logical.metadata.Publication;\n+import io.crate.session.CollectingResultReceiver;\n+import io.crate.session.Sessions;\n+import io.crate.sql.tree.ColumnPolicy;\n \n @Singleton\n public class AlterTableOperation {\n@@ -122,11 +124,20 @@ public class AlterTableOperation {\n     }\n \n     public CompletableFuture<Long> addColumn(AddColumnRequest addColumnRequest) {\n+        var newReferences = addColumnRequest.references();\n         String subject = null;\n         if (addColumnRequest.pKeyIndices().isEmpty() == false) {\n             subject = \"primary key\";\n         } else if (addColumnRequest.references().stream().anyMatch(ref -> ref instanceof GeneratedReference)) {\n             subject = \"generated\";\n+        } else {\n+            for (Reference newRef : newReferences) {\n+                if (newReferences.stream().anyMatch(r -> r.column().isChildOf(newRef.column()))\n+                    && newRef.columnPolicy().equals(ColumnPolicy.IGNORED)) {\n+                    subject = \"sub column to an OBJECT(IGNORED) parent\";\n+                    break;\n+                }\n+            }\n         }\n         if (subject != null) {\n             String finalSubject = subject;\n",
-      "insertion_line": 1,
-      "intent_verified": true,
-      "file_operation": "MODIFIED",
-      "old_target_file": null,
-      "file_operation_required": true,
-      "path_resolution_reason": "modified_target_mapped"
-    }
-  ],
+  "adapted_code_hunks": [],
   "validation_repeated_patch_detected": false,
-  "validation_repeated_plan_detected": false,
-  "best_effort_adapted_code_hunks": [
-    {
-      "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
-      "mainline_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
-      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java\nindex 61c17be1a7..23b92d9393 100644\n--- a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java\n+++ b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java\n@@ -53,8 +53,6 @@ import org.jetbrains.annotations.Nullable;\n import org.jetbrains.annotations.VisibleForTesting;\n \n import io.crate.action.FutureActionListener;\n-import io.crate.session.CollectingResultReceiver;\n-import io.crate.session.Sessions;\n import io.crate.analyze.AnalyzedAlterTableRenameTable;\n import io.crate.analyze.BoundAlterTable;\n import io.crate.data.Row;\n@@ -64,10 +62,14 @@ import io.crate.execution.support.ChainableAction;\n import io.crate.execution.support.ChainableActions;\n import io.crate.metadata.GeneratedReference;\n import io.crate.metadata.PartitionName;\n+import io.crate.metadata.Reference;\n import io.crate.metadata.RelationName;\n import io.crate.metadata.table.TableInfo;\n import io.crate.replication.logical.LogicalReplicationService;\n import io.crate.replication.logical.metadata.Publication;\n+import io.crate.session.CollectingResultReceiver;\n+import io.crate.session.Sessions;\n+import io.crate.sql.tree.ColumnPolicy;\n \n @Singleton\n public class AlterTableOperation {\n@@ -122,11 +124,20 @@ public class AlterTableOperation {\n     }\n \n     public CompletableFuture<Long> addColumn(AddColumnRequest addColumnRequest) {\n+        var newReferences = addColumnRequest.references();\n         String subject = null;\n         if (addColumnRequest.pKeyIndices().isEmpty() == false) {\n             subject = \"primary key\";\n         } else if (addColumnRequest.references().stream().anyMatch(ref -> ref instanceof GeneratedReference)) {\n             subject = \"generated\";\n+        } else {\n+            for (Reference newRef : newReferences) {\n+                if (newReferences.stream().anyMatch(r -> r.column().isChildOf(newRef.column()))\n+                    && newRef.columnPolicy().equals(ColumnPolicy.IGNORED)) {\n+                    subject = \"sub column to an OBJECT(IGNORED) parent\";\n+                    break;\n+                }\n+            }\n         }\n         if (subject != null) {\n             String finalSubject = subject;\n",
-      "insertion_line": 1,
-      "intent_verified": true,
-      "file_operation": "MODIFIED",
-      "old_target_file": null,
-      "file_operation_required": true,
-      "path_resolution_reason": "modified_target_mapped"
-    }
-  ],
+  "validation_repeated_plan_detected": true,
+  "best_effort_adapted_code_hunks": [],
   "adapted_test_hunks": [],
   "generation_checklist": [
     {
@@ -68,8 +114,8 @@
       "execution_types": [
         "TYPE_II"
       ],
-      "status": "success",
-      "reason": "developer_fast_path",
+      "status": "failed",
+      "reason": "deterministic_syntax_failed_no_react",
       "todo_steps": [
         "reset_file",
         "apply_edits",
@@ -78,15 +124,12 @@
         "restore_file"
       ],
       "completed_steps": [
-        "reset_file",
-        "apply_edits",
-        "capture_diff",
-        "intent_check",
-        "restore_file"
-      ]
+        "reset_file"
+      ],
+      "error": "post_edit_syntax_failed: CRITICAL: STRUCTURAL SYNTAX ERROR(S) FOUND.\nThese are parse/structure errors (e.g., braces, separators, malformed blocks) that MUST be fixed before submitting.\n\nERRORS:\n\n/home/kaushal/retrofit-java/temp_repo_storage/crate/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java:134: error: illegal start of type\n        } else {\n          ^\n1 error"
     }
   ],
-  "generated_patch_hash": "6b29352ccd42c5b207052fdd5d4393d11039fbd5b312565316073e40f1b70497",
+  "generated_patch_hash": "",
   "force_type_v_until_success": false,
   "force_type_v_reason": "",
   "force_type_v_retry_files": [],

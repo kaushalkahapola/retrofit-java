@@ -1,0 +1,870 @@
+{
+  "project": "crate",
+  "patch_id": "crate_adf9854b",
+  "mainline_commit": "adf9854bdb9cbf08dde206c0a1e005a5ea3379c9",
+  "backport_commit": "b92b08dc1f9d9ffd4c84a68d21ccb08dfe85a1c8",
+  "run_mode": "full",
+  "timestamp": "2026-04-07T05:24:28.226061",
+  "phases": {
+    "phase1_context_analyzer": {
+      "context_analyzer": {
+        "node": "context_analyzer",
+        "outputs": {
+          "semantic_blueprint": {
+            "root_cause_hypothesis": "Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.",
+            "fix_logic": "Apply each source hunk with target-verified context and symbol consistency while preserving behavior.",
+            "dependent_apis": [
+              "with",
+              "Role"
+            ],
+            "patch_intent_summary": "Backport patch behavior to target branch with minimal, context-correct edits.",
+            "hunk_chain": [
+              {
+                "hunk_index": 1,
+                "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "summary": "Modifies logic (+1/-1 lines).",
+                "role": "core_fix",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 1
+              },
+              {
+                "hunk_index": 2,
+                "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "summary": "Modifies logic (+1/-1 lines).",
+                "role": "core_fix",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 2
+              },
+              {
+                "hunk_index": 3,
+                "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "summary": "Modifies logic (+1/-1 lines).",
+                "role": "core_fix",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 3
+              },
+              {
+                "hunk_index": 4,
+                "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "summary": "Modifies logic (+1/-1 lines).",
+                "role": "core_fix",
+                "connects_to_next": "",
+                "global_index": 4
+              },
+              {
+                "hunk_index": 1,
+                "file": "server/src/main/java/io/crate/role/Role.java",
+                "summary": "Modifies logic (+6/-2 lines).",
+                "role": "guard",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 5
+              },
+              {
+                "hunk_index": 2,
+                "file": "server/src/main/java/io/crate/role/Role.java",
+                "summary": "Modifies logic (+1/-1 lines).",
+                "role": "propagation",
+                "connects_to_next": "",
+                "global_index": 6
+              },
+              {
+                "hunk_index": 1,
+                "file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+                "summary": "Modifies logic (+1/-8 lines).",
+                "role": "core_fix",
+                "connects_to_next": "",
+                "global_index": 7
+              }
+            ]
+          },
+          "patch_diff": "diff --git a/server/src/main/java/io/crate/role/PrivilegesModifier.java b/server/src/main/java/io/crate/role/PrivilegesModifier.java\nindex 0000000..0000000 100644\n--- a/server/src/main/java/io/crate/role/PrivilegesModifier.java\n+++ b/server/src/main/java/io/crate/role/PrivilegesModifier.java\n@@ -96,7 +96,7 @@\n             }\n \n             if (affectedCount > 0) {\n-                roles.put(userName, role.with(privileges));\n+                roles.put(userName, role.with(new RolePrivileges(privileges)));\n             }\n         }\n \n@@ -139,7 +139,7 @@\n                     privileges.add(privilege);\n                 }\n             }\n-            newRoles.put(entry.getKey(), role.with(privileges));\n+            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n         }\n \n         if (privilegesChanged) {\n@@ -171,7 +171,7 @@\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(role.name(), role.with(updatedPrivileges));\n+            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n         return affectedPrivileges;\n@@ -201,7 +201,7 @@\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(user, role.with(updatedPrivileges));\n+            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         return new RolesMetadata(newRoles);\n     }\ndiff --git a/server/src/main/java/io/crate/role/Role.java b/server/src/main/java/io/crate/role/Role.java\nindex 0000000..0000000 100644\n--- a/server/src/main/java/io/crate/role/Role.java\n+++ b/server/src/main/java/io/crate/role/Role.java\n@@ -241,8 +241,12 @@\n \n     }\n \n-    public Role with(Set<Privilege> privileges) {\n-        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n+    public Role with(RolePrivileges privileges) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n+    }\n+\n+    public Role with(Set<GrantedRole> grantedRoles) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n     }\n \n     public Role with(@Nullable SecureHash password,\n@@ -257,7 +261,7 @@\n                 password,\n                 jwtProperties,\n                 sessionSettings),\n-            false\n+            isSuperUser\n         );\n     }\n \ndiff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\nindex 0000000..0000000 100644\n--- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n+++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n@@ -239,14 +239,7 @@\n             }\n         }\n         if (affectedCount > 0) {\n-            roles.put(role.name(), new Role(\n-                role.name(),\n-                role.isUser(),\n-                Set.of(),\n-                grantedRoles,\n-                role.password(),\n-                role.jwtProperties(),\n-                role.sessionSettings()));\n+            roles.put(role.name(), role.with(grantedRoles));\n         }\n         return affectedCount;\n     }\n",
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false
+          }
+        }
+      }
+    },
+    "phase2_structural_locator": {
+      "structural_locator": {
+        "node": "structural_locator",
+        "outputs": {
+          "consistency_map": {},
+          "mapped_target_context": {
+            "server/src/main/java/io/crate/role/PrivilegesModifier.java": [
+              {
+                "hunk_index": 1,
+                "mainline_method": "hunk_1",
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "target_method": "applyPrivileges",
+                "start_line": 99,
+                "end_line": 99,
+                "code_snippet": "                        break;\n                    } else {\n                        // we only want to process a new GRANT/DENY privilege if the user doesn't already have it\n                        if (userPrivilege.equals(newPrivilege) == false) {\n                            iterator.remove();\n                            privileges.add(newPrivilege);\n                            affectedCount++;\n                        }\n                        break;\n                    }\n                }\n            }\n\n            if (userHadPrivilegeOnSameObject == false && newPrivilege.policy().equals(Policy.REVOKE) == false) {\n                // revoking a privilege that was not granted is a no-op\n                affectedCount++;\n                privileges.add(newPrivilege);\n            }\n\n            if (affectedCount > 0) {\n                roles.put(userName, role.with(privileges));\n            }\n        }\n\n        return affectedCount;\n    }\n\n    /**\n     * Returns a copy of the {@link RolesMetadata} including a copied list of privileges if at least one\n     * privilege was replaced. Otherwise returns the NULL to indicate that nothing was changed.\n     * Privileges of {@link Securable#TABLE} whose idents are matching the given source ident are replaced\n     * by a copy where the ident is changed to the given target ident.\n     */\n    @Nullable\n    public static RolesMetadata maybeCopyAndReplaceTableIdents(RolesMetadata oldMetadata,\n                                                               String sourceIdent,\n                                                               String targetIdent) {\n        boolean privilegesChanged = false;\n        Map<String, Role> newRoles = HashMap.newHashMap(oldMetadata.roles().size());\n        for (Map.Entry<String, Role> entry : oldMetadata.roles().entrySet()) {\n            var role = entry.getValue();",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+                "anchor_strategy": "deterministic_realign+structure_locator"
+              },
+              {
+                "hunk_index": 2,
+                "mainline_method": "hunk_2",
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "target_method": "applyPrivileges",
+                "start_line": 142,
+                "end_line": 142,
+                "code_snippet": "                Subject subject = privilege.subject();\n                if (subject.securable() != Securable.TABLE) {\n                    privileges.add(privilege);\n                    continue;\n                }\n\n                String ident = subject.ident();\n                assert ident != null : \"ident must not be null for securable 'TABLE'\";\n                if (ident.equals(sourceIdent)) {\n                    privileges.add(new Privilege(\n                        privilege.policy(),\n                        subject.permission(),\n                        subject.securable(),\n                        targetIdent,\n                        privilege.grantor()));\n                    privilegesChanged = true;\n                } else {\n                    privileges.add(privilege);\n                }\n            }\n            newRoles.put(entry.getKey(), role.with(privileges));\n        }\n\n        if (privilegesChanged) {\n            return new RolesMetadata(newRoles);\n        }\n        return null;\n    }\n\n    public static long dropTableOrViewPrivileges(Metadata.Builder mdBuilder,\n                                                 RolesMetadata rolesMetadata,\n                                                 String tableOrViewIdent) {\n        long affectedPrivileges = 0L;\n        Map<String, Role> newRoles = HashMap.newHashMap(rolesMetadata.roles().size());\n        for (Map.Entry<String, Role> entry : rolesMetadata.roles().entrySet()) {\n            var role = entry.getValue();\n            Set<Privilege> updatedPrivileges = new HashSet<>();\n            for (Privilege privilege : role.privileges()) {\n                Subject subject = privilege.subject();\n                Securable securable = subject.securable();\n                if (securable != Securable.TABLE && securable != Securable.VIEW) {",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+                "anchor_strategy": "deterministic_realign+structure_locator"
+              },
+              {
+                "hunk_index": 3,
+                "mainline_method": "hunk_3",
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "target_method": "applyPrivileges",
+                "start_line": 174,
+                "end_line": 174,
+                "code_snippet": "        long affectedPrivileges = 0L;\n        Map<String, Role> newRoles = HashMap.newHashMap(rolesMetadata.roles().size());\n        for (Map.Entry<String, Role> entry : rolesMetadata.roles().entrySet()) {\n            var role = entry.getValue();\n            Set<Privilege> updatedPrivileges = new HashSet<>();\n            for (Privilege privilege : role.privileges()) {\n                Subject subject = privilege.subject();\n                Securable securable = subject.securable();\n                if (securable != Securable.TABLE && securable != Securable.VIEW) {\n                    continue;\n                }\n\n                String ident = subject.ident();\n                assert ident != null : \"ident must not be null for securable 'TABLE'\";\n                if (ident.equals(tableOrViewIdent)) {\n                    affectedPrivileges++;\n                } else {\n                    updatedPrivileges.add(privilege);\n                }\n            }\n            newRoles.put(role.name(), role.with(updatedPrivileges));\n        }\n        mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n        return affectedPrivileges;\n    }\n\n    public static RolesMetadata swapPrivileges(RolesMetadata oldMetadata,\n                                               RelationName source,\n                                               RelationName target) {\n        Map<String, Role> newRoles = HashMap.newHashMap(oldMetadata.roles().size());\n        for (Map.Entry<String, Role> entry : oldMetadata.roles().entrySet()) {\n            String user = entry.getKey();\n            var role = entry.getValue();\n            Set<Privilege> updatedPrivileges = new HashSet<>();\n            for (Privilege privilege : role.privileges()) {\n                Subject ident = privilege.subject();\n                if (ident.securable() == Securable.TABLE) {\n                    if (source.fqn().equals(ident.ident())) {\n                        updatedPrivileges.add(\n                            new Privilege(privilege.policy(), ident.permission(), ident.securable(), target.fqn(), privilege.grantor()));\n                    } else if (target.fqn().equals(ident.ident())) {",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+                "anchor_strategy": "deterministic_realign+structure_locator"
+              },
+              {
+                "hunk_index": 4,
+                "mainline_method": "hunk_4",
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "target_method": "applyPrivileges",
+                "start_line": 204,
+                "end_line": 204,
+                "code_snippet": "        for (Map.Entry<String, Role> entry : oldMetadata.roles().entrySet()) {\n            String user = entry.getKey();\n            var role = entry.getValue();\n            Set<Privilege> updatedPrivileges = new HashSet<>();\n            for (Privilege privilege : role.privileges()) {\n                Subject ident = privilege.subject();\n                if (ident.securable() == Securable.TABLE) {\n                    if (source.fqn().equals(ident.ident())) {\n                        updatedPrivileges.add(\n                            new Privilege(privilege.policy(), ident.permission(), ident.securable(), target.fqn(), privilege.grantor()));\n                    } else if (target.fqn().equals(ident.ident())) {\n                        updatedPrivileges.add(\n                            new Privilege(privilege.policy(), ident.permission(), ident.securable(), source.fqn(), privilege.grantor()));\n                    } else {\n                        updatedPrivileges.add(privilege);\n                    }\n                } else {\n                    updatedPrivileges.add(privilege);\n                }\n            }\n            newRoles.put(user, role.with(updatedPrivileges));\n        }\n        return new RolesMetadata(newRoles);\n    }\n}",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+                "anchor_strategy": "deterministic_realign+structure_locator"
+              }
+            ],
+            "server/src/main/java/io/crate/role/Role.java": [
+              {
+                "hunk_index": 1,
+                "mainline_method": "with",
+                "target_file": "server/src/main/java/io/crate/role/Role.java",
+                "target_method": "with",
+                "start_line": 187,
+                "end_line": 187,
+                "code_snippet": "\n    public Role(StreamInput in) throws IOException {\n        name = in.readString();\n        int privSize = in.readVInt();\n        var privilegesList = new ArrayList<Privilege>(privSize);\n        for (int i = 0; i < privSize; i++) {\n            privilegesList.add(new Privilege(in));\n        }\n        privileges = new RolePrivileges(privilegesList);\n        int grantedRolesSize = in.readVInt();\n        Set<GrantedRole> grantedRoleSet = HashSet.newHashSet(grantedRolesSize);\n        for (int i = 0; i < grantedRolesSize; i++) {\n            grantedRoleSet.add(new GrantedRole(in));\n        }\n        grantedRoles = Collections.unmodifiableSet(grantedRoleSet);\n        isSuperUser = false;\n        properties = new Properties(in);\n\n    }\n\n    public Role with(Set<Privilege> privileges) {\n        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n    }\n\n    public Role with(@Nullable SecureHash password,\n                     @Nullable JwtProperties jwtProperties) {\n        return new Role(\n            name,\n            privileges,\n            grantedRoles,\n            new Properties(properties.login, password, jwtProperties),\n            false\n        );\n    }\n\n    public String name() {\n        return name;\n    }\n\n    @Nullable\n    public SecureHash password() {",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved",
+                "anchor_strategy": "deterministic_realign"
+              },
+              {
+                "hunk_index": 2,
+                "mainline_method": "hunk_2",
+                "target_file": "server/src/main/java/io/crate/role/Role.java",
+                "target_method": "with",
+                "start_line": 198,
+                "end_line": 198,
+                "code_snippet": "        for (int i = 0; i < grantedRolesSize; i++) {\n            grantedRoleSet.add(new GrantedRole(in));\n        }\n        grantedRoles = Collections.unmodifiableSet(grantedRoleSet);\n        isSuperUser = false;\n        properties = new Properties(in);\n\n    }\n\n    public Role with(Set<Privilege> privileges) {\n        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n    }\n\n    public Role with(@Nullable SecureHash password,\n                     @Nullable JwtProperties jwtProperties) {\n        return new Role(\n            name,\n            privileges,\n            grantedRoles,\n            new Properties(properties.login, password, jwtProperties),\n            false\n        );\n    }\n\n    public String name() {\n        return name;\n    }\n\n    @Nullable\n    public SecureHash password() {\n        return properties.password();\n    }\n\n    public boolean isUser() {\n        return properties.login();\n    }\n\n    @Nullable\n    public JwtProperties jwtProperties() {\n        return properties.jwtProperties();\n    }",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+                "anchor_strategy": "deterministic_realign+structure_locator"
+              }
+            ],
+            "server/src/main/java/io/crate/role/metadata/RolesMetadata.java": [
+              {
+                "hunk_index": 1,
+                "mainline_method": "hunk_1",
+                "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+                "target_method": "applyRolePrivilegesToUser",
+                "start_line": 242,
+                "end_line": 242,
+                "code_snippet": "    private long applyRolePrivilegesToUser(String roleName, GrantedRolesChange newGrantedRolesChange) {\n        Role role = roles.get(roleName);\n\n        // Create a new set to avoid modifying in-place the granted roles as this will lead\n        // to no difference in previous and new metadata and thus cluster state\n        Set<GrantedRole> grantedRoles = new HashSet<>(role.grantedRoles());\n        long affectedCount = 0L;\n        for (var roleNameToApply : newGrantedRolesChange.roleNames()) {\n\n            if (newGrantedRolesChange.policy() == Policy.GRANT) {\n                if (grantedRoles.add(new GrantedRole(roleNameToApply, newGrantedRolesChange.grantor()))) {\n                    affectedCount++;\n                }\n            } else if (newGrantedRolesChange.policy() == Policy.REVOKE) {\n                if (grantedRoles.remove(new GrantedRole(roleNameToApply, newGrantedRolesChange.grantor()))) {\n                    affectedCount++;\n                }\n            }\n        }\n        if (affectedCount > 0) {\n            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));\n        }\n        return affectedCount;\n    }\n\n    @Override\n    public EnumSet<Metadata.XContentContext> context() {\n        return EnumSet.of(Metadata.XContentContext.GATEWAY, Metadata.XContentContext.SNAPSHOT);\n    }\n\n    @Override\n    public boolean equals(Object o) {\n        if (this == o) return true;\n        if (o == null || getClass() != o.getClass()) return false;\n\n        RolesMetadata that = (RolesMetadata) o;\n        return Objects.equals(roles, that.roles);\n    }\n\n    @Override\n    public int hashCode() {",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+                "anchor_strategy": "deterministic_realign+structure_locator"
+              }
+            ]
+          },
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "reason": "llm_usage_not_collected_in_this_node"
+          }
+        }
+      }
+    },
+    "phase3_hunk_generator": {
+      "hunk_generator": {
+        "node": "hunk_generator",
+        "outputs": {
+          "adapted_file_edits": [
+            {
+              "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+              "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+              "old_string": "<mainline patch fast path>",
+              "new_string": "diff --git a/server/src/main/java/io/crate/role/PrivilegesModifier.java b/server/src/main/java/io/crate/role/PrivilegesModifier.java\nindex 2effd6d7bf..8fdf086f88 100644\n--- a/server/src/main/java/io/crate/role/PrivilegesModifier.java\n+++ b/server/src/main/java/io/crate/role/PrivilegesModifier.java\n@@ -96,7 +96,7 @@ public final class PrivilegesModifier {\n             }\n \n             if (affectedCount > 0) {\n-                roles.put(userName, role.with(privileges));\n+                roles.put(userName, role.with(new RolePrivileges(privileges)));\n             }\n         }\n \n@@ -139,7 +139,7 @@ public final class PrivilegesModifier {\n                     privileges.add(privilege);\n                 }\n             }\n-            newRoles.put(entry.getKey(), role.with(privileges));\n+            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n         }\n \n         if (privilegesChanged) {\n@@ -171,7 +171,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(role.name(), role.with(updatedPrivileges));\n+            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n         return affectedPrivileges;\n@@ -201,7 +201,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(user, role.with(updatedPrivileges));\n+            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         return new RolesMetadata(newRoles);\n     }",
+              "edit_type": "replace",
+              "verified": true,
+              "verification_result": "mainline_fast_path_ok (TYPE I)",
+              "applied": true,
+              "apply_result": "SUCCESS"
+            }
+          ],
+          "all_adapted_file_edits": [
+            [
+              {
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "old_string": "<mainline patch fast path>",
+                "new_string": "diff --git a/server/src/main/java/io/crate/role/PrivilegesModifier.java b/server/src/main/java/io/crate/role/PrivilegesModifier.java\nindex 2effd6d7bf..8fdf086f88 100644\n--- a/server/src/main/java/io/crate/role/PrivilegesModifier.java\n+++ b/server/src/main/java/io/crate/role/PrivilegesModifier.java\n@@ -96,7 +96,7 @@ public final class PrivilegesModifier {\n             }\n \n             if (affectedCount > 0) {\n-                roles.put(userName, role.with(privileges));\n+                roles.put(userName, role.with(new RolePrivileges(privileges)));\n             }\n         }\n \n@@ -139,7 +139,7 @@ public final class PrivilegesModifier {\n                     privileges.add(privilege);\n                 }\n             }\n-            newRoles.put(entry.getKey(), role.with(privileges));\n+            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n         }\n \n         if (privilegesChanged) {\n@@ -171,7 +171,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(role.name(), role.with(updatedPrivileges));\n+            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n         return affectedPrivileges;\n@@ -201,7 +201,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(user, role.with(updatedPrivileges));\n+            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         return new RolesMetadata(newRoles);\n     }",
+                "edit_type": "replace",
+                "verified": true,
+                "verification_result": "mainline_fast_path_ok (TYPE I)",
+                "applied": true,
+                "apply_result": "SUCCESS"
+              }
+            ],
+            [
+              {
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "old_string": "<mainline patch fast path>",
+                "new_string": "diff --git a/server/src/main/java/io/crate/role/PrivilegesModifier.java b/server/src/main/java/io/crate/role/PrivilegesModifier.java\nindex 2effd6d7bf..8fdf086f88 100644\n--- a/server/src/main/java/io/crate/role/PrivilegesModifier.java\n+++ b/server/src/main/java/io/crate/role/PrivilegesModifier.java\n@@ -96,7 +96,7 @@ public final class PrivilegesModifier {\n             }\n \n             if (affectedCount > 0) {\n-                roles.put(userName, role.with(privileges));\n+                roles.put(userName, role.with(new RolePrivileges(privileges)));\n             }\n         }\n \n@@ -139,7 +139,7 @@ public final class PrivilegesModifier {\n                     privileges.add(privilege);\n                 }\n             }\n-            newRoles.put(entry.getKey(), role.with(privileges));\n+            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n         }\n \n         if (privilegesChanged) {\n@@ -171,7 +171,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(role.name(), role.with(updatedPrivileges));\n+            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n         return affectedPrivileges;\n@@ -201,7 +201,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(user, role.with(updatedPrivileges));\n+            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         return new RolesMetadata(newRoles);\n     }",
+                "edit_type": "replace",
+                "verified": true,
+                "verification_result": "mainline_fast_path_ok (TYPE I)",
+                "applied": true,
+                "apply_result": "SUCCESS"
+              }
+            ],
+            [
+              {
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "old_string": "<mainline patch fast path>",
+                "new_string": "diff --git a/server/src/main/java/io/crate/role/PrivilegesModifier.java b/server/src/main/java/io/crate/role/PrivilegesModifier.java\nindex 2effd6d7bf..8fdf086f88 100644\n--- a/server/src/main/java/io/crate/role/PrivilegesModifier.java\n+++ b/server/src/main/java/io/crate/role/PrivilegesModifier.java\n@@ -96,7 +96,7 @@ public final class PrivilegesModifier {\n             }\n \n             if (affectedCount > 0) {\n-                roles.put(userName, role.with(privileges));\n+                roles.put(userName, role.with(new RolePrivileges(privileges)));\n             }\n         }\n \n@@ -139,7 +139,7 @@ public final class PrivilegesModifier {\n                     privileges.add(privilege);\n                 }\n             }\n-            newRoles.put(entry.getKey(), role.with(privileges));\n+            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n         }\n \n         if (privilegesChanged) {\n@@ -171,7 +171,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(role.name(), role.with(updatedPrivileges));\n+            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n         return affectedPrivileges;\n@@ -201,7 +201,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(user, role.with(updatedPrivileges));\n+            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         return new RolesMetadata(newRoles);\n     }",
+                "edit_type": "replace",
+                "verified": true,
+                "verification_result": "mainline_fast_path_ok (TYPE I)",
+                "applied": true,
+                "apply_result": "SUCCESS"
+              }
+            ]
+          ],
+          "agent_trajectory_edits": [
+            [],
+            [],
+            []
+          ],
+          "adapted_code_hunks": [
+            {
+              "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+              "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+              "hunk_text": "diff --git a/server/src/main/java/io/crate/role/PrivilegesModifier.java b/server/src/main/java/io/crate/role/PrivilegesModifier.java\nindex 2effd6d7bf..8fdf086f88 100644\n--- a/server/src/main/java/io/crate/role/PrivilegesModifier.java\n+++ b/server/src/main/java/io/crate/role/PrivilegesModifier.java\n@@ -96,7 +96,7 @@ public final class PrivilegesModifier {\n             }\n \n             if (affectedCount > 0) {\n-                roles.put(userName, role.with(privileges));\n+                roles.put(userName, role.with(new RolePrivileges(privileges)));\n             }\n         }\n \n@@ -139,7 +139,7 @@ public final class PrivilegesModifier {\n                     privileges.add(privilege);\n                 }\n             }\n-            newRoles.put(entry.getKey(), role.with(privileges));\n+            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n         }\n \n         if (privilegesChanged) {\n@@ -171,7 +171,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(role.name(), role.with(updatedPrivileges));\n+            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n         return affectedPrivileges;\n@@ -201,7 +201,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(user, role.with(updatedPrivileges));\n+            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         return new RolesMetadata(newRoles);\n     }\n",
+              "insertion_line": 1,
+              "intent_verified": true,
+              "file_operation": "MODIFIED",
+              "old_target_file": null,
+              "file_operation_required": true,
+              "path_resolution_reason": "modified_target_mapped"
+            }
+          ],
+          "validation_repeated_patch_detected": false,
+          "validation_repeated_plan_detected": true,
+          "best_effort_adapted_code_hunks": [
+            {
+              "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+              "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+              "hunk_text": "diff --git a/server/src/main/java/io/crate/role/PrivilegesModifier.java b/server/src/main/java/io/crate/role/PrivilegesModifier.java\nindex 2effd6d7bf..8fdf086f88 100644\n--- a/server/src/main/java/io/crate/role/PrivilegesModifier.java\n+++ b/server/src/main/java/io/crate/role/PrivilegesModifier.java\n@@ -96,7 +96,7 @@ public final class PrivilegesModifier {\n             }\n \n             if (affectedCount > 0) {\n-                roles.put(userName, role.with(privileges));\n+                roles.put(userName, role.with(new RolePrivileges(privileges)));\n             }\n         }\n \n@@ -139,7 +139,7 @@ public final class PrivilegesModifier {\n                     privileges.add(privilege);\n                 }\n             }\n-            newRoles.put(entry.getKey(), role.with(privileges));\n+            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n         }\n \n         if (privilegesChanged) {\n@@ -171,7 +171,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(role.name(), role.with(updatedPrivileges));\n+            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n         return affectedPrivileges;\n@@ -201,7 +201,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(user, role.with(updatedPrivileges));\n+            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         return new RolesMetadata(newRoles);\n     }\n",
+              "insertion_line": 1,
+              "intent_verified": true,
+              "file_operation": "MODIFIED",
+              "old_target_file": null,
+              "file_operation_required": true,
+              "path_resolution_reason": "modified_target_mapped"
+            }
+          ],
+          "adapted_test_hunks": [],
+          "generation_checklist": [
+            {
+              "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+              "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+              "hunk_index": 0,
+              "adaptation_type": "TYPE_I",
+              "execution_types": [
+                "TYPE_I"
+              ],
+              "status": "success",
+              "reason": "mainline_fast_path",
+              "todo_steps": [
+                "reset_file",
+                "apply_edits",
+                "capture_diff",
+                "intent_check",
+                "restore_file"
+              ],
+              "completed_steps": [
+                "reset_file",
+                "apply_edits",
+                "capture_diff",
+                "intent_check",
+                "restore_file"
+              ]
+            }
+          ],
+          "generated_patch_hash": "eb6f2b9e08886e28d66ca424828cfb2d4d18b4e2a3fded78567c6e653db9430e",
+          "force_type_v_until_success": false,
+          "force_type_v_reason": "",
+          "force_type_v_retry_files": [],
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "sources": []
+          }
+        }
+      }
+    },
+    "phase4_validation": {
+      "validation": {
+        "node": "validation",
+        "outputs": {
+          "validation_passed": false,
+          "validation_attempts": 3,
+          "validation_error_context": "Build failed: Build failed; deterministic parser could not identify a narrower category.",
+          "validation_error_context_structured": {
+            "raw_error": "--- Building code for 085d163 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/retrofit-java/temp_repo_storage/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      [jar]\n[INFO] crate-jmx-monitoring                                               [jar]\n[INFO] jlink-jdk                                                        [jlink]\n[INFO] crate-app                                                          [jar]\n[INFO] crate-benchmarks                                                   [jar]\n[INFO] \n[INFO] Using the MultiThreadedBuilder implementation with a thread count of 12\n[INFO] \n[INFO] ---------------------------< io.crate:crate >---------------------------\n[INFO] Building crate 5.8.4                                              [1/24]\n[INFO]   from pom.xml\n[INFO] --------------------------------[ pom ]---------------------------------\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate ---\n[INFO] Deleting /repo/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate ---\n[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireMavenVersion passed\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Begin to install JDK 22.0.2+9\n[INFO] Download OpenJDK22U-jdk_x64_linux_hotspot_22.0.2_9.tar.gz from https://github.com/adoptium/temurin22-binaries/releases/download/jdk-22.0.2%2B9/OpenJDK22U-jdk_x64_linux_hotspot_22.0.2_9.tar.gz\n[INFO] Extract OpenJDK22U-jdk_x64_linux_hotspot_22.0.2_9.tar.gz\n[INFO] JDK installed: /root/.m2/jdks/jdk-22.0.2+9\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/target/jacoco.exec\n[INFO] \n[INFO] --- forbiddenapis:3.7:check (default) @ crate ---\n[INFO] Skipping execution for packaging \"pom\"\n[INFO] \n[INFO] --- install:3.1.1:install (default-install) @ crate ---\n[INFO] Installing /repo/pom.xml to /root/.m2/repository/io/crate/crate/5.8.4/crate-5.8.4.pom\n[INFO] \n[INFO] ---------------------< io.crate:crate-libs-shared >---------------------\n[INFO] Building crate-libs-shared 5.8.4                                  [2/24]\n[INFO] \n[INFO] ---------------------< io.crate:crate-libs-guice >----------------------\n[INFO]   from libs/shared/pom.xml\n[INFO] \n[INFO] Building crate-libs-guice 5.8.4                                   [3/24]\n[INFO] \n[INFO]   from libs/guice/pom.xml\n[INFO] -------------------------< io.crate:jlink-jdk >-------------------------\n[INFO] ---------------------< io.crate:crate-libs-pgwire >---------------------\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] Building crate-libs-pgwire 5.8.4                                  [5/24]\n[INFO] Building jlink-jdk 5.8.4                                          [4/24]\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO]   from jlink-jdk/pom.xml\n[INFO]   from libs/pgwire/pom.xml\n[INFO] -------------------------------[ jlink ]--------------------------------\n[INFO] --------------------------------[ jar ]---------------------------------\n[WARNING] *****************************************************************\n[WARNING] * Your build is requesting parallel execution, but this         *\n[WARNING] * project contains the following plugin(s) that have goals not  *\n[WARNING] * marked as thread-safe to support parallel execution.          *\n[WARNING] * While this /may/ work fine, please look for plugin updates    *\n[WARNING] * and/or request plugins be made thread-safe.                   *\n[WARNING] * If reporting an issue, report it against the plugin in        *\n[WARNING] * question, not against Apache Maven.                           *\n[WARNING] *****************************************************************\n[WARNING] The following plugins are not marked as thread-safe in jlink-jdk:\n[WARNING]   org.apache.maven.plugins:maven-jlink-plugin:3.1.0\n[WARNING] \n[WARNING] Enable debug to see precisely which goals are not marked as thread-safe.\n[WARNING] *****************************************************************\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ jlink-jdk ---\n[INFO] Deleting /repo/jlink-jdk/target\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-pgwire ---\n[INFO] Deleting /repo/libs/pgwire/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ jlink-jdk ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ jlink-jdk ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-guice ---\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-shared ---\n[INFO] Deleting /repo/libs/guice/target\n[INFO] Deleting /repo/libs/shared/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-shared ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-shared ---\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-guice ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-guice ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ jlink-jdk ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ jlink-jdk ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/jlink-jdk/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ jlink-jdk ---\n[INFO] skip non existing resourceDirectory /repo/jlink-jdk/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ jlink-jdk ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ jlink-jdk ---\n[INFO] skip non existing resourceDirectory /repo/jlink-jdk/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ jlink-jdk ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- surefire:3.3.0:test (default-test) @ jlink-jdk ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jlink:3.1.0:jlink (default-jlink) @ jlink-jdk ---\n[INFO] Toolchain in maven-jlink-plugin: jlink [ /root/.m2/jdks/jdk-22.0.2+9/bin/jlink ]\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-pgwire ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-pgwire ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/pgwire/target/jacoco.exec\n[INFO] \n[INFO] --- antlr4:4.13.1:antlr4 (antlr) @ crate-libs-pgwire ---\n[INFO] ANTLR 4: Processing source directory /repo/libs/pgwire/src/main/antlr\n[INFO] Processing grammar: io/crate/protocols/postgres/antlr/PgArray.g4\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-pgwire ---\n[INFO] skip non existing resourceDirectory /repo/libs/pgwire/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-pgwire ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed source code.\n[IN",
+            "failed_locations": [
+              {
+                "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "line": 99
+              },
+              {
+                "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "line": 142
+              },
+              {
+                "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "line": 174
+              },
+              {
+                "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "line": 204
+              },
+              {
+                "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "line": 99
+              },
+              {
+                "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "line": 142
+              },
+              {
+                "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "line": 174
+              },
+              {
+                "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "line": 204
+              }
+            ],
+            "symbol_errors": [],
+            "signature_errors": [],
+            "failed_hunk_targets": [
+              {
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "error_line": 99
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "error_line": 142
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "error_line": 174
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "error_line": 204
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "error_line": 99
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "error_line": 142
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "error_line": 174
+              },
+              {
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "error_line": 204
+              }
+            ],
+            "primary_failed_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+            "primary_failed_symbol": ""
+          },
+          "validation_results": {
+            "hunk_application": {
+              "success": true,
+              "raw": "All hunks applied successfully."
+            },
+            "build": {
+              "success": false,
+              "raw": "--- Building code for 085d163 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/retrofit-java/temp_repo_storage/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      [jar]\n[INFO] crate-jmx-monitoring                                               [jar]\n[INFO] jlink-jdk                                                        [jlink]\n[INFO] crate-app                                                          [jar]\n[INFO] crate-benchmarks                                                   [jar]\n[INFO] \n[INFO] Using the MultiThreadedBuilder implementation with a thread count of 12\n[INFO] \n[INFO] ---------------------------< io.crate:crate >---------------------------\n[INFO] Building crate 5.8.4                                              [1/24]\n[INFO]   from pom.xml\n[INFO] --------------------------------[ pom ]---------------------------------\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate ---\n[INFO] Deleting /repo/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate ---\n[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireMavenVersion passed\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Begin to install JDK 22.0.2+9\n[INFO] Download OpenJDK22U-jdk_x64_linux_hotspot_22.0.2_9.tar.gz from https://github.com/adoptium/temurin22-binaries/releases/download/jdk-22.0.2%2B9/OpenJDK22U-jdk_x64_linux_hotspot_22.0.2_9.tar.gz\n[INFO] Extract OpenJDK22U-jdk_x64_linux_hotspot_22.0.2_9.tar.gz\n[INFO] JDK installed: /root/.m2/jdks/jdk-22.0.2+9\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/target/jacoco.exec\n[INFO] \n[INFO] --- forbiddenapis:3.7:check (default) @ crate ---\n[INFO] Skipping execution for packaging \"pom\"\n[INFO] \n[INFO] --- install:3.1.1:install (default-install) @ crate ---\n[INFO] Installing /repo/pom.xml to /root/.m2/repository/io/crate/crate/5.8.4/crate-5.8.4.pom\n[INFO] \n[INFO] ---------------------< io.crate:crate-libs-shared >---------------------\n[INFO] Building crate-libs-shared 5.8.4                                  [2/24]\n[INFO] \n[INFO] ---------------------< io.crate:crate-libs-guice >----------------------\n[INFO]   from libs/shared/pom.xml\n[INFO] \n[INFO] Building crate-libs-guice 5.8.4                                   [3/24]\n[INFO] \n[INFO]   from libs/guice/pom.xml\n[INFO] -------------------------< io.crate:jlink-jdk >-------------------------\n[INFO] ---------------------< io.crate:crate-libs-pgwire >---------------------\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] Building crate-libs-pgwire 5.8.4                                  [5/24]\n[INFO] Building jlink-jdk 5.8.4                                          [4/24]\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO]   from jlink-jdk/pom.xml\n[INFO]   from libs/pgwire/pom.xml\n[INFO] -------------------------------[ jlink ]--------------------------------\n[INFO] --------------------------------[ jar ]---------------------------------\n[WARNING] *****************************************************************\n[WARNING] * Your build is requesting parallel execution, but this         *\n[WARNING] * project contains the following plugin(s) that have goals not  *\n[WARNING] * marked as thread-safe to support parallel execution.          *\n[WARNING] * While this /may/ work fine, please look for plugin updates    *\n[WARNING] * and/or request plugins be made thread-safe.                   *\n[WARNING] * If reporting an issue, report it against the plugin in        *\n[WARNING] * question, not against Apache Maven.                           *\n[WARNING] *****************************************************************\n[WARNING] The following plugins are not marked as thread-safe in jlink-jdk:\n[WARNING]   org.apache.maven.plugins:maven-jlink-plugin:3.1.0\n[WARNING] \n[WARNING] Enable debug to see precisely which goals are not marked as thread-safe.\n[WARNING] *****************************************************************\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ jlink-jdk ---\n[INFO] Deleting /repo/jlink-jdk/target\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-pgwire ---\n[INFO] Deleting /repo/libs/pgwire/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ jlink-jdk ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ jlink-jdk ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-guice ---\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-shared ---\n[INFO] Deleting /repo/libs/guice/target\n[INFO] Deleting /repo/libs/shared/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-shared ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-shared ---\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-guice ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-guice ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ jlink-jdk ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ jlink-jdk ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/jlink-jdk/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ jlink-jdk ---\n[INFO] skip non existing resourceDirectory /repo/jlink-jdk/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ jlink-jdk ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ jlink-jdk ---\n[INFO] skip non existing resourceDirectory /repo/jlink-jdk/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ jlink-jdk ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- surefire:3.3.0:test (default-test) @ jlink-jdk ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jlink:3.1.0:jlink (default-jlink) @ jlink-jdk ---\n[INFO] Toolchain in maven-jlink-plugin: jlink [ /root/.m2/jdks/jdk-22.0.2+9/bin/jlink ]\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-pgwire ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-pgwire ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/pgwire/target/jacoco.exec\n[INFO] \n[INFO] --- antlr4:4.13.1:antlr4 (antlr) @ crate-libs-pgwire ---\n[INFO] ANTLR 4: Processing source directory /repo/libs/pgwire/src/main/antlr\n[INFO] Processing grammar: io/crate/protocols/postgres/antlr/PgArray.g4\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-pgwire ---\n[INFO] skip non existing resourceDirectory /repo/libs/pgwire/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-pgwire ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed source code.\n[INFO] Compiling 7 source files with javac [forked debug target 22] to target/classes\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-shared ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-shared ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/shared/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-shared ---\n[INFO] skip non existing resourceDirectory /repo/libs/shared/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-shared ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed source code.\n[INFO] Compiling 49 source files with javac [forked debug target 22] to target/classes\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-guice ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-guice ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/guice/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-guice ---\n[INFO] skip non existing resourceDirectory /repo/libs/guice/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-guice ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-pgwire ---\n[INFO] skip non existing resourceDirectory /repo/libs/pgwire/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-pgwire ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed source code.\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 1 source file with javac [forked debug target 22] to target/test-classes\n[INFO] Compiling 169 source files with javac [forked debug target 22] to target/classes\n[INFO] Building zip: /repo/jlink-jdk/target/jlink-jdk-5.8.4.zip\n[INFO] \n[INFO] --- build-helper:3.6.0:add-test-source (add-gradle-testfixtures) @ crate-libs-shared ---\n[INFO] Test Source directory: /repo/libs/shared/src/testFixtures/java added.\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-shared ---\n[INFO] skip non existing resourceDirectory /repo/libs/shared/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-shared ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 10 source files with javac [forked debug target 22] to target/test-classes\n[INFO] \n[INFO] --- surefire:3.3.0:test (default-test) @ crate-libs-pgwire ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.1:jar (default-jar) @ crate-libs-pgwire ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Building jar: /repo/libs/pgwire/target/crate-libs-pgwire-5.8.4.jar\n[INFO] \n[INFO] --- forbiddenapis:3.7:check (default) @ crate-libs-pgwire ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-22\n[INFO] Reading bundled API signatures: jdk-deprecated-22\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.55s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.1:install (default-install) @ crate-libs-pgwire ---\n[INFO] Installing /repo/libs/pgwire/pom.xml to /root/.m2/repository/io/crate/crate-libs-pgwire/5.8.4/crate-libs-pgwire-5.8.4.pom\n[INFO] Installing /repo/libs/pgwire/target/crate-libs-pgwire-5.8.4.jar to /root/.m2/repository/io/crate/crate-libs-pgwire/5.8.4/crate-libs-pgwire-5.8.4.jar\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-guice ---\n[INFO] skip non existing resourceDirectory /repo/libs/guice/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-guice ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- surefire:3.3.0:test (default-test) @ crate-libs-guice ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.1:jar (default-jar) @ crate-libs-guice ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Building jar: /repo/libs/guice/target/crate-libs-guice-5.8.4.jar\n[INFO] \n[INFO] --- forbiddenapis:3.7:check (default) @ crate-libs-guice ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-22\n[INFO] Reading bundled API signatures: jdk-deprecated-22\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] \n[INFO] --- surefire:3.3.0:test (default-test) @ crate-libs-shared ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.1:jar (default-jar) @ crate-libs-shared ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Building jar: /repo/libs/shared/target/crate-libs-shared-5.8.4.jar\n[INFO] \n[INFO] --- jar:3.4.1:test-jar (default) @ crate-libs-shared ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Building jar: /repo/libs/shared/target/crate-libs-shared-5.8.4-tests.jar\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.27s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.1:install (default-install) @ crate-libs-guice ---\n[INFO] Installing /repo/libs/guice/pom.xml to /root/.m2/repository/io/crate/crate-libs-guice/5.8.4/crate-libs-guice-5.8.4.pom\n[INFO] Installing /repo/libs/guice/target/crate-libs-guice-5.8.4.jar to /root/.m2/repository/io/crate/crate-libs-guice/5.8.4/crate-libs-guice-5.8.4.jar\n[INFO] \n[INFO] --- forbiddenapis:3.7:check (default) @ crate-libs-shared ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-22\n[INFO] Reading bundled API signatures: jdk-deprecated-22\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] Scanned 79 class file(s) for forbidden API invocations (in 0.11s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.1:install (default-install) @ crate-libs-shared ---\n[INFO] Installing /repo/libs/shared/pom.xml to /root/.m2/repository/io/crate/crate-libs-shared/5.8.4/crate-libs-shared-5.8.4.pom\n[INFO] Installing /repo/libs/shared/target/crate-libs-shared-5.8.4.jar to /root/.m2/repository/io/crate/crate-libs-shared/5.8.4/crate-libs-shared-5.8.4.jar\n[INFO] Installing /repo/libs/shared/target/crate-libs-shared-5.8.4-tests.jar to /root/.m2/repository/io/crate/crate-libs-shared/5.8.4/crate-libs-shared-5.8.4-tests.jar\n[INFO] \n[INFO] ----------------------< io.crate:crate-libs-dex >-----------------------\n[INFO] Building crate-libs-dex 5.8.4                                     [6/24]\n[INFO]   from libs/dex/pom.xml\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] \n[INFO] \n[INFO] ------------------< io.crate:crate-libs-es-x-content >------------------\n[INFO] ----------------------< io.crate:crate-libs-cli >-----------------------\n[INFO] Building crate-libs-es-x-content 5.8.4                            [7/24]\n[INFO] Building crate-libs-cli 5.8.4                                     [8/24]\n[INFO]   from libs/es-x-content/pom.xml\n[INFO]   from libs/cli/pom.xml\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] \n[INFO] -------------------< io.crate:crate-libs-sql-parser >-------------------\n[INFO] Building crate-libs-sql-parser 5.8.4                              [9/24]\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO]   from libs/sql-parser/pom.xml\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-cli ---\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-dex ---\n[INFO] Deleting /repo/libs/cli/target\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-sql-parser ---\n[INFO] Deleting /repo/libs/dex/target\n[INFO] Deleting /repo/libs/sql-parser/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-cli ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-cli ---\n[INFO] \n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-es-x-content ---\n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-dex ---\n[INFO] Deleting /repo/libs/es-x-content/target\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-dex ---\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-es-x-content ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-es-x-content ---\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-sql-parser ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-sql-parser ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-cli ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-cli ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/cli/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-cli ---\n[INFO] skip non existing resourceDirectory /repo/libs/cli/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-cli ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 5 source files with javac [forked debug target 22] to target/classes\n[INFO] \n[INFO] --- forbiddenapis:3.7:check (default) @ jlink-jdk ---\n[INFO] Scanning for classes to check...\n[INFO] Classes directory does not exist, forbiddenapis check skipped: /repo/jlink-jdk/target/classes\n[INFO] \n[INFO] --- install:3.1.1:install (default-install) @ jlink-jdk ---\n[INFO] Installing /repo/jlink-jdk/pom.xml to /root/.m2/repository/io/crate/jlink-jdk/5.8.4/jlink-jdk-5.8.4.pom\n[INFO] Installing /repo/jlink-jdk/target/jlink-jdk-5.8.4.zip to /root/.m2/repository/io/crate/jlink-jdk/5.8.4/jlink-jdk-5.8.4.zip\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-es-x-content ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-es-x-content ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/es-x-content/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-es-x-content ---\n[INFO] skip non existing resourceDirectory /repo/libs/es-x-content/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-es-x-content ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 30 source files with javac [forked debug target 22] to target/classes\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-dex ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-dex ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/dex/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-dex ---\n[INFO] skip non existing resourceDirectory /repo/libs/dex/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-dex ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 47 source files with javac [forked debug target 22] to target/classes\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-cli ---\n[INFO] skip non existing resourceDirectory /repo/libs/cli/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-cli ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- surefire:3.3.0:test (default-test) @ crate-libs-cli ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.1:jar (default-jar) @ crate-libs-cli ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Building jar: /repo/libs/cli/target/crate-libs-cli-5.8.4.jar\n[INFO] \n[INFO] --- forbiddenapis:3.7:check (default) @ crate-libs-cli ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-22\n[INFO] Reading bundled API signatures: jdk-deprecated-22\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.07s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.1:install (default-install) @ crate-libs-cli ---\n[INFO] Installing /repo/libs/cli/pom.xml to /root/.m2/repository/io/crate/crate-libs-cli/5.8.4/crate-libs-cli-5.8.4.pom\n[INFO] Installing /repo/libs/cli/target/crate-libs-cli-5.8.4.jar to /root/.m2/repository/io/crate/crate-libs-cli/5.8.4/crate-libs-cli-5.8.4.jar\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-sql-parser ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-sql-parser ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/sql-parser/target/jacoco.exec\n[INFO] \n[INFO] --- antlr4:4.13.1:antlr4 (antlr) @ crate-libs-sql-parser ---\n[INFO] ANTLR 4: Processing source directory /repo/libs/sql-parser/src/main/antlr\n[INFO] Processing grammar: io/crate/sql/parser/antlr/SqlBaseLexer.g4\n[INFO] Processing grammar: io/crate/sql/parser/antlr/SqlBaseParser.g4\n[INFO] \n[INFO] --- build-helper:3.6.0:add-test-source (add-testfixtures) @ crate-libs-dex ---\n[INFO] Test Source directory: /repo/libs/dex/src/testFixtures/java added.\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-dex ---\n[INFO] skip non existing resourceDirectory /repo/libs/dex/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-dex ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 22 source files with javac [forked debug target 22] to target/test-classes\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-es-x-content ---\n[INFO] skip non existing resourceDirectory /repo/libs/es-x-content/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-es-x-content ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- surefire:3.3.0:test (default-test) @ crate-libs-es-x-content ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.1:jar (default-jar) @ crate-libs-es-x-content ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Building jar: /repo/libs/es-x-content/target/crate-libs-es-x-content-5.8.4.jar\n[INFO] \n[INFO] --- forbiddenapis:3.7:check (default) @ crate-libs-es-x-content ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-22\n[INFO] Reading bundled API signatures: jdk-deprecated-22\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] Scanned 68 class file(s) for forbidden API invocations (in 0.08s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.1:install (default-install) @ crate-libs-es-x-content ---\n[INFO] Installing /repo/libs/es-x-content/pom.xml to /root/.m2/repository/io/crate/crate-libs-es-x-content/5.8.4/crate-libs-es-x-content-5.8.4.pom\n[INFO] Installing /repo/libs/es-x-content/target/crate-libs-es-x-content-5.8.4.jar to /root/.m2/repository/io/crate/crate-libs-es-x-content/5.8.4/crate-libs-es-x-content-5.8.4.jar\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-sql-parser ---\n[INFO] skip non existing resourceDirectory /repo/libs/sql-parser/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-sql-parser ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 215 source files with javac [forked debug target 22] to target/classes\n[INFO] \n[INFO] --- surefire:3.3.0:test (default-test) @ crate-libs-dex ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.1:jar (default-jar) @ crate-libs-dex ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Building jar: /repo/libs/dex/target/crate-libs-dex-5.8.4.jar\n[INFO] \n[INFO] --- jar:3.4.1:test-jar (default) @ crate-libs-dex ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Building jar: /repo/libs/dex/target/crate-libs-dex-5.8.4-tests.jar\n[INFO] \n[INFO] --- forbiddenapis:3.7:check (default) @ crate-libs-dex ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-22\n[INFO] Reading bundled API signatures: jdk-deprecated-22\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] Scanned 62 class file(s) for forbidden API invocations (in 0.11s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.1:install (default-install) @ crate-libs-dex ---\n[INFO] Installing /repo/libs/dex/pom.xml to /root/.m2/repository/io/crate/crate-libs-dex/5.8.4/crate-libs-dex-5.8.4.pom\n[INFO] Installing /repo/libs/dex/target/crate-libs-dex-5.8.4.jar to /root/.m2/repository/io/crate/crate-libs-dex/5.8.4/crate-libs-dex-5.8.4.jar\n[INFO] Installing /repo/libs/dex/target/crate-libs-dex-5.8.4-tests.jar to /root/.m2/repository/io/crate/crate-libs-dex/5.8.4/crate-libs-dex-5.8.4-tests.jar\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ crate-libs-sql-parser ---\n[INFO] Copying 22 resources from src/test/resources to target/test-classes\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ crate-libs-sql-parser ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 14 source files with javac [forked debug target 22] to target/test-classes\n[INFO] \n[INFO] --- surefire:3.3.0:test (default-test) @ crate-libs-sql-parser ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jar:3.4.1:jar (default-jar) @ crate-libs-sql-parser ---\n[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Building jar: /repo/libs/sql-parser/target/crate-libs-sql-parser-5.8.4.jar\n[INFO] \n[INFO] --- forbiddenapis:3.7:check (default) @ crate-libs-sql-parser ---\n[INFO] Scanning for classes to check...\n[INFO] Reading bundled API signatures: jdk-unsafe-22\n[INFO] Reading bundled API signatures: jdk-deprecated-22\n[INFO] Reading bundled API signatures: jdk-non-portable\n[INFO] Reading bundled API signatures: jdk-reflection\n[INFO] Reading API signatures: /repo/forbidden-signatures.txt\n[INFO] Loading classes to check...\n[INFO] Scanning classes for violations...\n[INFO] Scanned 573 class file(s) for forbidden API invocations (in 0.39s), 0 error(s).\n[INFO] \n[INFO] --- install:3.1.1:install (default-install) @ crate-libs-sql-parser ---\n[INFO] Installing /repo/libs/sql-parser/pom.xml to /root/.m2/repository/io/crate/crate-libs-sql-parser/5.8.4/crate-libs-sql-parser-5.8.4.pom\n[INFO] Installing /repo/libs/sql-parser/target/crate-libs-sql-parser-5.8.4.jar to /root/.m2/repository/io/crate/crate-libs-sql-parser/5.8.4/crate-libs-sql-parser-5.8.4.jar\n[INFO] \n[INFO] -----------------------< io.crate:crate-server >------------------------\n[INFO] Building crate-server 5.8.4                                      [10/24]\n[INFO]   from server/pom.xml\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-server ---\n[INFO] Deleting /repo/server/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-server ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-server ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-server ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-server ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/server/target/jacoco.exec\n[INFO] \n[INFO] --- antlr4:4.13.1:antlr4 (antlr) @ crate-server ---\n[INFO] ANTLR 4: Processing source directory /repo/server/src/main/antlr\n[INFO] Processing grammar: io/crate/signatures/antlr/TypeSignatures.g4\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-server ---\n[INFO] Copying 12 resources from src/main/resources to target/classes\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-server ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed dependency.\n[INFO] Compiling 2872 source files with javac [forked debug target 22] to target/classes\n[INFO] -------------------------------------------------------------\n[ERROR] COMPILATION ERROR : \n[INFO] -------------------------------------------------------------\n[ERROR]   on the class path. A future release of javac may disable annotation processing\n  unless at least one processor is specified by name (-processor), or a search\n  path is specified (--processor-path, --processor-module-path), or annotation\n  processing is enabled explicitly (-proc:only, -proc:full).\n  Use -Xlint:-options to suppress this message.\n  Use -proc:none to disable annotation processing.\nNote: Processing Log4j annotations\nNote: Annotations processed\nNote: Processing Log4j annotations\nNote: No elements to process\n/repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[99,46] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[142,51] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[174,48] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[204,41] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[INFO] 4 errors \n[INFO] -------------------------------------------------------------\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Summary for crate 5.8.4:\n[INFO] \n[INFO] crate .............................................. SUCCESS [  6.778 s]\n[INFO] crate-libs-shared .................................. SUCCESS [ 10.622 s]\n[INFO] crate-libs-dex ..................................... SUCCESS [  7.395 s]\n[INFO] crate-libs-es-x-content ............................ SUCCESS [  4.521 s]\n[INFO] crate-libs-cli ..................................... SUCCESS [  2.151 s]\n[INFO] crate-libs-guice ................................... SUCCESS [ 10.510 s]\n[INFO] crate-libs-sql-parser .............................. SUCCESS [ 13.890 s]\n[INFO] crate-libs-pgwire .................................. SUCCESS [  9.147 s]\n[INFO] crate-server ....................................... FAILURE [01:39 min]\n[INFO] es-analysis-common ................................. SKIPPED\n[INFO] es-analysis-phonetic ............................... SKIPPED\n[INFO] es-discovery-ec2 ................................... SKIPPED\n[INFO] es-repository-s3 ................................... SKIPPED\n[INFO] es-repository-url .................................. SKIPPED\n[INFO] es-repository-azure ................................ SKIPPED\n[INFO] repository-gcs ..................................... SKIPPED\n[INFO] dns-discovery ...................................... SKIPPED\n[INFO] crate-copy-s3 ...................................... SKIPPED\n[INFO] crate-functions .................................... SKIPPED\n[INFO] crate-lang-js ...................................... SKIPPED\n[INFO] crate-jmx-monitoring ............................... SKIPPED\n[INFO] jlink-jdk .......................................... SUCCESS [ 11.123 s]\n[INFO] crate-app .......................................... SKIPPED\n[INFO] crate-benchmarks ................................... SKIPPED\n[INFO] ------------------------------------------------------------------------\n[INFO] BUILD FAILURE\n[INFO] ------------------------------------------------------------------------\n[INFO] Total time:  02:11 min (Wall Clock)\n[INFO] Finished at: 2026-04-07T05:32:39Z\n[INFO] ------------------------------------------------------------------------\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[99,46] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[142,51] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[174,48] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[204,41] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server\n\u274c Build Failed\n\n#0 building with \"default\" instance using docker driver\n\n#1 [internal] load build definition from Dockerfile\n#1 transferring dockerfile: 1.18kB done\n#1 DONE 0.0s\n\n#2 [internal] load metadata for docker.io/library/maven:3.9-eclipse-temurin-24\n#2 DONE 0.3s\n\n#3 [internal] load .dockerignore\n#3 transferring context: 2B done\n#3 DONE 0.0s\n\n#4 [1/5] FROM docker.io/library/maven:3.9-eclipse-temurin-24@sha256:a137a467ec89b5713d0be817b55bdba6b4d6ef16e3d05565a79bc08d8e775a1c\n#4 resolve docker.io/library/maven:3.9-eclipse-temurin-24@sha256:a137a467ec89b5713d0be817b55bdba6b4d6ef16e3d05565a79bc08d8e775a1c 0.0s done\n#4 DONE 0.0s\n\n#5 [2/5] RUN apt-get update && apt-get install -y     git     rsync     && rm -rf /var/lib/apt/lists/*\n#5 CACHED\n\n#6 [3/5] WORKDIR /repo\n#6 CACHED\n\n#7 [4/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/maven/conf/toolchains.xml /root/.m2/toolchains.xml &&     cp /usr/share/maven/conf/toolchains.xml /etc/maven/toolchains.xml &&     cp /usr/share/maven/conf/toolchains.xml /.m2/toolchains.xml &&     cp /usr/share/maven/conf/toolchains.xml /usr/share/maven/ref/toolchains.xml &&     chmod -R 777 /.m2 /usr/share/maven/ref/ /etc/maven /usr/share/maven/conf/toolchains.xml\n#8 CACHED\n\n#9 exporting to image\n#9 exporting layers done\n#9 exporting manifest sha256:0d74cc1c64aaf1c4c8b651e15ad4a4dfbb869c68af5759f6ebffff665b323376 done\n#9 exporting config sha256:0e3430a77d8bbc7e42e6f17589d44797d67bb006839a860d45cb45b257f56cf5 done\n#9 exporting attestation manifest sha256:2502f905af16b3c95b17180be7de9cd52c18e3dc9a76159f57069abf4c969374 0.0s done\n#9 exporting manifest list sha256:642289381d94c71beb7fea6fcafc068207f71304db43877caa68ec1eeb752f98\n#9 exporting manifest list sha256:642289381d94c71beb7fea6fcafc068207f71304db43877caa68ec1eeb752f98 0.0s done\n#9 naming to docker.io/library/retrofit-crate-builder:local done\n#9 unpacking to docker.io/library/retrofit-crate-builder:local 0.0s done\n#9 DONE 0.2s\nWARNING: A terminally deprecated method in sun.misc.Unsafe has been called\nWARNING: sun.misc.Unsafe::staticFieldBase has been called by com.google.inject.internal.aop.HiddenClassDefiner (file:/usr/share/maven/lib/guice-5.1.0-classes.jar)\nWARNING: Please consider reporting this to the maintainers of class com.google.inject.internal.aop.HiddenClassDefiner\nWARNING: sun.misc.Unsafe::staticFieldBase will be removed in a future release",
+              "agent_evaluation": "Build failed; deterministic parser could not identify a narrower category.",
+              "error_context": "Build failed; deterministic parser could not identify a narrower category.",
+              "diagnostics": {
+                "category": "unknown",
+                "retry_files": [
+                  "server/src/main/java/io/crate/role/PrivilegesModifier.java"
+                ],
+                "retry_hunks": [],
+                "issues": [
+                  {
+                    "error_type": "unknown_build_failure",
+                    "suggested_action": "inspect_build_log_and_retry"
+                  }
+                ]
+              }
+            },
+            "structured_failure": {
+              "raw_error": "--- Building code for 085d163 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/retrofit-java/temp_repo_storage/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      [jar]\n[INFO] crate-jmx-monitoring                                               [jar]\n[INFO] jlink-jdk                                                        [jlink]\n[INFO] crate-app                                                          [jar]\n[INFO] crate-benchmarks                                                   [jar]\n[INFO] \n[INFO] Using the MultiThreadedBuilder implementation with a thread count of 12\n[INFO] \n[INFO] ---------------------------< io.crate:crate >---------------------------\n[INFO] Building crate 5.8.4                                              [1/24]\n[INFO]   from pom.xml\n[INFO] --------------------------------[ pom ]---------------------------------\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate ---\n[INFO] Deleting /repo/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate ---\n[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireMavenVersion passed\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Begin to install JDK 22.0.2+9\n[INFO] Download OpenJDK22U-jdk_x64_linux_hotspot_22.0.2_9.tar.gz from https://github.com/adoptium/temurin22-binaries/releases/download/jdk-22.0.2%2B9/OpenJDK22U-jdk_x64_linux_hotspot_22.0.2_9.tar.gz\n[INFO] Extract OpenJDK22U-jdk_x64_linux_hotspot_22.0.2_9.tar.gz\n[INFO] JDK installed: /root/.m2/jdks/jdk-22.0.2+9\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/target/jacoco.exec\n[INFO] \n[INFO] --- forbiddenapis:3.7:check (default) @ crate ---\n[INFO] Skipping execution for packaging \"pom\"\n[INFO] \n[INFO] --- install:3.1.1:install (default-install) @ crate ---\n[INFO] Installing /repo/pom.xml to /root/.m2/repository/io/crate/crate/5.8.4/crate-5.8.4.pom\n[INFO] \n[INFO] ---------------------< io.crate:crate-libs-shared >---------------------\n[INFO] Building crate-libs-shared 5.8.4                                  [2/24]\n[INFO] \n[INFO] ---------------------< io.crate:crate-libs-guice >----------------------\n[INFO]   from libs/shared/pom.xml\n[INFO] \n[INFO] Building crate-libs-guice 5.8.4                                   [3/24]\n[INFO] \n[INFO]   from libs/guice/pom.xml\n[INFO] -------------------------< io.crate:jlink-jdk >-------------------------\n[INFO] ---------------------< io.crate:crate-libs-pgwire >---------------------\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] Building crate-libs-pgwire 5.8.4                                  [5/24]\n[INFO] Building jlink-jdk 5.8.4                                          [4/24]\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO]   from jlink-jdk/pom.xml\n[INFO]   from libs/pgwire/pom.xml\n[INFO] -------------------------------[ jlink ]--------------------------------\n[INFO] --------------------------------[ jar ]---------------------------------\n[WARNING] *****************************************************************\n[WARNING] * Your build is requesting parallel execution, but this         *\n[WARNING] * project contains the following plugin(s) that have goals not  *\n[WARNING] * marked as thread-safe to support parallel execution.          *\n[WARNING] * While this /may/ work fine, please look for plugin updates    *\n[WARNING] * and/or request plugins be made thread-safe.                   *\n[WARNING] * If reporting an issue, report it against the plugin in        *\n[WARNING] * question, not against Apache Maven.                           *\n[WARNING] *****************************************************************\n[WARNING] The following plugins are not marked as thread-safe in jlink-jdk:\n[WARNING]   org.apache.maven.plugins:maven-jlink-plugin:3.1.0\n[WARNING] \n[WARNING] Enable debug to see precisely which goals are not marked as thread-safe.\n[WARNING] *****************************************************************\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ jlink-jdk ---\n[INFO] Deleting /repo/jlink-jdk/target\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-pgwire ---\n[INFO] Deleting /repo/libs/pgwire/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ jlink-jdk ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ jlink-jdk ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-guice ---\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-shared ---\n[INFO] Deleting /repo/libs/guice/target\n[INFO] Deleting /repo/libs/shared/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-shared ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-shared ---\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-guice ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-guice ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ jlink-jdk ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ jlink-jdk ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/jlink-jdk/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ jlink-jdk ---\n[INFO] skip non existing resourceDirectory /repo/jlink-jdk/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ jlink-jdk ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ jlink-jdk ---\n[INFO] skip non existing resourceDirectory /repo/jlink-jdk/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ jlink-jdk ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- surefire:3.3.0:test (default-test) @ jlink-jdk ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jlink:3.1.0:jlink (default-jlink) @ jlink-jdk ---\n[INFO] Toolchain in maven-jlink-plugin: jlink [ /root/.m2/jdks/jdk-22.0.2+9/bin/jlink ]\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-pgwire ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='22.0.2+9' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-pgwire ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/pgwire/target/jacoco.exec\n[INFO] \n[INFO] --- antlr4:4.13.1:antlr4 (antlr) @ crate-libs-pgwire ---\n[INFO] ANTLR 4: Processing source directory /repo/libs/pgwire/src/main/antlr\n[INFO] Processing grammar: io/crate/protocols/postgres/antlr/PgArray.g4\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-pgwire ---\n[INFO] skip non existing resourceDirectory /repo/libs/pgwire/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-libs-pgwire ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-22.0.2+9]\n[INFO] Recompiling the module because of changed source code.\n[IN",
+              "failed_locations": [
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 99
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 142
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 174
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 204
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 99
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 142
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 174
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 204
+                }
+              ],
+              "symbol_errors": [],
+              "signature_errors": [],
+              "failed_hunk_targets": [
+                {
+                  "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "error_line": 99
+                },
+                {
+                  "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "error_line": 142
+                },
+                {
+                  "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "error_line": 174
+                },
+                {
+                  "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "error_line": 204
+                },
+                {
+                  "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "error_line": 99
+                },
+                {
+                  "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "error_line": 142
+                },
+                {
+                  "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "error_line": 174
+                },
+                {
+                  "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "error_line": 204
+                }
+              ],
+              "primary_failed_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+              "primary_failed_symbol": ""
+            }
+          },
+          "validation_failure_category": "unknown",
+          "validation_retry_files": [
+            "server/src/main/java/io/crate/role/PrivilegesModifier.java"
+          ],
+          "validation_retry_hunks": [],
+          "force_type_v_until_success": false,
+          "force_type_v_reason": "",
+          "force_type_v_retry_files": []
+        }
+      }
+    },
+    "phase2_5_planning_agent": {
+      "planning_agent": {
+        "node": "planning_agent",
+        "outputs": {
+          "hunk_generation_plan": {
+            "server/src/main/java/io/crate/role/PrivilegesModifier.java": [
+              {
+                "hunk_index": 0,
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "operation_index": 0,
+                "edit_type": "replace",
+                "old_string": "\n            if (affectedCount > 0) {\n                roles.put(userName, role.with(privileges));\n            }",
+                "new_string": "\n            if (affectedCount > 0) {\n                roles.put(userName, role.with(new RolePrivileges(privileges)));\n            }",
+                "verified": true,
+                "verification_result": "sanitize_resolved:exact",
+                "notes": "required_op_replace",
+                "surround_before_3": [
+                  "                affectedCount++;",
+                  "                privileges.add(newPrivilege);",
+                  "            }"
+                ],
+                "surround_after_3": [
+                  "        }",
+                  "",
+                  "        return affectedCount;"
+                ],
+                "adaptation_type": "TYPE_I",
+                "base_adaptation_type": "TYPE_I",
+                "execution_type": "TYPE_I",
+                "location_match": true,
+                "surrounding_match": false,
+                "blockers": [],
+                "namespace_only_possible": false,
+                "namespace_changes": [],
+                "required_invariants": [
+                  "roles.put(userName, role.with(new RolePrivileges(privileges)));"
+                ],
+                "required_symbols": [],
+                "protected_symbols": [],
+                "must_preserve_symbols": [],
+                "chain_constraints": [],
+                "api_inventory": {
+                  "mainline_declared_methods_count": 4,
+                  "target_declared_methods_count": 4,
+                  "matched_symbols_before": [],
+                  "missing_symbols_before": []
+                }
+              },
+              {
+                "hunk_index": 1,
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "operation_index": 0,
+                "edit_type": "replace",
+                "old_string": "                }\n            }\n            newRoles.put(entry.getKey(), role.with(privileges));\n        }",
+                "new_string": "                }\n            }\n            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n        }",
+                "verified": true,
+                "verification_result": "sanitize_resolved:exact",
+                "notes": "required_op_replace",
+                "surround_before_3": [
+                  "                    privilegesChanged = true;",
+                  "                } else {",
+                  "                    privileges.add(privilege);"
+                ],
+                "surround_after_3": [
+                  "",
+                  "        if (privilegesChanged) {",
+                  "            return new RolesMetadata(newRoles);"
+                ],
+                "adaptation_type": "TYPE_I",
+                "base_adaptation_type": "TYPE_I",
+                "execution_type": "TYPE_I",
+                "location_match": true,
+                "surrounding_match": false,
+                "blockers": [],
+                "namespace_only_possible": false,
+                "namespace_changes": [],
+                "required_invariants": [
+                  "newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));"
+                ],
+                "required_symbols": [],
+                "protected_symbols": [],
+                "must_preserve_symbols": [],
+                "chain_constraints": [],
+                "api_inventory": {
+                  "mainline_declared_methods_count": 4,
+                  "target_declared_methods_count": 4,
+                  "matched_symbols_before": [],
+                  "missing_symbols_before": []
+                }
+              },
+              {
+                "hunk_index": 2,
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "operation_index": 0,
+                "edit_type": "replace",
+                "old_string": "                }\n            }\n            newRoles.put(role.name(), role.with(updatedPrivileges));\n        }",
+                "new_string": "                }\n            }\n            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n        }",
+                "verified": true,
+                "verification_result": "sanitize_resolved:exact",
+                "notes": "required_op_replace",
+                "surround_before_3": [
+                  "                    affectedPrivileges++;",
+                  "                } else {",
+                  "                    updatedPrivileges.add(privilege);"
+                ],
+                "surround_after_3": [
+                  "        mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));",
+                  "        return affectedPrivileges;",
+                  "    }"
+                ],
+                "adaptation_type": "TYPE_I",
+                "base_adaptation_type": "TYPE_I",
+                "execution_type": "TYPE_I",
+                "location_match": true,
+                "surrounding_match": false,
+                "blockers": [],
+                "namespace_only_possible": false,
+                "namespace_changes": [],
+                "required_invariants": [
+                  "newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));"
+                ],
+                "required_symbols": [],
+                "protected_symbols": [],
+                "must_preserve_symbols": [],
+                "chain_constraints": [],
+                "api_inventory": {
+                  "mainline_declared_methods_count": 4,
+                  "target_declared_methods_count": 4,
+                  "matched_symbols_before": [],
+                  "missing_symbols_before": []
+                }
+              },
+              {
+                "hunk_index": 3,
+                "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                "operation_index": 0,
+                "edit_type": "replace",
+                "old_string": "                }\n            }\n            newRoles.put(user, role.with(updatedPrivileges));\n        }",
+                "new_string": "                }\n            }\n            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n        }",
+                "verified": true,
+                "verification_result": "sanitize_resolved:exact",
+                "notes": "required_op_replace",
+                "surround_before_3": [
+                  "                    }",
+                  "                } else {",
+                  "                    updatedPrivileges.add(privilege);"
+                ],
+                "surround_after_3": [
+                  "        return new RolesMetadata(newRoles);",
+                  "    }",
+                  "}"
+                ],
+                "adaptation_type": "TYPE_I",
+                "base_adaptation_type": "TYPE_I",
+                "execution_type": "TYPE_I",
+                "location_match": true,
+                "surrounding_match": true,
+                "blockers": [],
+                "namespace_only_possible": false,
+                "namespace_changes": [],
+                "required_invariants": [
+                  "newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));"
+                ],
+                "required_symbols": [],
+                "protected_symbols": [],
+                "must_preserve_symbols": [],
+                "chain_constraints": [],
+                "api_inventory": {
+                  "mainline_declared_methods_count": 4,
+                  "target_declared_methods_count": 4,
+                  "matched_symbols_before": [],
+                  "missing_symbols_before": []
+                }
+              }
+            ]
+          },
+          "last_plan_signature": "dc858744f74ce5fd8f00ef4ff93ad4fc6ea23070bf897ea2529c48f6076e38b0",
+          "validation_repeated_plan_detected": true,
+          "force_type_v_until_success": false,
+          "force_type_v_reason": "",
+          "force_type_v_retry_files": [],
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "sources": []
+          }
+        }
+      }
+    },
+    "reasoning_architect": {
+      "reasoning_architect": {
+        "node": "reasoning_architect",
+        "outputs": {
+          "surgical_plans": {},
+          "reasoning_context": {
+            "current_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+            "failure_kind": "anchor_not_found",
+            "build_diagnostics": {
+              "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+              "issues": [
+                {
+                  "error_type": "unknown_build_failure",
+                  "suggested_action": "inspect_build_log_and_retry"
+                }
+              ],
+              "failed_locations": [
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 99
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 142
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 174
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 204
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 99
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 142
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 174
+                },
+                {
+                  "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+                  "line": 204
+                }
+              ],
+              "symbol_errors": [],
+              "signature_errors": [],
+              "primary_failed_symbol": "",
+              "raw_error_preview": "Build failed: Build failed; deterministic parser could not identify a narrower category."
+            },
+            "side_files": [],
+            "iteration": 2,
+            "surgical_ops": []
+          },
+          "reasoning_iterations": 2,
+          "token_usage": {
+            "input_tokens": 110893,
+            "output_tokens": 994,
+            "total_tokens": 111887,
+            "estimated": false,
+            "sources": [
+              "reasoning_architect.react.aggregate_usage"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "pair_consistency": {
+    "mainline_java_files": [
+      "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+      "server/src/main/java/io/crate/role/Role.java",
+      "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
+    ],
+    "developer_java_files": [
+      "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+      "server/src/main/java/io/crate/role/Role.java",
+      "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
+    ],
+    "overlap_java_files": [
+      "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+      "server/src/main/java/io/crate/role/Role.java",
+      "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
+    ],
+    "overlap_ratio_mainline": 1.0,
+    "pair_mismatch": false,
+    "reason": "scope_overlap_ok"
+  },
+  "exact_developer_patch": false,
+  "developer_patch_comparison": {
+    "comparison_method": "file_state",
+    "compared_files": [
+      "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+      "server/src/main/java/io/crate/role/Role.java",
+      "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
+    ],
+    "mismatched_files": [
+      "server/src/main/java/io/crate/role/Role.java",
+      "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
+    ],
+    "developer_files": [
+      "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+      "server/src/main/java/io/crate/role/Role.java",
+      "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
+    ],
+    "generated_files": [
+      "server/src/main/java/io/crate/role/PrivilegesModifier.java"
+    ],
+    "pair_consistency": {
+      "mainline_java_files": [
+        "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "server/src/main/java/io/crate/role/Role.java",
+        "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
+      ],
+      "developer_java_files": [
+        "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "server/src/main/java/io/crate/role/Role.java",
+        "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
+      ],
+      "overlap_java_files": [
+        "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "server/src/main/java/io/crate/role/Role.java",
+        "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
+      ],
+      "overlap_ratio_mainline": 1.0,
+      "pair_mismatch": false,
+      "reason": "scope_overlap_ok"
+    },
+    "error": null
+  },
+  "generated_patch_files": {
+    "agent_only": "/home/kaushal/retrofit-java/agents-backend/evaluate/full_run/results/crate/crate_adf9854b/generated_patch_agent_only.patch",
+    "final_effective": "/home/kaushal/retrofit-java/agents-backend/evaluate/full_run/results/crate/crate_adf9854b/generated_patch_final_effective.patch"
+  },
+  "status": "completed"
+}

@@ -1,0 +1,241 @@
+{
+  "adapted_file_edits": [],
+  "all_adapted_file_edits": [
+    [],
+    [],
+    []
+  ],
+  "agent_trajectory_edits": [
+    [],
+    [
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "center_line": 60,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "center_line": 70,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "search_text": "getProfileBreakdown"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "search_text": "createProfileBreakdown"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "search_text": "getTree"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "search_text": "getTypeFromElement"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "search_text": "getDescriptionFromElement"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "center_line": 20,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "check_java_syntax",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "git_diff_file",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "verify_guidelines",
+        "args": {
+          "diff_text": ""
+        }
+      }
+    ],
+    [
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "center_line": 60,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "center_line": 20,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "find_method_definitions",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "search_text": "getProfileBreakdown"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "search_text": "createProfileBreakdown"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "search_text": "getTree"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "search_text": "getTypeFromElement"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "grep_in_file",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "search_text": "getDescriptionFromElement"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+          "center_line": 20,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "check_java_syntax",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "git_diff_file",
+        "args": {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "tool": "verify_guidelines",
+        "args": {
+          "diff_text": ""
+        }
+      }
+    ]
+  ],
+  "adapted_code_hunks": [],
+  "validation_repeated_patch_detected": false,
+  "validation_repeated_plan_detected": true,
+  "best_effort_adapted_code_hunks": [],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+      "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "failed",
+      "reason": "generation_contract_failed",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits"
+      ],
+      "error": "no_diff_after_edits"
+    }
+  ],
+  "generated_patch_hash": "",
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
+  "token_usage": {
+    "input_tokens": 72811,
+    "output_tokens": 563,
+    "total_tokens": 73374,
+    "estimated": false,
+    "sources": [
+      "file_editor.react.aggregate_usage"
+    ]
+  }
+}
