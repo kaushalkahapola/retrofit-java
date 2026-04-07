@@ -238,9 +238,256 @@
           "missing_symbols_before": []
         }
       }
+    ],
+    "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import java.util.concurrent.CompletableFuture;",
+        "new_string": "import java.util.UUID;\nimport java.util.concurrent.CompletableFuture;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "import java.util.Iterator;",
+          "import java.util.List;",
+          "import java.util.Locale;"
+        ],
+        "surround_after_3": [
+          "import java.util.concurrent.ScheduledExecutorService;",
+          "import java.util.concurrent.TimeUnit;",
+          ""
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 5,
+          "target_declared_methods_count": 5,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "            ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures\n            true,\n            // Don't trip breaker on transport layer, but instead depend on ram-accounting in PageBucketReceivers\n            // We need to always handle requests to avoid jobs from getting stuck.\n            // (If we receive a request, but don't handle it, a task would remain open indefinitely)\n            false,\n            DistributedResultRequest::new,",
+        "new_string": "            ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures\n            true,\n            true,\n            false,\n            DistributedResultRequest::new,",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace|guard_revert_required_replace|required_replace_enforced",
+        "surround_before_3": [
+          "        NodeAction<DistributedResultRequest, DistributedResultResponse> nodeAction = this::nodeOperation;",
+          "        transportService.registerRequestHandler(",
+          "            DistributedResultAction.NAME,"
+        ],
+        "surround_after_3": [
+          "            new NodeActionRequestHandler<>(nodeAction));",
+          "    }",
+          ""
+        ],
+        "adaptation_type": "TYPE_I",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_I",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 5,
+          "target_declared_methods_count": 5,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+        "operation_index": 0,
+        "edit_type": "delete",
+        "old_string": "            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());",
+        "new_string": "",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_delete",
+        "surround_before_3": [
+          "            if (LOGGER.isTraceEnabled()) {",
+          "                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());",
+          "            }"
+        ],
+        "surround_after_3": [
+          "            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.",
+          "             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.",
+          "             *"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +",
+          "\"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";",
+          "broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);",
+          "public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,",
+          "String localNodeId,",
+          "List<String> excludedNodeIds = Collections.singletonList(localNodeId);",
+          "KillJobsNodeRequest killRequest = new KillJobsNodeRequest(",
+          "Role.CRATE_USER.name(),"
+        ],
+        "required_symbols": [
+          "broadcastKill"
+        ],
+        "protected_symbols": [
+          "broadcastKill"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 5,
+          "target_declared_methods_count": 5,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "broadcastKill"
+          ]
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "             * a kill to make sure that doesn't happen.\n             */\n            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n                excludedNodeIds,\n                List.of(request.jobId()),\n                Role.CRATE_USER.name(),\n                \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\"\n            );\n            killNodeAction\n                .execute(killRequest)\n                .whenComplete(\n                    (resp, t) -> {\n                        if (t != null) {\n                            LOGGER.debug(\"Could not kill \" + request.jobId(), t);\n                        }\n                    }",
+        "new_string": "             * a kill to make sure that doesn't happen.\n             */\n            String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";\n            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));\n                excludedNodeIds,\n                .whenComplete(\n                    (resp, t) -> {\n                        if (t != null) {\n                            LOGGER.debug(\"Could not kill \" + request.jobId(), t);\n                        }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:multiline_anchor_reconstructed",
+        "notes": "required_op_replace|guard_revert_required_replace|required_replace_enforced",
+        "surround_before_3": [
+          "             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.",
+          "             *",
+          "             * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke"
+        ],
+        "surround_after_3": [
+          "                );",
+          "            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));",
+          "        }"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +",
+          "\"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";",
+          "broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);",
+          "public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,",
+          "String localNodeId,",
+          "List<String> excludedNodeIds = Collections.singletonList(localNodeId);",
+          "KillJobsNodeRequest killRequest = new KillJobsNodeRequest(",
+          "Role.CRATE_USER.name(),"
+        ],
+        "required_symbols": [
+          "broadcastKill"
+        ],
+        "protected_symbols": [
+          "broadcastKill"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 5,
+          "target_declared_methods_count": 5,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "broadcastKill"
+          ]
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+        "operation_index": 2,
+        "edit_type": "insert_before",
+        "old_string": "    private static class SendResponsePageResultListener implements PageResultListener {",
+        "new_string": "    /**\n     * Sends KILL request to all nodes (excluding sender node).\n     */\n    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                     UUID jobId,\n                                     String localNodeId,\n                                     String reason) {\n        List<String> excludedNodeIds = Collections.singletonList(localNodeId);\n\n        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n            excludedNodeIds,\n            List.of(jobId),\n            Role.CRATE_USER.name(),\n            reason\n        );\n        killNodeAction\n            .execute(killRequest)\n            .whenComplete((_, t) -> {\n                if (t != null) {\n                    LOGGER.debug(\"Could not kill \" + jobId, t);\n                }\n            });\n    }\n\n    private static class SendResponsePageResultListener implements PageResultListener {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before",
+        "surround_before_3": [
+          "        }",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "        private final CompletableFuture<DistributedResultResponse> future = new CompletableFuture<>();",
+          "",
+          "        @Override"
+        ],
+        "adaptation_type": "TYPE_II",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_II",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +",
+          "\"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";",
+          "broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);",
+          "public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,",
+          "String localNodeId,",
+          "List<String> excludedNodeIds = Collections.singletonList(localNodeId);",
+          "KillJobsNodeRequest killRequest = new KillJobsNodeRequest(",
+          "Role.CRATE_USER.name(),"
+        ],
+        "required_symbols": [
+          "broadcastKill"
+        ],
+        "protected_symbols": [
+          "broadcastKill"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 5,
+          "target_declared_methods_count": 5,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "broadcastKill"
+          ]
+        }
+      }
     ]
   },
-  "last_plan_signature": "ad239de8629ce307827263d26fc93870f6520fc2f4f1ea22228f0c1ea8e9b66b",
+  "last_plan_signature": "8248e4269372c7102144b9bb639212e470ec28f572369881f91f7119a16433eb",
   "validation_repeated_plan_detected": true,
   "force_type_v_until_success": false,
   "force_type_v_reason": "",

@@ -47,38 +47,24 @@
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "    private volatile Throwable failure;",
-  "new_string": "    private volatile Throwable failure;\n\n    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\n    private final String localNodeId;"
+  "old_string": "    private volatile Throwable failure;\n\n    public DistributingConsumer(Executor responseExecutor,\n                                UUID jobId,\n                                MultiBucketBuilder multiBucketBuilder,\n                                int targetPhaseId,\n                                byte inputId,\n                                int bucketIdx,\n                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];\n        this.completionFuture = new CompletableFuture<>();",
+  "new_string": "    private volatile Throwable failure;\n    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\n    private final String localNodeId;\n\n    public DistributingConsumer(Executor responseExecutor,\n                                UUID jobId,\n                                MultiBucketBuilder multiBucketBuilder,\n                                int targetPhaseId,\n                                byte inputId,\n                                int bucketIdx,\n                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                String localNodeId,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.killNodeAction = killNodeAction;\n        this.localNodeId = localNodeId;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];\n        this.completionFuture = new CompletableFuture<>();"
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 90,
-  "radius": 20
+  "center_line": 320,
+  "radius": 10
 }
 ```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `edit_file`
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];\n        this.completionFuture = new CompletableFuture<>();",
-  "new_string": "                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                String localNodeId,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.killNodeAction = killNodeAction;\n        this.localNodeId = localNodeId;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];\n        this.completionFuture = new CompletableFuture<>();"
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `find_method_definitions`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "symbol": "onFailure"
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `find_method_definitions`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "symbol": "onResponse"
+  "center_line": 330,
+  "radius": 10
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `ripgrep_in_file`
@@ -100,7 +86,7 @@
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 170,
+  "center_line": 175,
   "radius": 10
 }
 ```
@@ -109,14 +95,6 @@
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
   "center_line": 180,
-  "radius": 10
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 190,
   "radius": 10
 }
 ```
@@ -132,8 +110,40 @@
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 150,
-  "radius": 40
+  "center_line": 180,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "center_line": 185,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "center_line": 320,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "center_line": 200,
+  "radius": 20
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "center_line": 320,
+  "radius": 10
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
@@ -142,13 +152,6 @@
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
   "center_line": 300,
   "radius": 20
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `ripgrep_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "pattern": "countdownAndMaybeContinue"
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java**: Called `str_replace_in_file`
@@ -211,7 +214,7 @@
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-  "center_line": 20,
+  "center_line": 25,
   "radius": 10
 }
 ```
@@ -219,8 +222,8 @@
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-  "center_line": 25,
-  "radius": 10
+  "center_line": 27,
+  "radius": 5
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `edit_file`
@@ -236,7 +239,7 @@
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-  "center_line": 110,
+  "center_line": 115,
   "radius": 10
 }
 ```
@@ -253,7 +256,7 @@
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-  "old_string": "            if (LOGGER.isTraceEnabled()) {\n                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n            }\n            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());\n            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n                excludedNodeIds,\n                List.of(request.jobId()),\n                Role.CRATE_USER.name(),\n                \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\"\n            );\n            killNodeAction\n                .execute(killRequest)\n                .whenComplete(\n                    (resp, t) -> {\n                        if (t != null) {\n                            LOGGER.debug(\"Could not kill \" + request.jobId(), t);\n                        }\n                    }\n                );\n            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.\n             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.",
+  "old_string": "            if (LOGGER.isTraceEnabled()) {\n                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n            }\n            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());\n            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n                excludedNodeIds,\n                List.of(request.jobId()),\n                Role.CRATE_USER.name(),\n                \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\"\n            );\n            killNodeAction\n                .execute(killRequest)\n                .whenComplete((_, t) -> {\n                    if (t != null) {\n                        LOGGER.debug(\"Could not kill \" + request.jobId(), t);\n                    }\n                });\n            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.\n             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.",
   "new_string": "            if (LOGGER.isTraceEnabled()) {\n                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n            }\n            String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";\n            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n    /**\n     * Sends KILL request to all nodes (excluding sender node).\n     */\n    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                     UUID jobId,\n                                     String localNodeId,\n                                     String reason) {\n        List<String> excludedNodeIds = Collections.singletonList(localNodeId);\n\n        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n            excludedNodeIds,\n            List.of(jobId),\n            Role.CRATE_USER.name(),\n            reason\n        );\n        killNodeAction\n            .execute(killRequest)\n            .whenComplete((_, t) -> {\n                if (t != null) {\n                    LOGGER.debug(\"Could not kill \" + jobId, t);\n                }\n            });\n    }\n\n            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.\n             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.",
   "replace_all": false
 }
@@ -270,7 +273,7 @@
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-  "center_line": 215,
+  "center_line": 210,
   "radius": 20
 }
 ```
@@ -278,61 +281,21 @@
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-  "old_string": "            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());\n            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.\n             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.\n             *\n             * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke\n             * a kill to make sure that doesn't happen.\n             */\n            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n                excludedNodeIds,\n                List.of(request.jobId()),\n                Role.CRATE_USER.name(),\n                \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\"\n            );\n            killNodeAction\n                .execute(killRequest)\n                .whenComplete(\n                    (resp, t) -> {\n                        if (t != null) {\n                            LOGGER.debug(\"Could not kill \" + request.jobId(), t);\n                        }\n                    }\n                );\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));",
-  "new_string": "            String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";\n            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n    /**\n     * Sends KILL request to all nodes (excluding sender node).\n     */\n    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                     UUID jobId,\n                                     String localNodeId,\n                                     String reason) {\n        List<String> excludedNodeIds = Collections.singletonList(localNodeId);\n\n        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n            excludedNodeIds,\n            List.of(jobId),\n            Role.CRATE_USER.name(),\n            reason\n        );\n        killNodeAction\n            .execute(killRequest)\n            .whenComplete((_, t) -> {\n                if (t != null) {\n                    LOGGER.debug(\"Could not kill \" + jobId, t);\n                }\n            });\n    }\n\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));",
+  "old_string": "            if (LOGGER.isTraceEnabled()) {\n                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n            }\n            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());\n            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.\n             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.\n             *\n             * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke\n             * a kill to make sure that doesn't happen.\n             */\n            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n                excludedNodeIds,\n                List.of(request.jobId()),\n                Role.CRATE_USER.name(),\n                \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\"\n            );\n            killNodeAction\n                .execute(killRequest)\n                .whenComplete(\n                    (resp, t) -> {\n                        if (t != null) {\n                            LOGGER.debug(\"Could not kill \" + request.jobId(), t);\n                        }\n                    }\n                );\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));",
+  "new_string": "            if (LOGGER.isTraceEnabled()) {\n                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n            }\n            String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";\n            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));",
   "replace_all": false
 }
 ```
-- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `check_java_syntax`
+- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `git_diff_file`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java"
 }
 ```
-- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `read_file_window`
+- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `verify_guidelines`
 ```json
 {
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-  "center_line": 200,
-  "radius": 40
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `edit_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-  "old_string": "            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n    /**\n     * Sends KILL request to all nodes (excluding sender node).\n     */\n    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                     UUID jobId,\n                                     String localNodeId,\n                                     String reason) {\n        List<String> excludedNodeIds = Collections.singletonList(localNodeId);\n\n        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n            excludedNodeIds,\n            List.of(jobId),\n            Role.CRATE_USER.name(),\n            reason\n        );\n        killNodeAction\n            .execute(killRequest)\n            .whenComplete((_, t) -> {\n                if (t != null) {\n                    LOGGER.debug(\"Could not kill \" + jobId, t);\n                }\n            });\n    }\n\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));",
-  "new_string": "            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));\n    }\n\n    /**\n     * Sends KILL request to all nodes (excluding sender node).\n     */\n    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                     UUID jobId,\n                                     String localNodeId,\n                                     String reason) {\n        List<String> excludedNodeIds = Collections.singletonList(localNodeId);\n\n        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n            excludedNodeIds,\n            List.of(jobId),\n            Role.CRATE_USER.name(),\n            reason\n        );\n        killNodeAction\n            .execute(killRequest)\n            .whenComplete((_, t) -> {\n                if (t != null) {\n                    LOGGER.debug(\"Could not kill \" + jobId, t);\n                }\n            });\n    }"
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `check_java_syntax`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java"
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-  "center_line": 180,
-  "radius": 20
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-  "center_line": 230,
-  "radius": 20
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `edit_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-  "old_string": "    }\n    }\n\n    private static class SendResponsePageResultListener implements PageResultListener {",
-  "new_string": "    }\n\n    private static class SendResponsePageResultListener implements PageResultListener {"
+  "diff_text": "diff --git a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java\nindex 4d64814dd5..cb43cdd151 100644\n--- a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java\n+++ b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java\n@@ -25,6 +25,7 @@ import java.util.Collections;\n import java.util.Iterator;\n import java.util.List;\n import java.util.Locale;\n+import java.util.UUID;\n import java.util.concurrent.CompletableFuture;\n import java.util.concurrent.ScheduledExecutorService;\n import java.util.concurrent.TimeUnit;\n@@ -110,10 +111,7 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques\n             DistributedResultAction.NAME,\n             ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures\n             true,\n-            // Don't trip breaker on transport layer, but instead depend on ram-accounting in PageBucketReceivers\n-            // We need to always handle requests to avoid jobs from getting stuck.\n-            // (If we receive a request, but don't handle it, a task would remain open indefinitely)\n-            false,\n+            true,\n             DistributedResultRequest::new,\n             new NodeActionRequestHandler<>(nodeAction));\n     }\n@@ -204,29 +202,9 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques\n             if (LOGGER.isTraceEnabled()) {\n                 LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n             }\n-            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());\n-            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.\n-             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.\n-             *\n-             * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke\n-             * a kill to make sure that doesn't happen.\n-             */\n-            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n-                excludedNodeIds,\n-                List.of(request.jobId()),\n-                Role.CRATE_USER.name(),\n-                \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n-                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\"\n-            );\n-            killNodeAction\n-                .execute(killRequest)\n-                .whenComplete(\n-                    (resp, t) -> {\n-                        if (t != null) {\n-                            LOGGER.debug(\"Could not kill \" + request.jobId(), t);\n-                        }\n-                    }\n-                );\n+            String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n+                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";\n+            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n             return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));\n         }\n     }\n"
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `check_java_syntax`
@@ -346,7 +309,7 @@
 **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java** [replace]
 ```diff
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-index 12171a4a54..2688f768ad 100644
+index 12171a4a54..11550f590b 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 @@ -20,6 +20,7 @@
@@ -366,17 +329,16 @@ index 12171a4a54..2688f768ad 100644
  import io.crate.execution.support.ActionExecutor;
  import io.crate.execution.support.NodeRequest;
  
-@@ -75,6 +78,9 @@ public class DistributingConsumer implements RowConsumer {
+@@ -74,6 +77,8 @@ public class DistributingConsumer implements RowConsumer {
+     final MultiBucketBuilder multiBucketBuilder;
  
      private volatile Throwable failure;
- 
 +    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
 +    private final String localNodeId;
-+
+ 
      public DistributingConsumer(Executor responseExecutor,
                                  UUID jobId,
-                                 MultiBucketBuilder multiBucketBuilder,
-@@ -83,6 +89,8 @@ public class DistributingConsumer implements RowConsumer {
+@@ -83,6 +88,8 @@ public class DistributingConsumer implements RowConsumer {
                                  int bucketIdx,
                                  Collection<String> downstreamNodeIds,
                                  ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
@@ -385,7 +347,7 @@ index 12171a4a54..2688f768ad 100644
                                  int pageSize) {
          this.traceEnabled = LOGGER.isTraceEnabled();
          this.responseExecutor = responseExecutor;
-@@ -92,6 +100,8 @@ public class DistributingConsumer implements RowConsumer {
+@@ -92,6 +99,8 @@ public class DistributingConsumer implements RowConsumer {
          this.inputId = inputId;
          this.bucketIdx = bucketIdx;
          this.distributedResultAction = distributedResultAction;
@@ -439,6 +401,66 @@ index 3dc1921a76..2130479fdf 100644
 +            clusterService.localNode().getId(),
              pageSize
          );
+     }
+```
+**server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java** [replace]
+```diff
+diff --git a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
+index 4d64814dd5..cb43cdd151 100644
+--- a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
++++ b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
+@@ -25,6 +25,7 @@ import java.util.Collections;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Locale;
++import java.util.UUID;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.ScheduledExecutorService;
+ import java.util.concurrent.TimeUnit;
+@@ -110,10 +111,7 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques
+             DistributedResultAction.NAME,
+             ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures
+             true,
+-            // Don't trip breaker on transport layer, but instead depend on ram-accounting in PageBucketReceivers
+-            // We need to always handle requests to avoid jobs from getting stuck.
+-            // (If we receive a request, but don't handle it, a task would remain open indefinitely)
+-            false,
++            true,
+             DistributedResultRequest::new,
+             new NodeActionRequestHandler<>(nodeAction));
+     }
+@@ -204,29 +202,9 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques
+             if (LOGGER.isTraceEnabled()) {
+                 LOGGER.trace("Received a result for job={} but couldn't find a RootTask for it", request.jobId());
+             }
+-            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());
+-            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.
+-             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.
+-             *
+-             * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke
+-             * a kill to make sure that doesn't happen.
+-             */
+-            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
+-                excludedNodeIds,
+-                List.of(request.jobId()),
+-                Role.CRATE_USER.name(),
+-                "Received data for job=" + request.jobId() + " but there is no job context present. " +
+-                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load"
+-            );
+-            killNodeAction
+-                .execute(killRequest)
+-                .whenComplete(
+-                    (resp, t) -> {
+-                        if (t != null) {
+-                            LOGGER.debug("Could not kill " + request.jobId(), t);
+-                        }
+-                    }
+-                );
++            String reason = "Received data for job=" + request.jobId() + " but there is no job context present. " +
++                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load";
++            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);
+             return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));
+         }
      }
 ```
 
@@ -515,9 +537,24 @@ index 3dc1921a76..2130479fdf 100644
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;",
-  "new_string": "                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                String localNodeId,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;",
-  "replace_all": false
+  "old_string": "                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];\n        this.completionFuture = new CompletableFuture<>();\n        downstreams = new ArrayList<>(downstreamNodeIds.size());",
+  "new_string": "                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                String localNodeId,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.killNodeAction = killNodeAction;\n        this.localNodeId = localNodeId;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];\n        this.completionFuture = new CompletableFuture<>();\n        downstreams = new ArrayList<>(downstreamNodeIds.size());"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "center_line": 95,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "old_string": "                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                 int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];\n        this.completionFuture = new CompletableFuture<>();\n        downstreams = new ArrayList<>(downstreamNodeIds.size());",
+  "new_string": "                                 ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                 String localNodeId,\n                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                 int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.killNodeAction = killNodeAction;\n        this.localNodeId = localNodeId;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];\n        this.completionFuture = new CompletableFuture<>();\n        downstreams = new ArrayList<>(downstreamNodeIds.size());"
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
@@ -528,13 +565,40 @@ index 3dc1921a76..2130479fdf 100644
   "radius": 10
 }
 ```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `edit_file`
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `grep_in_file`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];",
-  "new_string": "        this.killNodeAction = killNodeAction;\n        this.localNodeId = localNodeId;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];",
-  "replace_all": false
+  "search_text": "killNodeAction"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `grep_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "search_text": "localNodeId"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `find_method_definitions`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "symbol": "DistributingConsumer"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `grep_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "search_text": "DistributingConsumer"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "center_line": 88,
+  "radius": 20
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
@@ -549,79 +613,32 @@ index 3dc1921a76..2130479fdf 100644
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 310,
+  "center_line": 320,
   "radius": 20
 }
 ```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `grep_in_file`
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "search_text": "countdownAndMaybeCloseIt"
+  "center_line": 320,
+  "radius": 40
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 170,
-  "radius": 10
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 175,
-  "radius": 10
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 180,
-  "radius": 10
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 185,
-  "radius": 10
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `edit_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "                countdownAndMaybeCloseIt(numActiveRequests, it);\n            } else {\n                countdownAndMaybeContinue(it, numActiveRequests, false);\n            }",
-  "new_string": "                countdownAndMaybeCloseIt(numActiveRequests, it);\n            } else {\n                String reason = \"An error was encountered: \" + failure;\n                broadcastKill(killNodeAction, jobId, localNodeId, reason);\n\n                it.close();\n                completionFuture.completeExceptionally(failure);\n            }",
-  "replace_all": false
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 180,
+  "center_line": 220,
   "radius": 20
 }
 ```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `grep_in_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "search_text": "countdownAndMaybeContinue"
-}
-```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 215,
-  "radius": 10
+  "center_line": 320,
+  "radius": 40
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
@@ -629,15 +646,45 @@ index 3dc1921a76..2130479fdf 100644
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
   "center_line": 230,
-  "radius": 10
+  "radius": 20
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 240,
-  "radius": 10
+  "center_line": 320,
+  "radius": 40
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `str_replace_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+  "edit_type": "insert_before",
+  "resolution_reason": "exact",
+  "resolved_old_preview": "import java.util.concurrent.CompletableFuture;",
+  "resolved_new_preview": "import java.util.UUID;\nimport java.util.concurrent.CompletableFuture;"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `str_replace_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+  "edit_type": "replace",
+  "resolution_reason": "exact",
+  "resolved_old_preview": "            ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures\n            true,\n            // Don't trip breaker on transport layer, but instead depend on ram-a",
+  "resolved_new_preview": "            ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures\n            true,\n            true,\n            false,\n            DistributedResultRequest::new,"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `str_replace_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+  "edit_type": "delete",
+  "resolution_reason": "exact",
+  "resolved_old_preview": "            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());",
+  "resolved_new_preview": ""
 }
 ```
 
@@ -645,7 +692,7 @@ index 3dc1921a76..2130479fdf 100644
 **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java** [replace]
 ```diff
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-index 12171a4a54..5d899b1ae7 100644
+index 12171a4a54..0e564dcf47 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 @@ -21,6 +21,10 @@
@@ -679,21 +726,10 @@ index 12171a4a54..5d899b1ae7 100644
      public DistributingConsumer(Executor responseExecutor,
                                  UUID jobId,
                                  MultiBucketBuilder multiBucketBuilder,
-@@ -83,6 +93,8 @@ public class DistributingConsumer implements RowConsumer {
-                                 int bucketIdx,
-                                 Collection<String> downstreamNodeIds,
-                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
-+                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                String localNodeId,
-                                 int pageSize) {
-         this.traceEnabled = LOGGER.isTraceEnabled();
-         this.responseExecutor = responseExecutor;
-@@ -92,6 +104,10 @@ public class DistributingConsumer implements RowConsumer {
+@@ -92,6 +102,8 @@ public class DistributingConsumer implements RowConsumer {
          this.inputId = inputId;
          this.bucketIdx = bucketIdx;
          this.distributedResultAction = distributedResultAction;
-+        this.killNodeAction = killNodeAction;
-+        this.localNodeId = localNodeId;
 +        this.killNodeAction = killNodeAction;
 +        this.localNodeId = localNodeId;
          this.pageSize = pageSize;
@@ -757,35 +793,8 @@ index 12171a4a54..5d899b1ae7 100644
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "import io.crate.data.Row;\nimport io.crate.data.RowConsumer;\nimport io.crate.exceptions.SQLExceptions;\nimport io.crate.execution.support.ActionExecutor;",
-  "new_string": "import io.crate.data.Row;\nimport io.crate.data.RowConsumer;\nimport io.crate.exceptions.SQLExceptions;\nimport io.crate.execution.jobs.kill.KillJobsNodeRequest;\nimport io.crate.execution.jobs.kill.KillResponse;\nimport io.crate.execution.support.ActionExecutor;",
-  "replace_all": false
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `edit_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "    private volatile Throwable failure;\n\n    public DistributingConsumer(Executor responseExecutor,",
-  "new_string": "    private volatile Throwable failure;\n\n    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\n    private final String localNodeId;\n    public DistributingConsumer(Executor responseExecutor,",
-  "replace_all": false
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `edit_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "                                int pageSize,",
-  "new_string": "                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                String localNodeId,\n                                int pageSize,",
-  "replace_all": false
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `edit_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "        this.pageSize = pageSize;",
-  "new_string": "        this.killNodeAction = killNodeAction;\n        this.localNodeId = localNodeId;\n        this.pageSize = pageSize;",
+  "old_string": "import io.crate.execution.support.ActionExecutor;",
+  "new_string": "import io.crate.execution.jobs.kill.KillJobsNodeRequest;\nimport io.crate.execution.jobs.kill.KillResponse;\nimport io.crate.execution.support.ActionExecutor;",
   "replace_all": false
 }
 ```
@@ -797,11 +806,19 @@ index 12171a4a54..5d899b1ae7 100644
   "radius": 10
 }
 ```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `edit_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "old_string": "                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];\n        this.completionFuture = new CompletableFuture<>();\n        downstreams = new ArrayList<>(downstreamNodeIds.size());",
+  "new_string": "                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                String localNodeId,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.killNodeAction = killNodeAction;\n        this.localNodeId = localNodeId;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];\n        this.completionFuture = new CompletableFuture<>();\n        downstreams = new ArrayList<>(downstreamNodeIds.size());"
+}
+```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 90,
+  "center_line": 95,
   "radius": 10
 }
 ```
@@ -809,18 +826,16 @@ index 12171a4a54..5d899b1ae7 100644
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "    public DistributingConsumer(Executor responseExecutor,\n                                UUID jobId,\n                                MultiBucketBuilder multiBucketBuilder,\n                                int targetPhaseId,\n                                byte inputId,\n                                int bucketIdx,\n                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                int pageSize) {",
-  "new_string": "    public DistributingConsumer(Executor responseExecutor,\n                                UUID jobId,\n                                MultiBucketBuilder multiBucketBuilder,\n                                int targetPhaseId,\n                                byte inputId,\n                                int bucketIdx,\n                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                String localNodeId,\n                                int pageSize) {",
-  "replace_all": false
+  "old_string": "                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                 int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];\n        this.completionFuture = new CompletableFuture<>();\n        downstreams = new ArrayList<>(downstreamNodeIds.size());",
+  "new_string": "                                 ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                 String localNodeId,\n                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                 int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.killNodeAction = killNodeAction;\n        this.localNodeId = localNodeId;\n        this.pageSize = pageSize;\n        this.buckets = new StreamBucket[downstreamNodeIds.size()];\n        this.completionFuture = new CompletableFuture<>();\n        downstreams = new ArrayList<>(downstreamNodeIds.size());"
 }
 ```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `edit_file`
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "        this.pageSize = pageSize;",
-  "new_string": "        this.killNodeAction = killNodeAction;\n        this.localNodeId = localNodeId;\n        this.pageSize = pageSize;",
-  "replace_all": false
+  "center_line": 300,
+  "radius": 10
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
@@ -828,15 +843,15 @@ index 12171a4a54..5d899b1ae7 100644
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
   "center_line": 320,
-  "radius": 5
+  "radius": 10
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 310,
-  "radius": 10
+  "center_line": 320,
+  "radius": 20
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
@@ -851,8 +866,32 @@ index 12171a4a54..5d899b1ae7 100644
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 280,
-  "radius": 20
+  "center_line": 275,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "center_line": 270,
+  "radius": 10
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "center_line": 271,
+  "radius": 5
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+  "center_line": 270,
+  "radius": 3
 }
 ```
 - **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `edit_file`
@@ -860,7 +899,7 @@ index 12171a4a54..5d899b1ae7 100644
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
   "old_string": "                countdownAndMaybeContinue(it, numActiveRequests, false);\n            } else {\n                countdownAndMaybeContinue(it, numActiveRequests, false);\n            }",
-  "new_string": "                countdownAndMaybeCloseIt(numActiveRequests, it);\n            } else {\n                String reason = \"An error was encountered: \" + failure;\n                broadcastKill(killNodeAction, jobId, localNodeId, reason);\n\n                it.close();\n                completionFuture.completeExceptionally(failure);\n            }",
+  "new_string": "                countdownAndMaybeContinue(it, numActiveRequests, false);\n            } else {\n                String reason = \"An error was encountered: \" + failure;\n                broadcastKill(killNodeAction, jobId, localNodeId, reason);\n\n                it.close();\n                completionFuture.completeExceptionally(failure);\n            }",
   "replace_all": false
 }
 ```
@@ -868,15 +907,7 @@ index 12171a4a54..5d899b1ae7 100644
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 240,
-  "radius": 10
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 245,
+  "center_line": 270,
   "radius": 10
 }
 ```
@@ -884,8 +915,8 @@ index 12171a4a54..5d899b1ae7 100644
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "                            countdownAndMaybeContinue(it, numActiveRequests, false);\n                        } else {\n                            countdownAndMaybeContinue(it, numActiveRequests, false);\n                        }",
-  "new_string": "                            countdownAndMaybeContinue(it, numActiveRequests, false);\n                        } else {\n                            String reason = \"An error was encountered: \" + failure;\n                            broadcastKill(killNodeAction, jobId, localNodeId, reason);\n\n                            it.close();\n                            completionFuture.completeExceptionally(failure);\n                        }",
+  "old_string": "                countdownAndMaybeContinue(it, numActiveRequests, false);\n            } else {\n                countdownAndMaybeContinue(it, numActiveRequests, false);\n            }",
+  "new_string": "                countdownAndMaybeContinue(it, numActiveRequests, false);\n            } else {\n                String reason = \"An error was encountered: \" + failure;\n                broadcastKill(killNodeAction, jobId, localNodeId, reason);\n\n                it.close();\n                completionFuture.completeExceptionally(failure);\n            }",
   "replace_all": false
 }
 ```
@@ -893,49 +924,47 @@ index 12171a4a54..5d899b1ae7 100644
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 240,
-  "radius": 15
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 260,
-  "radius": 15
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 275,
-  "radius": 15
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `edit_file`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "old_string": "                forwardFailure(it, failure);\n            } else {\n                // If we've a failure we either communicated it to the other downstreams already,\n                // or were able to send results to all downstreams. In either case, *this* operation succeeded and the\n                // downstreams need to deal with failures.\n\n                // The NodeDisconnectJobMonitorService takes care of node disconnects, so we don't have to manage\n                // that scenario.\n                it.close();\n                completionFuture.complete(null);\n            }",
-  "new_string": "                forwardFailure(it, failure);\n            } else {\n                // If we've a failure we either communicated it to the other downstreams already,\n                // or were able to send results to all downstreams. In either case, *this* operation succeeded and the\n                // downstreams need to deal with failures.\n\n                // The NodeDisconnectJobMonitorService takes care of node disconnects, so we don't have to manage\n                // that scenario.\n                it.close();\n                completionFuture.complete(null);\n            }",
-  "replace_all": false
-}
-```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
-```json
-{
-  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 240,
+  "center_line": 270,
   "radius": 20
 }
 ```
-- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `read_file_window`
+- **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java**: Called `edit_file`
 ```json
 {
   "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-  "center_line": 245,
-  "radius": 10
+  "old_string": "                forwardFailure(it, failure);\n            }",
+  "new_string": "                String reason = \"An error was encountered: \" + failure;\n                broadcastKill(killNodeAction, jobId, localNodeId, reason);\n\n                it.close();\n                completionFuture.completeExceptionally(failure);\n            }",
+  "replace_all": false
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `str_replace_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+  "edit_type": "insert_before",
+  "resolution_reason": "exact",
+  "resolved_old_preview": "import java.util.concurrent.CompletableFuture;",
+  "resolved_new_preview": "import java.util.UUID;\nimport java.util.concurrent.CompletableFuture;"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `str_replace_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+  "edit_type": "replace",
+  "resolution_reason": "exact",
+  "resolved_old_preview": "            ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures\n            true,\n            // Don't trip breaker on transport layer, but instead depend on ram-a",
+  "resolved_new_preview": "            ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures\n            true,\n            true,\n            false,\n            DistributedResultRequest::new,"
+}
+```
+- **server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java**: Called `str_replace_in_file`
+```json
+{
+  "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+  "edit_type": "delete",
+  "resolution_reason": "exact",
+  "resolved_old_preview": "            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());",
+  "resolved_new_preview": ""
 }
 ```
 
@@ -943,7 +972,7 @@ index 12171a4a54..5d899b1ae7 100644
 **server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java** [replace]
 ```diff
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-index 12171a4a54..c33511e4c9 100644
+index 12171a4a54..0e564dcf47 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 @@ -21,6 +21,10 @@
@@ -957,16 +986,18 @@ index 12171a4a54..c33511e4c9 100644
  import java.util.ArrayList;
  import java.util.Collection;
  import java.util.List;
-@@ -40,6 +44,8 @@ import io.crate.data.Paging;
+@@ -40,6 +44,10 @@ import io.crate.data.Paging;
  import io.crate.data.Row;
  import io.crate.data.RowConsumer;
  import io.crate.exceptions.SQLExceptions;
 +import io.crate.execution.jobs.kill.KillJobsNodeRequest;
 +import io.crate.execution.jobs.kill.KillResponse;
++import io.crate.execution.jobs.kill.KillJobsNodeRequest;
++import io.crate.execution.jobs.kill.KillResponse;
  import io.crate.execution.support.ActionExecutor;
  import io.crate.execution.support.NodeRequest;
  
-@@ -75,6 +81,8 @@ public class DistributingConsumer implements RowConsumer {
+@@ -75,6 +83,8 @@ public class DistributingConsumer implements RowConsumer {
  
      private volatile Throwable failure;
  
@@ -975,23 +1006,10 @@ index 12171a4a54..c33511e4c9 100644
      public DistributingConsumer(Executor responseExecutor,
                                  UUID jobId,
                                  MultiBucketBuilder multiBucketBuilder,
-@@ -83,6 +91,8 @@ public class DistributingConsumer implements RowConsumer {
-                                 int bucketIdx,
-                                 Collection<String> downstreamNodeIds,
-                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
-+                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                String localNodeId,
-                                 int pageSize) {
-         this.traceEnabled = LOGGER.isTraceEnabled();
-         this.responseExecutor = responseExecutor;
-@@ -92,6 +102,12 @@ public class DistributingConsumer implements RowConsumer {
+@@ -92,6 +102,8 @@ public class DistributingConsumer implements RowConsumer {
          this.inputId = inputId;
          this.bucketIdx = bucketIdx;
          this.distributedResultAction = distributedResultAction;
-+        this.killNodeAction = killNodeAction;
-+        this.localNodeId = localNodeId;
-+        this.killNodeAction = killNodeAction;
-+        this.localNodeId = localNodeId;
 +        this.killNodeAction = killNodeAction;
 +        this.localNodeId = localNodeId;
          this.pageSize = pageSize;

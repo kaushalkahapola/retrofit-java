@@ -305,17 +305,75 @@ def _format_transition_summary(transition_eval: dict) -> str:
     )
 
 
+def _classify_error_kind(error_message: str) -> str:
+    """
+    Classify an error message as 'structural_syntax' or 'symbol_resolution'.
+
+    Structural syntax errors indicate the file was mangled (braces, separators).
+    Symbol resolution errors indicate missing/changed APIs.
+    """
+    structural_patterns = [
+        r"';' expected",
+        r"'\)' expected",
+        r"'\(' expected",
+        r"'\]' expected",
+        r"'\[' expected",
+        r"'\}' expected",
+        r"'\{' expected",
+        r"'<' expected",
+        r"'>' expected",
+        r"<identifier> expected",
+        r"not a statement",
+        r"illegal start of expression",
+        r"illegal start of type",
+        r"reached end of file while parsing",
+        r"class, interface, enum, or record expected",
+        r"unclosed string literal",
+        r"unclosed character literal",
+        r"unclosed comment",
+        r"invalid method declaration; return type required",
+        r"orphaned case",
+        r"case, default, or '\}' expected",
+        r"else without if",
+        r"'catch' without 'try'",
+        r"'finally' without 'try'",
+        r"'try' without 'catch', 'finally' or resource declarations",
+    ]
+
+    text = (error_message or "").strip()
+    if any(re.search(pat, text) for pat in structural_patterns):
+        return "structural_syntax"
+    return "symbol_resolution"
+
+
 def _extract_structured_failure_context(
     build_error: str,
     hunk_apply_error: str,
     effective_hunks: list,
+    adapted_file_edits: list = None,
 ) -> dict:
     """
     Produce a structured failure context dict for the rulebook.
     Stored in validation_results["structured_failure"] and
     passed to the planning agent as validation_error_context_structured.
+
+    Additionally tags each error with:
+    - error_source: "post_surgical" if the error is in a file that was edited, else "pre_existing"
+    - error_kind: "structural_syntax" or "symbol_resolution"
     """
+    if adapted_file_edits is None:
+        adapted_file_edits = []
+
     text = str(build_error or hunk_apply_error or "")
+
+    # Build a set of files that were edited in this attempt
+    edited_files_with_ranges: dict[str, list[tuple[int, int]]] = {}
+    for edit in adapted_file_edits:
+        if isinstance(edit, dict):
+            file_path = edit.get("file_path") or edit.get("file") or ""
+            # Rough tracking: if we have line info, use it; otherwise mark the whole file
+            edited_files_with_ranges.setdefault(file_path, [])
+
     # Extract failed file + line from javac/maven output.
     # Maven format: file.java:[line,col] error:   (space before error)
     # javac format: file.java:line: error:        (colon immediately after line)
@@ -328,22 +386,47 @@ def _extract_structured_failure_context(
         file_path = str(m.group(1) or "")
         if file_path.startswith("/repo/"):
             file_path = file_path[len("/repo/") :]
+
+        # Determine error_source: is this file in the edited set?
+        error_source = "pre_existing"
+        for edited_file in edited_files_with_ranges.keys():
+            if file_path.endswith(edited_file) or edited_file.endswith(file_path):
+                error_source = "post_surgical"
+                break
+
         failed_locations.append(
             {
                 "file": file_path,
                 "line": line_num,
+                "error_source": error_source,
             }
         )
 
-    # Extract "cannot find symbol" details
+    # Extract "cannot find symbol" details and classify by kind
     symbol_errors = []
-    for m in re.finditer(r"symbol:\s+(variable|method|class)\s+(\w+)", text):
+    # Look for the actual error message before the symbol line
+    for m in re.finditer(r"(?:.*?):\s+error:\s+([^\n]+)\n\s+symbol:\s+(variable|method|class)\s+(\w+)", text):
+        error_msg = m.group(1)
+        error_kind = _classify_error_kind(error_msg)
         symbol_errors.append(
             {
-                "kind": m.group(1),
-                "name": m.group(2),
+                "kind": m.group(2),
+                "name": m.group(3),
+                "error_kind": error_kind,
             }
         )
+
+    # If the regex above didn't match, fall back to simple extraction
+    if not symbol_errors:
+        for m in re.finditer(r"symbol:\s+(variable|method|class)\s+(\w+)", text):
+            error_kind = _classify_error_kind(text)
+            symbol_errors.append(
+                {
+                    "kind": m.group(1),
+                    "name": m.group(2),
+                    "error_kind": error_kind,
+                }
+            )
 
     # Extract "cannot be applied to given types" — signature mismatch
     sig_errors = []
@@ -355,6 +438,7 @@ def _extract_structured_failure_context(
             {
                 "method": m.group(1),
                 "class": m.group(2),
+                "error_kind": "symbol_resolution",
             }
         )
 
@@ -371,6 +455,7 @@ def _extract_structured_failure_context(
                         "target_file": hunk.get("target_file"),
                         "mainline_file": hunk.get("mainline_file"),
                         "error_line": loc_line,
+                        "error_source": loc.get("error_source", "pre_existing"),
                     }
                 )
                 break
@@ -605,6 +690,7 @@ async def validation_agent(state: AgentState, config) -> dict:
     skip_compilation_checks = state.get("skip_compilation_checks", False)
     apply_only_validation = state.get("apply_only_validation", False)
     effective_code_hunks = list(code_hunks) + list(developer_aux_hunks)
+    adapted_file_edits = list(state.get("adapted_file_edits", []))
 
     # Build rename map for cross-class test transition matching
     # (e.g. SupervisorTest -> LagStatsTest when a test file is renamed in the patch)
@@ -824,6 +910,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 build_error=build_res.get("output", ""),
                 hunk_apply_error="",
                 effective_hunks=effective_code_hunks,
+                adapted_file_edits=adapted_file_edits,
             )
             validation_results["structured_failure"] = structured_failure
 
@@ -1168,6 +1255,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                     build_error=build_res.get("output", ""),
                     hunk_apply_error="",
                     effective_hunks=effective_code_hunks,
+                    adapted_file_edits=adapted_file_edits,
                 )
                 validation_results["structured_failure"] = structured_failure
 

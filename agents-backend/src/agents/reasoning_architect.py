@@ -27,67 +27,25 @@ from utils.plan_validator import _resolve_old as _resolve_old_in_content
 from utils.token_counter import add_usage, aggregate_usage_from_messages
 
 
-_REASONING_SYSTEM = """You are ReasoningArchitect — a senior Java backporting specialist working inside the H-MABS system.
+_DRIFT_RESOLVER_SYSTEM = """You are a DriftResolver — a re-anchoring specialist for Java backporting.
 
-[ROLE & AUTONOMY]
-You are meticulous and safety-first. Your only goal is to produce a verified, minimal, deterministic surgical plan that resolves compilation and API drift failures.
-You never edit files directly. You only diagnose and plan.
+The deterministic phase already applied most edits. You are called only for changes where the exact anchor from mainline was not found in the target file. Your job is to find a NEW anchor in the target that achieves the same semantic intent.
 
-[AUTONOMY BUDGET]
-- You MUST start with diagnosis tools.
-- You are authorized to inspect ANY file in the related_files list (including parents and callers/callees).
-- You may propose edits to multiple files if needed to resolve cascading signature changes (e.g. fullDocSizeEstimate propagation).
-- You are NOT allowed to make repetitive tool calls with identical arguments.
+[TASK]
+1. Inspect the target method body provided.
+2. Find a 1–3 line anchor that is UNIQUE in the method.
+3. Output JSON: {"new_anchor": "...", "new_replacement": "...", "method": "...", "reasoning": "..."}
 
-[EXECUTION PROTOCOL — follow strictly]
-1. Always begin by calling diagnose_api_drift.
-2. Use read_target_code_window / grep_in_target_file to verify anchors in the target file.
-3. When signature or API drift is detected, use compare_mainline_target and read_repo_code_window on connected files.
-4. Understand parent classes and callers/callees before proposing changes.
-5. Propose only minimal changes that preserve original intent.
-6. Every operation must have anchor_verified=true and be verifiable with exact string match (or resolved whitespace).
+[RULES]
+- The new_anchor MUST exist verbatim in the target method body.
+- The new_anchor MUST be 1–3 lines (not a whole method).
+- If found, new_replacement achieves the same semantic change as the original patch intended.
+- Do NOT propose API-level changes. Do NOT rewrite whole methods.
+- If you cannot find a safe re-anchor, output {"giveup": true, "reason": "..."}
 
-[OUTPUT CONTRACT — use exactly this structure]
-<thinking>Brief internal reasoning (1-3 sentences). What is the root cause? What files are in scope?</thinking>
-[DIAGNOSIS] Root cause + API drift summary + sphere of influence.
-[PLAN]
-```json
-[
-  {{
-    "target_file": "...",
-    "old_string": "...",
-    "new_string": "...",
-    "anchor_verified": true,
-    "verification_method": "exact",
-    "confidence": 0.85
-  }}
-]
-```
-[CONFIDENCE] high/medium/low + one-sentence justification
-
-[STRICT RULES]
-- Process ONE primary file at a time. Do not bleed context from previous files.
-- Never repeat the same tool call with the same arguments twice.
-- If anchor not found, shrink search window and re-read — do not guess large blocks.
-- When proposing changes to parent/connected files, explain why in <thinking>.
-- Final submission must go through submit_surgical_plan only.
-
-Current primary file: {current_file}
-
-Related files (sphere of influence):
-{related_files}
-
-Method/symbol hints:
-{method_hints}
-
-Build diagnostics:
-{build_diagnostics}
-
-Patch intent (high-level):
-{patch_intent}
-
-Session modified files so far:
-{session_modified_files}
+Original intent (from mainline patch): {patch_intent}
+Target file: {target_file}
+Method: {method_name}
 """
 
 
@@ -1019,6 +977,64 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
     last_context: dict[str, Any] | None = None
     planned_count = 0
 
+    def _detect_edit_induced_failure(state: AgentState, target_file: str) -> dict | None:
+        """
+        Detect if the validation failure is due to a just-applied edit breaking syntax.
+        Returns a recovery directive if detected, None otherwise.
+        """
+        structured = state.get("validation_error_context_structured") or {}
+        if not isinstance(structured, dict):
+            return None
+
+        # Check for any post_surgical + structural_syntax errors
+        failed_locations = structured.get("failed_locations") or []
+        failed_hunk_targets = structured.get("failed_hunk_targets") or []
+
+        has_post_surgical_structural = False
+        affected_files = []
+
+        for loc in failed_locations:
+            if loc.get("error_source") == "post_surgical" and loc.get("error_kind") == "structural_syntax":
+                has_post_surgical_structural = True
+                affected_files.append(loc.get("file", ""))
+
+        for hunk in failed_hunk_targets:
+            if hunk.get("error_source") == "post_surgical":
+                affected_files.append(hunk.get("target_file", ""))
+
+        if not has_post_surgical_structural:
+            return None
+
+        # Build recovery directive
+        surgical_history = state.get("surgical_history") or []
+        history_summary = ""
+        if surgical_history:
+            history_by_file: dict[str, list] = {}
+            for op in surgical_history:
+                if isinstance(op, dict):
+                    tf = op.get("target_file", "")
+                    if tf:
+                        history_by_file.setdefault(tf, []).append(op)
+            if history_by_file:
+                history_summary = "\n**Recently modified files in this attempt:**\n"
+                for f, ops in history_by_file.items():
+                    history_summary += f"- {f}: {len(ops)} operation(s)\n"
+
+        recovery_directive = {
+            "is_edit_recovery": True,
+            "affected_files": list(set(affected_files)),
+            "message": (
+                "The validation failure contains STRUCTURAL SYNTAX errors (e.g., '}' expected, illegal start of expression) "
+                "in files that were just edited in this attempt. This indicates the previous edit mangled braces or method boundaries. "
+                "DO NOT attempt API-drift diagnosis. Instead:\n"
+                "1. Re-examine the anchor text (old_string) — it likely matched a partial/mid-statement region.\n"
+                "2. Verify the new_string has balanced braces relative to its enclosing block.\n"
+                "3. Re-plan with a more precise, smaller anchor if possible.\n"
+                f"{history_summary}"
+            )
+        }
+        return recovery_directive
+
     for target_file in normalized_files:
         diagnostics = _extract_file_diagnostics(state, target_file)
         related_files, method_hints = _extract_related_files_and_method_hints(
@@ -1080,6 +1096,28 @@ async def reasoning_architect_node(state: AgentState, config) -> dict:
             )
 
             rulebook_hint = rule_decision.to_prompt_context()
+
+            # 1.5. Check for edit-induced syntax failures (recovery routing)
+            edit_recovery = _detect_edit_induced_failure(state, target_file)
+            if edit_recovery:
+                print(
+                    f"Reasoning Architect: detected edit-induced syntax failure in {target_file}. "
+                    "Routing to edit recovery instead of API-drift diagnosis."
+                )
+                # Emit a focused recovery plan without invoking full LLM diagnosis
+                recovery_plan: list[SurgicalOp] = [
+                    {
+                        "target_file": target_file,
+                        "old_string": "",  # Placeholder: re-planning will fill this
+                        "new_string": "",
+                        "anchor_verified": False,
+                        "reason": edit_recovery["message"],
+                        "is_recovery_directive": True,
+                    }
+                ]
+                merged[_normalize_rel_path(target_file)] = recovery_plan
+                planned_count += 1
+                continue  # Skip normal LLM invocation for this file
 
             # 2. Enhanced Prompt Construction
             prompt = _REASONING_SYSTEM.format(

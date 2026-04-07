@@ -1,10 +1,10 @@
 {
   "surgical_plans": {},
   "reasoning_context": {
-    "current_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+    "current_file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
     "failure_kind": "anchor_not_found",
     "build_diagnostics": {
-      "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+      "target_file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
       "issues": [
         {
           "error_type": "unknown_build_failure",
@@ -13,16 +13,24 @@
       ],
       "failed_locations": [
         {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "line": 24
+          "file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+          "line": 24,
+          "error_source": "post_surgical"
         },
         {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "line": 26
+          "file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+          "line": 26,
+          "error_source": "post_surgical"
         },
         {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "line": 88
+          "file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+          "line": 28,
+          "error_source": "post_surgical"
+        },
+        {
+          "file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+          "line": 63,
+          "error_source": "post_surgical"
         }
       ],
       "symbol_errors": [],
@@ -30,17 +38,20 @@
       "primary_failed_symbol": "",
       "raw_error_preview": "Build failed: Build failed; deterministic parser could not identify a narrower category."
     },
-    "side_files": [],
+    "side_files": [
+      "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java"
+    ],
     "iteration": 2,
     "surgical_ops": []
   },
   "reasoning_iterations": 2,
   "token_usage": {
-    "input_tokens": 203067,
-    "output_tokens": 882,
-    "total_tokens": 203949,
+    "input_tokens": 223044,
+    "output_tokens": 1891,
+    "total_tokens": 224935,
     "estimated": false,
     "sources": [
+      "reasoning_architect.react.aggregate_usage",
       "reasoning_architect.react.aggregate_usage"
     ]
   }

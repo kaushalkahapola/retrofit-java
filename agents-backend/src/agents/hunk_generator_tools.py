@@ -472,6 +472,37 @@ class HunkGeneratorToolkit:
         return out
 
     # ------------------------------------------------------------------
+    # Helper: _brace_delta (detect structural imbalance)
+    # ------------------------------------------------------------------
+
+    def _brace_delta(self, old_string: str, new_string: str) -> dict[str, int]:
+        """
+        Compute the change in brace/paren/bracket depth between old and new strings.
+        Useful for detecting structural imbalance that could break the enclosing method.
+
+        Returns a dict with 'braces', 'parens', 'brackets' keys, each with a delta value.
+        Non-zero delta indicates the replacement rebalances delimiters (may be intentional
+        for refactors), but signals that downstream syntax checking is critical.
+        """
+        def count_delims(s: str) -> dict[str, int]:
+            # Simple character counts; ignores strings/comments for speed
+            # (full AST parse overkill for this signal)
+            return {
+                "braces": s.count("{") - s.count("}"),
+                "parens": s.count("(") - s.count(")"),
+                "brackets": s.count("[") - s.count("]"),
+            }
+
+        old_counts = count_delims(old_string)
+        new_counts = count_delims(new_string)
+
+        return {
+            "braces": new_counts["braces"] - old_counts["braces"],
+            "parens": new_counts["parens"] - old_counts["parens"],
+            "brackets": new_counts["brackets"] - old_counts["brackets"],
+        }
+
+    # ------------------------------------------------------------------
     # Tool 8: str_replace_in_file  (File Editor core tool)
     # ------------------------------------------------------------------
 
@@ -501,6 +532,7 @@ class HunkGeneratorToolkit:
               "NOT_FOUND: old_string not present in file"
               "AMBIGUOUS: N occurrences found - add more surrounding context"
               "ERROR: <message>"
+              "EDIT_BROKE_SYNTAX: <error> (file rolled back)"
         """
         lines = self._read_lines(file_path)
         if lines is None:
@@ -528,11 +560,31 @@ class HunkGeneratorToolkit:
         offset = content.index(old_string)
         approx_line = content[:offset].count("\n") + 1
 
+        # Check syntax BEFORE applying the edit to establish a baseline.
+        syntax_before = self.check_java_syntax(file_path)
+        was_valid_before = syntax_before.get("syntax_valid", False)
+
+        # Apply the edit
         try:
             with open(full_path, "w", encoding="utf-8") as f:
                 f.write(new_content)
         except Exception as exc:
             return f"ERROR: Cannot write file '{file_path}': {exc}"
+
+        # Check syntax AFTER applying the edit.
+        syntax_after = self.check_java_syntax(file_path)
+        is_valid_after = syntax_after.get("syntax_valid", False)
+
+        # If the file was valid before and is now broken, roll back and signal the breakage.
+        if was_valid_before and not is_valid_after:
+            try:
+                with open(full_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+            except Exception:
+                pass  # Best-effort rollback; if it fails, leave the broken state
+
+            error_msg = syntax_after.get("output", "Unknown structural syntax error")
+            return f"EDIT_BROKE_SYNTAX: {error_msg}"
 
         return f"SUCCESS: replaced at approx line {approx_line} in '{file_path}'."
 

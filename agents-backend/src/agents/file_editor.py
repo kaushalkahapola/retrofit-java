@@ -2489,6 +2489,52 @@ async def file_editor_node(state: AgentState, config) -> dict:
     }
 
     # ------------------------------------------------------------------
+    # Fast path: Apply resolved_edits from patch_decomposer + anchor_resolver
+    # (typed-change layer produces deterministic edits that need no LLM)
+    # ------------------------------------------------------------------
+    resolved_edits: list[FileEdit] = state.get("resolved_edits") or []
+    if resolved_edits and validation_attempts == 0:
+        # Only use fast path on first attempt (not on retries)
+        print(f"  Agent 3: Fast path — applying {len(resolved_edits)} pre-resolved edits...")
+        toolkit_restore = toolkit
+        try:
+            for edit in resolved_edits:
+                target_file = edit.get("target_file", "")
+                old_string = edit.get("old_string", "")
+                new_string = edit.get("new_string", "")
+                edit_type = edit.get("edit_type", "replace")
+
+                if not target_file or not toolkit:
+                    continue
+
+                full_path = os.path.join(target_repo_path, target_file)
+                try:
+                    if edit_type == "replace" and old_string:
+                        result = toolkit.str_replace_in_file(target_file, old_string, new_string)
+                        edit["applied"] = str(result).startswith("SUCCESS")
+                        edit["apply_result"] = str(result)
+                    elif edit_type == "insert_after":
+                        # Find the line number from verification_result hint
+                        result = toolkit.str_replace_in_file(target_file, old_string or "", new_string)
+                        edit["applied"] = str(result).startswith("SUCCESS")
+                        edit["apply_result"] = str(result)
+                    elif edit_type == "delete" and old_string:
+                        result = toolkit.str_replace_in_file(target_file, old_string, "")
+                        edit["applied"] = str(result).startswith("SUCCESS")
+                        edit["apply_result"] = str(result)
+                    else:
+                        edit["applied"] = False
+                        edit["apply_result"] = f"Unsupported edit_type: {edit_type}"
+                except Exception as e:
+                    edit["applied"] = False
+                    edit["apply_result"] = str(e)
+
+            adapted_file_edits.extend(resolved_edits)
+            print(f"  Agent 3: Fast path completed. Applied {sum(1 for e in resolved_edits if e.get('applied'))} / {len(resolved_edits)} edits.")
+        except Exception as e:
+            print(f"  Agent 3: Fast path failed: {e}. Falling back to standard path.")
+
+    # ------------------------------------------------------------------
     # Per-file processing
     # ------------------------------------------------------------------
     for change in code_changes:

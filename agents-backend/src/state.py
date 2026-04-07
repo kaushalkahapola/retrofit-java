@@ -84,6 +84,23 @@ Each entry schema:
 """
 
 
+class Change(TypedDict):
+    """
+    Typed change extracted by patch_decomposer.
+    Represents one logically-distinct edit to be applied to the target repo.
+    """
+
+    kind: str  # "add_import" | "add_field" | "add_method" | "add_ctor_param" | "replace_statement" | "delete_statement" | "replace_block"
+    target_file: str
+    payload: str  # new text to insert/replace with
+    anchor: NotRequired[str]  # exact target substring (for replace/delete)
+    class_name: NotRequired[str]  # for add_method, add_field, add_ctor_param
+    method_hint: NotRequired[str]  # for replace/delete: which method body this affects
+    source_hunk_index: int  # reference back to the hunk that spawned this change
+    status: NotRequired[str]  # "resolved" | "drifted" | "skipped"
+    reason: NotRequired[str]  # diagnostic reason for status
+
+
 class SurgicalOp(TypedDict):
     """
     Verified deterministic operation produced by Reasoning Architect.
@@ -232,6 +249,17 @@ class AgentState(TypedDict):
         dict[str, list[SurgicalOp]]
     ]  # per-target-file surgical operations from Reasoning Architect
     reasoning_iterations: NotRequired[int]
+
+    # --- Typed-Change Layer (Patch Decomposer + Anchor Resolver) ---
+    typed_changes: NotRequired[
+        dict[str, list[Change]]
+    ]  # Per-file typed changes extracted from patch (add_import, add_method, replace_statement, etc.)
+    resolved_edits: NotRequired[
+        list[FileEdit]
+    ]  # Deterministically-resolved edits ready for application (no LLM needed)
+    drifted_changes: NotRequired[
+        list[Change]
+    ]  # Changes that couldn't be resolved deterministically (need DriftResolver LLM)
 
     # --- Legacy / Agent 2 compatibility ---
     implementation_plan: (
