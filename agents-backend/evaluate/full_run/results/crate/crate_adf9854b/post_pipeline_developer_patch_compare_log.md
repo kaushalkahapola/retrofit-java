@@ -1,6 +1,6 @@
 # Post-Pipeline Developer Patch Comparison
 
-**Exact Developer Patch (code-only)**: False
+**Exact Developer Patch (code-only)**: True
 
 **Comparison Method**: file_state
 
@@ -15,7 +15,7 @@
 
 ## File State Comparison
 - Compared files: ['server/src/main/java/io/crate/role/PrivilegesModifier.java', 'server/src/main/java/io/crate/role/Role.java', 'server/src/main/java/io/crate/role/metadata/RolesMetadata.java']
-- Mismatched files: ['server/src/main/java/io/crate/role/Role.java', 'server/src/main/java/io/crate/role/metadata/RolesMetadata.java']
+- Mismatched files: []
 - Error: None
 
 ## Comparison Scope
@@ -177,7 +177,7 @@ Developer -> Generated (Unified Diff)
 ### server/src/main/java/io/crate/role/Role.java
 
 - Developer hunks: 2
-- Generated hunks: 0
+- Generated hunks: 2
 
 #### Hunk 1
 
@@ -203,27 +203,28 @@ Developer
 
 Generated
 ```diff
-*No hunk*
+@@ -184,8 +184,12 @@
+ 
+     }
+ 
+-    public Role with(Set<Privilege> privileges) {
+-        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);
++    public Role with(RolePrivileges privileges) {
++        return new Role(name, privileges, grantedRoles, properties, isSuperUser);
++    }
++
++    public Role with(Set<GrantedRole> grantedRoles) {
++        return new Role(name, privileges, grantedRoles, properties, isSuperUser);
+     }
+ 
+     public Role with(@Nullable SecureHash password,
+
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,15 +1 @@-@@ -184,8 +184,12 @@
-- 
--     }
-- 
---    public Role with(Set<Privilege> privileges) {
---        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);
--+    public Role with(RolePrivileges privileges) {
--+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);
--+    }
--+
--+    public Role with(Set<GrantedRole> grantedRoles) {
--+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);
--     }
-- 
--     public Role with(@Nullable SecureHash password,
-+*No hunk*
+(No textual difference)
+
 ```
 
 #### Hunk 2
@@ -244,28 +245,29 @@ Developer
 
 Generated
 ```diff
-*No hunk*
+@@ -195,7 +199,7 @@
+             privileges,
+             grantedRoles,
+             new Properties(properties.login, password, jwtProperties),
+-            false
++            isSuperUser
+         );
+     }
+ 
+
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,9 +1 @@-@@ -195,7 +199,7 @@
--             privileges,
--             grantedRoles,
--             new Properties(properties.login, password, jwtProperties),
---            false
--+            isSuperUser
--         );
--     }
-- 
-+*No hunk*
+(No textual difference)
+
 ```
 
 
 ### server/src/main/java/io/crate/role/metadata/RolesMetadata.java
 
 - Developer hunks: 1
-- Generated hunks: 0
+- Generated hunks: 1
 
 #### Hunk 1
 
@@ -285,21 +287,22 @@ Developer
 
 Generated
 ```diff
-*No hunk*
+@@ -239,7 +239,7 @@
+             }
+         }
+         if (affectedCount > 0) {
+-            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));
++            roles.put(role.name(), role.with(grantedRoles));
+         }
+         return affectedCount;
+     }
+
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,9 +1 @@-@@ -239,7 +239,7 @@
--             }
--         }
--         if (affectedCount > 0) {
---            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));
--+            roles.put(role.name(), role.with(grantedRoles));
--         }
--         return affectedCount;
--     }
-+*No hunk*
+(No textual difference)
+
 ```
 
 
@@ -346,6 +349,47 @@ index 2effd6d7bf..8fdf086f88 100644
          }
          return new RolesMetadata(newRoles);
      }
+diff --git a/server/src/main/java/io/crate/role/Role.java b/server/src/main/java/io/crate/role/Role.java
+index 9a189cab59..ab26402783 100644
+--- a/server/src/main/java/io/crate/role/Role.java
++++ b/server/src/main/java/io/crate/role/Role.java
+@@ -184,8 +184,12 @@ public class Role implements Writeable, ToXContent {
+ 
+     }
+ 
+-    public Role with(Set<Privilege> privileges) {
+-        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);
++    public Role with(RolePrivileges privileges) {
++        return new Role(name, privileges, grantedRoles, properties, isSuperUser);
++    }
++
++    public Role with(Set<GrantedRole> grantedRoles) {
++        return new Role(name, privileges, grantedRoles, properties, isSuperUser);
+     }
+ 
+     public Role with(@Nullable SecureHash password,
+@@ -195,7 +199,7 @@ public class Role implements Writeable, ToXContent {
+             privileges,
+             grantedRoles,
+             new Properties(properties.login, password, jwtProperties),
+-            false
++            isSuperUser
+         );
+     }
+ 
+diff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
+index bbcaf64b09..b468dc833a 100644
+--- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
++++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
+@@ -239,7 +239,7 @@ public class RolesMetadata extends AbstractNamedDiffable<Metadata.Custom> implem
+             }
+         }
+         if (affectedCount > 0) {
+-            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));
++            roles.put(role.name(), role.with(grantedRoles));
+         }
+         return affectedCount;
+     }
 
 ```
 
@@ -390,6 +434,47 @@ index 2effd6d7bf..8fdf086f88 100644
 +            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));
          }
          return new RolesMetadata(newRoles);
+     }
+diff --git a/server/src/main/java/io/crate/role/Role.java b/server/src/main/java/io/crate/role/Role.java
+index 9a189cab59..ab26402783 100644
+--- a/server/src/main/java/io/crate/role/Role.java
++++ b/server/src/main/java/io/crate/role/Role.java
+@@ -184,8 +184,12 @@ public class Role implements Writeable, ToXContent {
+ 
+     }
+ 
+-    public Role with(Set<Privilege> privileges) {
+-        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);
++    public Role with(RolePrivileges privileges) {
++        return new Role(name, privileges, grantedRoles, properties, isSuperUser);
++    }
++
++    public Role with(Set<GrantedRole> grantedRoles) {
++        return new Role(name, privileges, grantedRoles, properties, isSuperUser);
+     }
+ 
+     public Role with(@Nullable SecureHash password,
+@@ -195,7 +199,7 @@ public class Role implements Writeable, ToXContent {
+             privileges,
+             grantedRoles,
+             new Properties(properties.login, password, jwtProperties),
+-            false
++            isSuperUser
+         );
+     }
+ 
+diff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
+index bbcaf64b09..b468dc833a 100644
+--- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
++++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
+@@ -239,7 +239,7 @@ public class RolesMetadata extends AbstractNamedDiffable<Metadata.Custom> implem
+             }
+         }
+         if (affectedCount > 0) {
+-            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));
++            roles.put(role.name(), role.with(grantedRoles));
+         }
+         return affectedCount;
      }
 
 ```

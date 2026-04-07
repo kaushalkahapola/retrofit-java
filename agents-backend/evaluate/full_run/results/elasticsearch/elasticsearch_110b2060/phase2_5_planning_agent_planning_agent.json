@@ -10,7 +10,7 @@
         "new_string": "                NodeDeprecationChecks::checkNodeAttrData,\n                NodeDeprecationChecks::checkWatcherBulkConcurrentRequestsSetting,\n                NodeDeprecationChecks::checkTracingApmSettings,\n                NodeDeprecationChecks::checkSourceModeInComponentTemplates\n            );",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Target lacks method checkSourceModeInComponentTemplates, cannot apply mainline patch as is|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "Target file lacks method checkSourceModeInComponentTemplates, cannot apply mainline patch as-is|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "                NodeDeprecationChecks::checkEnforceDefaultTierPreferenceSetting,",
           "                NodeDeprecationChecks::checkLifecyleStepMasterTimeoutSetting,",
@@ -27,8 +27,8 @@
         "location_match": true,
         "surrounding_match": false,
         "blockers": [
-          "Method checkSourceModeInComponentTemplates not found in target file",
-          "Surrounding context after patch differs between mainline and target"
+          "Method checkSourceModeInComponentTemplates not found in target file at expected location",
+          "Surrounding context after patch differs between mainline and target, indicating possible API or structural drift"
         ],
         "namespace_only_possible": false,
         "namespace_changes": [],
@@ -56,7 +56,7 @@
         "new_string": "        IndexDeprecationChecks::storeTypeSettingCheck,\n        IndexDeprecationChecks::frozenIndexSettingCheck,\n        IndexDeprecationChecks::deprecatedCamelCasePattern\n        IndexDeprecationChecks::deprecatedCamelCasePattern,\n    );",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "Removed checkSourceModeInMapping to match target structure|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "notes": "Removed deprecated checkSourceModeInMapping as per mainline patch|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "        IndexDeprecationChecks::oldIndicesCheck,",
           "        IndexDeprecationChecks::translogRetentionSettingCheck,",
@@ -74,7 +74,7 @@
         "surrounding_match": false,
         "blockers": [
           "Detected target start line (101) differs from mainline old-start line (97)",
-          "Method checkSourceModeInMapping is missing in target, causing location shift"
+          "Target file has additional lines after the patch location indicating shifted code"
         ],
         "namespace_only_possible": true,
         "namespace_changes": [],
@@ -94,7 +94,7 @@
       }
     ]
   },
-  "last_plan_signature": "9caf60648abd00e4895a1c880693cc258d8f2d28fd9af5c8b1ec9bae6735f901",
+  "last_plan_signature": "6b515aa58850bca76476c12e05d3a8fb4be4fd3cbd806822f2639a1f21fafdfd",
   "validation_repeated_plan_detected": false,
   "force_type_v_until_success": true,
   "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
@@ -102,9 +102,9 @@
     "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java"
   ],
   "token_usage": {
-    "input_tokens": 4481,
-    "output_tokens": 936,
-    "total_tokens": 5417,
+    "input_tokens": 4482,
+    "output_tokens": 941,
+    "total_tokens": 5423,
     "estimated": true,
     "sources": [
       "planning_agent.provider_usage",

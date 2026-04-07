@@ -1,6 +1,6 @@
 # Post-Pipeline Developer Patch Comparison
 
-**Exact Developer Patch (code-only)**: True
+**Exact Developer Patch (code-only)**: False
 
 **Comparison Method**: file_state
 
@@ -15,7 +15,7 @@
 
 ## File State Comparison
 - Compared files: ['server/src/main/java/io/crate/protocols/postgres/Portal.java', 'server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java', 'server/src/main/java/io/crate/session/Session.java']
-- Mismatched files: []
+- Mismatched files: ['server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java']
 - Error: None
 
 ## Comparison Scope
@@ -107,7 +107,7 @@ Developer -> Generated (Unified Diff)
 ### server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
 
 - Developer hunks: 7
-- Generated hunks: 7
+- Generated hunks: 6
 
 #### Hunk 1
 
@@ -126,20 +126,48 @@ Developer
 
 Generated
 ```diff
-@@ -27,6 +27,7 @@
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
- import org.jetbrains.annotations.Nullable;
-+import org.jetbrains.annotations.VisibleForTesting;
+@@ -45,12 +45,12 @@
+      * Reset per suspend/execute
+      */
+     private int rowCount = 0;
+-    private BatchIterator<Row> activeIt;
++    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();
  
- import io.crate.data.BatchIterator;
- import io.crate.data.Row;
+     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {
+         this.resultReceiver = resultReceiver;
+         this.maxRows = maxRows;
+-        completionFuture.whenComplete((res, err) -> {
++        completionFuture.whenComplete((_, err) -> {
+             onCompletion.accept(err);
+         });
+     }
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,8 +1,15 @@-@@ -27,6 +27,7 @@
+- import org.apache.logging.log4j.LogManager;
+- import org.apache.logging.log4j.Logger;
+- import org.jetbrains.annotations.Nullable;
+-+import org.jetbrains.annotations.VisibleForTesting;
++@@ -45,12 +45,12 @@
++      * Reset per suspend/execute
++      */
++     private int rowCount = 0;
++-    private BatchIterator<Row> activeIt;
+++    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();
+  
+- import io.crate.data.BatchIterator;
+- import io.crate.data.Row;
++     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {
++         this.resultReceiver = resultReceiver;
++         this.maxRows = maxRows;
++-        completionFuture.whenComplete((res, err) -> {
+++        completionFuture.whenComplete((_, err) -> {
++             onCompletion.accept(err);
++         });
++     }
 
 ```
 
@@ -168,28 +196,93 @@ Developer
 
 Generated
 ```diff
-@@ -45,12 +46,13 @@
-      * Reset per suspend/execute
-      */
-     private int rowCount = 0;
--    private BatchIterator<Row> activeIt;
-+    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();
-+    private boolean waitingForWrite = false;
- 
-     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {
-         this.resultReceiver = resultReceiver;
-         this.maxRows = maxRows;
--        completionFuture.whenComplete((res, err) -> {
-+        completionFuture.whenComplete((_, err) -> {
-             onCompletion.accept(err);
-         });
-     }
+@@ -77,23 +77,24 @@
+         while (true) {
+             try {
+                 while (iterator.moveNext()) {
++                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {
++                        suspendedIt.complete(iterator);
++                        resultReceiver.batchFinished();
++                        return; // resumed via postgres protocol, close is done later
++                    }
+                     rowCount++;
+                     CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());
+                     if (writeFuture != null) {
+                         LOGGER.trace("Suspended execution after {} rows as the receiver is not writable anymore", rowCount);
+-                        activeIt = iterator;
++                        suspendedIt.complete(iterator);
+                         writeFuture.thenRun(() -> {
+                             LOGGER.trace("Resume execution after {} rows", rowCount);
+-                            resume();
++                            suspendedIt = new CompletableFuture<>();
++                            rowCount = 0;
++                            consumeIt(iterator);
+                         });
+                         return;
+                     }
+-
+-                    if (maxRows > 0 && rowCount % maxRows == 0) {
+-                        activeIt = iterator;
+-                        resultReceiver.batchFinished();
+-                        return; // resumed via postgres protocol, close is done later
+-                    }
+                 }
+                 if (iterator.allLoaded()) {
+                     completionFuture.complete(null);
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,16 +1,33 @@-@@ -45,12 +46,13 @@
+-      * Reset per suspend/execute
+-      */
+-     private int rowCount = 0;
+--    private BatchIterator<Row> activeIt;
+-+    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();
+-+    private boolean waitingForWrite = false;
+- 
+-     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {
+-         this.resultReceiver = resultReceiver;
+-         this.maxRows = maxRows;
+--        completionFuture.whenComplete((res, err) -> {
+-+        completionFuture.whenComplete((_, err) -> {
+-             onCompletion.accept(err);
+-         });
+-     }
++@@ -77,23 +77,24 @@
++         while (true) {
++             try {
++                 while (iterator.moveNext()) {
+++                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {
+++                        suspendedIt.complete(iterator);
+++                        resultReceiver.batchFinished();
+++                        return; // resumed via postgres protocol, close is done later
+++                    }
++                     rowCount++;
++                     CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());
++                     if (writeFuture != null) {
++                         LOGGER.trace("Suspended execution after {} rows as the receiver is not writable anymore", rowCount);
++-                        activeIt = iterator;
+++                        suspendedIt.complete(iterator);
++                         writeFuture.thenRun(() -> {
++                             LOGGER.trace("Resume execution after {} rows", rowCount);
++-                            resume();
+++                            suspendedIt = new CompletableFuture<>();
+++                            rowCount = 0;
+++                            consumeIt(iterator);
++                         });
++                         return;
++                     }
++-
++-                    if (maxRows > 0 && rowCount % maxRows == 0) {
++-                        activeIt = iterator;
++-                        resultReceiver.batchFinished();
++-                        return; // resumed via postgres protocol, close is done later
++-                    }
++                 }
++                 if (iterator.allLoaded()) {
++                     completionFuture.complete(null);
 
 ```
 
@@ -235,45 +328,61 @@ Developer
 
 Generated
 ```diff
-@@ -77,23 +79,24 @@
-         while (true) {
-             try {
-                 while (iterator.moveNext()) {
-+                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {
-+                        suspendedIt.complete(iterator);
-+                        resultReceiver.batchFinished();
-+                        return; // resumed via postgres protocol, close is done later
-+                    }
-                     rowCount++;
-                     CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());
-                     if (writeFuture != null) {
-                         LOGGER.trace("Suspended execution after {} rows as the receiver is not writable anymore", rowCount);
--                        activeIt = iterator;
-+                        waitingForWrite = true;
-                         writeFuture.thenRun(() -> {
-                             LOGGER.trace("Resume execution after {} rows", rowCount);
--                            resume();
-+                            waitingForWrite = false;
-+                            rowCount = 0;
-+                            consumeIt(iterator);
-                         });
-                         return;
+@@ -109,7 +110,7 @@
+                         }
+                         continue;
                      }
--
--                    if (maxRows > 0 && rowCount % maxRows == 0) {
--                        activeIt = iterator;
--                        resultReceiver.batchFinished();
--                        return; // resumed via postgres protocol, close is done later
--                    }
-                 }
-                 if (iterator.allLoaded()) {
-                     completionFuture.complete(null);
+-                    nextBatch.whenComplete((r, f) -> {
++                    nextBatch.whenComplete((_, f) -> {
+                         if (f == null) {
+                             consumeIt(iterator);
+                         } else {
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,33 +1,9 @@-@@ -77,23 +79,24 @@
+-         while (true) {
+-             try {
+-                 while (iterator.moveNext()) {
+-+                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {
+-+                        suspendedIt.complete(iterator);
+-+                        resultReceiver.batchFinished();
+-+                        return; // resumed via postgres protocol, close is done later
+-+                    }
+-                     rowCount++;
+-                     CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());
+-                     if (writeFuture != null) {
+-                         LOGGER.trace("Suspended execution after {} rows as the receiver is not writable anymore", rowCount);
+--                        activeIt = iterator;
+-+                        waitingForWrite = true;
+-                         writeFuture.thenRun(() -> {
+-                             LOGGER.trace("Resume execution after {} rows", rowCount);
+--                            resume();
+-+                            waitingForWrite = false;
+-+                            rowCount = 0;
+-+                            consumeIt(iterator);
+-                         });
+-                         return;
++@@ -109,7 +110,7 @@
++                         }
++                         continue;
+                      }
+--
+--                    if (maxRows > 0 && rowCount % maxRows == 0) {
+--                        activeIt = iterator;
+--                        resultReceiver.batchFinished();
+--                        return; // resumed via postgres protocol, close is done later
+--                    }
+-                 }
+-                 if (iterator.allLoaded()) {
+-                     completionFuture.complete(null);
++-                    nextBatch.whenComplete((r, f) -> {
+++                    nextBatch.whenComplete((_, f) -> {
++                         if (f == null) {
++                             consumeIt(iterator);
++                         } else {
 
 ```
 
@@ -295,21 +404,64 @@ Developer
 
 Generated
 ```diff
-@@ -109,7 +112,7 @@
-                         }
-                         continue;
-                     }
--                    nextBatch.whenComplete((r, f) -> {
-+                    nextBatch.whenComplete((_, f) -> {
-                         if (f == null) {
-                             consumeIt(iterator);
-                         } else {
+@@ -135,17 +136,17 @@
+      * and finish the ResultReceiver
+      */
+     public void closeAndFinishIfSuspended() {
+-        if (activeIt != null) {
+-            activeIt.close();
++        suspendedIt.whenComplete((it, _) -> {
++            it.close();
+             completionFuture.complete(null);
+             // resultReceiver is left untouched:
+             // - A previous .batchCompleted() call already flushed out pending messages
+             // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.
+-        }
++        });
+     }
+ 
+     public boolean suspended() {
+-        return activeIt != null;
++        return suspendedIt.isDone();
+     }
+ 
+     public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,9 +1,22 @@-@@ -109,7 +112,7 @@
+-                         }
+-                         continue;
+-                     }
+--                    nextBatch.whenComplete((r, f) -> {
+-+                    nextBatch.whenComplete((_, f) -> {
+-                         if (f == null) {
+-                             consumeIt(iterator);
+-                         } else {
++@@ -135,17 +136,17 @@
++      * and finish the ResultReceiver
++      */
++     public void closeAndFinishIfSuspended() {
++-        if (activeIt != null) {
++-            activeIt.close();
+++        suspendedIt.whenComplete((it, _) -> {
+++            it.close();
++             completionFuture.complete(null);
++             // resultReceiver is left untouched:
++             // - A previous .batchCompleted() call already flushed out pending messages
++             // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.
++-        }
+++        });
++     }
++ 
++     public boolean suspended() {
++-        return activeIt != null;
+++        return suspendedIt.isDone();
++     }
++ 
++     public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {
 
 ```
 
@@ -349,39 +501,84 @@ Developer
 
 Generated
 ```diff
-@@ -135,17 +138,22 @@
-      * and finish the ResultReceiver
-      */
-     public void closeAndFinishIfSuspended() {
--        if (activeIt != null) {
--            activeIt.close();
-+        suspendedIt.whenComplete((it, _) -> {
-+            it.close();
-             completionFuture.complete(null);
-             // resultReceiver is left untouched:
-             // - A previous .batchCompleted() call already flushed out pending messages
-             // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.
--        }
-+        });
+@@ -159,10 +160,20 @@
      }
  
-     public boolean suspended() {
--        return activeIt != null;
-+        return suspendedIt.isDone();
-+    }
-+
-+    @VisibleForTesting
-+    public boolean waitingForWrite() {
-+        return waitingForWrite;
+     public void resume() {
+-        assert activeIt != null : "resume must only be called if suspended() returned true and activeIt is not null";
+-        BatchIterator<Row> iterator = this.activeIt;
+-        this.activeIt = null;
+-        consumeIt(iterator);
++        assert suspended() : "resume must only be called if suspended() returned true";
++        BatchIterator<Row> it = null;
++        try {
++            it = suspendedIt.join();
++            suspendedIt = new CompletableFuture<>();
++            resultReceiver.setNextRow(it.currentElement());
++            consumeIt(it);
++        } catch (Throwable t) {
++            if (it != null) {
++                it.close();
++            }
++            completionFuture.completeExceptionally(t);
++            resultReceiver.fail(t);
++        }
      }
  
-     public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {
+     @Override
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,27 +1,25 @@-@@ -135,17 +138,22 @@
+-      * and finish the ResultReceiver
+-      */
+-     public void closeAndFinishIfSuspended() {
+--        if (activeIt != null) {
+--            activeIt.close();
+-+        suspendedIt.whenComplete((it, _) -> {
+-+            it.close();
+-             completionFuture.complete(null);
+-             // resultReceiver is left untouched:
+-             // - A previous .batchCompleted() call already flushed out pending messages
+-             // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.
+--        }
+-+        });
++@@ -159,10 +160,20 @@
+      }
+  
+-     public boolean suspended() {
+--        return activeIt != null;
+-+        return suspendedIt.isDone();
+-+    }
+-+
+-+    @VisibleForTesting
+-+    public boolean waitingForWrite() {
+-+        return waitingForWrite;
++     public void resume() {
++-        assert activeIt != null : "resume must only be called if suspended() returned true and activeIt is not null";
++-        BatchIterator<Row> iterator = this.activeIt;
++-        this.activeIt = null;
++-        consumeIt(iterator);
+++        assert suspended() : "resume must only be called if suspended() returned true";
+++        BatchIterator<Row> it = null;
+++        try {
+++            it = suspendedIt.join();
+++            suspendedIt = new CompletableFuture<>();
+++            resultReceiver.setNextRow(it.currentElement());
+++            consumeIt(it);
+++        } catch (Throwable t) {
+++            if (it != null) {
+++                it.close();
+++            }
+++            completionFuture.completeExceptionally(t);
+++            resultReceiver.fail(t);
+++        }
+      }
+  
+-     public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {
++     @Override
 
 ```
 
@@ -420,38 +617,54 @@ Developer
 
 Generated
 ```diff
-@@ -159,10 +167,21 @@
+@@ -171,7 +182,7 @@
+                "resultReceiver=" + resultReceiver +
+                ", maxRows=" + maxRows +
+                ", rowCount=" + rowCount +
+-               ", activeIt=" + activeIt +
++               ", activeIt=" + suspendedIt +
+                '}';
      }
- 
-     public void resume() {
--        assert activeIt != null : "resume must only be called if suspended() returned true and activeIt is not null";
--        BatchIterator<Row> iterator = this.activeIt;
--        this.activeIt = null;
--        consumeIt(iterator);
-+        assert suspended() : "resume must only be called if suspended() returned true";
-+        BatchIterator<Row> it = null;
-+        try {
-+            it = suspendedIt.join();
-+            suspendedIt = new CompletableFuture<>();
-+            resultReceiver.setNextRow(it.currentElement());
-+            rowCount++;
-+            consumeIt(it);
-+        } catch (Throwable t) {
-+            if (it != null) {
-+                it.close();
-+            }
-+            completionFuture.completeExceptionally(t);
-+            resultReceiver.fail(t);
-+        }
-     }
- 
-     @Override
+ }
 
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,26 +1,9 @@-@@ -159,10 +167,21 @@
++@@ -171,7 +182,7 @@
++                "resultReceiver=" + resultReceiver +
++                ", maxRows=" + maxRows +
++                ", rowCount=" + rowCount +
++-               ", activeIt=" + activeIt +
+++               ", activeIt=" + suspendedIt +
++                '}';
+      }
+- 
+-     public void resume() {
+--        assert activeIt != null : "resume must only be called if suspended() returned true and activeIt is not null";
+--        BatchIterator<Row> iterator = this.activeIt;
+--        this.activeIt = null;
+--        consumeIt(iterator);
+-+        assert suspended() : "resume must only be called if suspended() returned true";
+-+        BatchIterator<Row> it = null;
+-+        try {
+-+            it = suspendedIt.join();
+-+            suspendedIt = new CompletableFuture<>();
+-+            resultReceiver.setNextRow(it.currentElement());
+-+            rowCount++;
+-+            consumeIt(it);
+-+        } catch (Throwable t) {
+-+            if (it != null) {
+-+                it.close();
+-+            }
+-+            completionFuture.completeExceptionally(t);
+-+            resultReceiver.fail(t);
+-+        }
+-     }
+- 
+-     @Override
++ }
 
 ```
 
@@ -473,22 +686,21 @@ Developer
 
 Generated
 ```diff
-@@ -171,7 +190,7 @@
-                "resultReceiver=" + resultReceiver +
-                ", maxRows=" + maxRows +
-                ", rowCount=" + rowCount +
--               ", activeIt=" + activeIt +
-+               ", activeIt=" + suspendedIt +
-                '}';
-     }
- }
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,9 +1 @@-@@ -171,7 +190,7 @@
+-                "resultReceiver=" + resultReceiver +
+-                ", maxRows=" + maxRows +
+-                ", rowCount=" + rowCount +
+--               ", activeIt=" + activeIt +
+-+               ", activeIt=" + suspendedIt +
+-                '}';
+-     }
+- }
++*No hunk*
 ```
 
 
@@ -639,24 +851,15 @@ index 8dcba13cda..c4bf4f630a 100644
      }
  }
 diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
-index 6ecea107b3..4d54effe4e 100644
+index 6ecea107b3..9c4fda3d25 100644
 --- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
 +++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
-@@ -27,6 +27,7 @@ import java.util.function.Consumer;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
- import org.jetbrains.annotations.Nullable;
-+import org.jetbrains.annotations.VisibleForTesting;
- 
- import io.crate.data.BatchIterator;
- import io.crate.data.Row;
-@@ -45,12 +46,13 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -45,12 +45,12 @@ public class RowConsumerToResultReceiver implements RowConsumer {
       * Reset per suspend/execute
       */
      private int rowCount = 0;
 -    private BatchIterator<Row> activeIt;
 +    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();
-+    private boolean waitingForWrite = false;
  
      public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {
          this.resultReceiver = resultReceiver;
@@ -666,7 +869,7 @@ index 6ecea107b3..4d54effe4e 100644
              onCompletion.accept(err);
          });
      }
-@@ -77,23 +79,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -77,23 +77,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {
          while (true) {
              try {
                  while (iterator.moveNext()) {
@@ -680,11 +883,11 @@ index 6ecea107b3..4d54effe4e 100644
                      if (writeFuture != null) {
                          LOGGER.trace("Suspended execution after {} rows as the receiver is not writable anymore", rowCount);
 -                        activeIt = iterator;
-+                        waitingForWrite = true;
++                        suspendedIt.complete(iterator);
                          writeFuture.thenRun(() -> {
                              LOGGER.trace("Resume execution after {} rows", rowCount);
 -                            resume();
-+                            waitingForWrite = false;
++                            suspendedIt = new CompletableFuture<>();
 +                            rowCount = 0;
 +                            consumeIt(iterator);
                          });
@@ -699,7 +902,7 @@ index 6ecea107b3..4d54effe4e 100644
                  }
                  if (iterator.allLoaded()) {
                      completionFuture.complete(null);
-@@ -109,7 +112,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -109,7 +110,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
                          }
                          continue;
                      }
@@ -708,7 +911,7 @@ index 6ecea107b3..4d54effe4e 100644
                          if (f == null) {
                              consumeIt(iterator);
                          } else {
-@@ -135,17 +138,22 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -135,17 +136,17 @@ public class RowConsumerToResultReceiver implements RowConsumer {
       * and finish the ResultReceiver
       */
      public void closeAndFinishIfSuspended() {
@@ -727,15 +930,10 @@ index 6ecea107b3..4d54effe4e 100644
      public boolean suspended() {
 -        return activeIt != null;
 +        return suspendedIt.isDone();
-+    }
-+
-+    @VisibleForTesting
-+    public boolean waitingForWrite() {
-+        return waitingForWrite;
      }
  
      public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {
-@@ -159,10 +167,21 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -159,10 +160,20 @@ public class RowConsumerToResultReceiver implements RowConsumer {
      }
  
      public void resume() {
@@ -749,7 +947,6 @@ index 6ecea107b3..4d54effe4e 100644
 +            it = suspendedIt.join();
 +            suspendedIt = new CompletableFuture<>();
 +            resultReceiver.setNextRow(it.currentElement());
-+            rowCount++;
 +            consumeIt(it);
 +        } catch (Throwable t) {
 +            if (it != null) {
@@ -761,7 +958,7 @@ index 6ecea107b3..4d54effe4e 100644
      }
  
      @Override
-@@ -171,7 +190,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -171,7 +182,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
                 "resultReceiver=" + resultReceiver +
                 ", maxRows=" + maxRows +
                 ", rowCount=" + rowCount +
@@ -833,24 +1030,15 @@ index 8dcba13cda..c4bf4f630a 100644
      }
  }
 diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
-index 6ecea107b3..4d54effe4e 100644
+index 6ecea107b3..9c4fda3d25 100644
 --- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
 +++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
-@@ -27,6 +27,7 @@ import java.util.function.Consumer;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
- import org.jetbrains.annotations.Nullable;
-+import org.jetbrains.annotations.VisibleForTesting;
- 
- import io.crate.data.BatchIterator;
- import io.crate.data.Row;
-@@ -45,12 +46,13 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -45,12 +45,12 @@ public class RowConsumerToResultReceiver implements RowConsumer {
       * Reset per suspend/execute
       */
      private int rowCount = 0;
 -    private BatchIterator<Row> activeIt;
 +    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();
-+    private boolean waitingForWrite = false;
  
      public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {
          this.resultReceiver = resultReceiver;
@@ -860,7 +1048,7 @@ index 6ecea107b3..4d54effe4e 100644
              onCompletion.accept(err);
          });
      }
-@@ -77,23 +79,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -77,23 +77,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {
          while (true) {
              try {
                  while (iterator.moveNext()) {
@@ -874,11 +1062,11 @@ index 6ecea107b3..4d54effe4e 100644
                      if (writeFuture != null) {
                          LOGGER.trace("Suspended execution after {} rows as the receiver is not writable anymore", rowCount);
 -                        activeIt = iterator;
-+                        waitingForWrite = true;
++                        suspendedIt.complete(iterator);
                          writeFuture.thenRun(() -> {
                              LOGGER.trace("Resume execution after {} rows", rowCount);
 -                            resume();
-+                            waitingForWrite = false;
++                            suspendedIt = new CompletableFuture<>();
 +                            rowCount = 0;
 +                            consumeIt(iterator);
                          });
@@ -893,7 +1081,7 @@ index 6ecea107b3..4d54effe4e 100644
                  }
                  if (iterator.allLoaded()) {
                      completionFuture.complete(null);
-@@ -109,7 +112,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -109,7 +110,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
                          }
                          continue;
                      }
@@ -902,7 +1090,7 @@ index 6ecea107b3..4d54effe4e 100644
                          if (f == null) {
                              consumeIt(iterator);
                          } else {
-@@ -135,17 +138,22 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -135,17 +136,17 @@ public class RowConsumerToResultReceiver implements RowConsumer {
       * and finish the ResultReceiver
       */
      public void closeAndFinishIfSuspended() {
@@ -921,15 +1109,10 @@ index 6ecea107b3..4d54effe4e 100644
      public boolean suspended() {
 -        return activeIt != null;
 +        return suspendedIt.isDone();
-+    }
-+
-+    @VisibleForTesting
-+    public boolean waitingForWrite() {
-+        return waitingForWrite;
      }
  
      public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {
-@@ -159,10 +167,21 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -159,10 +160,20 @@ public class RowConsumerToResultReceiver implements RowConsumer {
      }
  
      public void resume() {
@@ -943,7 +1126,6 @@ index 6ecea107b3..4d54effe4e 100644
 +            it = suspendedIt.join();
 +            suspendedIt = new CompletableFuture<>();
 +            resultReceiver.setNextRow(it.currentElement());
-+            rowCount++;
 +            consumeIt(it);
 +        } catch (Throwable t) {
 +            if (it != null) {
@@ -955,7 +1137,7 @@ index 6ecea107b3..4d54effe4e 100644
      }
  
      @Override
-@@ -171,7 +190,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -171,7 +182,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
                 "resultReceiver=" + resultReceiver +
                 ", maxRows=" + maxRows +
                 ", rowCount=" + rowCount +

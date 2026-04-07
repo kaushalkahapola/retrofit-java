@@ -10,7 +10,7 @@
         "new_string": "import io.crate.analyze.AnalyzedStatement;\nimport io.crate.session.PreparedStmt;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "",
           "import org.jetbrains.annotations.Nullable;",
@@ -21,13 +21,13 @@
           "import io.crate.analyze.AnalyzedStatement;",
           ""
         ],
-        "adaptation_type": "TYPE_I",
-        "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": false,
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
@@ -50,7 +50,7 @@
         "new_string": "",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_delete",
+        "notes": "required_op_delete|coverage_backfill|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "",
           "import io.crate.session.PreparedStmt;",
@@ -61,13 +61,13 @@
           "public final class Portal {",
           ""
         ],
-        "adaptation_type": "TYPE_I",
-        "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": false,
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
@@ -90,7 +90,7 @@
         "new_string": "               \", preparedStmt=\" + preparedStmt.rawStatement() +\n               \", consumer=\" + consumer +",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_after",
+        "notes": "required_op_insert_after|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "    public String toString() {",
           "        return \"Portal{\" +",
@@ -101,13 +101,13 @@
           "    }",
           "}"
         ],
-        "adaptation_type": "TYPE_I",
+        "adaptation_type": "TYPE_V",
         "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
+        "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": true,
         "blockers": [],
-        "namespace_only_possible": false,
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [
           "\", consumer=\" + consumer +"
@@ -131,10 +131,10 @@
         "operation_index": 0,
         "edit_type": "replace",
         "old_string": "     */\n    private int rowCount = 0;\n    private BatchIterator<Row> activeIt;\n",
-        "new_string": "     */\n    private int rowCount = 0;\n    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();\n",
+        "new_string": "     */\n    private int rowCount = 0;\n    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|required_replace_enforced|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "",
           "    /**",
@@ -145,12 +145,16 @@
           "        this.resultReceiver = resultReceiver;",
           "        this.maxRows = maxRows;"
         ],
-        "adaptation_type": "TYPE_I",
-        "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Detected target location (line 48) differs from mainline old-start line (45)",
+          "Pre-patch surrounding context differs between mainline and target",
+          "Build failure due to missing symbol 'waitingForWrite' in test indicates possible API or structural mismatch"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -177,7 +181,7 @@
         "new_string": "        this.resultReceiver = resultReceiver;\n        this.maxRows = maxRows;\n        completionFuture.whenComplete((_, err) -> {\n            onCompletion.accept(err);",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "    private BatchIterator<Row> activeIt;",
           "",
@@ -188,12 +192,16 @@
           "    }",
           ""
         ],
-        "adaptation_type": "TYPE_I",
-        "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Detected target location (line 48) differs from mainline old-start line (45)",
+          "Pre-patch surrounding context differs between mainline and target",
+          "Build failure due to missing symbol 'waitingForWrite' in test indicates possible API or structural mismatch"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -220,7 +228,7 @@
         "new_string": "                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {\n                        suspendedIt.complete(iterator);\n                        resultReceiver.batchFinished();\n                        return; // resumed via postgres protocol, close is done later\n                    }\n                    rowCount++;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "        while (true) {",
           "            try {",
@@ -231,12 +239,16 @@
           "                    if (writeFuture != null) {",
           "                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);"
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Detected target surrounding context does not match mainline pre-patch surrounding context",
+          "Location of change differs (mainline start line 77 vs target start line 84)",
+          "API drift map is empty, no signature changes detected, but test failures indicate missing method 'waitingForWrite' suggesting API differences or missing dependencies"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -267,7 +279,7 @@
         "new_string": "                    if (writeFuture != null) {\n                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);\n                        suspendedIt.complete(iterator);\n                        writeFuture.thenRun(() -> {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "                while (iterator.moveNext()) {",
           "                    rowCount++;",
@@ -278,12 +290,16 @@
           "                            resume();",
           "                        });"
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Detected target surrounding context does not match mainline pre-patch surrounding context",
+          "Location of change differs (mainline start line 77 vs target start line 84)",
+          "API drift map is empty, no signature changes detected, but test failures indicate missing method 'waitingForWrite' suggesting API differences or missing dependencies"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -314,7 +330,7 @@
         "new_string": "                        writeFuture.thenRun(() -> {\n                            LOGGER.trace(\"Resume execution after {} rows\", rowCount);\n                            suspendedIt = new CompletableFuture<>();\n                            rowCount = 0;\n                            consumeIt(iterator);\n                        });",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|guard_revert_required_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "                    if (writeFuture != null) {",
           "                        LOGGER.trace(\"Suspended execution after {} rows as the receiver is not writable anymore\", rowCount);",
@@ -325,12 +341,16 @@
           "                    }",
           ""
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Detected target surrounding context does not match mainline pre-patch surrounding context",
+          "Location of change differs (mainline start line 77 vs target start line 84)",
+          "API drift map is empty, no signature changes detected, but test failures indicate missing method 'waitingForWrite' suggesting API differences or missing dependencies"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -361,7 +381,7 @@
         "new_string": "",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_delete",
+        "notes": "required_op_delete|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "                        });",
           "                        return;",
@@ -372,12 +392,16 @@
           "                if (iterator.allLoaded()) {",
           "                    completionFuture.complete(null);"
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Detected target surrounding context does not match mainline pre-patch surrounding context",
+          "Location of change differs (mainline start line 77 vs target start line 84)",
+          "API drift map is empty, no signature changes detected, but test failures indicate missing method 'waitingForWrite' suggesting API differences or missing dependencies"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -408,7 +432,7 @@
         "new_string": "                        continue;\n                    }\n                    nextBatch.whenComplete((_, f) -> {\n                        if (f == null) {",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "                            // trigger exception",
           "                            nextBatch.join();",
@@ -419,12 +443,16 @@
           "                        } else {",
           "                            Throwable t = SQLExceptions.unwrap(f);"
         ],
-        "adaptation_type": "TYPE_I",
-        "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Detected target surrounding context differs from mainline pre-patch surrounding context",
+          "Target uses resultReceiver.fail(t) instead of completionFuture.completeExceptionally(t)",
+          "Target location shifted by 3 lines compared to mainline"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -446,29 +474,39 @@
         "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
         "operation_index": 0,
         "edit_type": "replace",
-        "old_string": "     */\n    public void closeAndFinishIfSuspended() {\n        if (activeIt != null) {\n            activeIt.close();\n            completionFuture.complete(null);",
-        "new_string": "     */\n    public void closeAndFinishIfSuspended() {\n        suspendedIt.whenComplete((it, _) -> {\n            it.close();\n            completionFuture.complete(null);",
+        "old_string": "    public void closeAndFinishIfSuspended() {\n        if (activeIt != null) {\n            activeIt.close();\n            completionFuture.complete(null);",
+        "new_string": "    public void closeAndFinishIfSuspended() {\n        if (activeIt != null) {\n            activeIt.close();\n            completionFuture.complete(null);",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|guard_revert_required_replace|type_v_repaired|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
-          "    /**",
           "     * If this consumer suspended itself (due to {@code maxRows} being > 0, it will close the BatchIterator",
-          "     * and finish the ResultReceiver"
+          "     * and finish the ResultReceiver",
+          "     */"
         ],
         "surround_after_3": [
           "            // resultReceiver is left untouched:",
           "            // - A previous .batchCompleted() call already flushed out pending messages",
           "            // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client."
         ],
-        "adaptation_type": "TYPE_I",
-        "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_III",
+        "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [],
-        "namespace_only_possible": false,
-        "namespace_changes": [],
+        "blockers": [
+          "Method signature and internal variable usage changed from activeIt to suspendedIt",
+          "Detected target location line 138 differs from mainline 135",
+          "API drift requires adapting method internals and usage of different variables"
+        ],
+        "namespace_only_possible": true,
+        "namespace_changes": [
+          {
+            "from": "activeIt",
+            "to": "suspendedIt",
+            "reason": "Variable renamed or replaced in new API"
+          }
+        ],
         "required_invariants": [
           "suspendedIt.whenComplete((it, _) -> {",
           "return suspendedIt.isDone();"
@@ -493,7 +531,7 @@
         "new_string": "            // - A previous .batchCompleted() call already flushed out pending messages\n            // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.\n        });\n    }",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "            activeIt.close();",
           "            completionFuture.complete(null);",
@@ -504,14 +542,24 @@
           "    public boolean suspended() {",
           "        return activeIt != null;"
         ],
-        "adaptation_type": "TYPE_I",
-        "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_III",
+        "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [],
-        "namespace_only_possible": false,
-        "namespace_changes": [],
+        "blockers": [
+          "Method signature and internal variable usage changed from activeIt to suspendedIt",
+          "Detected target location line 138 differs from mainline 135",
+          "API drift requires adapting method internals and usage of different variables"
+        ],
+        "namespace_only_possible": true,
+        "namespace_changes": [
+          {
+            "from": "activeIt",
+            "to": "suspendedIt",
+            "reason": "Variable renamed or replaced in new API"
+          }
+        ],
         "required_invariants": [
           "suspendedIt.whenComplete((it, _) -> {",
           "return suspendedIt.isDone();"
@@ -532,29 +580,39 @@
         "target_file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
         "operation_index": 2,
         "edit_type": "replace",
-        "old_string": "\n    public boolean suspended() {\n        return activeIt != null;\n    }",
-        "new_string": "\n    public boolean suspended() {\n        return suspendedIt.isDone();\n    }",
+        "old_string": "    public boolean suspended() {\n        return activeIt != null;",
+        "new_string": "    public boolean suspended() {\n        return activeIt != null;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|guard_revert_required_replace|type_v_repaired|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
-          "            // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.",
           "        }",
-          "    }"
+          "    }",
+          ""
         ],
         "surround_after_3": [
+          "    }",
           "",
-          "    public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {",
-          "        if (!this.resultReceiver.completionFuture().isDone()) {"
+          "    public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {"
         ],
-        "adaptation_type": "TYPE_I",
-        "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_III",
+        "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [],
-        "namespace_only_possible": false,
-        "namespace_changes": [],
+        "blockers": [
+          "Method signature and internal variable usage changed from activeIt to suspendedIt",
+          "Detected target location line 138 differs from mainline 135",
+          "API drift requires adapting method internals and usage of different variables"
+        ],
+        "namespace_only_possible": true,
+        "namespace_changes": [
+          {
+            "from": "activeIt",
+            "to": "suspendedIt",
+            "reason": "Variable renamed or replaced in new API"
+          }
+        ],
         "required_invariants": [
           "suspendedIt.whenComplete((it, _) -> {",
           "return suspendedIt.isDone();"
@@ -579,7 +637,7 @@
         "new_string": "\n    public void resume() {\n        assert suspended() : \"resume must only be called if suspended() returned true\";\n        BatchIterator<Row> it = null;\n        try {\n            it = suspendedIt.join();\n            suspendedIt = new CompletableFuture<>();\n            resultReceiver.setNextRow(it.currentElement());\n            consumeIt(it);\n        } catch (Throwable t) {\n            if (it != null) {\n                it.close();\n            }\n            completionFuture.completeExceptionally(t);\n            resultReceiver.fail(t);\n        }\n    }",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|guard_revert_required_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "        this.resultReceiver = resultReceiver;",
           "        this.maxRows = maxRows;",
@@ -590,12 +648,17 @@
           "    @Override",
           "    public String toString() {"
         ],
-        "adaptation_type": "TYPE_I",
-        "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Detected target resume() method starts at line 162, mainline at 159",
+          "Surrounding context lines differ: mainline before patch context is unrelated to target context",
+          "API drift map is empty, no direct signature or API changes to explain difference",
+          "Build failure in test code due to missing method 'waitingForWrite' indicates structural or API mismatch"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -628,7 +691,7 @@
         "new_string": "               \", maxRows=\" + maxRows +\n               \", rowCount=\" + rowCount +\n               \", activeIt=\" + suspendedIt +\n               '}';",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "    public String toString() {",
           "        return \"RowConsumerToResultReceiver{\" +",
@@ -638,13 +701,13 @@
           "    }",
           "}"
         ],
-        "adaptation_type": "TYPE_I",
-        "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": true,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": false,
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [
           "\", activeIt=\" + suspendedIt +"
@@ -671,7 +734,7 @@
         "new_string": "            LOGGER.debug(\"method=sync activeExecution={}\", activeExecution);\n            var result = activeExecution;",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "        if (activeExecution == null) {",
           "            return triggerDeferredExecutions(forceBulk);",
@@ -682,12 +745,16 @@
           "            return result;",
           "        }"
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": true,
-        "blockers": [],
+        "blockers": [
+          "Detected target surrounding context differs significantly from mainline pre-patch surrounding context",
+          "Target method sync(boolean) appears structurally different with different surrounding lines",
+          "API drift map shows missing method validateStatementLength, indicating structural differences in codebase"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -713,7 +780,7 @@
         "new_string": "\n    private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {\n        int numDeferred = deferredExecutionsByStmt.size();\n        LOGGER.debug(\"method=sync deferredExecutions={}\", numDeferred);\n        switch (numDeferred) {\n            case 0:",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|guard_revert_required_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "        ScheduledFuture<?> schedule = scheduler.schedule(kill, remainingTimeoutMs, TimeUnit.MILLISECONDS);",
           "        result.whenComplete((_, _) -> schedule.cancel(false));",
@@ -724,12 +791,17 @@
           "                return CompletableFuture.completedFuture(null);",
           "            case 1: {"
         ],
-        "adaptation_type": "TYPE_II",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_III",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Detected target start line (663) differs from mainline old-start line (679)",
+          "Pre-patch surrounding context before and after lines differ between mainline and target",
+          "API drift indicates method signature changes (parameter changes) affecting usage",
+          "Build failure due to missing symbol 'waitingForWrite' suggests deeper API or structural differences"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -757,7 +829,7 @@
         "new_string": "",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_delete",
+        "notes": "required_op_delete|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "    private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {",
           "        switch (deferredExecutionsByStmt.size()) {",
@@ -768,12 +840,17 @@
           "            case 1: {",
           "                var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();"
         ],
-        "adaptation_type": "TYPE_II",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_III",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Detected target start line (663) differs from mainline old-start line (679)",
+          "Pre-patch surrounding context before and after lines differ between mainline and target",
+          "API drift indicates method signature changes (parameter changes) affecting usage",
+          "Build failure due to missing symbol 'waitingForWrite' suggests deeper API or structural differences"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -801,7 +878,7 @@
         "new_string": "            }\n            default: {\n                // Mix of different deferred execution is PG specific.\n                // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "                var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();",
           "                deferredExecutionsByStmt.clear();",
@@ -812,13 +889,13 @@
           "                CompletableFuture<?> allCompleted = null;",
           "                for (var entry : deferredExecutionsByStmt.entrySet()) {"
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
         "blockers": [],
-        "namespace_only_possible": false,
+        "namespace_only_possible": true,
         "namespace_changes": [],
         "required_invariants": [],
         "required_symbols": [],
@@ -834,16 +911,38 @@
       }
     ]
   },
-  "last_plan_signature": "26d6f32f9096339e0ba101acc1ffc0e4785037d20228beb2afb30dca87239c99",
+  "last_plan_signature": "d39c4068aa854454dada12025aa8eb60b476fe5dd22e498e79663d40bf2c96b4",
   "validation_repeated_plan_detected": false,
-  "force_type_v_until_success": false,
-  "force_type_v_reason": "",
-  "force_type_v_retry_files": [],
+  "force_type_v_until_success": true,
+  "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
+  "force_type_v_retry_files": [
+    "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+    "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+    "server/src/main/java/io/crate/session/Session.java"
+  ],
   "token_usage": {
-    "input_tokens": 0,
-    "output_tokens": 0,
-    "total_tokens": 0,
-    "estimated": false,
-    "sources": []
+    "input_tokens": 37346,
+    "output_tokens": 6194,
+    "total_tokens": 43540,
+    "estimated": true,
+    "sources": [
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken",
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken",
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken",
+      "planning_agent.provider_usage"
+    ]
   }
 }

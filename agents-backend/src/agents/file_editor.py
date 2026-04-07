@@ -187,6 +187,14 @@ Here is the original git patch from the mainline project. You must backport the 
 {patch_diff}
 ```
 
+## str_replace Edit Plan
+The following plan entries contain candidate `old_string` / `new_string` pairs for each hunk.
+Entries marked `verified: true` match the target file exactly — try those with `edit_file()` first.
+Entries marked `verified: false` are best-effort hints; if `old_string` is not found, adapt the edit using the mainline diff and semantic blueprint above.
+```json
+{hunk_generation_plan}
+```
+
 ## Structural Mapping Hints
 The structural locator has provided hints about where these hunks might belong in the target file:
 {mapping_hints}
@@ -385,10 +393,72 @@ def _build_fallback_plan_entries(
         )
 
         if edit_type in {"insert_after", "insert_before"}:
-            context = _extract_context_lines(raw_hunk)
-            anchor = context[0] if context else ""
+            # For insert_after: the ideal anchor is the last context line BEFORE the
+            # additions in the hunk (the line right before the first `+`).  Using the
+            # first context line of the hunk places the insertion too early.
+            # For insert_before: use the first context line AFTER the additions.
+            hunk_body = (raw_hunk or "").splitlines()[1:]
+            before_adds: list[str] = []
+            after_adds: list[str] = []
+            found_add = False
+            for hl in hunk_body:
+                if hl.startswith("+") and not hl.startswith("+++"):
+                    found_add = True
+                elif hl.startswith(" "):
+                    (after_adds if found_add else before_adds).append(hl[1:])
+
+            if edit_type == "insert_after":
+                # Last non-blank context line before the additions
+                anchor = next(
+                    (c for c in reversed(before_adds) if c.strip()), ""
+                )
+            else:
+                # First non-blank context line after the additions
+                anchor = next((c for c in after_adds if c.strip()), "")
+                # Fall back to before_adds if no after context
+                if not anchor:
+                    anchor = next((c for c in reversed(before_adds) if c.strip()), "")
+
             old_string = anchor
             new_string = (anchor + "\n" + new_string) if anchor else new_string
+        elif edit_type == "replace":
+            # For replace edits, old_string is only the removed lines. If those lines
+            # appear multiple times in the file, validate_plan_before_apply will reject
+            # with ambiguous_old_string. Expand old_string with surrounding context
+            # lines (up to 2 before and 2 after) to make the match unique.
+            hunk_body = (raw_hunk or "").splitlines()[1:]
+            ctx_before: list[str] = []
+            ctx_after: list[str] = []
+            found_del = False
+            found_after_del = False
+            for hl in hunk_body:
+                is_add = hl.startswith("+") and not hl.startswith("+++")
+                is_del = hl.startswith("-") and not hl.startswith("---")
+                is_ctx = hl.startswith(" ")
+                if is_del:
+                    found_del = True
+                    found_after_del = False
+                elif is_ctx:
+                    if not found_del:
+                        ctx_before.append(hl[1:])
+                    elif not found_after_del:
+                        ctx_after.append(hl[1:])
+                elif is_add and found_del:
+                    found_after_del = True
+
+            # Use up to 2 context lines before and 2 after for disambiguation
+            prefix_lines = [l for l in ctx_before if l.strip()][-2:]
+            suffix_lines = [l for l in ctx_after if l.strip()][:2]
+
+            if prefix_lines or suffix_lines:
+                prefix = "\n".join(prefix_lines)
+                suffix = "\n".join(suffix_lines)
+                if prefix_lines:
+                    old_string = prefix + "\n" + old_string
+                    new_string = prefix + "\n" + new_string
+                if suffix_lines:
+                    old_string = old_string + "\n" + suffix
+                    new_string = new_string + "\n" + suffix
 
         entries.append(
             {
@@ -1901,8 +1971,8 @@ def _react_tool_budget_for_complexity(complexity: str) -> int:
     if c == "TRIVIAL":
         return 4
     if c == "STRUCTURAL":
-        return 10
-    return 24
+        return 20
+    return 30
 
 
 def _tool_call_signature(name: str, args: Any) -> str:
@@ -2058,6 +2128,15 @@ async def _run_react_edit_pass(
         )
 
     tool_budget = _react_tool_budget_for_complexity(patch_complexity)
+    if type_v_mode:
+        # TYPE_V always gets at least 30 tool calls — enough for structural adaptation.
+        type_v_base_cap = _to_int_env(
+            "FILE_EDITOR_REACT_TYPE_V_RETRY_TOOL_BUDGET",
+            default=30,
+            minimum=10,
+            maximum=120,
+        )
+        tool_budget = max(tool_budget, type_v_base_cap)
     if validation_attempts > 0:
         if type_v_mode:
             type_v_retry_cap = _to_int_env(
@@ -2066,7 +2145,7 @@ async def _run_react_edit_pass(
                 minimum=10,
                 maximum=120,
             )
-            tool_budget = max(10, min(tool_budget, type_v_retry_cap))
+            tool_budget = max(tool_budget, type_v_retry_cap)
         else:
             retry_cap = _to_int_env(
                 "FILE_EDITOR_REACT_RETRY_TOOL_BUDGET",
@@ -2709,6 +2788,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
             if "partial_apply" in _mfp_reason:
                 _git_reset_file(target_repo_path, target_file)
 
+        _preflight_fail_reason: str = ""
         if deterministic_only and target_file.lower().endswith(".java"):
             try:
                 fp = os.path.normpath(
@@ -2730,9 +2810,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 )
                 if not _pr.ok:
                     agent_metrics["plan_preflight_failures"] += 1
-                    _react_recovery = (not first_pass_dumb_mode) and (
-                        validation_attempts > 0
-                        or bool(state.get("evaluation_full_workflow"))
+                    _react_recovery = validation_attempts > 0 or bool(
+                        state.get("evaluation_full_workflow")
                     )
                     if _react_recovery:
                         print(
@@ -2740,6 +2819,14 @@ async def file_editor_node(state: AgentState, config) -> dict:
                             "— falling back to ReAct (stale anchors after build failure or eval mode)."
                         )
                         deterministic_only = False
+                        # Force TYPE_V mode so the ReAct agent gets the structural-adaptation
+                        # system prompt instead of the naive "apply these edits" prompt.
+                        # Without this, the agent spends its whole budget on reads trying to
+                        # find anchors that don't exist in the target file.
+                        execution_types = execution_types | {"TYPE_V"}
+                        # Record the preflight reason so the else-branch ReAct call can
+                        # include it as extra_retry_context.
+                        _preflight_fail_reason = str(_pr.reason)
                     else:
                         print(
                             f"    Agent 3: PLAN_PREFLIGHT_FAILED {target_file}: {_pr.reason} "
@@ -2786,6 +2873,31 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         f"    Agent 3: TYPE_V has {len(unverified_entries)} unverified entries; "
                         "attempting targeted ReAct repair instead of empty-generation fail-close."
                     )
+                    # Apply verified entries deterministically BEFORE ReAct so the LLM
+                    # doesn't need to re-derive them (and doesn't accidentally skip them).
+                    verified_entries = [
+                        e for e in plan_entries if bool((e or {}).get("verified", False))
+                    ]
+                    if verified_entries:
+                        _pre_ok, _pre_reason = _apply_plan_entries_deterministically(
+                            toolkit=toolkit,
+                            target_repo_path=target_repo_path,
+                            target_file=target_file,
+                            plan_entries=verified_entries,
+                            current_attempt_trajectory=current_attempt_trajectory,
+                            strict_exact=False,
+                        )
+                        if _pre_ok:
+                            print(
+                                f"    Agent 3: TYPE_V pre-applied {len(verified_entries)} "
+                                "verified entries before ReAct."
+                            )
+                        else:
+                            print(
+                                f"    Agent 3: TYPE_V pre-apply of verified entries failed "
+                                f"({_pre_reason}); proceeding to ReAct with full plan."
+                            )
+                            _git_reset_file(target_repo_path, target_file)
 
             if deterministic_only:
                 agent_metrics["deterministic_apply_attempts"] += 1
@@ -2867,6 +2979,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     current_attempt_trajectory=current_attempt_trajectory,
                     patch_complexity=patch_complexity,
                     type_v_mode=("TYPE_V" in execution_types),
+                    extra_retry_context=_preflight_fail_reason or None,
                     token_usage=token_usage,
                 )
                 if not react_ok:

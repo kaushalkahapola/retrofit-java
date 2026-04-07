@@ -1,0 +1,114 @@
+{
+  "surgical_plans": {},
+  "reasoning_context": {
+    "current_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+    "failure_kind": "anchor_not_found",
+    "build_diagnostics": {
+      "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+      "issues": [
+        {
+          "error_type": "api_or_signature_mismatch",
+          "suggested_action": "replan_and_regenerate_with_api_compatibility",
+          "compiler_errors": [
+            "[ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[150,12] error: method executePlan in class ExplainPlan cannot be applied to given types;",
+            "[ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[256,32] error: method executePlan in class ExplainPlan cannot be applied to given types;",
+            "[ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[274,12] error: cannot find symbol",
+            "[ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[290,20] error: cannot find symbol",
+            "[ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[299,45] error: cannot find symbol",
+            "[ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[150,12] error: method executePlan in class ExplainPlan cannot be applied to given types;",
+            "[ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[256,32] error: method executePlan in class ExplainPlan cannot be applied to given types;",
+            "[ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[274,12] error: cannot find symbol",
+            "[ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[290,20] error: cannot find symbol",
+            "[ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[299,45] error: cannot find symbol"
+          ]
+        }
+      ],
+      "failed_locations": [
+        {
+          "file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "line": 150
+        },
+        {
+          "file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "line": 256
+        },
+        {
+          "file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "line": 274
+        },
+        {
+          "file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "line": 290
+        },
+        {
+          "file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "line": 299
+        },
+        {
+          "file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "line": 150
+        },
+        {
+          "file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "line": 256
+        },
+        {
+          "file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "line": 274
+        },
+        {
+          "file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "line": 290
+        },
+        {
+          "file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "line": 299
+        }
+      ],
+      "symbol_errors": [
+        {
+          "kind": "variable",
+          "name": "isTopLevel"
+        },
+        {
+          "kind": "variable",
+          "name": "selectSymbol"
+        },
+        {
+          "kind": "variable",
+          "name": "selectSymbol"
+        },
+        {
+          "kind": "variable",
+          "name": "isTopLevel"
+        },
+        {
+          "kind": "variable",
+          "name": "selectSymbol"
+        },
+        {
+          "kind": "variable",
+          "name": "selectSymbol"
+        }
+      ],
+      "signature_errors": [],
+      "primary_failed_symbol": "isTopLevel",
+      "raw_error_preview": "Build failed: API/signature mismatch in generated patch against target branch. Compiler errors: [ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[150,12] error: method executePlan in class ExplainPlan cannot be applied to given types; | [ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[256,32] error: method executePlan in class ExplainPlan cannot be applied to given types; | [ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[274,12] error: cannot find symbol | [ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[290,20] error: cannot find symbol | [ERROR] /repo/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java:[299,45] error: cannot find symbol"
+    },
+    "side_files": [
+      "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java"
+    ],
+    "iteration": 2,
+    "surgical_ops": []
+  },
+  "reasoning_iterations": 2,
+  "token_usage": {
+    "input_tokens": 179971,
+    "output_tokens": 1118,
+    "total_tokens": 181089,
+    "estimated": false,
+    "sources": [
+      "reasoning_architect.react.aggregate_usage"
+    ]
+  }
+}

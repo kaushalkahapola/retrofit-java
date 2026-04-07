@@ -18,25 +18,25 @@
         "hunk_index": 2,
         "mainline_method": "hunk_2",
         "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
-        "target_method": null,
+        "target_method": "currentState",
         "start_line": 196,
         "end_line": 196,
         "code_snippet": "            AlterTableRequest request = new AlterTableRequest(\n                analysis.table().ident(),\n                partitionName == null ? List.of() : partitionName.values(),\n                analysis.isPartitioned(),\n                analysis.excludePartitions(),\n                analysis.settings()\n            );\n            return client.execute(TransportAlterTable.ACTION, request).thenApply(_ -> -1L);\n        } catch (IOException e) {\n            return CompletableFuture.failedFuture(e);\n        }\n    }\n\n    private CompletableFuture<Long> resize(BoundAlterTable analysis) {\n        final TableInfo table = analysis.table();\n        PartitionName partitionName = analysis.partitionName();\n        final ClusterState currentState = clusterService.state();\n        List<String> partitionValues = partitionName == null\n            ? List.of()\n            : partitionName.values();\n        IndexMetadata sourceIndexMetadata = currentState.metadata().getIndex(table.ident(), partitionValues, true, im -> im);\n        if (sourceIndexMetadata == null) {\n            throw new RelationUnknown(\n                String.format(Locale.ENGLISH, \"Table/Partition '%s' does not exist\", table.ident().fqn()));\n        }\n\n        final int targetNumberOfShards = getNumberOfShards(analysis.settings());\n        validateNumberOfShardsForResize(sourceIndexMetadata, targetNumberOfShards);\n        validateReadOnlyIndexForResize(sourceIndexMetadata);\n\n        final ResizeRequest request = new ResizeRequest(\n            table.ident(),\n            partitionName == null ? List.of() : partitionName.values(),\n            targetNumberOfShards\n        );\n        return deleteTempIndices()\n            .thenCompose(_ -> client.execute(TransportResize.ACTION, request))\n            .thenApply(_ -> 0L);\n    }\n\n    @VisibleForTesting",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:field_declaration",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       },
       {
         "hunk_index": 3,
         "mainline_method": "hunk_3",
         "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
-        "target_method": null,
+        "target_method": "deleteTempIndices",
         "start_line": 211,
         "end_line": 211,
         "code_snippet": "        PartitionName partitionName = analysis.partitionName();\n        final ClusterState currentState = clusterService.state();\n        List<String> partitionValues = partitionName == null\n            ? List.of()\n            : partitionName.values();\n        IndexMetadata sourceIndexMetadata = currentState.metadata().getIndex(table.ident(), partitionValues, true, im -> im);\n        if (sourceIndexMetadata == null) {\n            throw new RelationUnknown(\n                String.format(Locale.ENGLISH, \"Table/Partition '%s' does not exist\", table.ident().fqn()));\n        }\n\n        final int targetNumberOfShards = getNumberOfShards(analysis.settings());\n        validateNumberOfShardsForResize(sourceIndexMetadata, targetNumberOfShards);\n        validateReadOnlyIndexForResize(sourceIndexMetadata);\n\n        final ResizeRequest request = new ResizeRequest(\n            table.ident(),\n            partitionName == null ? List.of() : partitionName.values(),\n            targetNumberOfShards\n        );\n        return deleteTempIndices()\n            .thenCompose(_ -> client.execute(TransportResize.ACTION, request))\n            .thenApply(_ -> 0L);\n    }\n\n    @VisibleForTesting\n    static int getNumberOfShards(final Settings settings) {\n        return Objects.requireNonNull(\n            settings.getAsInt(SETTING_NUMBER_OF_SHARDS, null),\n            \"Setting 'number_of_shards' is missing\"\n        );\n    }\n\n    @VisibleForTesting\n    static void validateNumberOfShardsForResize(IndexMetadata indexMetadata, int targetNumberOfShards) {\n        final int currentNumberOfShards = indexMetadata.getNumberOfShards();\n        if (currentNumberOfShards == targetNumberOfShards) {\n            throw new IllegalArgumentException(\n                String.format(Locale.ENGLISH,\n                    \"Table/partition is already allocated <%d> shards\",\n                    currentNumberOfShards));",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       },
       {
         "hunk_index": 4,
@@ -70,13 +70,13 @@
         "hunk_index": 1,
         "mainline_method": "hunk_1",
         "target_file": "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java",
-        "target_method": null,
+        "target_method": "executor",
         "start_line": 95,
         "end_line": 95,
         "code_snippet": "            AcknowledgedResponse::new,\n            AcknowledgedResponse::new,\n            \"gc\"\n        );\n        executor = new DDLClusterStateTaskExecutor<>() {\n            @Override\n            protected ClusterState execute(ClusterState currentState,\n                                           GCDanglingArtifactsRequest gcDanglingArtifactsRequest) {\n                Metadata metadata = currentState.metadata();\n\n                Set<Index> danglingIndicesToDelete = new HashSet<>();\n                Set<Index> allTableIndices = new HashSet<>();\n                for (RelationMetadata rm : metadata.relations(RelationMetadata.class)) {\n                    allTableIndices.addAll(metadata.getIndices(\n                        rm.name(),\n                        List.of(),\n                        false,\n                        IndexMetadata::getIndex)\n                    );\n                }\n                for (ObjectCursor<IndexMetadata> indexMetadata : metadata.indices().values()) {\n                    Index index = indexMetadata.value.getIndex();\n                    if (allTableIndices.contains(index) == false) {\n                        danglingIndicesToDelete.add(index);\n                    }\n                }\n\n                if (danglingIndicesToDelete.isEmpty()) {\n                    return currentState;\n                }\n                return deleteIndexService.deleteIndices(currentState, danglingIndicesToDelete);\n            }\n        };\n    }\n\n    @Override\n    public ClusterStateTaskExecutor<GCDanglingArtifactsRequest> clusterStateTaskExecutor(GCDanglingArtifactsRequest request) {\n        return executor;\n    }\n\n    @Override",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:field_declaration",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ],
     "server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java": [
@@ -84,13 +84,13 @@
         "hunk_index": 1,
         "mainline_method": "hunk_1",
         "target_file": "server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java",
-        "target_method": null,
+        "target_method": "type",
         "start_line": 45,
         "end_line": 45,
         "code_snippet": "import io.crate.data.RowConsumer;\nimport io.crate.execution.ddl.tables.GCDanglingArtifactsRequest;\nimport io.crate.execution.ddl.tables.TransportGCDanglingArtifacts;\nimport io.crate.execution.support.OneRowActionListener;\nimport io.crate.planner.operators.SubQueryResults;\n\npublic final class GCDanglingArtifactsPlan implements Plan {\n\n    @Override\n    public StatementType type() {\n        return StatementType.MANAGEMENT;\n    }\n\n    @Override\n    public void executeOrFail(DependencyCarrier dependencies,\n                              PlannerContext plannerContext,\n                              RowConsumer consumer,\n                              Row params,\n                              SubQueryResults subQueryResults) {\n        var listener = OneRowActionListener.oneIfAcknowledged(consumer);\n        dependencies.client().execute(TransportGCDanglingArtifacts.ACTION, GCDanglingArtifactsRequest.INSTANCE)\n            .whenComplete(listener);\n    }\n}",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ],
     "server/src/main/java/org/elasticsearch/Version.java": [
@@ -98,13 +98,13 @@
         "hunk_index": 1,
         "mainline_method": "hunk_1",
         "target_file": "server/src/main/java/org/elasticsearch/Version.java",
-        "target_method": null,
+        "target_method": "V_6_0_1",
         "start_line": 206,
         "end_line": 206,
         "code_snippet": "    public static final Version V_5_9_12 = new Version(8_09_12_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_13 = new Version(8_09_13_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n\n    public static final Version V_5_10_0 = new Version(8_10_00_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_1 = new Version(8_10_01_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_2 = new Version(8_10_02_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_3 = new Version(8_10_03_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_4 = new Version(8_10_04_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_5 = new Version(8_10_05_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_6 = new Version(8_10_06_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_7 = new Version(8_10_07_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_8 = new Version(8_10_08_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_9 = new Version(8_10_09_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_10 = new Version(8_10_10_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_11 = new Version(8_10_11_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_12 = new Version(8_10_12_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_13 = new Version(8_10_13_99, false, Lucene.luceneVersion(9, 12, 3));\n    public static final Version V_5_10_14 = new Version(8_10_14_99, false, Lucene.luceneVersion(9, 12, 3));\n\n    public static final Version V_6_0_0 = new Version(9_00_00_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);\n    public static final Version V_6_0_1 = new Version(9_00_01_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);\n    public static final Version V_6_0_2 = new Version(9_00_02_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);\n    public static final Version V_6_0_3 = new Version(9_00_03_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);\n\n    public static final Version V_6_1_0 = new Version(9_01_00_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);\n    public static final Version V_6_1_1 = new Version(9_01_01_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);\n\n    public static final Version CURRENT = V_6_1_1;\n\n    private static final ImmutableOpenIntMap<Version> ID_TO_VERSION;\n    private static final ImmutableOpenMap<String, Version> STRING_TO_VERSION;\n\n    static {\n        final ImmutableOpenIntMap.Builder<Version> builder = ImmutableOpenIntMap.builder();\n        final ImmutableOpenMap.Builder<String, Version> builderByString = ImmutableOpenMap.builder();\n\n        for (final Field declaredField : Version.class.getFields()) {\n            if (declaredField.getType().equals(Version.class)) {\n                final String fieldName = declaredField.getName();\n                if (fieldName.equals(\"CURRENT\") || fieldName.equals(\"V_EMPTY\")) {\n                    continue;",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:field_declaration",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ],
     "server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java": [
@@ -124,13 +124,13 @@
         "hunk_index": 2,
         "mainline_method": "hunk_2",
         "target_file": "server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java",
-        "target_method": null,
+        "target_method": "resizedIndexUUID",
         "start_line": 123,
         "end_line": 123,
         "code_snippet": "    }\n\n    @Override\n    protected void masterOperation(final ResizeRequest request,\n                                   final ClusterState state,\n                                   final ActionListener<ResizeResponse> listener) {\n        if (state.nodes().getMinNodeVersion().onOrAfter(Version.V_6_0_0) == false) {\n            throw new IllegalStateException(\"Cannot resize a table/partition until all nodes are upgraded to 6.0\");\n        }\n\n        final String sourceIndexUUID = state.metadata().getIndex(request.table(), request.partitionValues(), true, IndexMetadata::getIndexUUID);\n        final String resizedIndexUUID = UUIDs.randomBase64UUID();\n\n        client.stats(new IndicesStatsRequest(new PartitionName(request.table(), request.partitionValues()))\n            .clear()\n            .docs(true))\n            .thenCompose(statsResponse -> createIndexService.resizeIndex(request, sourceIndexUUID, resizedIndexUUID, statsResponse))\n            .thenCompose(resizeResp -> {\n                if (resizeResp.isAcknowledged() && resizeResp.isShardsAcknowledged()) {\n                    SwapAndDropIndexRequest req = new SwapAndDropIndexRequest(resizedIndexUUID, sourceIndexUUID);\n                    return swapAndDropIndexAction.execute(req).thenApply(ignored -> resizeResp);\n                } else {\n                    return gcDanglingArtifactsAction.execute(GCDanglingArtifactsRequest.INSTANCE).handle(\n                        (ignored, err) -> {\n                            throw new IllegalStateException(\n                                \"Resize operation wasn't acknowledged. Check shard allocation and retry\", err);\n                        });\n                }\n            })\n\n            .whenComplete(listener);\n    }\n}",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:field_declaration",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ]
   },

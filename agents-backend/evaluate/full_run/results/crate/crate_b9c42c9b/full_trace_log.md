@@ -6,7 +6,7 @@
 **server/src/main/java/io/crate/protocols/postgres/Portal.java** [replace]
 ```java
 // --- OLD ---
-<developer patch fast path>
+<mainline patch fast path>
 // --- NEW ---
 diff --git a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/server/src/main/java/io/crate/protocols/postgres/Portal.java
 index 8dcba13cda..c4bf4f630a 100644
@@ -35,27 +35,18 @@ index 8dcba13cda..c4bf4f630a 100644
 **server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java** [replace]
 ```java
 // --- OLD ---
-<developer patch fast path>
+<mainline patch fast path>
 // --- NEW ---
 diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
-index 6ecea107b3..4d54effe4e 100644
+index 6ecea107b3..9c4fda3d25 100644
 --- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
 +++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
-@@ -27,6 +27,7 @@ import java.util.function.Consumer;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
- import org.jetbrains.annotations.Nullable;
-+import org.jetbrains.annotations.VisibleForTesting;
- 
- import io.crate.data.BatchIterator;
- import io.crate.data.Row;
-@@ -45,12 +46,13 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -45,12 +45,12 @@ public class RowConsumerToResultReceiver implements RowConsumer {
       * Reset per suspend/execute
       */
      private int rowCount = 0;
 -    private BatchIterator<Row> activeIt;
 +    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();
-+    private boolean waitingForWrite = false;
  
      public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {
          this.resultReceiver = resultReceiver;
@@ -65,7 +56,7 @@ index 6ecea107b3..4d54effe4e 100644
              onCompletion.accept(err);
          });
      }
-@@ -77,23 +79,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -77,23 +77,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {
          while (true) {
              try {
                  while (iterator.moveNext()) {
@@ -79,11 +70,11 @@ index 6ecea107b3..4d54effe4e 100644
                      if (writeFuture != null) {
                          LOGGER.trace("Suspended execution after {} rows as the receiver is not writable anymore", rowCount);
 -                        activeIt = iterator;
-+                        waitingForWrite = true;
++                        suspendedIt.complete(iterator);
                          writeFuture.thenRun(() -> {
                              LOGGER.trace("Resume execution after {} rows", rowCount);
 -                            resume();
-+                            waitingForWrite = false;
++                            suspendedIt = new CompletableFuture<>();
 +                            rowCount = 0;
 +                            consumeIt(iterator);
                          });
@@ -98,7 +89,7 @@ index 6ecea107b3..4d54effe4e 100644
                  }
                  if (iterator.allLoaded()) {
                      completionFuture.complete(null);
-@@ -109,7 +112,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -109,7 +110,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
                          }
                          continue;
                      }
@@ -107,7 +98,7 @@ index 6ecea107b3..4d54effe4e 100644
                          if (f == null) {
                              consumeIt(iterator);
                          } else {
-@@ -135,17 +138,22 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -135,17 +136,17 @@ public class RowConsumerToResultReceiver implements RowConsumer {
       * and finish the ResultReceiver
       */
      public void closeAndFinishIfSuspended() {
@@ -126,15 +117,10 @@ index 6ecea107b3..4d54effe4e 100644
      public boolean suspended() {
 -        return activeIt != null;
 +        return suspendedIt.isDone();
-+    }
-+
-+    @VisibleForTesting
-+    public boolean waitingForWrite() {
-+        return waitingForWrite;
      }
  
      public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {
-@@ -159,10 +167,21 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -159,10 +160,20 @@ public class RowConsumerToResultReceiver implements RowConsumer {
      }
  
      public void resume() {
@@ -148,7 +134,6 @@ index 6ecea107b3..4d54effe4e 100644
 +            it = suspendedIt.join();
 +            suspendedIt = new CompletableFuture<>();
 +            resultReceiver.setNextRow(it.currentElement());
-+            rowCount++;
 +            consumeIt(it);
 +        } catch (Throwable t) {
 +            if (it != null) {
@@ -160,7 +145,7 @@ index 6ecea107b3..4d54effe4e 100644
      }
  
      @Override
-@@ -171,7 +190,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+@@ -171,7 +182,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
                 "resultReceiver=" + resultReceiver +
                 ", maxRows=" + maxRows +
                 ", rowCount=" + rowCount +
@@ -173,7 +158,399 @@ index 6ecea107b3..4d54effe4e 100644
 **server/src/main/java/io/crate/session/Session.java** [replace]
 ```java
 // --- OLD ---
-<developer patch fast path>
+<mainline patch fast path>
+// --- NEW ---
+diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java
+index dd4bfdf4ed..60c4f48565 100644
+--- a/server/src/main/java/io/crate/session/Session.java
++++ b/server/src/main/java/io/crate/session/Session.java
+@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {
+         if (activeExecution == null) {
+             return triggerDeferredExecutions(forceBulk);
+         } else {
++            LOGGER.debug("method=sync activeExecution={}", activeExecution);
+             var result = activeExecution;
+             activeExecution = null;
+             return result;
+@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {
+     }
+ 
+     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {
+-        switch (deferredExecutionsByStmt.size()) {
++        int numDeferred = deferredExecutionsByStmt.size();
++        LOGGER.debug("method=sync deferredExecutions={}", numDeferred);
++        switch (numDeferred) {
+             case 0:
+-                LOGGER.debug("method=sync deferredExecutions=0");
+                 return CompletableFuture.completedFuture(null);
+             case 1: {
+                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();
+@@ -670,7 +672,7 @@ public class Session implements AutoCloseable {
+                 return exec(deferredExecutions, forceBulk);
+             }
+             default: {
+-                // Mix of different defered execution is PG specific.
++                // Mix of different deferred execution is PG specific.
+                 // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.
+                 // sequentiallize execution to ensure client receives row counts in correct order
+                 CompletableFuture<?> allCompleted = null;
+```
+
+## Attempt #2
+
+### Final Output Diff
+**server/src/main/java/io/crate/protocols/postgres/Portal.java** [replace]
+```java
+// --- OLD ---
+<mainline patch fast path>
+// --- NEW ---
+diff --git a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/server/src/main/java/io/crate/protocols/postgres/Portal.java
+index 8dcba13cda..c4bf4f630a 100644
+--- a/server/src/main/java/io/crate/protocols/postgres/Portal.java
++++ b/server/src/main/java/io/crate/protocols/postgres/Portal.java
+@@ -25,9 +25,9 @@ import java.util.List;
+ 
+ import org.jetbrains.annotations.Nullable;
+ 
++import io.crate.analyze.AnalyzedStatement;
+ import io.crate.session.PreparedStmt;
+ import io.crate.session.RowConsumerToResultReceiver;
+-import io.crate.analyze.AnalyzedStatement;
+ 
+ public final class Portal {
+ 
+@@ -91,6 +91,7 @@ public final class Portal {
+         return "Portal{" +
+                "portalName=" + portalName +
+                ", preparedStmt=" + preparedStmt.rawStatement() +
++               ", consumer=" + consumer +
+                '}';
+     }
+ }
+```
+**server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java** [replace]
+```java
+// --- OLD ---
+<mainline patch fast path>
+// --- NEW ---
+diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+index 6ecea107b3..9c4fda3d25 100644
+--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
++++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+@@ -45,12 +45,12 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+      * Reset per suspend/execute
+      */
+     private int rowCount = 0;
+-    private BatchIterator<Row> activeIt;
++    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();
+ 
+     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {
+         this.resultReceiver = resultReceiver;
+         this.maxRows = maxRows;
+-        completionFuture.whenComplete((res, err) -> {
++        completionFuture.whenComplete((_, err) -> {
+             onCompletion.accept(err);
+         });
+     }
+@@ -77,23 +77,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+         while (true) {
+             try {
+                 while (iterator.moveNext()) {
++                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {
++                        suspendedIt.complete(iterator);
++                        resultReceiver.batchFinished();
++                        return; // resumed via postgres protocol, close is done later
++                    }
+                     rowCount++;
+                     CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());
+                     if (writeFuture != null) {
+                         LOGGER.trace("Suspended execution after {} rows as the receiver is not writable anymore", rowCount);
+-                        activeIt = iterator;
++                        suspendedIt.complete(iterator);
+                         writeFuture.thenRun(() -> {
+                             LOGGER.trace("Resume execution after {} rows", rowCount);
+-                            resume();
++                            suspendedIt = new CompletableFuture<>();
++                            rowCount = 0;
++                            consumeIt(iterator);
+                         });
+                         return;
+                     }
+-
+-                    if (maxRows > 0 && rowCount % maxRows == 0) {
+-                        activeIt = iterator;
+-                        resultReceiver.batchFinished();
+-                        return; // resumed via postgres protocol, close is done later
+-                    }
+                 }
+                 if (iterator.allLoaded()) {
+                     completionFuture.complete(null);
+@@ -109,7 +110,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+                         }
+                         continue;
+                     }
+-                    nextBatch.whenComplete((r, f) -> {
++                    nextBatch.whenComplete((_, f) -> {
+                         if (f == null) {
+                             consumeIt(iterator);
+                         } else {
+@@ -135,17 +136,17 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+      * and finish the ResultReceiver
+      */
+     public void closeAndFinishIfSuspended() {
+-        if (activeIt != null) {
+-            activeIt.close();
++        suspendedIt.whenComplete((it, _) -> {
++            it.close();
+             completionFuture.complete(null);
+             // resultReceiver is left untouched:
+             // - A previous .batchCompleted() call already flushed out pending messages
+             // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.
+-        }
++        });
+     }
+ 
+     public boolean suspended() {
+-        return activeIt != null;
++        return suspendedIt.isDone();
+     }
+ 
+     public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {
+@@ -159,10 +160,20 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+     }
+ 
+     public void resume() {
+-        assert activeIt != null : "resume must only be called if suspended() returned true and activeIt is not null";
+-        BatchIterator<Row> iterator = this.activeIt;
+-        this.activeIt = null;
+-        consumeIt(iterator);
++        assert suspended() : "resume must only be called if suspended() returned true";
++        BatchIterator<Row> it = null;
++        try {
++            it = suspendedIt.join();
++            suspendedIt = new CompletableFuture<>();
++            resultReceiver.setNextRow(it.currentElement());
++            consumeIt(it);
++        } catch (Throwable t) {
++            if (it != null) {
++                it.close();
++            }
++            completionFuture.completeExceptionally(t);
++            resultReceiver.fail(t);
++        }
+     }
+ 
+     @Override
+@@ -171,7 +182,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+                "resultReceiver=" + resultReceiver +
+                ", maxRows=" + maxRows +
+                ", rowCount=" + rowCount +
+-               ", activeIt=" + activeIt +
++               ", activeIt=" + suspendedIt +
+                '}';
+     }
+ }
+```
+**server/src/main/java/io/crate/session/Session.java** [replace]
+```java
+// --- OLD ---
+<mainline patch fast path>
+// --- NEW ---
+diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java
+index dd4bfdf4ed..60c4f48565 100644
+--- a/server/src/main/java/io/crate/session/Session.java
++++ b/server/src/main/java/io/crate/session/Session.java
+@@ -611,6 +611,7 @@ public class Session implements AutoCloseable {
+         if (activeExecution == null) {
+             return triggerDeferredExecutions(forceBulk);
+         } else {
++            LOGGER.debug("method=sync activeExecution={}", activeExecution);
+             var result = activeExecution;
+             activeExecution = null;
+             return result;
+@@ -660,9 +661,10 @@ public class Session implements AutoCloseable {
+     }
+ 
+     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {
+-        switch (deferredExecutionsByStmt.size()) {
++        int numDeferred = deferredExecutionsByStmt.size();
++        LOGGER.debug("method=sync deferredExecutions={}", numDeferred);
++        switch (numDeferred) {
+             case 0:
+-                LOGGER.debug("method=sync deferredExecutions=0");
+                 return CompletableFuture.completedFuture(null);
+             case 1: {
+                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();
+@@ -670,7 +672,7 @@ public class Session implements AutoCloseable {
+                 return exec(deferredExecutions, forceBulk);
+             }
+             default: {
+-                // Mix of different defered execution is PG specific.
++                // Mix of different deferred execution is PG specific.
+                 // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.
+                 // sequentiallize execution to ensure client receives row counts in correct order
+                 CompletableFuture<?> allCompleted = null;
+```
+
+## Attempt #3
+
+### Final Output Diff
+**server/src/main/java/io/crate/protocols/postgres/Portal.java** [replace]
+```java
+// --- OLD ---
+<mainline patch fast path>
+// --- NEW ---
+diff --git a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/server/src/main/java/io/crate/protocols/postgres/Portal.java
+index 8dcba13cda..c4bf4f630a 100644
+--- a/server/src/main/java/io/crate/protocols/postgres/Portal.java
++++ b/server/src/main/java/io/crate/protocols/postgres/Portal.java
+@@ -25,9 +25,9 @@ import java.util.List;
+ 
+ import org.jetbrains.annotations.Nullable;
+ 
++import io.crate.analyze.AnalyzedStatement;
+ import io.crate.session.PreparedStmt;
+ import io.crate.session.RowConsumerToResultReceiver;
+-import io.crate.analyze.AnalyzedStatement;
+ 
+ public final class Portal {
+ 
+@@ -91,6 +91,7 @@ public final class Portal {
+         return "Portal{" +
+                "portalName=" + portalName +
+                ", preparedStmt=" + preparedStmt.rawStatement() +
++               ", consumer=" + consumer +
+                '}';
+     }
+ }
+```
+**server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java** [replace]
+```java
+// --- OLD ---
+<mainline patch fast path>
+// --- NEW ---
+diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+index 6ecea107b3..9c4fda3d25 100644
+--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
++++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+@@ -45,12 +45,12 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+      * Reset per suspend/execute
+      */
+     private int rowCount = 0;
+-    private BatchIterator<Row> activeIt;
++    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();
+ 
+     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {
+         this.resultReceiver = resultReceiver;
+         this.maxRows = maxRows;
+-        completionFuture.whenComplete((res, err) -> {
++        completionFuture.whenComplete((_, err) -> {
+             onCompletion.accept(err);
+         });
+     }
+@@ -77,23 +77,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+         while (true) {
+             try {
+                 while (iterator.moveNext()) {
++                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {
++                        suspendedIt.complete(iterator);
++                        resultReceiver.batchFinished();
++                        return; // resumed via postgres protocol, close is done later
++                    }
+                     rowCount++;
+                     CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());
+                     if (writeFuture != null) {
+                         LOGGER.trace("Suspended execution after {} rows as the receiver is not writable anymore", rowCount);
+-                        activeIt = iterator;
++                        suspendedIt.complete(iterator);
+                         writeFuture.thenRun(() -> {
+                             LOGGER.trace("Resume execution after {} rows", rowCount);
+-                            resume();
++                            suspendedIt = new CompletableFuture<>();
++                            rowCount = 0;
++                            consumeIt(iterator);
+                         });
+                         return;
+                     }
+-
+-                    if (maxRows > 0 && rowCount % maxRows == 0) {
+-                        activeIt = iterator;
+-                        resultReceiver.batchFinished();
+-                        return; // resumed via postgres protocol, close is done later
+-                    }
+                 }
+                 if (iterator.allLoaded()) {
+                     completionFuture.complete(null);
+@@ -109,7 +110,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+                         }
+                         continue;
+                     }
+-                    nextBatch.whenComplete((r, f) -> {
++                    nextBatch.whenComplete((_, f) -> {
+                         if (f == null) {
+                             consumeIt(iterator);
+                         } else {
+@@ -135,17 +136,17 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+      * and finish the ResultReceiver
+      */
+     public void closeAndFinishIfSuspended() {
+-        if (activeIt != null) {
+-            activeIt.close();
++        suspendedIt.whenComplete((it, _) -> {
++            it.close();
+             completionFuture.complete(null);
+             // resultReceiver is left untouched:
+             // - A previous .batchCompleted() call already flushed out pending messages
+             // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.
+-        }
++        });
+     }
+ 
+     public boolean suspended() {
+-        return activeIt != null;
++        return suspendedIt.isDone();
+     }
+ 
+     public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {
+@@ -159,10 +160,20 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+     }
+ 
+     public void resume() {
+-        assert activeIt != null : "resume must only be called if suspended() returned true and activeIt is not null";
+-        BatchIterator<Row> iterator = this.activeIt;
+-        this.activeIt = null;
+-        consumeIt(iterator);
++        assert suspended() : "resume must only be called if suspended() returned true";
++        BatchIterator<Row> it = null;
++        try {
++            it = suspendedIt.join();
++            suspendedIt = new CompletableFuture<>();
++            resultReceiver.setNextRow(it.currentElement());
++            consumeIt(it);
++        } catch (Throwable t) {
++            if (it != null) {
++                it.close();
++            }
++            completionFuture.completeExceptionally(t);
++            resultReceiver.fail(t);
++        }
+     }
+ 
+     @Override
+@@ -171,7 +182,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+                "resultReceiver=" + resultReceiver +
+                ", maxRows=" + maxRows +
+                ", rowCount=" + rowCount +
+-               ", activeIt=" + activeIt +
++               ", activeIt=" + suspendedIt +
+                '}';
+     }
+ }
+```
+**server/src/main/java/io/crate/session/Session.java** [replace]
+```java
+// --- OLD ---
+<mainline patch fast path>
 // --- NEW ---
 diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java
 index dd4bfdf4ed..60c4f48565 100644

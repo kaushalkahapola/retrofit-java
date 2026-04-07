@@ -1,10 +1,10 @@
 {
   "surgical_plans": {},
   "reasoning_context": {
-    "current_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+    "current_file": "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java",
     "failure_kind": "anchor_not_found",
     "build_diagnostics": {
-      "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+      "target_file": "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java",
       "issues": [
         {
           "error_type": "unknown_build_failure",
@@ -13,16 +13,8 @@
       ],
       "failed_locations": [
         {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "line": 24
-        },
-        {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "line": 26
-        },
-        {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "line": 88
+          "file": "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java",
+          "line": 25
         }
       ],
       "symbol_errors": [],
@@ -36,9 +28,9 @@
   },
   "reasoning_iterations": 2,
   "token_usage": {
-    "input_tokens": 203067,
-    "output_tokens": 882,
-    "total_tokens": 203949,
+    "input_tokens": 105296,
+    "output_tokens": 1038,
+    "total_tokens": 106334,
     "estimated": false,
     "sources": [
       "reasoning_architect.react.aggregate_usage"

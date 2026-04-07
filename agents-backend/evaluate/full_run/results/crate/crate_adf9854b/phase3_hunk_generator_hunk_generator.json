@@ -10,6 +10,28 @@
       "verification_result": "mainline_fast_path_ok (TYPE I)",
       "applied": true,
       "apply_result": "SUCCESS"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/role/Role.java",
+      "mainline_file": "server/src/main/java/io/crate/role/Role.java",
+      "old_string": "<line-based ReAct agent diff>",
+      "new_string": "diff --git a/server/src/main/java/io/crate/role/Role.java b/server/src/main/java/io/crate/role/Role.java\nindex 9a189cab59..ab26402783 100644\n--- a/server/src/main/java/io/crate/role/Role.java\n+++ b/server/src/main/java/io/crate/role/Role.java\n@@ -184,8 +184,12 @@ public class Role implements Writeable, ToXContent {\n \n     }\n \n-    public Role with(Set<Privilege> privileges) {\n-        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n+    public Role with(RolePrivileges privileges) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n+    }\n+\n+    public Role with(Set<GrantedRole> grantedRoles) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n     }\n \n     public Role with(@Nullable SecureHash password,\n@@ -195,7 +199,7 @@ public class Role implements Writeable, ToXContent {\n             privileges,\n             grantedRoles,\n             new Properties(properties.login, password, jwtProperties),\n-            false\n+            isSuperUser\n         );\n     }",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "ReAct agent applied",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+      "mainline_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+      "old_string": "<line-based ReAct agent diff>",
+      "new_string": "diff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\nindex bbcaf64b09..b468dc833a 100644\n--- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n+++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n@@ -239,7 +239,7 @@ public class RolesMetadata extends AbstractNamedDiffable<Metadata.Custom> implem\n             }\n         }\n         if (affectedCount > 0) {\n-            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));\n+            roles.put(role.name(), role.with(grantedRoles));\n         }\n         return affectedCount;\n     }",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "ReAct agent applied",
+      "applied": true,
+      "apply_result": "SUCCESS"
     }
   ],
   "all_adapted_file_edits": [
@@ -24,39 +46,184 @@
         "verification_result": "mainline_fast_path_ok (TYPE I)",
         "applied": true,
         "apply_result": "SUCCESS"
-      }
-    ],
-    [
+      },
       {
-        "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-        "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-        "old_string": "<mainline patch fast path>",
-        "new_string": "diff --git a/server/src/main/java/io/crate/role/PrivilegesModifier.java b/server/src/main/java/io/crate/role/PrivilegesModifier.java\nindex 2effd6d7bf..8fdf086f88 100644\n--- a/server/src/main/java/io/crate/role/PrivilegesModifier.java\n+++ b/server/src/main/java/io/crate/role/PrivilegesModifier.java\n@@ -96,7 +96,7 @@ public final class PrivilegesModifier {\n             }\n \n             if (affectedCount > 0) {\n-                roles.put(userName, role.with(privileges));\n+                roles.put(userName, role.with(new RolePrivileges(privileges)));\n             }\n         }\n \n@@ -139,7 +139,7 @@ public final class PrivilegesModifier {\n                     privileges.add(privilege);\n                 }\n             }\n-            newRoles.put(entry.getKey(), role.with(privileges));\n+            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n         }\n \n         if (privilegesChanged) {\n@@ -171,7 +171,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(role.name(), role.with(updatedPrivileges));\n+            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n         return affectedPrivileges;\n@@ -201,7 +201,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(user, role.with(updatedPrivileges));\n+            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         return new RolesMetadata(newRoles);\n     }",
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "mainline_file": "server/src/main/java/io/crate/role/Role.java",
+        "old_string": "<line-based ReAct agent diff>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/role/Role.java b/server/src/main/java/io/crate/role/Role.java\nindex 9a189cab59..ab26402783 100644\n--- a/server/src/main/java/io/crate/role/Role.java\n+++ b/server/src/main/java/io/crate/role/Role.java\n@@ -184,8 +184,12 @@ public class Role implements Writeable, ToXContent {\n \n     }\n \n-    public Role with(Set<Privilege> privileges) {\n-        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n+    public Role with(RolePrivileges privileges) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n+    }\n+\n+    public Role with(Set<GrantedRole> grantedRoles) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n     }\n \n     public Role with(@Nullable SecureHash password,\n@@ -195,7 +199,7 @@ public class Role implements Writeable, ToXContent {\n             privileges,\n             grantedRoles,\n             new Properties(properties.login, password, jwtProperties),\n-            false\n+            isSuperUser\n         );\n     }",
         "edit_type": "replace",
         "verified": true,
-        "verification_result": "mainline_fast_path_ok (TYPE I)",
+        "verification_result": "ReAct agent applied",
         "applied": true,
         "apply_result": "SUCCESS"
-      }
-    ],
-    [
+      },
       {
-        "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-        "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-        "old_string": "<mainline patch fast path>",
-        "new_string": "diff --git a/server/src/main/java/io/crate/role/PrivilegesModifier.java b/server/src/main/java/io/crate/role/PrivilegesModifier.java\nindex 2effd6d7bf..8fdf086f88 100644\n--- a/server/src/main/java/io/crate/role/PrivilegesModifier.java\n+++ b/server/src/main/java/io/crate/role/PrivilegesModifier.java\n@@ -96,7 +96,7 @@ public final class PrivilegesModifier {\n             }\n \n             if (affectedCount > 0) {\n-                roles.put(userName, role.with(privileges));\n+                roles.put(userName, role.with(new RolePrivileges(privileges)));\n             }\n         }\n \n@@ -139,7 +139,7 @@ public final class PrivilegesModifier {\n                     privileges.add(privilege);\n                 }\n             }\n-            newRoles.put(entry.getKey(), role.with(privileges));\n+            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n         }\n \n         if (privilegesChanged) {\n@@ -171,7 +171,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(role.name(), role.with(updatedPrivileges));\n+            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n         return affectedPrivileges;\n@@ -201,7 +201,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(user, role.with(updatedPrivileges));\n+            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         return new RolesMetadata(newRoles);\n     }",
+        "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+        "mainline_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+        "old_string": "<line-based ReAct agent diff>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\nindex bbcaf64b09..b468dc833a 100644\n--- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n+++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n@@ -239,7 +239,7 @@ public class RolesMetadata extends AbstractNamedDiffable<Metadata.Custom> implem\n             }\n         }\n         if (affectedCount > 0) {\n-            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));\n+            roles.put(role.name(), role.with(grantedRoles));\n         }\n         return affectedCount;\n     }",
         "edit_type": "replace",
         "verified": true,
-        "verification_result": "mainline_fast_path_ok (TYPE I)",
+        "verification_result": "ReAct agent applied",
         "applied": true,
         "apply_result": "SUCCESS"
       }
     ]
   ],
   "agent_trajectory_edits": [
-    [],
-    [],
-    []
+    [
+      {
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "center_line": 190,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "old_string": "    }\n    public Role with(Set<Privilege> privileges) {\n        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);",
+          "new_string": "    }\n    public Role with(RolePrivileges privileges) {\n        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n    }\n\n    public Role with(Set<GrantedRole> grantedRoles) {\n        return new Role(name, privileges, grantedRoles, properties, isSuperUser);"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "center_line": 180,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "old_string": "    }\n    public Role with(Set<Privilege> privileges) {\n        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n    }",
+          "new_string": "    }\n    public Role with(RolePrivileges privileges) {\n        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n    }\n\n    public Role with(Set<GrantedRole> grantedRoles) {\n        return new Role(name, this.privileges, grantedRoles, properties, isSuperUser);\n    }"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "center_line": 187,
+          "radius": 10
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "old_string": "    public Role with(Set<Privilege> privileges) {\n        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n    }",
+          "new_string": "    public Role with(RolePrivileges privileges) {\n        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n    }\n\n    public Role with(Set<GrantedRole> grantedRoles) {\n        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n    }"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "center_line": 195,
+          "radius": 10
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "old_string": "            new Properties(properties.login, password, jwtProperties),\n            false\n        );",
+          "new_string": "            new Properties(properties.login, password, jwtProperties),\n            isSuperUser\n        );"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "tool": "check_java_syntax",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/Role.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "tool": "git_diff_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/Role.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "tool": "verify_guidelines",
+        "args": {
+          "diff_text": "diff --git a/server/src/main/java/io/crate/role/Role.java b/server/src/main/java/io/crate/role/Role.java\nindex 9a189cab59..ab26402783 100644\n--- a/server/src/main/java/io/crate/role/Role.java\n+++ b/server/src/main/java/io/crate/role/Role.java\n@@ -184,8 +184,12 @@ public class Role implements Writeable, ToXContent {\n \n     }\n \n-    public Role with(Set<Privilege> privileges) {\n-        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n+    public Role with(RolePrivileges privileges) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n+    }\n+\n+    public Role with(Set<GrantedRole> grantedRoles) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n     }\n \n     public Role with(@Nullable SecureHash password,\n@@ -195,7 +199,7 @@ public class Role implements Writeable, ToXContent {\n             privileges,\n             grantedRoles,\n             new Properties(properties.login, password, jwtProperties),\n-            false\n+            isSuperUser\n         );\n     }\n \n"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "center_line": 242,
+          "radius": 15
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "old_string": "        if (affectedCount > 0) {\n            roles.put(role.name(), new Role(\n                role.name(),\n                role.isUser(),\n                Set.of(),\n                grantedRoles,\n                role.password(),\n                role.jwtProperties(),\n                role.sessionSettings()));",
+          "new_string": "        if (affectedCount > 0) {\n            roles.put(role.name(), role.with(grantedRoles));"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "center_line": 240,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "old_string": "        if (affectedCount > 0) {\n            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));",
+          "new_string": "        if (affectedCount > 0) {\n            roles.put(role.name(), role.with(grantedRoles));"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+        "tool": "check_java_syntax",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+        "tool": "git_diff_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+        "tool": "verify_guidelines",
+        "args": {
+          "diff_text": "diff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\nindex bbcaf64b09..b468dc833a 100644\n--- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n+++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n@@ -239,7 +239,7 @@ public class RolesMetadata extends AbstractNamedDiffable<Metadata.Custom> implem\n              }\n          }\n          if (affectedCount > 0) {\n-            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));\n+            roles.put(role.name(), role.with(grantedRoles));\n          }\n          return affectedCount;\n      }\n"
+        }
+      }
+    ]
   ],
   "adapted_code_hunks": [
     {
@@ -69,16 +236,60 @@
       "old_target_file": null,
       "file_operation_required": true,
       "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/role/Role.java",
+      "mainline_file": "server/src/main/java/io/crate/role/Role.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/role/Role.java b/server/src/main/java/io/crate/role/Role.java\nindex 9a189cab59..ab26402783 100644\n--- a/server/src/main/java/io/crate/role/Role.java\n+++ b/server/src/main/java/io/crate/role/Role.java\n@@ -184,8 +184,12 @@ public class Role implements Writeable, ToXContent {\n \n     }\n \n-    public Role with(Set<Privilege> privileges) {\n-        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n+    public Role with(RolePrivileges privileges) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n+    }\n+\n+    public Role with(Set<GrantedRole> grantedRoles) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n     }\n \n     public Role with(@Nullable SecureHash password,\n@@ -195,7 +199,7 @@ public class Role implements Writeable, ToXContent {\n             privileges,\n             grantedRoles,\n             new Properties(properties.login, password, jwtProperties),\n-            false\n+            isSuperUser\n         );\n     }\n \n",
+      "insertion_line": 184,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+      "mainline_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\nindex bbcaf64b09..b468dc833a 100644\n--- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n+++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n@@ -239,7 +239,7 @@ public class RolesMetadata extends AbstractNamedDiffable<Metadata.Custom> implem\n             }\n         }\n         if (affectedCount > 0) {\n-            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));\n+            roles.put(role.name(), role.with(grantedRoles));\n         }\n         return affectedCount;\n     }\n",
+      "insertion_line": 239,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
     }
   ],
   "validation_repeated_patch_detected": false,
-  "validation_repeated_plan_detected": true,
+  "validation_repeated_plan_detected": false,
   "best_effort_adapted_code_hunks": [
     {
       "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
       "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
       "hunk_text": "diff --git a/server/src/main/java/io/crate/role/PrivilegesModifier.java b/server/src/main/java/io/crate/role/PrivilegesModifier.java\nindex 2effd6d7bf..8fdf086f88 100644\n--- a/server/src/main/java/io/crate/role/PrivilegesModifier.java\n+++ b/server/src/main/java/io/crate/role/PrivilegesModifier.java\n@@ -96,7 +96,7 @@ public final class PrivilegesModifier {\n             }\n \n             if (affectedCount > 0) {\n-                roles.put(userName, role.with(privileges));\n+                roles.put(userName, role.with(new RolePrivileges(privileges)));\n             }\n         }\n \n@@ -139,7 +139,7 @@ public final class PrivilegesModifier {\n                     privileges.add(privilege);\n                 }\n             }\n-            newRoles.put(entry.getKey(), role.with(privileges));\n+            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n         }\n \n         if (privilegesChanged) {\n@@ -171,7 +171,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(role.name(), role.with(updatedPrivileges));\n+            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n         return affectedPrivileges;\n@@ -201,7 +201,7 @@ public final class PrivilegesModifier {\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(user, role.with(updatedPrivileges));\n+            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         return new RolesMetadata(newRoles);\n     }\n",
       "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/role/Role.java",
+      "mainline_file": "server/src/main/java/io/crate/role/Role.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/role/Role.java b/server/src/main/java/io/crate/role/Role.java\nindex 9a189cab59..ab26402783 100644\n--- a/server/src/main/java/io/crate/role/Role.java\n+++ b/server/src/main/java/io/crate/role/Role.java\n@@ -184,8 +184,12 @@ public class Role implements Writeable, ToXContent {\n \n     }\n \n-    public Role with(Set<Privilege> privileges) {\n-        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n+    public Role with(RolePrivileges privileges) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n+    }\n+\n+    public Role with(Set<GrantedRole> grantedRoles) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n     }\n \n     public Role with(@Nullable SecureHash password,\n@@ -195,7 +199,7 @@ public class Role implements Writeable, ToXContent {\n             privileges,\n             grantedRoles,\n             new Properties(properties.login, password, jwtProperties),\n-            false\n+            isSuperUser\n         );\n     }\n \n",
+      "insertion_line": 184,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+      "mainline_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\nindex bbcaf64b09..b468dc833a 100644\n--- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n+++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n@@ -239,7 +239,7 @@ public class RolesMetadata extends AbstractNamedDiffable<Metadata.Custom> implem\n             }\n         }\n         if (affectedCount > 0) {\n-            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));\n+            roles.put(role.name(), role.with(grantedRoles));\n         }\n         return affectedCount;\n     }\n",
+      "insertion_line": 239,
       "intent_verified": true,
       "file_operation": "MODIFIED",
       "old_target_file": null,
@@ -92,9 +303,9 @@
       "mainline_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
       "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
       "hunk_index": 0,
-      "adaptation_type": "TYPE_I",
+      "adaptation_type": "TYPE_II",
       "execution_types": [
-        "TYPE_I"
+        "TYPE_II"
       ],
       "status": "success",
       "reason": "mainline_fast_path",
@@ -112,17 +323,72 @@
         "intent_check",
         "restore_file"
       ]
+    },
+    {
+      "mainline_file": "server/src/main/java/io/crate/role/Role.java",
+      "target_file": "server/src/main/java/io/crate/role/Role.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "generated_and_validated",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    },
+    {
+      "mainline_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+      "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "generated_and_validated",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
     }
   ],
-  "generated_patch_hash": "eb6f2b9e08886e28d66ca424828cfb2d4d18b4e2a3fded78567c6e653db9430e",
+  "generated_patch_hash": "46b7e18f1b24239a5ec8d4d64683a869f05a70fcf9dcd6b8e8ba866d60bd1e48",
   "force_type_v_until_success": false,
   "force_type_v_reason": "",
   "force_type_v_retry_files": [],
   "token_usage": {
-    "input_tokens": 0,
-    "output_tokens": 0,
-    "total_tokens": 0,
+    "input_tokens": 128160,
+    "output_tokens": 1579,
+    "total_tokens": 129739,
     "estimated": false,
-    "sources": []
+    "sources": [
+      "file_editor.react.aggregate_usage",
+      "file_editor.intent.provider_usage",
+      "file_editor.react.aggregate_usage",
+      "file_editor.intent.provider_usage"
+    ]
   }
 }

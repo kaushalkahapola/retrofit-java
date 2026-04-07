@@ -18,9 +18,9 @@
   },
   "reasoning_iterations": 2,
   "token_usage": {
-    "input_tokens": 75550,
-    "output_tokens": 1461,
-    "total_tokens": 77011,
+    "input_tokens": 109885,
+    "output_tokens": 1026,
+    "total_tokens": 110911,
     "estimated": false,
     "sources": [
       "reasoning_architect.react.aggregate_usage"

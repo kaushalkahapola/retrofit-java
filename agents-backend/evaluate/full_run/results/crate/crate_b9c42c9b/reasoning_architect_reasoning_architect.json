@@ -1,0 +1,78 @@
+{
+  "surgical_plans": {},
+  "reasoning_context": {
+    "current_file": "server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java",
+    "failure_kind": "anchor_not_found",
+    "build_diagnostics": {
+      "target_file": "server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java",
+      "issues": [
+        {
+          "error_type": "api_or_signature_mismatch",
+          "suggested_action": "replan_and_regenerate_with_api_compatibility",
+          "compiler_errors": [
+            "[ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[110,32] error: cannot find symbol",
+            "[ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[118,32] error: cannot find symbol",
+            "[ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[110,32] error: cannot find symbol",
+            "[ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[118,32] error: cannot find symbol"
+          ]
+        }
+      ],
+      "failed_locations": [
+        {
+          "file": "server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java",
+          "line": 110
+        },
+        {
+          "file": "server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java",
+          "line": 118
+        },
+        {
+          "file": "server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java",
+          "line": 110
+        },
+        {
+          "file": "server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java",
+          "line": 118
+        }
+      ],
+      "symbol_errors": [
+        {
+          "kind": "method",
+          "name": "waitingForWrite"
+        },
+        {
+          "kind": "method",
+          "name": "waitingForWrite"
+        },
+        {
+          "kind": "method",
+          "name": "waitingForWrite"
+        },
+        {
+          "kind": "method",
+          "name": "waitingForWrite"
+        }
+      ],
+      "signature_errors": [],
+      "primary_failed_symbol": "waitingForWrite",
+      "raw_error_preview": "Build failed: API/signature mismatch in generated patch against target branch. Compiler errors: [ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[110,32] error: cannot find symbol | [ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[118,32] error: cannot find symbol | [ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[110,32] error: cannot find symbol | [ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[118,32] error: cannot find symbol"
+    },
+    "side_files": [
+      "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+      "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+      "server/src/main/java/io/crate/session/Session.java"
+    ],
+    "iteration": 2,
+    "surgical_ops": []
+  },
+  "reasoning_iterations": 2,
+  "token_usage": {
+    "input_tokens": 116968,
+    "output_tokens": 1156,
+    "total_tokens": 118124,
+    "estimated": false,
+    "sources": [
+      "reasoning_architect.react.aggregate_usage"
+    ]
+  }
+}

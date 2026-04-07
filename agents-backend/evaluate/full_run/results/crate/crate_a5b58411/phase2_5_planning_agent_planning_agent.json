@@ -10,7 +10,7 @@
         "new_string": "        var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n            \"multi-phase\",\n            dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n            plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n        );\n        consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n        executePlan(",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_insert_before",
+        "notes": "Insert accounting setup before executePlan call; location differs but context matches|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "        if (context != null) {",
           "            assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";",
@@ -21,12 +21,15 @@
           "                dependencies,",
           "                plannerContext,"
         ],
-        "adaptation_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
         "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": true,
-        "blockers": [],
+        "blockers": [
+          "Method executePlan signature mismatch causing compilation errors",
+          "Missing symbols like isTopLevel and selectSymbol in target file"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -52,10 +55,10 @@
         "operation_index": 0,
         "edit_type": "replace",
         "old_string": "                new IdentityHashMap<>(),\n                new ArrayList<>(plan.dependencies().size()),\n                null,\n                null",
-        "new_string": "            new IdentityHashMap<>(),\n            new ArrayList<>(plan.dependencies().size()),\n            ramAccounting,\n            null",
+        "new_string": "            new IdentityHashMap<>(),\n            new ArrayList<>(plan.dependencies().size()),\n            ramAccounting,\n                null,\n            null",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "Direct replacement causes build errors due to signature mismatch and missing symbols; structural rewrite needed|required_replace_enforced|forced_type_v:context_mismatch_with_build_api_or_syntax",
         "surround_before_3": [
           "                consumer,",
           "                params,",
@@ -66,12 +69,17 @@
           "        } else {",
           "            if (subPlan instanceof LogicalPlan logicalPlan) {"
         ],
-        "adaptation_type": "TYPE_II",
-        "base_adaptation_type": "TYPE_II",
-        "execution_type": "TYPE_II",
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_IV",
+        "execution_type": "TYPE_V",
         "location_match": false,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Method executePlan signature mismatch: mainline has additional parameter 'ramAccounting' not present in target",
+          "Multiple symbol errors in target: missing variables 'isTopLevel', 'selectSymbol'",
+          "Detected target executePlan method location differs significantly from mainline",
+          "Surrounding context lines differ between mainline and target"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [],
@@ -88,22 +96,34 @@
       },
       {
         "hunk_index": 2,
-        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java",
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
         "operation_index": 0,
         "edit_type": "replace",
         "old_string": "                                             Map<SelectSymbol, Object> valuesBySubQuery,\n                                             List<Map<String, Object>> explainResults,\n                                             @Nullable RamAccounting ramAccounting,\n                                             @Nullable SelectSymbol selectSymbol) {",
         "new_string": "                                             Map<SelectSymbol, Object> valuesBySubQuery,\n                                             List<Map<String, Object>> explainResults,\n                                             RamAccounting ramAccounting,\n                                             @Nullable SelectSymbol selectSymbol) {",
-        "verified": false,
-        "verification_result": "deterministic_required_replace",
-        "notes": "required_op_replace",
-        "surround_before_3": [],
-        "surround_after_3": [],
-        "adaptation_type": "TYPE_I",
-        "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
-        "location_match": true,
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "Adapted parameter annotation and nullability to match target signature|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "                                             RowConsumer consumer,",
+          "                                             Row params,",
+          "                                             SubQueryResults subQueryResults,"
+        ],
+        "surround_after_3": [
+          "        boolean isTopLevel = selectSymbol == null;",
+          "",
+          "        assert ramAccounting != null || isTopLevel : \"ramAccounting must NOT be null for subPlans\";"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Detected target location line 239 differs from mainline patch start line 113",
+          "Target file uses different method signature for executePlan, causing symbol errors for variables introduced in mainline patch (isTopLevel, selectSymbol)",
+          "Mainline patch deletes code that initializes ramAccounting if null and modifies plannerContext for subPlans, but target does not have these variables or logic"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -115,29 +135,41 @@
         "chain_constraints": [],
         "api_inventory": {
           "mainline_declared_methods_count": 12,
-          "target_declared_methods_count": 0,
+          "target_declared_methods_count": 22,
           "matched_symbols_before": [],
           "missing_symbols_before": []
         }
       },
       {
         "hunk_index": 2,
-        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java",
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
         "operation_index": 1,
         "edit_type": "delete",
         "old_string": "\n        assert ramAccounting != null || isTopLevel : \"ramAccounting must NOT be null for subPlans\";\n\n        if (ramAccounting == null) {\n            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n                \"multi-phase\",\n                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n            );\n        }\n\n        if (isTopLevel == false) {\n            plannerContext = PlannerContext.forSubPlan(plannerContext);\n        }\n",
         "new_string": "",
-        "verified": false,
-        "verification_result": "deterministic_required_delete",
-        "notes": "required_op_delete",
-        "surround_before_3": [],
-        "surround_after_3": [],
-        "adaptation_type": "TYPE_I",
-        "base_adaptation_type": "TYPE_I",
-        "execution_type": "TYPE_I",
-        "location_match": true,
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "Removed code block not present or incompatible in target due to missing variables and different method signature|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "                                             @Nullable RamAccounting ramAccounting,",
+          "                                             @Nullable SelectSymbol selectSymbol) {",
+          "        boolean isTopLevel = selectSymbol == null;"
+        ],
+        "surround_after_3": [
+          "        IdentityHashMap<SelectSymbol, Object> subPlanValueBySubQuery = new IdentityHashMap<>();",
+          "        ArrayList<Map<String, Object>> subPlansExplainResults = new ArrayList<>(plan.dependencies().size());",
+          "        List<CompletableFuture<?>> subPlansFutures = new ArrayList<>(plan.dependencies().size());"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
         "surrounding_match": false,
-        "blockers": [],
+        "blockers": [
+          "Detected target location line 239 differs from mainline patch start line 113",
+          "Target file uses different method signature for executePlan, causing symbol errors for variables introduced in mainline patch (isTopLevel, selectSymbol)",
+          "Mainline patch deletes code that initializes ramAccounting if null and modifies plannerContext for subPlans, but target does not have these variables or logic"
+        ],
         "namespace_only_possible": false,
         "namespace_changes": [],
         "required_invariants": [
@@ -149,23 +181,31 @@
         "chain_constraints": [],
         "api_inventory": {
           "mainline_declared_methods_count": 12,
-          "target_declared_methods_count": 0,
+          "target_declared_methods_count": 22,
           "matched_symbols_before": [],
           "missing_symbols_before": []
         }
       }
     ]
   },
-  "last_plan_signature": "ed6e8afe3821444ddf54e30389151be6b3409403894e2461b7def779585f6528",
+  "last_plan_signature": "6b455f006e7f3dce2e168f940d8d27dbeb2de90ccba8d4ca744b86b9915e8174",
   "validation_repeated_plan_detected": false,
-  "force_type_v_until_success": false,
-  "force_type_v_reason": "",
-  "force_type_v_retry_files": [],
+  "force_type_v_until_success": true,
+  "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
+  "force_type_v_retry_files": [
+    "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+    "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java"
+  ],
   "token_usage": {
-    "input_tokens": 0,
-    "output_tokens": 0,
-    "total_tokens": 0,
-    "estimated": false,
-    "sources": []
+    "input_tokens": 12187,
+    "output_tokens": 1550,
+    "total_tokens": 13737,
+    "estimated": true,
+    "sources": [
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken",
+      "planning_agent.provider_usage"
+    ]
   }
 }

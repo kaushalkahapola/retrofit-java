@@ -37,14 +37,14 @@
       "raw_error_preview": "Build failed: API/signature mismatch in generated patch against target branch."
     },
     "side_files": [],
-    "iteration": 1,
+    "iteration": 2,
     "surgical_ops": []
   },
-  "reasoning_iterations": 1,
+  "reasoning_iterations": 2,
   "token_usage": {
-    "input_tokens": 131470,
-    "output_tokens": 1174,
-    "total_tokens": 132644,
+    "input_tokens": 114054,
+    "output_tokens": 1333,
+    "total_tokens": 115387,
     "estimated": false,
     "sources": [
       "reasoning_architect.react.aggregate_usage"

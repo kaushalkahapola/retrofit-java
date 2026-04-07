@@ -3,11 +3,11 @@
     {
       "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
       "mainline_file": "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java",
-      "old_string": "<developer patch fast path>",
-      "new_string": "diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\nindex fe20bbb9bb..b3085d0d98 100644\n--- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n+++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n@@ -141,6 +141,12 @@ public class ExplainPlan implements Plan {\n         if (context != null) {\n             assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n             LogicalPlan plan = (LogicalPlan) subPlan;\n+            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n+                \"multi-phase\",\n+                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n+                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n+            );\n+            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n             executePlan(\n                 plan,\n                 dependencies,\n@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {\n                 subQueryResults,\n                 new IdentityHashMap<>(),\n                 new ArrayList<>(plan.dependencies().size()),\n-                null,\n+                ramAccounting,\n                 null\n             );\n         } else {\n@@ -236,20 +242,10 @@ public class ExplainPlan implements Plan {\n                                              SubQueryResults subQueryResults,\n                                              Map<SelectSymbol, Object> valuesBySubQuery,\n                                              List<Map<String, Object>> explainResults,\n-                                             @Nullable RamAccounting ramAccounting,\n+                                             RamAccounting ramAccounting,\n                                              @Nullable SelectSymbol selectSymbol) {\n         boolean isTopLevel = selectSymbol == null;\n \n-        assert ramAccounting != null || isTopLevel : \"ramAccounting must NOT be null for subPlans\";\n-\n-        if (ramAccounting == null) {\n-            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n-                \"multi-phase\",\n-                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n-                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n-            );\n-        }\n-\n         if (isTopLevel == false) {\n             plannerContext = PlannerContext.forSubPlan(plannerContext);\n         }",
+      "old_string": "<line-based ReAct agent diff>",
+      "new_string": "diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\nindex fe20bbb9bb..94c2a82a44 100644\n--- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n+++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n@@ -141,6 +141,12 @@ public class ExplainPlan implements Plan {\n         if (context != null) {\n             assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n             LogicalPlan plan = (LogicalPlan) subPlan;\n+            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n+                \"multi-phase\",\n+                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n+                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n+            );\n+            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n             executePlan(\n                 plan,\n                 dependencies,\n@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {\n                 subQueryResults,\n                 new IdentityHashMap<>(),\n                 new ArrayList<>(plan.dependencies().size()),\n-                null,\n+                ramAccounting,\n                 null\n             );\n         } else {",
       "edit_type": "replace",
       "verified": true,
-      "verification_result": "developer_fast_path_ok",
+      "verification_result": "ReAct agent applied",
       "applied": true,
       "apply_result": "SUCCESS"
     }
@@ -17,30 +17,202 @@
       {
         "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
         "mainline_file": "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java",
-        "old_string": "<developer patch fast path>",
-        "new_string": "diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\nindex fe20bbb9bb..b3085d0d98 100644\n--- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n+++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n@@ -141,6 +141,12 @@ public class ExplainPlan implements Plan {\n         if (context != null) {\n             assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n             LogicalPlan plan = (LogicalPlan) subPlan;\n+            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n+                \"multi-phase\",\n+                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n+                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n+            );\n+            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n             executePlan(\n                 plan,\n                 dependencies,\n@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {\n                 subQueryResults,\n                 new IdentityHashMap<>(),\n                 new ArrayList<>(plan.dependencies().size()),\n-                null,\n+                ramAccounting,\n                 null\n             );\n         } else {\n@@ -236,20 +242,10 @@ public class ExplainPlan implements Plan {\n                                              SubQueryResults subQueryResults,\n                                              Map<SelectSymbol, Object> valuesBySubQuery,\n                                              List<Map<String, Object>> explainResults,\n-                                             @Nullable RamAccounting ramAccounting,\n+                                             RamAccounting ramAccounting,\n                                              @Nullable SelectSymbol selectSymbol) {\n         boolean isTopLevel = selectSymbol == null;\n \n-        assert ramAccounting != null || isTopLevel : \"ramAccounting must NOT be null for subPlans\";\n-\n-        if (ramAccounting == null) {\n-            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n-                \"multi-phase\",\n-                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n-                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n-            );\n-        }\n-\n         if (isTopLevel == false) {\n             plannerContext = PlannerContext.forSubPlan(plannerContext);\n         }",
+        "old_string": "<line-based ReAct agent diff>",
+        "new_string": "diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\nindex fe20bbb9bb..94c2a82a44 100644\n--- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n+++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n@@ -141,6 +141,12 @@ public class ExplainPlan implements Plan {\n         if (context != null) {\n             assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n             LogicalPlan plan = (LogicalPlan) subPlan;\n+            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n+                \"multi-phase\",\n+                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n+                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n+            );\n+            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n             executePlan(\n                 plan,\n                 dependencies,\n@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {\n                 subQueryResults,\n                 new IdentityHashMap<>(),\n                 new ArrayList<>(plan.dependencies().size()),\n-                null,\n+                ramAccounting,\n                 null\n             );\n         } else {",
         "edit_type": "replace",
         "verified": true,
-        "verification_result": "developer_fast_path_ok",
+        "verification_result": "ReAct agent applied",
         "applied": true,
         "apply_result": "SUCCESS"
       }
     ]
   ],
   "agent_trajectory_edits": [
-    []
+    [
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "center_line": 150,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "center_line": 240,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "center_line": 230,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "center_line": 135,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "old_string": "                              SubQueryResults subQueryResults) throws Exception {\n        if (context != null) {\n            assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n            LogicalPlan plan = (LogicalPlan) subPlan;\n            executePlan(\n                plan,\n                dependencies,\n                plannerContext,\n                consumer,\n                params,\n                subQueryResults,\n                new IdentityHashMap<>(),\n                new ArrayList<>(plan.dependencies().size()),\n                null,\n                null\n            );",
+          "new_string": "                              SubQueryResults subQueryResults) throws Exception {\n        if (context != null) {\n            assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n            LogicalPlan plan = (LogicalPlan) subPlan;\n            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n                \"multi-phase\",\n                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n            );\n            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n            executePlan(\n                plan,\n                dependencies,\n                plannerContext,\n                consumer,\n                params,\n                subQueryResults,\n                new IdentityHashMap<>(),\n                new ArrayList<>(plan.dependencies().size()),\n                ramAccounting,\n                null\n            );"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "center_line": 140,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "old_string": "                              SubQueryResults subQueryResults) {\n        if (context != null) {\n            assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n            LogicalPlan plan = (LogicalPlan) subPlan;\n            executePlan(\n                plan,\n                dependencies,\n                plannerContext,\n                consumer,\n                params,\n                subQueryResults,\n                new IdentityHashMap<>(),\n                new ArrayList<>(plan.dependencies().size()),\n                null,\n                null\n            );",
+          "new_string": "                              SubQueryResults subQueryResults) {\n        if (context != null) {\n            assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n            LogicalPlan plan = (LogicalPlan) subPlan;\n            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n                \"multi-phase\",\n                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n            );\n            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n            executePlan(\n                plan,\n                dependencies,\n                plannerContext,\n                consumer,\n                params,\n                subQueryResults,\n                new IdentityHashMap<>(),\n                new ArrayList<>(plan.dependencies().size()),\n                ramAccounting,\n                null\n            );"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "old_string": "            new IdentityHashMap<>(),\n            new ArrayList<>(plan.dependencies().size()),\n            null,",
+          "new_string": "            new IdentityHashMap<>(),\n            new ArrayList<>(plan.dependencies().size()),\n            ramAccounting,"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "center_line": 150,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "old_string": "            new IdentityHashMap<>(),\n            new ArrayList<>(plan.dependencies().size()),\n            null,",
+          "new_string": "            new IdentityHashMap<>(),\n            new ArrayList<>(plan.dependencies().size()),\n            ramAccounting,"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "old_string": "            new IdentityHashMap<>(),\n            new ArrayList<>(plan.dependencies().size()),\n            null,\n            null\n        );",
+          "new_string": "            new IdentityHashMap<>(),\n            new ArrayList<>(plan.dependencies().size()),\n            ramAccounting,\n            null\n        );"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "old_string": "            new IdentityHashMap<>(),\n            new ArrayList<>(plan.dependencies().size()),\n            null,\n            null\n        );",
+          "new_string": "            new IdentityHashMap<>(),\n            new ArrayList<>(plan.dependencies().size()),\n            ramAccounting,\n            null\n        );"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "center_line": 230,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "old_string": "                                             List<Map<String, Object>> explainResults,\n                                             @Nullable RamAccounting ramAccounting,\n                                             @Nullable SelectSymbol selectSymbol) {\n         boolean isTopLevel = selectSymbol == null;\n \n         assert ramAccounting != null || isTopLevel : \"ramAccounting must NOT be null for subPlans\";\n \n         if (ramAccounting == null) {\n             ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n                 \"multi-phase\",\n                 executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n                 plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n             );\n         }\n \n         if (isTopLevel == false) {\n             plannerContext = PlannerContext.forSubPlan(plannerContext);\n         }\n \n         IdentityHashMap<SelectSymbol, Object> subPlanValueBySubQuery = new IdentityHashMap<>();\n         ArrayList<Map<String, Object>> subPlansExplainResults = new ArrayList<>(plan.dependencies().size());",
+          "new_string": "                                             List<Map<String, Object>> explainResults,\n                                             RamAccounting ramAccounting,\n         IdentityHashMap<SelectSymbol, Object> subPlanValueBySubQuery = new IdentityHashMap<>();\n         ArrayList<Map<String, Object>> subPlansExplainResults = new ArrayList<>(plan.dependencies().size());"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "center_line": 240,
+          "radius": 20
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "old_string": "                                             List<Map<String, Object>> explainResults,\n                                             @Nullable RamAccounting ramAccounting,\n                                             @Nullable SelectSymbol selectSymbol) {\n         boolean isTopLevel = selectSymbol == null;\n \n         assert ramAccounting != null || isTopLevel : \"ramAccounting must NOT be null for subPlans\";\n \n         if (ramAccounting == null) {\n             ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n                 \"multi-phase\",\n                 executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n                 plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n             );\n         }\n \n         if (isTopLevel == false) {\n             plannerContext = PlannerContext.forSubPlan(plannerContext);\n         }\n \n         IdentityHashMap<SelectSymbol, Object> subPlanValueBySubQuery = new IdentityHashMap<>();\n         ArrayList<Map<String, Object>> subPlansExplainResults = new ArrayList<>(plan.dependencies().size());",
+          "new_string": "                                             List<Map<String, Object>> explainResults,\n                                             RamAccounting ramAccounting,\n         IdentityHashMap<SelectSymbol, Object> subPlanValueBySubQuery = new IdentityHashMap<>();\n         ArrayList<Map<String, Object>> subPlansExplainResults = new ArrayList<>(plan.dependencies().size());"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "center_line": 230,
+          "radius": 40
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "edit_file",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "old_string": "                                             List<Map<String, Object>> explainResults,\n                                             @Nullable RamAccounting ramAccounting,\n                                             @Nullable SelectSymbol selectSymbol) {\n         boolean isTopLevel = selectSymbol == null;\n \n         assert ramAccounting != null || isTopLevel : \"ramAccounting must NOT be null for subPlans\";\n \n         if (ramAccounting == null) {\n             ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n                 \"multi-phase\",\n                 executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n                 plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n             );\n         }\n \n         if (isTopLevel == false) {\n             plannerContext = PlannerContext.forSubPlan(plannerContext);\n         }\n \n         IdentityHashMap<SelectSymbol, Object> subPlanValueBySubQuery = new IdentityHashMap<>();\n         ArrayList<Map<String, Object>> subPlansExplainResults = new ArrayList<>(plan.dependencies().size());",
+          "new_string": "                                             List<Map<String, Object>> explainResults,\n                                             RamAccounting ramAccounting,\n         IdentityHashMap<SelectSymbol, Object> subPlanValueBySubQuery = new IdentityHashMap<>();\n         ArrayList<Map<String, Object>> subPlansExplainResults = new ArrayList<>(plan.dependencies().size());"
+        }
+      },
+      {
+        "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+        "tool": "read_file_window",
+        "args": {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "center_line": 230,
+          "radius": 50
+        }
+      }
+    ]
   ],
   "adapted_code_hunks": [
     {
       "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
       "mainline_file": "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java",
-      "hunk_text": "diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\nindex fe20bbb9bb..b3085d0d98 100644\n--- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n+++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n@@ -141,6 +141,12 @@ public class ExplainPlan implements Plan {\n         if (context != null) {\n             assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n             LogicalPlan plan = (LogicalPlan) subPlan;\n+            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n+                \"multi-phase\",\n+                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n+                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n+            );\n+            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n             executePlan(\n                 plan,\n                 dependencies,\n@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {\n                 subQueryResults,\n                 new IdentityHashMap<>(),\n                 new ArrayList<>(plan.dependencies().size()),\n-                null,\n+                ramAccounting,\n                 null\n             );\n         } else {\n@@ -236,20 +242,10 @@ public class ExplainPlan implements Plan {\n                                              SubQueryResults subQueryResults,\n                                              Map<SelectSymbol, Object> valuesBySubQuery,\n                                              List<Map<String, Object>> explainResults,\n-                                             @Nullable RamAccounting ramAccounting,\n+                                             RamAccounting ramAccounting,\n                                              @Nullable SelectSymbol selectSymbol) {\n         boolean isTopLevel = selectSymbol == null;\n \n-        assert ramAccounting != null || isTopLevel : \"ramAccounting must NOT be null for subPlans\";\n-\n-        if (ramAccounting == null) {\n-            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n-                \"multi-phase\",\n-                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n-                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n-            );\n-        }\n-\n         if (isTopLevel == false) {\n             plannerContext = PlannerContext.forSubPlan(plannerContext);\n         }\n",
-      "insertion_line": 1,
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\nindex fe20bbb9bb..94c2a82a44 100644\n--- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n+++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n@@ -141,6 +141,12 @@ public class ExplainPlan implements Plan {\n         if (context != null) {\n             assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n             LogicalPlan plan = (LogicalPlan) subPlan;\n+            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n+                \"multi-phase\",\n+                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n+                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n+            );\n+            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n             executePlan(\n                 plan,\n                 dependencies,\n@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {\n                 subQueryResults,\n                 new IdentityHashMap<>(),\n                 new ArrayList<>(plan.dependencies().size()),\n-                null,\n+                ramAccounting,\n                 null\n             );\n         } else {\n",
+      "insertion_line": 141,
       "intent_verified": true,
       "file_operation": "MODIFIED",
       "old_target_file": null,
       "file_operation_required": true,
-      "path_resolution_reason": "mapped_target_context_pair_mismatch"
+      "path_resolution_reason": "modified_target_mapped"
     }
   ],
   "validation_repeated_patch_detected": false,
@@ -49,13 +221,13 @@
     {
       "target_file": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
       "mainline_file": "server/src/main/java/io/crate/planner/node/management/ExplainProfilePlan.java",
-      "hunk_text": "diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\nindex fe20bbb9bb..b3085d0d98 100644\n--- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n+++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n@@ -141,6 +141,12 @@ public class ExplainPlan implements Plan {\n         if (context != null) {\n             assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n             LogicalPlan plan = (LogicalPlan) subPlan;\n+            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n+                \"multi-phase\",\n+                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n+                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n+            );\n+            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n             executePlan(\n                 plan,\n                 dependencies,\n@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {\n                 subQueryResults,\n                 new IdentityHashMap<>(),\n                 new ArrayList<>(plan.dependencies().size()),\n-                null,\n+                ramAccounting,\n                 null\n             );\n         } else {\n@@ -236,20 +242,10 @@ public class ExplainPlan implements Plan {\n                                              SubQueryResults subQueryResults,\n                                              Map<SelectSymbol, Object> valuesBySubQuery,\n                                              List<Map<String, Object>> explainResults,\n-                                             @Nullable RamAccounting ramAccounting,\n+                                             RamAccounting ramAccounting,\n                                              @Nullable SelectSymbol selectSymbol) {\n         boolean isTopLevel = selectSymbol == null;\n \n-        assert ramAccounting != null || isTopLevel : \"ramAccounting must NOT be null for subPlans\";\n-\n-        if (ramAccounting == null) {\n-            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n-                \"multi-phase\",\n-                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n-                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n-            );\n-        }\n-\n         if (isTopLevel == false) {\n             plannerContext = PlannerContext.forSubPlan(plannerContext);\n         }\n",
-      "insertion_line": 1,
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\nindex fe20bbb9bb..94c2a82a44 100644\n--- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n+++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java\n@@ -141,6 +141,12 @@ public class ExplainPlan implements Plan {\n         if (context != null) {\n             assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n             LogicalPlan plan = (LogicalPlan) subPlan;\n+            var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n+                \"multi-phase\",\n+                dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n+                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n+            );\n+            consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());\n             executePlan(\n                 plan,\n                 dependencies,\n@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {\n                 subQueryResults,\n                 new IdentityHashMap<>(),\n                 new ArrayList<>(plan.dependencies().size()),\n-                null,\n+                ramAccounting,\n                 null\n             );\n         } else {\n",
+      "insertion_line": 141,
       "intent_verified": true,
       "file_operation": "MODIFIED",
       "old_target_file": null,
       "file_operation_required": true,
-      "path_resolution_reason": "mapped_target_context_pair_mismatch"
+      "path_resolution_reason": "modified_target_mapped"
     }
   ],
   "adapted_test_hunks": [],
@@ -66,11 +238,10 @@
       "hunk_index": 0,
       "adaptation_type": "TYPE_II",
       "execution_types": [
-        "TYPE_I",
         "TYPE_II"
       ],
       "status": "success",
-      "reason": "developer_fast_path",
+      "reason": "generated_and_validated",
       "todo_steps": [
         "reset_file",
         "apply_edits",
@@ -87,15 +258,18 @@
       ]
     }
   ],
-  "generated_patch_hash": "b8be72e7854c7ec3235555d718d1a0e1f055a9b748317b1f7785ec3ab3e7d1cf",
+  "generated_patch_hash": "9f3840d0a6ff5d7297547921bf141bed5109f49f633d9172657dfec93a43f7ca",
   "force_type_v_until_success": false,
   "force_type_v_reason": "",
   "force_type_v_retry_files": [],
   "token_usage": {
-    "input_tokens": 0,
-    "output_tokens": 0,
-    "total_tokens": 0,
+    "input_tokens": 176383,
+    "output_tokens": 2414,
+    "total_tokens": 178797,
     "estimated": false,
-    "sources": []
+    "sources": [
+      "file_editor.react.aggregate_usage",
+      "file_editor.intent.provider_usage"
+    ]
   }
 }
