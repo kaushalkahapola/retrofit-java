@@ -1,25 +1,14 @@
 {
-  "input_tokens": 77,
+  "input_tokens": 0,
   "output_tokens": 0,
-  "total_tokens": 77,
+  "total_tokens": 0,
   "messages_with_usage": 0,
-  "estimated_messages": 1,
+  "estimated_messages": 0,
   "tokenizer": {
     "model": "gpt-4.1-mini",
     "library": "tiktoken",
     "available": true
   },
-  "by_node": {
-    "phase_0_optimistic": {
-      "input_tokens": 77,
-      "output_tokens": 0,
-      "total_tokens": 77,
-      "estimated_events": 1,
-      "exact_events": 0,
-      "sources": [
-        "estimated_from_message_chars"
-      ]
-    }
-  },
-  "finished_at": "2026-04-04T10:51:32.932539"
+  "by_node": {},
+  "finished_at": "2026-04-07T04:20:33.072908"
 }

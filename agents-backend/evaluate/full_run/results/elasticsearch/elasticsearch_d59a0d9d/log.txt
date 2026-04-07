@@ -3,26 +3,12 @@ project=elasticsearch
 mainline_commit=d59a0d9d44fb0cf553cb33a7a5e0da1f0b541c6b
 backport_commit=55ac92975e6ec0d714cfaa80d2d4a883bed9b78e
 mode=full
-started_at=2026-04-04T10:34:41.109661
+started_at=2026-04-07T04:20:29.980691
 ----------------------------------------
-Running full workflow graph
-Completed node=phase_0_optimistic
-Workflow completed successfully
+Phase0 cache fast-path success; skipping agentic workflow
+Completed from cache
 
 [elasticsearch/elasticsearch_d59a0d9d] Setting up repositories for mode=full...
-[elasticsearch/elasticsearch_d59a0d9d] Running full workflow graph...
-Router: Running Phase 0.
-Phase 0 (Optimistic): Checking direct patch applicability...
-Phase 0: Experiment mode — checking out parent of 55ac92975e6ec0d714cfaa80d2d4a883bed9b78e...
-Phase 0: Building baseline by applying developer backport test hunks only...
-  Validation: server/src/test/java/org/elasticsearch/ingest/IngestServiceTests.java - applying 1 hunk(s) one by one in bottom-to-top order: [2146]
-  Validation: server/src/test/java/org/elasticsearch/ingest/IngestStatsTests.java - applying 2 hunk(s) one by one in bottom-to-top order: [38, 19]
-    Agent 4: Executing elasticsearch helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_tests.sh
-Phase 0: git apply --check SUCCEEDED. Attempting actual patch application and test run.
-    Agent 4: Executing elasticsearch helper build script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_build.sh
-    Agent 4: Executing elasticsearch helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_tests.sh
-Phase 0: Transition summary -> reason=Valid: Observed fail-to-pass and/or newly passing relevant tests with no regressions.; fail->pass(1): ['org.elasticsearch.ingest.IngestStatsTests#testProcessorNameAndTypeIdentitySerialization']; newly_passing(0): []; pass->fail(0): []
-Phase 0: Transition-based test validation passed. Fast-path success.
-Router: Phase 0 succeeded - taking fast-path exit.
-  Completed: phase_0_optimistic
-[elasticsearch/elasticsearch_d59a0d9d] Full workflow completed!
+[elasticsearch/elasticsearch_d59a0d9d] Found cached Phase 0 results. Skipping Phase 0 and reusing baseline test state.
+[elasticsearch/elasticsearch_d59a0d9d] Cached Phase 0 fast-path success. Skipping agentic workflow.
+[elasticsearch/elasticsearch_d59a0d9d] Completed from cache without agentic workflow.

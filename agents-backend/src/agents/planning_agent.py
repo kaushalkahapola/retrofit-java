@@ -32,16 +32,139 @@ from langgraph.prebuilt import create_react_agent
 
 from agents.hunk_generator_tools import HunkGeneratorToolkit
 from agents.semantic_hunk_adapter import SemanticHunkAdapter
+from agents.type_v_rulebook import TypeVRulebook, RulebookDecision
+from agents.failure_diagnosis import FailureDiagnosisEngine
 from state import AgentState
 from utils.llm_provider import get_llm
 from utils.patch_analyzer import PatchAnalyzer
+from utils.mcp_client import get_client
 from utils.plan_validator import consolidate_plan_entries_java
+from utils.api_drift_detector import detect_drift, extract_method_signatures
+from utils.repomap import build_repomap_from_analysis
 from utils.token_counter import (
     add_usage,
     count_text_tokens,
     extract_usage_from_response,
     resolve_model_name,
 )
+
+
+def _line_tokens(line: str) -> set[str]:
+    return {
+        t
+        for t in re.findall(r"[A-Za-z_][A-Za-z0-9_:.]*", str(line or ""))
+        if t
+        not in {
+            "this",
+            "super",
+            "return",
+            "new",
+            "if",
+            "else",
+            "for",
+            "while",
+        }
+    }
+
+
+def _core_line_tokens(line: str) -> set[str]:
+    """Tokens excluding common call-shape helpers to compare semantic identity."""
+    drop = {
+        "ActionRunnable",
+        "supply",
+        "threadPool",
+        "executor",
+        "ThreadPool",
+        "Names",
+        "MANAGEMENT",
+        "EsExecutors",
+        "DIRECT_EXECUTOR_SERVICE",
+        "SingleResultDeduplicator",
+        "allocationStatsService",
+        "stats",
+        "allocationStatsSupplier",
+        "getThreadContext",
+        "l",
+    }
+    return {t for t in _line_tokens(line) if t not in drop}
+
+
+def _guard_required_replace_entry(
+    entry: dict[str, Any],
+    target_content: str,
+) -> dict[str, Any]:
+    """
+    Protect deterministic required replace operations from unsafe token drift.
+
+    If planner changes target-only stable symbols (e.g. constructor parameters)
+    in a way that is not present in raw required op, revert to conservative
+    required entry and mark unverified so execution can fail-fast/escalate.
+    """
+    out = dict(entry)
+    if str(out.get("edit_type") or "").strip().lower() != "replace":
+        return out
+
+    notes = str(out.get("notes") or "")
+    if "required_op_replace" not in notes:
+        return out
+
+    old_s = str(out.get("old_string") or "")
+    new_s = str(out.get("new_string") or "")
+    if not old_s or not new_s:
+        return out
+
+    if old_s not in target_content and not _linewise_subsequence(old_s, target_content):
+        return out
+
+    old_lines = old_s.splitlines()
+    new_lines = new_s.splitlines()
+
+    for i, old_line in enumerate(old_lines):
+        if i >= len(new_lines):
+            break
+        old_stripped = old_line.strip()
+        if not old_stripped:
+            continue
+        # If old/new token sets diverge too much, this likely came from
+        # unsafe adaptation.
+        old_tokens = _line_tokens(old_line)
+        new_tokens = _line_tokens(new_lines[i])
+        old_core = _core_line_tokens(old_line)
+        new_core = _core_line_tokens(new_lines[i])
+        if not old_tokens or not new_tokens:
+            continue
+
+        overlap = len(old_tokens & new_tokens)
+        if (
+            overlap == 0
+            or (
+                "indexNameExpressionResolver" in old_tokens
+                and "indexNameExpressionResolver" not in new_tokens
+            )
+            or (old_core and new_core and len(old_core & new_core) == 0)
+        ):
+            out["verified"] = False
+            out["verification_result"] = "guard_revert_required_replace:token_drift"
+            out["notes"] = (notes + "|guard_revert_required_replace").strip("|")
+            return out
+
+    return out
+
+
+def _linewise_subsequence(needle_text: str, haystack_text: str) -> bool:
+    """Return True when non-empty needle lines appear in-order in haystack."""
+    needle = [ln.strip() for ln in str(needle_text or "").splitlines() if ln.strip()]
+    hay = [ln.strip() for ln in str(haystack_text or "").splitlines() if ln.strip()]
+    if not needle:
+        return True
+    i = 0
+    for ln in hay:
+        if ln == needle[i]:
+            i += 1
+            if i >= len(needle):
+                return True
+    return False
+
 
 # ---------------------------------------------------------------------------
 # Planner system prompt
@@ -55,10 +178,11 @@ You do NOT edit files. You only produce an execution plan for File Editor.
 MANDATORY TODO WORKFLOW (do in order):
 1) Check whether mainline location and detected target location are the same.
 2) Compare PRE-PATCH surrounding context: mainline before-patch surroundings vs detected target surroundings.
-3) If surrounding context is effectively same, prefer same mainline edit logic.
-4) If blocked, identify blockers explicitly.
-5) Determine whether blockers can be solved with namespace-only changes (variable/method/api/signature renames) based on context.
-6) If namespace-only is insufficient, plan structural rewrite.
+3) Use the API DRIFT MAP to understand structural changes (renamed methods, added parameters, etc.).
+4) If surrounding context is effectively same, prefer same mainline edit logic.
+5) If blocked, identify blockers explicitly.
+6) Determine whether blockers can be solved with namespace-only changes (variable/method/api/signature renames) based on context.
+7) If namespace-only is insufficient, plan structural rewrite.
 
 Adaptation type definitions:
 - TYPE_I: same change, same location
@@ -97,37 +221,42 @@ Rules:
 _TYPE_V_REPAIR_SYSTEM = """\
 You are a specialized TYPE_V repair subagent for backport planning.
 
-You receive one unresolved operation where old_string did not match target file text.
-Your task is to produce ONE corrected operation that preserves semantic intent and can apply on target.
+You receive UNRESOLVED operations where old_string did not match target file text.
+Your task is to produce CORRECTED operations that preserve semantic intent and can apply on target.
+
+Use the API DRIFT MAP to understand why the signatures differ.
 
 Rules:
 - Be conservative and minimal.
 - Reuse existing target symbols and call chains.
 - old_string MUST be verbatim from target file.
-- Prefer deterministic anchor-based edits from provided candidates.
-- Return JSON only.
+- Return a JSON array of corrected operations.
 
 Output schema:
-{
-  "found_equivalent": true|false,
-  "strategy": "replace_exact|replace_method_block|insert_before_anchor|insert_after_anchor",
-  "edit_type": "replace|insert_before|insert_after|delete",
-  "anchor_line_text": "exact anchor line chosen from candidates or empty",
-  "old_string": "...",
-  "new_string": "...",
-  "reason": "short explanation",
-  "confidence": 0.0
-}
+[
+  {
+    "operation_index": int,
+    "found_equivalent": true|false,
+    "strategy": "replace_exact|replace_method_block|insert_before_anchor|insert_after_anchor",
+    "edit_type": "replace|insert_before|insert_after|delete",
+    "anchor_line_text": "exact anchor line chosen from candidates or empty",
+    "old_string": "...",
+    "new_string": "...",
+    "reason": "short explanation",
+    "confidence": 0.0
+  }
+]
 """
 
 
 _TYPE_V_REPAIR_HUMAN = """Run this TODO exactly:
 1) Build symbol lists from MAINLINE added/removed code and TARGET file using tools.
-2) Remove common symbols and focus on non-common symbols that must be adapted.
-3) Use grep/find methods + read windows to locate equivalent chain/method anchors in target.
-4) Produce ONE corrected operation with exact old_string from target.
-5) If single-line replace is fragile, switch strategy to replace_method_block or anchored insert.
-6) Return JSON only.
+2) Analyze the API DRIFT MAP to identify if any symbols used in the hunk were renamed or changed signature.
+3) Remove common symbols and focus on non-common symbols that must be adapted.
+4) Use grep/find methods + read windows to locate equivalent chain/method anchors in target.
+5) Produce corrected operations with exact old_string from target.
+6) If single-line replace is fragile, switch strategy to replace_method_block or anchored insert.
+7) Return a JSON array only.
 """
 
 
@@ -696,11 +825,114 @@ def _ensure_required_coverage(
     return out
 
 
+def _enforce_required_replace_lines(
+    planned_entries: list[dict[str, Any]],
+    required_entries: list[dict[str, Any]],
+    target_content: str,
+) -> list[dict[str, Any]]:
+    """
+    Force planner to keep deterministic required replace payloads for fragile hunks.
+
+    This prevents LLM rewrites from mutating unchanged target-only lines
+    (e.g. constructor args like indexNameExpressionResolver).
+    """
+    req_map: dict[tuple[int | None, int | None], dict[str, Any]] = {}
+    for req in required_entries or []:
+        if str(req.get("edit_type") or "").strip().lower() != "replace":
+            continue
+        key = (req.get("hunk_index"), req.get("operation_index"))
+        req_map[key] = dict(req)
+
+    out: list[dict[str, Any]] = []
+    for entry in planned_entries or []:
+        e = dict(entry)
+        if str(e.get("edit_type") or "").strip().lower() != "replace":
+            out.append(e)
+            continue
+
+        key = (e.get("hunk_index"), e.get("operation_index"))
+        req = req_map.get(key)
+        if not req:
+            out.append(e)
+            continue
+
+        # Apply guard before deciding whether to enforce required payload.
+        guarded = _guard_required_replace_entry(e, target_content)
+
+        req_old = str(req.get("old_string") or "")
+        req_new = str(req.get("new_string") or "")
+        got_old = str(guarded.get("old_string") or "")
+        got_new = str(guarded.get("new_string") or "")
+
+        # If planner deviated from deterministic required op, snap back.
+        if req_old and req_new and (got_old != req_old or got_new != req_new):
+            patched = dict(req)
+            patched["verified"] = False
+            patched["verification_result"] = "required_replace_enforced"
+            patched["notes"] = (
+                str(guarded.get("notes") or req.get("notes") or "")
+                + "|required_replace_enforced"
+            ).strip("|")
+            out.append(patched)
+            continue
+
+        out.append(guarded)
+
+    return out
+
+
 def _normalize_path(path: str) -> str:
     p = (path or "").strip().replace("\\", "/").lstrip("/")
-    if p.startswith("a/") or p.startswith("b/"):
+    while p.startswith("a/") or p.startswith("b/"):
         p = p[2:]
     return p
+
+
+def _build_local_repomap(target_repo_path: str, target_file: str) -> Optional[Any]:
+    """
+    Builds a small, localized RepoMap for the given target file by analyzing its
+    immediate neighborhood (imports and superclasses).
+    """
+    try:
+        client = get_client()
+        # 1. Get dependency graph for the target file
+        graph = client.call_tool(
+            "get_dependency_graph",
+            {
+                "target_repo_path": target_repo_path,
+                "file_paths": [target_file],
+                "explore_neighbors": True,  # Get siblings in same package
+            },
+        )
+
+        # 2. Collect all unique file paths in the graph
+        related_files = set()
+        for node in graph.get("nodes", []):
+            f_path = node.get("file_path")
+            if f_path:
+                related_files.add(f_path)
+
+        if not related_files:
+            return None
+
+        # 3. Fetch structural analysis for all related files
+        analyses = []
+        for f in list(related_files)[:15]:  # Cap to avoid massive latency
+            analysis = client.call_tool(
+                "get_structural_analysis",
+                {
+                    "target_repo_path": target_repo_path,
+                    "file_path": f,
+                },
+            )
+            if analysis:
+                analysis["file_path"] = f
+                analyses.append(analysis)
+
+        return build_repomap_from_analysis(target_repo_path, analyses)
+    except Exception as e:
+        print(f"    Planning Agent: Failed to build local repomap: {e}")
+        return None
 
 
 def _read_target_file(target_repo_path: str, rel_path: str) -> str:
@@ -827,9 +1059,16 @@ def _build_hunk_planner_prompt(
     target_before: list[str],
     target_after: list[str],
     consistency_map: dict[str, str],
+    drift_map: dict[str, Any],
     deterministic_entries: list[dict[str, Any]],
     retry_failure_context: str,
+    structured_failure_context: str,
+    rulebook_decision: RulebookDecision | None = None,
 ) -> str:
+    rulebook_section = ""
+    if rulebook_decision and rulebook_decision.confidence > 0.4:
+        rulebook_section = rulebook_decision.to_prompt_context()
+
     return f"""Plan this backport hunk.
 
 Mainline file: {mainline_file}
@@ -854,19 +1093,28 @@ after={json.dumps(target_after, ensure_ascii=False)}
 Consistency map:
 {json.dumps(consistency_map or {}, indent=2, ensure_ascii=False)}
 
+API DRIFT MAP (Crucial for structural changes):
+{json.dumps(drift_map or {}, indent=2, ensure_ascii=False)}
+
+{rulebook_section}
+
 Deterministic candidate operations:
 {json.dumps(deterministic_entries, indent=2, ensure_ascii=False)}
 
 Retry/failure context:
 {retry_failure_context or "<none>"}
 
+Structured failure diagnostics:
+{structured_failure_context or "<none>"}
+
 Follow this exact TODO:
 1. Check if mainline location and detected target location are same.
 2. Compare PRE-PATCH surrounding context (mainline before patch) with detected target surroundings.
-3. If both surroundings are same, use same edit logic as mainline.
-4. If blocked, list blockers.
-5. Check whether blockers can be solved with namespace-only changes based on context (do not assume; justify).
-6. If namespace-only is insufficient, do structural rewrite.
+3. Use the API DRIFT MAP to understand why the signatures differ (e.g. added parameters).
+4. If both surroundings are same, use same edit logic as mainline.
+5. If blocked, list blockers.
+6. Check whether blockers can be solved with namespace-only changes based on context (do not assume; justify).
+7. If namespace-only is insufficient, do structural rewrite.
 
 Return JSON ONLY in this shape:
 {{
@@ -968,6 +1216,112 @@ def _collect_build_issue_types_from_state(state: AgentState) -> set[str]:
         for issue in (build_diag.get("issues") or [])
         if isinstance(issue, dict)
     }
+
+
+def _format_structured_failure_context_for_prompt(
+    structured_failure_context: dict[str, Any] | None,
+) -> str:
+    if (
+        not isinstance(structured_failure_context, dict)
+        or not structured_failure_context
+    ):
+        return "<none>"
+
+    summary = {
+        "primary_failed_file": str(
+            structured_failure_context.get("primary_failed_file") or ""
+        ),
+        "primary_failed_symbol": str(
+            structured_failure_context.get("primary_failed_symbol") or ""
+        ),
+        "failed_locations": list(
+            (structured_failure_context.get("failed_locations") or [])[:6]
+        ),
+        "symbol_errors": list(
+            (structured_failure_context.get("symbol_errors") or [])[:6]
+        ),
+        "signature_errors": list(
+            (structured_failure_context.get("signature_errors") or [])[:6]
+        ),
+    }
+    return json.dumps(summary, indent=2, ensure_ascii=False)
+
+
+def _normalize_api_accessor_drift_entries(
+    *,
+    entries: list[dict[str, Any]],
+    target_content: str,
+    retry_failure_context: str,
+    structured_failure_context: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """
+    Deterministically normalize known API accessor drift patterns.
+
+    Current rule: Lucene TopDocs totalHits accessor drift between
+    `.totalHits.value()` and `.totalHits.value`.
+    """
+    if not entries:
+        return entries
+
+    content = str(target_content or "")
+    if ".totalHits.value" not in content:
+        return entries
+
+    field_hits = len(re.findall(r"\.totalHits\.value\s*;", content))
+    method_hits = len(re.findall(r"\.totalHits\.value\(\)", content))
+    if field_hits == method_hits:
+        return entries
+
+    prefer_field = field_hits > method_hits
+    prefer_method = method_hits > field_hits
+
+    symbol_errors = []
+    if isinstance(structured_failure_context, dict):
+        symbol_errors = [
+            s
+            for s in (structured_failure_context.get("symbol_errors") or [])
+            if isinstance(s, dict)
+        ]
+    method_value_missing = any(
+        str(s.get("kind") or "").strip().lower() == "method"
+        and str(s.get("name") or "").strip() == "value"
+        for s in symbol_errors
+    )
+    retry_ctx = str(retry_failure_context or "").lower()
+    if not method_value_missing and (
+        "cannot find symbol" in retry_ctx and "value" in retry_ctx
+    ):
+        method_value_missing = True
+
+    out: list[dict[str, Any]] = []
+    for entry in entries:
+        updated = dict(entry)
+        entry_changed = False
+        for field in ("old_string", "new_string"):
+            txt = str(updated.get(field) or "")
+            if not txt or ".totalHits.value" not in txt:
+                continue
+
+            new_txt = txt
+            if prefer_field and (method_value_missing or ".totalHits.value()" in txt):
+                new_txt = new_txt.replace(".totalHits.value()", ".totalHits.value")
+            elif prefer_method and ".totalHits.value" in txt:
+                new_txt = re.sub(
+                    r"\.totalHits\.value(?=\s*;)",
+                    ".totalHits.value()",
+                    new_txt,
+                )
+
+            if new_txt != txt:
+                updated[field] = new_txt
+                entry_changed = True
+
+        if entry_changed:
+            updated["notes"] = (
+                str(updated.get("notes") or "") + "|api_accessor_drift_normalized"
+            ).strip("|")
+        out.append(updated)
+    return out
 
 
 def _should_force_type_v_replanning(
@@ -1404,12 +1758,14 @@ def _build_type_v_repair_prompt(
     mainline_file: str,
     target_file: str,
     raw_hunk: str,
-    entry: dict[str, Any],
+    entries: list[dict[str, Any]],
     target_method_windows: list[dict[str, Any]],
     consistency_map: dict[str, str],
+    drift_map: dict[str, Any],
     required_symbols: list[str],
     chain_constraints: list[list[str]],
     retry_failure_context: str,
+    structured_failure_context: str,
     anchor_candidates: list[str],
     mainline_symbols_added: list[str],
     mainline_symbols_removed: list[str],
@@ -1418,7 +1774,7 @@ def _build_type_v_repair_prompt(
     uncommon_removed_symbols: list[str],
 ) -> str:
     focused_windows = target_method_windows[:10]
-    return f"""Repair one unresolved TYPE_V operation.
+    return f"""Repair one or more unresolved TYPE_V operations.
 
 Mainline file: {mainline_file}
 Target file: {target_file}
@@ -1427,8 +1783,11 @@ Raw hunk:
 {raw_hunk}
 ```
 
-Unresolved operation:
-{json.dumps(entry, indent=2, ensure_ascii=False)}
+Unresolved operations (must repair all):
+{json.dumps(entries, indent=2, ensure_ascii=False)}
+
+API DRIFT MAP (Crucial for structural changes):
+{json.dumps(drift_map or {}, indent=2, ensure_ascii=False)}
 
 Required symbols:
 {json.dumps(required_symbols or [], ensure_ascii=False)}
@@ -1463,17 +1822,23 @@ Uncommon removed symbols (priority):
 Retry/failure context:
 {retry_failure_context or "<none>"}
 
-Return JSON only with schema:
-{{
-  "found_equivalent": true,
-  "strategy": "replace_exact|replace_method_block|insert_before_anchor|insert_after_anchor",
-  "edit_type": "replace|insert_before|insert_after|delete",
-  "anchor_line_text": "",
-  "old_string": "",
-  "new_string": "",
-  "reason": "",
-  "confidence": 0.0
-}}"""
+Structured failure diagnostics:
+{structured_failure_context or "<none>"}
+
+Return a JSON array only with schema:
+[
+  {{
+    "operation_index": int,
+    "found_equivalent": true,
+    "strategy": "replace_exact|replace_method_block|insert_before_anchor|insert_after_anchor",
+    "edit_type": "replace|insert_before|insert_after|delete",
+    "anchor_line_text": "",
+    "old_string": "",
+    "new_string": "",
+    "reason": "",
+    "confidence": 0.0
+  }}
+]"""
 
 
 async def _repair_type_v_unverified_entries_with_subagent(
@@ -1486,9 +1851,11 @@ async def _repair_type_v_unverified_entries_with_subagent(
     raw_hunk: str,
     target_content: str,
     consistency_map: dict[str, str],
+    drift_map: dict[str, Any],
     required_symbols: list[str],
     chain_constraints: list[list[str]],
     retry_failure_context: str,
+    structured_failure_context: str,
     token_usage: dict[str, Any],
     model_name: str,
     toolkit: HunkGeneratorToolkit | None = None,
@@ -1496,9 +1863,12 @@ async def _repair_type_v_unverified_entries_with_subagent(
     """
     TYPE_V planning repair subagent:
     - only for entries still unverified after deterministic sanitization
-    - repairs one operation at a time with strict JSON output
+    - repairs ALL unverified operations in a single batch LLM call
     """
-    out: list[dict[str, Any]] = []
+    unverified = [e for e in entries if not e.get("verified", False)]
+    if not unverified:
+        return entries
+
     req_by_idx = {
         (r.get("hunk_index"), r.get("operation_index")): r
         for r in (required_entries or [])
@@ -1512,132 +1882,129 @@ async def _repair_type_v_unverified_entries_with_subagent(
         target_content=target_content,
     )
 
+    prompt = _build_type_v_repair_prompt(
+        mainline_file=mainline_file,
+        target_file=target_file,
+        raw_hunk=raw_hunk,
+        entries=unverified,
+        target_method_windows=method_windows,
+        consistency_map=consistency_map,
+        drift_map=drift_map,
+        required_symbols=required_symbols,
+        chain_constraints=chain_constraints,
+        retry_failure_context=retry_failure_context,
+        structured_failure_context=structured_failure_context,
+        anchor_candidates=anchor_candidates,
+        mainline_symbols_added=inventory.get("added", []),
+        mainline_symbols_removed=inventory.get("removed", []),
+        target_declared_symbols=inventory.get("target_declared", []),
+        uncommon_added_symbols=inventory.get("uncommon_added", []),
+        uncommon_removed_symbols=inventory.get("uncommon_removed", []),
+    )
+
+    repaired_payloads = []
+    try:
+        if toolkit is not None:
+            type_v_agent = create_react_agent(llm, toolkit.get_tools())
+            response = await type_v_agent.ainvoke(
+                {
+                    "messages": [
+                        SystemMessage(content=_TYPE_V_REPAIR_SYSTEM),
+                        HumanMessage(content=prompt + "\n\n" + _TYPE_V_REPAIR_HUMAN),
+                    ]
+                }
+            )
+            resp_msgs = (
+                response.get("messages", []) if isinstance(response, dict) else []
+            )
+            final_text = ""
+            if resp_msgs:
+                last = resp_msgs[-1]
+                final_text = str(getattr(last, "content", "") or last)
+            else:
+                final_text = str(response)
+            response_text = final_text
+            usage = None
+        else:
+            response = await llm.ainvoke(
+                [
+                    SystemMessage(content=_TYPE_V_REPAIR_SYSTEM),
+                    HumanMessage(content=prompt),
+                ]
+            )
+            usage = extract_usage_from_response(response)
+            response_text = (
+                response.content if hasattr(response, "content") else str(response)
+            )
+
+        if usage and (usage["input_tokens"] or usage["output_tokens"]):
+            add_usage(
+                token_usage,
+                usage["input_tokens"],
+                usage["output_tokens"],
+                "planning_agent.type_v_subagent.provider_usage",
+            )
+        else:
+            add_usage(
+                token_usage,
+                count_text_tokens(_TYPE_V_REPAIR_SYSTEM + "\n" + prompt, model_name),
+                count_text_tokens(str(response_text), model_name),
+                "planning_agent.type_v_subagent.tiktoken",
+            )
+            token_usage["estimated"] = True
+
+        payload = _extract_json_payload(str(response_text))
+        if isinstance(payload, list):
+            repaired_payloads = payload
+    except Exception as e:
+        print(f"    Planning Agent: Type V batch repair failed: {e}")
+
+    # Map repaired payloads back to original entries
+    repaired_map = {p.get("operation_index"): p for p in repaired_payloads}
+
+    out = []
     for entry in entries:
         if entry.get("verified", False):
             out.append(entry)
             continue
 
-        op_key = (entry.get("hunk_index"), entry.get("operation_index"))
-        fallback = req_by_idx.get(op_key, entry)
-
-        prompt = _build_type_v_repair_prompt(
-            mainline_file=mainline_file,
-            target_file=target_file,
-            raw_hunk=raw_hunk,
-            entry=entry,
-            target_method_windows=method_windows,
-            consistency_map=consistency_map,
-            required_symbols=required_symbols,
-            chain_constraints=chain_constraints,
-            retry_failure_context=retry_failure_context,
-            anchor_candidates=anchor_candidates,
-            mainline_symbols_added=inventory.get("added", []),
-            mainline_symbols_removed=inventory.get("removed", []),
-            target_declared_symbols=inventory.get("target_declared", []),
-            uncommon_added_symbols=inventory.get("uncommon_added", []),
-            uncommon_removed_symbols=inventory.get("uncommon_removed", []),
-        )
+        op_idx = entry.get("operation_index")
+        payload = repaired_map.get(op_idx)
 
         repaired = dict(entry)
-        try:
-            if toolkit is not None:
-                # Tool-enabled TYPE_V repair subagent for complex anchor discovery.
-                type_v_agent = create_react_agent(llm, toolkit.get_tools())
-                response = await type_v_agent.ainvoke(
-                    {
-                        "messages": [
-                            SystemMessage(content=_TYPE_V_REPAIR_SYSTEM),
-                            HumanMessage(
-                                content=prompt + "\n\n" + _TYPE_V_REPAIR_HUMAN
-                            ),
-                        ]
-                    }
-                )
-                # For ReAct responses, use the final assistant message text.
-                resp_msgs = (
-                    response.get("messages", []) if isinstance(response, dict) else []
-                )
-                final_text = ""
-                if resp_msgs:
-                    last = resp_msgs[-1]
-                    final_text = str(getattr(last, "content", "") or last)
-                else:
-                    final_text = str(response)
-                response_text = final_text
-                usage = None
-            else:
-                response = await llm.ainvoke(
-                    [
-                        SystemMessage(content=_TYPE_V_REPAIR_SYSTEM),
-                        HumanMessage(content=prompt),
-                    ]
-                )
-                usage = extract_usage_from_response(response)
-                response_text = (
-                    response.content if hasattr(response, "content") else str(response)
-                )
-
-            if usage and (usage["input_tokens"] or usage["output_tokens"]):
-                add_usage(
-                    token_usage,
-                    usage["input_tokens"],
-                    usage["output_tokens"],
-                    "planning_agent.type_v_subagent.provider_usage",
-                )
-            else:
-                add_usage(
-                    token_usage,
-                    count_text_tokens(
-                        _TYPE_V_REPAIR_SYSTEM + "\n" + prompt, model_name
-                    ),
-                    count_text_tokens(str(response_text), model_name),
-                    "planning_agent.type_v_subagent.tiktoken",
-                )
-                token_usage["estimated"] = True
-
-            payload = _extract_json_payload(str(response_text))
-            if isinstance(payload, dict) and payload.get("found_equivalent"):
-                repaired = _apply_anchor_strategy_to_payload(
-                    payload,
-                    target_content,
-                    method_block_map,
-                    repaired,
-                )
-                repaired["verified"] = True
-                repaired["verification_result"] = (
-                    f"type_v_subagent:{float(payload.get('confidence', 0.0)):.2f}"
-                )
-                repaired["notes"] = (
-                    str(repaired.get("notes") or "") + "|type_v_subagent_repaired"
-                ).strip("|")
-            else:
-                repaired["notes"] = (
-                    str(repaired.get("notes") or "") + "|type_v_subagent_no_equivalent"
-                ).strip("|")
-        except Exception as e:
+        if isinstance(payload, dict) and payload.get("found_equivalent"):
+            repaired = _apply_anchor_strategy_to_payload(
+                payload,
+                target_content,
+                method_block_map,
+                repaired,
+            )
+            repaired["verified"] = True
+            repaired["verification_result"] = (
+                f"type_v_batch_repair:{float(payload.get('confidence', 0.0)):.2f}"
+            )
             repaired["notes"] = (
-                str(repaired.get("notes") or "") + f"|type_v_subagent_error:{e}"
+                str(repaired.get("notes") or "") + "|type_v_repaired"
             ).strip("|")
-
-            # Deterministic sanitize after subagent attempt (must be applicable on target)
+        else:
+            # Fallback logic for unverified entries
             repaired = _sanitize_entry_against_target(repaired, target_content)
             if (
                 not repaired.get("verified", False)
             ) and _entry_requires_chain_sensitive_repair(entry):
                 promoted = _promote_unverified_chain_entry_to_method_block(
-                    repaired,
-                    target_content,
-                    method_block_map,
+                    repaired, target_content, method_block_map
                 )
                 repaired = _sanitize_entry_against_target(promoted, target_content)
-            det_fallback: dict[str, Any] | None = None
+
+            op_key = (entry.get("hunk_index"), entry.get("operation_index"))
+            fallback = req_by_idx.get(op_key, entry)
             if not repaired.get("verified", False):
-                # Fallback to deterministic required entry if it sanitizes better.
                 det_fallback = _sanitize_entry_against_target(
                     dict(fallback), target_content
                 )
-            if det_fallback and det_fallback.get("verified", False):
-                repaired = det_fallback
+                if det_fallback and det_fallback.get("verified", False):
+                    repaired = det_fallback
 
         out.append(repaired)
 
@@ -1761,6 +2128,127 @@ def _resolve_old_in_content(content: str, old_string: str) -> tuple[str, str]:
     return "", "not_found_multiline"
 
 
+def _preserve_target_only_lines_in_new(
+    old_source: str,
+    new_source: str,
+    resolved_old_target: str,
+) -> str:
+    """Carry target-only lines from resolved old block into replacement new block."""
+    old_src_lines = old_source.splitlines()
+    new_lines = new_source.splitlines()
+    old_tgt_lines = resolved_old_target.splitlines()
+
+    if not old_src_lines or not old_tgt_lines or not new_lines:
+        return new_source
+
+    src_norm = [l.strip() for l in old_src_lines]
+    tgt_norm = [l.strip() for l in old_tgt_lines]
+
+    # Greedy alignment from source-old to resolved target-old by stripped lines.
+    aligned_tgt_indexes: list[int] = []
+    j = 0
+    for s in src_norm:
+        found = -1
+        while j < len(tgt_norm):
+            if tgt_norm[j] == s:
+                found = j
+                j += 1
+                break
+            j += 1
+        if found >= 0:
+            aligned_tgt_indexes.append(found)
+
+    if not aligned_tgt_indexes:
+        return new_source
+
+    aligned_set = set(aligned_tgt_indexes)
+    extras: list[tuple[int, str]] = []
+    for idx, line in enumerate(old_tgt_lines):
+        if idx in aligned_set:
+            continue
+        if not line.strip():
+            continue
+        extras.append((idx, line))
+
+    if not extras:
+        return new_source
+
+    new_norm = [l.strip() for l in new_lines]
+    out_lines = list(new_lines)
+
+    for extra_idx, extra_line in extras:
+        extra_norm = extra_line.strip()
+        if extra_norm in new_norm:
+            continue
+
+        # Find nearest aligned neighbor after extra to place before.
+        insert_at = -1
+        after_candidates = [i for i in aligned_tgt_indexes if i > extra_idx]
+        before_candidates = [i for i in aligned_tgt_indexes if i < extra_idx]
+
+        if after_candidates:
+            nearest_after = min(after_candidates)
+            anchor_norm = old_tgt_lines[nearest_after].strip()
+            try:
+                insert_at = new_norm.index(anchor_norm)
+            except ValueError:
+                insert_at = -1
+
+        if insert_at < 0 and before_candidates:
+            nearest_before = max(before_candidates)
+            anchor_norm = old_tgt_lines[nearest_before].strip()
+            try:
+                insert_at = new_norm.index(anchor_norm) + 1
+            except ValueError:
+                insert_at = -1
+
+        if insert_at < 0:
+            insert_at = len(out_lines)
+
+        out_lines.insert(insert_at, extra_line)
+        new_norm.insert(insert_at, extra_norm)
+
+    return "\n".join(out_lines)
+
+
+def _preserve_old_argument_lines_in_new(old_source: str, new_source: str) -> str:
+    """Preserve missing comma-argument lines from old block in new block."""
+    old_lines = old_source.splitlines()
+    out_lines = new_source.splitlines()
+    out_norm = [ln.strip() for ln in out_lines]
+
+    arg_re = re.compile(r"^[A-Za-z_][A-Za-z0-9_:.]*,\s*$")
+
+    for i, old_line in enumerate(old_lines):
+        s = old_line.strip()
+        if not s or s in out_norm:
+            continue
+        if not arg_re.match(s):
+            continue
+
+        insert_at = len(out_lines)
+
+        # Prefer inserting before the nearest following old line that exists.
+        for j in range(i + 1, len(old_lines)):
+            nxt = old_lines[j].strip()
+            if nxt and nxt in out_norm:
+                insert_at = out_norm.index(nxt)
+                break
+
+        # Otherwise insert after nearest previous old line that exists.
+        if insert_at == len(out_lines):
+            for j in range(i - 1, -1, -1):
+                prev = old_lines[j].strip()
+                if prev and prev in out_norm:
+                    insert_at = out_norm.index(prev) + 1
+                    break
+
+        out_lines.insert(insert_at, old_line)
+        out_norm.insert(insert_at, s)
+
+    return "\n".join(out_lines)
+
+
 def _sanitize_entry_against_target(
     entry: dict[str, Any],
     content: str,
@@ -1786,6 +2274,20 @@ def _sanitize_entry_against_target(
     out["old_string"] = resolved_old
     out["verified"] = True
     out["verification_result"] = f"sanitize_resolved:{reason}"
+
+    # Preserve target-only lines within multiline replace blocks (e.g. extra
+    # constructor args present only on target branch).
+    if edit_type == "replace" and "\n" in old_s and "\n" in new_s:
+        out["new_string"] = _preserve_target_only_lines_in_new(
+            old_source=old_s,
+            new_source=new_s,
+            resolved_old_target=resolved_old,
+        )
+        out["new_string"] = _preserve_old_argument_lines_in_new(
+            old_source=resolved_old,
+            new_source=str(out.get("new_string") or new_s),
+        )
+        new_s = str(out.get("new_string") or new_s)
 
     if edit_type in {"insert_before", "insert_after"}:
         payload = None
@@ -2187,6 +2689,9 @@ async def planning_agent_node(state: AgentState, config) -> dict:
     retry_files_raw = state.get("validation_retry_files") or []
     retry_hunks_raw = state.get("validation_retry_hunks") or []
     validation_error_context = str(state.get("validation_error_context") or "")
+    validation_error_context_structured = state.get(
+        "validation_error_context_structured"
+    ) or ((state.get("validation_results") or {}).get("structured_failure") or {})
     validation_failure_category = str(state.get("validation_failure_category") or "")
     validation_failed_stage = str(state.get("validation_failed_stage") or "")
     sticky_force_type_v = bool(state.get("force_type_v_until_success") or False)
@@ -2245,6 +2750,10 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         print(msg)
         return {"messages": [HumanMessage(content=msg)]}
 
+    structured_failure_context_text = _format_structured_failure_context_for_prompt(
+        validation_error_context_structured
+    )
+
     # Gate: abort planning if ALL mapped contexts are flagged as file-missing.
     # This means structural locator found no valid target files — planning
     # would produce a stagnant plan targeting non-existent files. Signal
@@ -2297,6 +2806,10 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             + truncated_failure_context[-700:]
         )
 
+    # If we have a previous plan and a list of specific hunks to retry,
+    # we can keep the successful parts of the previous plan.
+    previous_plan = state.get("hunk_generation_plan") or {}
+
     for mainline_file, raw_hunks in (raw_hunks_by_file or {}).items():
         normalized_mainline = str(mainline_file).replace("\\", "/").strip().lstrip("/")
         if not _is_java_code_file(normalized_mainline):
@@ -2309,10 +2822,52 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         ):
             continue
 
+        if mainline_file not in mainline_pre_cache:
+            mainline_pre_cache[mainline_file] = _read_mainline_prepatch_file(
+                mainline_repo_path,
+                original_commit,
+                mainline_file,
+            )
+        mainline_pre = mainline_pre_cache.get(mainline_file) or ""
+
+        # Drift detection once per file to guide all hunks
+        drift_map = {}
         mapped = mapped_target_context.get(mainline_file, [])
+        if mapped and mainline_pre:
+            first_ctx = mapped[0] if mapped else {}
+            target_file_for_drift = (
+                first_ctx.get("target_file") or mainline_file
+            ).replace("\\", "/")
+            target_content_for_drift = _read_target_file(
+                target_repo_path, target_file_for_drift
+            )
+            if target_content_for_drift:
+                # Build local repomap to detect cross-file drifts (e.g. moved methods)
+                repomap = _build_local_repomap(target_repo_path, target_file_for_drift)
+                drift_map = detect_drift(
+                    mainline_pre, target_content_for_drift, repomap=repomap
+                )
+                if repomap:
+                    print(
+                        f"    Planning Agent: Drift analysis for {target_file_for_drift} complete with RepoMap."
+                    )
+
         for hidx, raw_hunk in enumerate(raw_hunks):
+            # Selective Retry: If we have specific hunks to retry, and this hunk isn't one of them,
+            # reuse the previous plan entry for this hunk.
             if validation_attempts > 0 and retry_hunks and hidx not in retry_hunks:
-                continue
+                if mainline_file in previous_plan:
+                    existing_entries = [
+                        e
+                        for e in previous_plan[mainline_file]
+                        if e.get("hunk_index") == hidx
+                    ]
+                    if existing_entries:
+                        print(
+                            f"    Planning Agent: Reusing {len(existing_entries)} successful plan entries for hunk {hidx}"
+                        )
+                        plan[mainline_file].extend(existing_entries)
+                        continue
 
             ctx = mapped[min(hidx, len(mapped) - 1)] if mapped else {}
             target_file = (ctx.get("target_file") or mainline_file).replace("\\", "/")
@@ -2346,14 +2901,6 @@ async def planning_agent_node(state: AgentState, config) -> dict:
 
             old_start, old_count, _new_start, _new_count = _parse_hunk_header(raw_hunk)
             target_start = int(ctx.get("start_line") or old_start or 1)
-
-            if mainline_file not in mainline_pre_cache:
-                mainline_pre_cache[mainline_file] = _read_mainline_prepatch_file(
-                    mainline_repo_path,
-                    original_commit,
-                    mainline_file,
-                )
-            mainline_pre = mainline_pre_cache.get(mainline_file) or ""
 
             main_before, main_after = _extract_surrounding_lines(
                 mainline_pre,
@@ -2392,7 +2939,70 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                     _normalize_path(normalized_mainline) in sticky_force_type_v_files
                     or _normalize_path(target_file) in sticky_force_type_v_files
                 )
-            # Retry file filtering is already handled at file-iteration level.
+
+            # ------------------------------------------------------------------
+            # TYPE_V RULEBOOK: Run before LLM planning to guide it deterministically
+            # ------------------------------------------------------------------
+            rulebook_decision = None
+            if force_type_v_for_entry and validation_attempts > 0:
+                rulebook = TypeVRulebook(target_repo_path, mainline_repo_path)
+                rulebook_decision = rulebook.apply(
+                    target_file=target_file,
+                    failed_plan_entry=sanitized_entries[0] if sanitized_entries else {},
+                    build_error=str(validation_error_context or ""),
+                    consistency_map=consistency_map or {},
+                )
+
+                # If rulebook says remap to a different file, update target_file NOW
+                # before we even call the LLM
+                if (
+                    rulebook_decision.action == "remap_file"
+                    and rulebook_decision.override_target_file
+                ):
+                    if rulebook_decision.confidence >= 0.7:
+                        old_target = target_file
+                        target_file = rulebook_decision.override_target_file
+                        print(
+                            f"    Planning Agent: RULEBOOK remap: {old_target} → {target_file} "
+                            f"(confidence={rulebook_decision.confidence:.0%})"
+                        )
+                        # Re-run sanitize against new target
+                        new_content = _read_target_file(target_repo_path, target_file)
+                        if new_content:
+                            sanitized_entries = [
+                                _sanitize_entry_against_target(e, new_content)
+                                for e in sanitized_entries
+                            ]
+                    else:
+                        print(
+                            f"    Planning Agent: RULEBOOK remap rejected due to low confidence ({rulebook_decision.confidence:.0%})"
+                        )
+
+                # If rulebook says apply to parent, redirect
+                elif (
+                    rulebook_decision.action == "apply_to_parent"
+                    and rulebook_decision.override_target_file
+                ):
+                    target_file = rulebook_decision.override_target_file
+                    print(
+                        f"    Planning Agent: RULEBOOK parent redirect → {target_file}"
+                    )
+
+                # If rulebook says add side files, add them to the plan queue
+                elif rulebook_decision.action == "add_side_file":
+                    for sf in rulebook_decision.additional_files:
+                        if sf not in mapped_target_context:
+                            # Add a minimal mapping so hunk generator picks it up
+                            mapped_target_context[sf] = [
+                                {
+                                    "hunk_index": 0,
+                                    "target_file": sf,
+                                    "start_line": None,
+                                    "code_snippet": "",
+                                    "anchor_reason": "rulebook_side_file",
+                                }
+                            ]
+                            print(f"    Planning Agent: RULEBOOK added side file: {sf}")
 
             if force_type_v_for_entry:
                 forced_scope_files.add(_normalize_path(normalized_mainline))
@@ -2413,8 +3023,11 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                     target_before=target_before,
                     target_after=target_after,
                     consistency_map=consistency_map,
+                    drift_map=drift_map,
                     deterministic_entries=sanitized_entries,
                     retry_failure_context=truncated_failure_context,
+                    structured_failure_context=structured_failure_context_text,
+                    rulebook_decision=rulebook_decision,
                 )
 
                 planner_messages = [
@@ -2471,6 +3084,17 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                     llm_entries = list(sanitized_entries)
 
             entries = _ensure_required_coverage(llm_entries, required_entries)
+            entries = _enforce_required_replace_lines(
+                entries,
+                required_entries,
+                target_content,
+            )
+            entries = _normalize_api_accessor_drift_entries(
+                entries=entries,
+                target_content=target_content,
+                retry_failure_context=validation_error_context,
+                structured_failure_context=validation_error_context_structured,
+            )
 
             # TYPE_V repair subagent pass for unresolved operations.
             if force_type_v_for_entry and target_content:
@@ -2492,9 +3116,11 @@ async def planning_agent_node(state: AgentState, config) -> dict:
                     raw_hunk=raw_hunk,
                     target_content=target_content,
                     consistency_map=consistency_map,
+                    drift_map=drift_map,
                     required_symbols=required_symbols,
                     chain_constraints=chain_constraints,
                     retry_failure_context=truncated_failure_context,
+                    structured_failure_context=structured_failure_context_text,
                     token_usage=token_usage,
                     model_name=model_name,
                     toolkit=HunkGeneratorToolkit(target_repo_path)

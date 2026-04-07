@@ -1,0 +1,53 @@
+{
+  "surgical_plans": {},
+  "reasoning_context": {
+    "current_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+    "failure_kind": "anchor_not_found",
+    "build_diagnostics": {
+      "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+      "issues": [
+        {
+          "error_type": "api_or_signature_mismatch",
+          "suggested_action": "replan_and_regenerate_with_api_compatibility",
+          "compiler_errors": []
+        }
+      ],
+      "failed_locations": [
+        {
+          "file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+          "line": 93
+        },
+        {
+          "file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+          "line": 93
+        }
+      ],
+      "symbol_errors": [
+        {
+          "kind": "method",
+          "name": "checkSourceModeInComponentTemplates"
+        },
+        {
+          "kind": "method",
+          "name": "checkSourceModeInComponentTemplates"
+        }
+      ],
+      "signature_errors": [],
+      "primary_failed_symbol": "checkSourceModeInComponentTemplates",
+      "raw_error_preview": "Build failed: API/signature mismatch in generated patch against target branch."
+    },
+    "side_files": [],
+    "iteration": 2,
+    "surgical_ops": []
+  },
+  "reasoning_iterations": 2,
+  "token_usage": {
+    "input_tokens": 114054,
+    "output_tokens": 1333,
+    "total_tokens": 115387,
+    "estimated": false,
+    "sources": [
+      "reasoning_architect.react.aggregate_usage"
+    ]
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "semantic_blueprint": {
+    "root_cause_hypothesis": "Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.",
+    "fix_logic": "Apply each source hunk with target-verified context and symbol consistency while preserving behavior.",
+    "dependent_apis": [
+      "with",
+      "Role"
+    ],
+    "patch_intent_summary": "Backport patch behavior to target branch with minimal, context-correct edits.",
+    "hunk_chain": [
+      {
+        "hunk_index": 1,
+        "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "summary": "Modifies logic (+1/-1 lines).",
+        "role": "core_fix",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 1
+      },
+      {
+        "hunk_index": 2,
+        "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "summary": "Modifies logic (+1/-1 lines).",
+        "role": "core_fix",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 2
+      },
+      {
+        "hunk_index": 3,
+        "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "summary": "Modifies logic (+1/-1 lines).",
+        "role": "core_fix",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 3
+      },
+      {
+        "hunk_index": 4,
+        "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "summary": "Modifies logic (+1/-1 lines).",
+        "role": "core_fix",
+        "connects_to_next": "",
+        "global_index": 4
+      },
+      {
+        "hunk_index": 1,
+        "file": "server/src/main/java/io/crate/role/Role.java",
+        "summary": "Modifies logic (+6/-2 lines).",
+        "role": "guard",
+        "connects_to_next": "Prepares next hunk in same file with related context.",
+        "global_index": 5
+      },
+      {
+        "hunk_index": 2,
+        "file": "server/src/main/java/io/crate/role/Role.java",
+        "summary": "Modifies logic (+1/-1 lines).",
+        "role": "propagation",
+        "connects_to_next": "",
+        "global_index": 6
+      },
+      {
+        "hunk_index": 1,
+        "file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+        "summary": "Modifies logic (+1/-8 lines).",
+        "role": "core_fix",
+        "connects_to_next": "",
+        "global_index": 7
+      }
+    ]
+  },
+  "patch_diff": "diff --git a/server/src/main/java/io/crate/role/PrivilegesModifier.java b/server/src/main/java/io/crate/role/PrivilegesModifier.java\nindex 0000000..0000000 100644\n--- a/server/src/main/java/io/crate/role/PrivilegesModifier.java\n+++ b/server/src/main/java/io/crate/role/PrivilegesModifier.java\n@@ -96,7 +96,7 @@\n             }\n \n             if (affectedCount > 0) {\n-                roles.put(userName, role.with(privileges));\n+                roles.put(userName, role.with(new RolePrivileges(privileges)));\n             }\n         }\n \n@@ -139,7 +139,7 @@\n                     privileges.add(privilege);\n                 }\n             }\n-            newRoles.put(entry.getKey(), role.with(privileges));\n+            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));\n         }\n \n         if (privilegesChanged) {\n@@ -171,7 +171,7 @@\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(role.name(), role.with(updatedPrivileges));\n+            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n         return affectedPrivileges;\n@@ -201,7 +201,7 @@\n                     updatedPrivileges.add(privilege);\n                 }\n             }\n-            newRoles.put(user, role.with(updatedPrivileges));\n+            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));\n         }\n         return new RolesMetadata(newRoles);\n     }\ndiff --git a/server/src/main/java/io/crate/role/Role.java b/server/src/main/java/io/crate/role/Role.java\nindex 0000000..0000000 100644\n--- a/server/src/main/java/io/crate/role/Role.java\n+++ b/server/src/main/java/io/crate/role/Role.java\n@@ -241,8 +241,12 @@\n \n     }\n \n-    public Role with(Set<Privilege> privileges) {\n-        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n+    public Role with(RolePrivileges privileges) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n+    }\n+\n+    public Role with(Set<GrantedRole> grantedRoles) {\n+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);\n     }\n \n     public Role with(@Nullable SecureHash password,\n@@ -257,7 +261,7 @@\n                 password,\n                 jwtProperties,\n                 sessionSettings),\n-            false\n+            isSuperUser\n         );\n     }\n \ndiff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\nindex 0000000..0000000 100644\n--- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n+++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java\n@@ -239,14 +239,7 @@\n             }\n         }\n         if (affectedCount > 0) {\n-            roles.put(role.name(), new Role(\n-                role.name(),\n-                role.isUser(),\n-                Set.of(),\n-                grantedRoles,\n-                role.password(),\n-                role.jwtProperties(),\n-                role.sessionSettings()));\n+            roles.put(role.name(), role.with(grantedRoles));\n         }\n         return affectedCount;\n     }\n",
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false
+  }
+}

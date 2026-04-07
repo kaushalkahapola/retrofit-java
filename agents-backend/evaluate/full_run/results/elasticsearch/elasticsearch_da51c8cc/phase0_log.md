@@ -5,6 +5,14 @@
 - Java-only files for agentic phases: 4
 - Developer auxiliary hunks (test + non-Java): 4
 
+## Commit Pair Consistency
+- Pair mismatch: False
+- Reason: scope_overlap_ok
+- Mainline Java files: ['modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java', 'modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java', 'server/src/main/java/org/elasticsearch/transport/InboundDecoder.java', 'server/src/main/java/org/elasticsearch/transport/InboundPipeline.java']
+- Developer Java files: ['modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java', 'modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java', 'server/src/main/java/org/elasticsearch/transport/InboundDecoder.java', 'server/src/main/java/org/elasticsearch/transport/InboundPipeline.java']
+- Overlap Java files: ['modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java', 'modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java', 'server/src/main/java/org/elasticsearch/transport/InboundDecoder.java', 'server/src/main/java/org/elasticsearch/transport/InboundPipeline.java']
+- Overlap ratio (mainline): 1.0
+
 ## Mainline Patch
 ```diff
 From da51c8ccbf0171abefb2978810efd6db0f6f743e Mon Sep 17 00:00:00 2001
@@ -439,7 +447,7 @@ index 282cb720f52..d0c6cd8b00f 100644
          }
      }
 -- 
-2.43.0
+2.53.0
 
 
 ```

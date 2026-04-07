@@ -4,8 +4,9 @@ Full Workflow Evaluation Script (Phase 0-4) for Multiple Projects (Druid, CrateD
 This evaluator differs from evaluate/pipeline/evaluate_full_pipeline.py:
 - Uses the full workflow (does NOT skip phase 0).
 - Runs build + relevant tests in phase 0 and phase 4.
-- Restricts agentic adaptation to non-test Java code hunks only.
-- Merges developer backport non-Java + test hunks during validation (phase 4).
+- Restricts agentic adaptation to Java code hunks from mainline.patch only.
+- Applies developer backport hunks only in validation (phase 4), and only for
+  test files, non-Java files, and auto-generated Java files.
 """
 
 import argparse
@@ -455,10 +456,6 @@ def _prepare_pipeline_inputs(
     with open(mainline_patch_file, "w", encoding="utf-8") as f:
         f.write(patch_output)
 
-    target_patch_file = os.path.join(project_dir, "target.patch")
-    with open(target_patch_file, "w", encoding="utf-8") as f:
-        f.write(developer_patch_diff)
-
     analyzer = PatchAnalyzer()
     full_patch_analysis = analyzer.analyze(patch_output, with_test_changes=True)
     java_only_patch_analysis = [
@@ -497,7 +494,7 @@ def _build_auxiliary_hunks_from_developer_patch(
     Build hunks for developer-owned changes that agentic system should not generate:
     - all test file hunks
     - all non-Java file hunks
-    - non-Java code content hunks within .java files (SQL, YAML, JSON, XML, etc.)
+    - auto-generated Java file hunks
 
     These hunks are applied directly during validation phase without agent modification.
     """
@@ -508,8 +505,8 @@ def _build_auxiliary_hunks_from_developer_patch(
     hunks: list[dict[str, Any]] = []
 
     def _norm_path(path: str | None) -> str:
-        p = (path or "").strip().replace("\\", "/")
-        if p.startswith("a/") or p.startswith("b/"):
+        p = (path or "").strip().replace("\\", "/").lstrip("/")
+        while p.startswith("a/") or p.startswith("b/"):
             p = p[2:]
         if p == "dev/null":
             return ""
@@ -562,10 +559,7 @@ def _build_auxiliary_hunks_from_developer_patch(
             is_auxiliary = (
                 is_test_file_check  # Test files always auxiliary
                 or is_non_java_file  # Non-Java files always auxiliary
-                or is_auto_generated  # Auto-generated .java files (ANTLR, Protobuf, gRPC)
-                or _is_non_java_hunk_in_java_file(
-                    file_path, hunk_text
-                )  # Non-code in .java files
+                or is_auto_generated  # Auto-generated Java files always auxiliary
             )
 
             # Only add to auxiliary hunks if it should be skipped from agents
@@ -609,8 +603,7 @@ def _build_agent_eligible_patch(
     Filters out:
     - All test file hunks
     - All non-Java file hunks
-    - Auto-generated Java file hunks (ANTLR, Protobuf, gRPC)
-    - Non-code content hunks within .java files (SQL, YAML, JSON, XML, etc.)
+    - All auto-generated Java file hunks
 
     Returns a valid patch diff that agents can safely modify.
 
@@ -628,7 +621,8 @@ def _build_agent_eligible_patch(
 
     def _norm_path(path: str | None) -> str:
         p = (path or "").strip().replace("\\", "/")
-        if p.startswith("a/") or p.startswith("b/"):
+        p = p.lstrip("/")
+        while p.startswith("a/") or p.startswith("b/"):
             p = p[2:]
         if p == "dev/null":
             return ""
@@ -645,7 +639,7 @@ def _build_agent_eligible_patch(
         if is_test_file or is_non_java_file or is_auto_generated:
             continue
 
-        # Filter hunks: only keep those without non-code content
+        # Keep all hunks in eligible Java files.
         eligible_hunks = []
         for hunk in patched_file:
             lines = [
@@ -663,23 +657,24 @@ def _build_agent_eligible_patch(
             if not hunk_text.endswith("\n"):
                 hunk_text += "\n"
 
-            # Check if this hunk contains non-code content
-            is_non_code = _is_non_java_hunk_in_java_file(file_path, hunk_text)
-
-            if not is_non_code:
-                eligible_hunks.append(hunk)
+            eligible_hunks.append(hunk)
 
         # If the file has eligible hunks, include it in the output patch
         if eligible_hunks:
             # Write the file header
-            source_file = (
+            source_file_raw = (
                 getattr(patched_file, "source_file", None) or patched_file.path
             )
-            target_file = (
+            target_file_raw = (
                 getattr(patched_file, "target_file", None) or patched_file.path
             )
+            source_file = _norm_path(source_file_raw)
+            target_file = _norm_path(target_file_raw)
 
-            output_lines.append(f"diff --git a/{source_file} b/{target_file}\n")
+            diff_source = source_file or target_file
+            diff_target = target_file or source_file
+
+            output_lines.append(f"diff --git a/{diff_source} b/{diff_target}\n")
 
             # Write file operation markers
             if patched_file.is_added_file:
@@ -691,10 +686,10 @@ def _build_agent_eligible_patch(
             output_lines.append(f"index 0000000..0000000 100644\n")
 
             # Write --- and +++ lines
-            src = source_file if not patched_file.is_added_file else "/dev/null"
-            tgt = target_file if not patched_file.is_removed_file else "/dev/null"
-            output_lines.append(f"--- a/{src}\n")
-            output_lines.append(f"+++ b/{tgt}\n")
+            src = "/dev/null" if patched_file.is_added_file else f"a/{source_file}"
+            tgt = "/dev/null" if patched_file.is_removed_file else f"b/{target_file}"
+            output_lines.append(f"--- {src}\n")
+            output_lines.append(f"+++ {tgt}\n")
 
             # Write hunks
             for hunk in eligible_hunks:
@@ -894,8 +889,8 @@ def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) 
     """
 
     def _norm(path: str | None) -> str:
-        p = (path or "").strip().replace("\\", "/")
-        if p.startswith("a/") or p.startswith("b/"):
+        p = (path or "").strip().replace("\\", "/").lstrip("/")
+        while p.startswith("a/") or p.startswith("b/"):
             p = p[2:]
         if p == "dev/null":
             return ""
@@ -1732,7 +1727,6 @@ async def run_full_pipeline(
             "evaluation_full_workflow": True,
             "with_test_changes": False,
             "developer_auxiliary_hunks": developer_aux_hunks,
-            "developer_patch_diff": developer_patch_diff,
             "pair_consistency": pair_consistency,
             "use_phase_0_cache": True,
         }

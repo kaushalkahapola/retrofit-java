@@ -84,6 +84,32 @@ Each entry schema:
 """
 
 
+class SurgicalOp(TypedDict):
+    """
+    Verified deterministic operation produced by Reasoning Architect.
+    """
+
+    target_file: str
+    old_string: str
+    new_string: str
+    anchor_verified: bool
+    verification_method: str  # "exact" | "grep_confirmed" | "ast_boundary"
+    confidence: float
+
+
+class ReasoningContext(TypedDict):
+    """
+    Per-file reasoning context captured for surgical retry planning.
+    """
+
+    current_file: str
+    failure_kind: str  # "signature_drift" | "logic_moved" | "anchor_not_found"
+    build_diagnostics: dict[str, Any]
+    side_files: NotRequired[list[str]]
+    iteration: int
+    surgical_ops: list[SurgicalOp]
+
+
 class FileEdit(TypedDict):
     """
     One atomic str_replace edit applied directly to a checked-out target file.
@@ -201,6 +227,11 @@ class AgentState(TypedDict):
     generation_checklist: NotRequired[
         list[dict[str, Any]]
     ]  # Per-hunk generation status (success/failed/noop) for fail-closed orchestration
+    reasoning_context: NotRequired[ReasoningContext]
+    surgical_plans: NotRequired[
+        dict[str, list[SurgicalOp]]
+    ]  # per-target-file surgical operations from Reasoning Architect
+    reasoning_iterations: NotRequired[int]
 
     # --- Legacy / Agent 2 compatibility ---
     implementation_plan: (
@@ -237,6 +268,12 @@ class AgentState(TypedDict):
     validation_results: dict[
         str, dict
     ]  # Detailed results per step (e.g. "hunk_application": {...})
+    validation_error_context_structured: NotRequired[dict[str, Any]]
+    # Structured failure context from validation agent.
+    # Contains: failed_locations, symbol_errors, signature_errors,
+    # primary_failed_file, primary_failed_symbol.
+    # Fed to TypeVRulebook for deterministic pre-analysis.
+
     validation_infrastructure_failure: NotRequired[
         bool
     ]  # True when failure is test infra/runner related (not code generation)

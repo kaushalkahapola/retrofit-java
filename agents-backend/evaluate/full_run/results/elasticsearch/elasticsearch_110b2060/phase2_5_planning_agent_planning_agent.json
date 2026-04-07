@@ -1,0 +1,115 @@
+{
+  "hunk_generation_plan": {
+    "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "                NodeDeprecationChecks::checkNodeAttrData,\n                NodeDeprecationChecks::checkWatcherBulkConcurrentRequestsSetting,\n                NodeDeprecationChecks::checkTracingApmSettings\n            );",
+        "new_string": "                NodeDeprecationChecks::checkNodeAttrData,\n                NodeDeprecationChecks::checkWatcherBulkConcurrentRequestsSetting,\n                NodeDeprecationChecks::checkTracingApmSettings,\n                NodeDeprecationChecks::checkSourceModeInComponentTemplates\n            );",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "Target file lacks method checkSourceModeInComponentTemplates, cannot apply mainline patch as-is|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "                NodeDeprecationChecks::checkEnforceDefaultTierPreferenceSetting,",
+          "                NodeDeprecationChecks::checkLifecyleStepMasterTimeoutSetting,",
+          "                NodeDeprecationChecks::checkEqlEnabledSetting,"
+        ],
+        "surround_after_3": [
+          "",
+          "    static List<BiFunction<IndexMetadata, ClusterState, DeprecationIssue>> INDEX_SETTINGS_CHECKS = List.of(",
+          "        IndexDeprecationChecks::oldIndicesCheck,"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [
+          "Method checkSourceModeInComponentTemplates not found in target file at expected location",
+          "Surrounding context after patch differs between mainline and target, indicating possible API or structural drift"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          "NodeDeprecationChecks::checkTracingApmSettings,",
+          "NodeDeprecationChecks::checkSourceModeInComponentTemplates"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 0,
+          "target_declared_methods_count": 0,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "        IndexDeprecationChecks::storeTypeSettingCheck,\n        IndexDeprecationChecks::frozenIndexSettingCheck,\n        IndexDeprecationChecks::deprecatedCamelCasePattern,\n        IndexDeprecationChecks::checkSourceModeInMapping\n    );",
+        "new_string": "        IndexDeprecationChecks::storeTypeSettingCheck,\n        IndexDeprecationChecks::frozenIndexSettingCheck,\n        IndexDeprecationChecks::deprecatedCamelCasePattern\n        IndexDeprecationChecks::deprecatedCamelCasePattern,\n    );",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "Removed deprecated checkSourceModeInMapping as per mainline patch|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "        IndexDeprecationChecks::oldIndicesCheck,",
+          "        IndexDeprecationChecks::translogRetentionSettingCheck,",
+          "        IndexDeprecationChecks::checkIndexDataPath,"
+        ],
+        "surround_after_3": [
+          "",
+          "    static List<BiFunction<DataStream, ClusterState, DeprecationIssue>> DATA_STREAM_CHECKS = List.of(",
+          "        DataStreamDeprecationChecks::oldIndicesCheck"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [
+          "Detected target start line (101) differs from mainline old-start line (97)",
+          "Target file has additional lines after the patch location indicating shifted code"
+        ],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          "IndexDeprecationChecks::deprecatedCamelCasePattern"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 0,
+          "target_declared_methods_count": 0,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ]
+  },
+  "last_plan_signature": "6b515aa58850bca76476c12e05d3a8fb4be4fd3cbd806822f2639a1f21fafdfd",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": true,
+  "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
+  "force_type_v_retry_files": [
+    "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java"
+  ],
+  "token_usage": {
+    "input_tokens": 4482,
+    "output_tokens": 941,
+    "total_tokens": 5423,
+    "estimated": true,
+    "sources": [
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken",
+      "planning_agent.provider_usage"
+    ]
+  }
+}

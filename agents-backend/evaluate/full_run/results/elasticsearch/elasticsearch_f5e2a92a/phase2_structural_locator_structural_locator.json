@@ -56,13 +56,13 @@
         "hunk_index": 4,
         "mainline_method": "hunk_4",
         "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java",
-        "target_method": null,
+        "target_method": "contextIdentity",
         "start_line": 52,
         "end_line": 52,
         "code_snippet": " *\n * Note: this query was adapted from Lucene's DocAndScoreQuery from the class\n * {@link org.apache.lucene.search.KnnFloatVectorQuery}, which is package-private.\n * There are no changes to the behavior, just some renames.\n */\npublic class KnnScoreDocQuery extends Query {\n    private final int[] docs;\n    private final float[] scores;\n\n    // the indexes in docs and scores corresponding to the first matching document in each segment.\n    // If a segment has no matching documents, it should be assigned the index of the next segment that does.\n    // There should be a final entry that is always docs.length-1.\n    private final int[] segmentStarts;\n\n    // an object identifying the reader context that was used to build this query\n    private final Object contextIdentity;\n\n    /**\n     * Creates a query.\n     *\n     * @param docs the global doc IDs of documents that match, in ascending order\n     * @param scores the scores of the matching documents\n     * @param reader IndexReader\n     */\n    KnnScoreDocQuery(int[] docs, float[] scores, IndexReader reader) {\n        this.docs = docs;\n        this.scores = scores;\n        this.segmentStarts = findSegmentStarts(reader, docs);\n        this.contextIdentity = reader.getContext().id();\n    }\n\n    private static int[] findSegmentStarts(IndexReader reader, int[] docs) {\n        int[] starts = new int[reader.leaves().size() + 1];\n        starts[starts.length - 1] = docs.length;\n        if (starts.length == 2) {\n            return starts;\n        }\n        int resultIndex = 0;\n        for (int i = 1; i < starts.length - 1; i++) {\n            int upper = reader.leaves().get(i).docBase;\n            resultIndex = Arrays.binarySearch(docs, resultIndex, docs.length, upper);",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:field_declaration",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ],
     "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java": [
@@ -70,13 +70,13 @@
         "hunk_index": 1,
         "mainline_method": "hunk_1",
         "target_file": "server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQueryBuilder.java",
-        "target_method": null,
+        "target_method": "doToQuery",
         "start_line": 144,
         "end_line": 144,
         "code_snippet": "        builder.startArray(\"values\");\n        for (ScoreDoc scoreDoc : scoreDocs) {\n            builder.startObject().field(\"doc\", scoreDoc.doc).field(\"score\", scoreDoc.score).endObject();\n        }\n        builder.endArray();\n        if (fieldName != null) {\n            builder.field(\"field\", fieldName);\n        }\n        if (queryVector != null) {\n            builder.field(\"query\", queryVector);\n        }\n        if (vectorSimilarity != null) {\n            builder.field(\"similarity\", vectorSimilarity);\n        }\n        boostAndQueryNameToXContent(builder);\n        builder.endObject();\n    }\n\n    @Override\n    protected Query doToQuery(SearchExecutionContext context) throws IOException {\n        int numDocs = scoreDocs.length;\n        int[] docs = new int[numDocs];\n        float[] scores = new float[numDocs];\n        for (int i = 0; i < numDocs; i++) {\n            docs[i] = scoreDocs[i].doc;\n            scores[i] = scoreDocs[i].score;\n        }\n\n        return new KnnScoreDocQuery(docs, scores, context.getIndexReader());\n    }\n\n    @Override\n    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {\n        if (scoreDocs.length == 0) {\n            return new MatchNoneQueryBuilder(\"The \\\"\" + getName() + \"\\\" query was rewritten to a \\\"match_none\\\" query.\");\n        }\n        if (queryRewriteContext.convertToInnerHitsRewriteContext() != null && queryVector != null && fieldName != null) {\n            return new ExactKnnQueryBuilder(queryVector, fieldName, vectorSimilarity);\n        }\n        return super.doRewrite(queryRewriteContext);\n    }",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ],
     "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java": [

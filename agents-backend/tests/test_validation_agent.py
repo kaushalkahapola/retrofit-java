@@ -211,6 +211,75 @@ class TestValidationAgentIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.get("validation_passed"))
         self.assertEqual(len(result.get("adapted_test_hunks", [])), 1)
 
+    @patch("agents.validation_agent.ValidationToolkit")
+    async def test_eval_mode_runs_build_even_with_incomplete_checklist(
+        self, mock_toolkit_class
+    ):
+        mock_toolkit = MagicMock()
+        mock_toolkit_class.return_value = mock_toolkit
+
+        mock_toolkit.apply_adapted_hunks.return_value = {
+            "success": True,
+            "output": "ok",
+        }
+        mock_toolkit.run_build_script.return_value = {
+            "success": True,
+            "output": "build ok",
+        }
+        mock_toolkit.detect_relevant_test_targets_from_changed_files.return_value = {
+            "test_targets": []
+        }
+        mock_toolkit.run_relevant_tests.return_value = {
+            "success": True,
+            "compile_error": False,
+            "output": "tests ok",
+            "failed_tests": [],
+            "test_state": {
+                "summary": {"passed": 0, "failed": 0, "skipped": 0, "total": 0},
+                "test_cases": {},
+                "classes": {},
+            },
+        }
+        mock_toolkit.evaluate_test_state_transition.return_value = {
+            "valid_backport_signal": True,
+            "fail_to_pass": [],
+            "newly_passing": ["dummy"],
+            "pass_to_fail": [],
+            "reason": "ok",
+        }
+
+        state = self._make_state(
+            code_hunks=[{"target_file": "src/main/Foo.java", "hunk_text": "@@\n+fix"}],
+            test_hunks=[],
+        )
+        state["evaluation_full_workflow"] = True
+        state["generation_checklist"] = [
+            {
+                "status": "failed",
+                "reason": "generation_contract_failed",
+                "mainline_file": "src/main/Foo.java",
+                "target_file": "src/main/Foo.java",
+                "hunk_index": 0,
+                "todo_steps": ["reset_file", "apply_edits"],
+                "completed_steps": ["reset_file"],
+            }
+        ]
+        state["phase_0_test_targets"] = {"test_targets": []}
+        state["phase_0_baseline_test_result"] = {
+            "success": True,
+            "output": "baseline",
+            "test_state": {
+                "summary": {"passed": 0, "failed": 0, "skipped": 0, "total": 0},
+                "test_cases": {},
+                "classes": {},
+            },
+        }
+
+        result = await validation_agent(state, {})
+
+        self.assertTrue(result.get("validation_passed"))
+        self.assertTrue(mock_toolkit.run_build_script.called)
+
 
 if __name__ == "__main__":
     unittest.main()

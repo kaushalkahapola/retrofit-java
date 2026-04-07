@@ -1,0 +1,102 @@
+{
+  "consistency_map": {},
+  "mapped_target_context": {
+    "server/src/main/java/io/crate/role/PrivilegesModifier.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "target_method": "applyPrivileges",
+        "start_line": 99,
+        "end_line": 99,
+        "code_snippet": "                        break;\n                    } else {\n                        // we only want to process a new GRANT/DENY privilege if the user doesn't already have it\n                        if (userPrivilege.equals(newPrivilege) == false) {\n                            iterator.remove();\n                            privileges.add(newPrivilege);\n                            affectedCount++;\n                        }\n                        break;\n                    }\n                }\n            }\n\n            if (userHadPrivilegeOnSameObject == false && newPrivilege.policy().equals(Policy.REVOKE) == false) {\n                // revoking a privilege that was not granted is a no-op\n                affectedCount++;\n                privileges.add(newPrivilege);\n            }\n\n            if (affectedCount > 0) {\n                roles.put(userName, role.with(privileges));\n            }\n        }\n\n        return affectedCount;\n    }\n\n    /**\n     * Returns a copy of the {@link RolesMetadata} including a copied list of privileges if at least one\n     * privilege was replaced. Otherwise returns the NULL to indicate that nothing was changed.\n     * Privileges of {@link Securable#TABLE} whose idents are matching the given source ident are replaced\n     * by a copy where the ident is changed to the given target ident.\n     */\n    @Nullable\n    public static RolesMetadata maybeCopyAndReplaceTableIdents(RolesMetadata oldMetadata,\n                                                               String sourceIdent,\n                                                               String targetIdent) {\n        boolean privilegesChanged = false;\n        Map<String, Role> newRoles = HashMap.newHashMap(oldMetadata.roles().size());\n        for (Map.Entry<String, Role> entry : oldMetadata.roles().entrySet()) {\n            var role = entry.getValue();",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "target_method": "applyPrivileges",
+        "start_line": 142,
+        "end_line": 142,
+        "code_snippet": "                Subject subject = privilege.subject();\n                if (subject.securable() != Securable.TABLE) {\n                    privileges.add(privilege);\n                    continue;\n                }\n\n                String ident = subject.ident();\n                assert ident != null : \"ident must not be null for securable 'TABLE'\";\n                if (ident.equals(sourceIdent)) {\n                    privileges.add(new Privilege(\n                        privilege.policy(),\n                        subject.permission(),\n                        subject.securable(),\n                        targetIdent,\n                        privilege.grantor()));\n                    privilegesChanged = true;\n                } else {\n                    privileges.add(privilege);\n                }\n            }\n            newRoles.put(entry.getKey(), role.with(privileges));\n        }\n\n        if (privilegesChanged) {\n            return new RolesMetadata(newRoles);\n        }\n        return null;\n    }\n\n    public static long dropTableOrViewPrivileges(Metadata.Builder mdBuilder,\n                                                 RolesMetadata rolesMetadata,\n                                                 String tableOrViewIdent) {\n        long affectedPrivileges = 0L;\n        Map<String, Role> newRoles = HashMap.newHashMap(rolesMetadata.roles().size());\n        for (Map.Entry<String, Role> entry : rolesMetadata.roles().entrySet()) {\n            var role = entry.getValue();\n            Set<Privilege> updatedPrivileges = new HashSet<>();\n            for (Privilege privilege : role.privileges()) {\n                Subject subject = privilege.subject();\n                Securable securable = subject.securable();\n                if (securable != Securable.TABLE && securable != Securable.VIEW) {",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
+      },
+      {
+        "hunk_index": 3,
+        "mainline_method": "hunk_3",
+        "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "target_method": "applyPrivileges",
+        "start_line": 174,
+        "end_line": 174,
+        "code_snippet": "        long affectedPrivileges = 0L;\n        Map<String, Role> newRoles = HashMap.newHashMap(rolesMetadata.roles().size());\n        for (Map.Entry<String, Role> entry : rolesMetadata.roles().entrySet()) {\n            var role = entry.getValue();\n            Set<Privilege> updatedPrivileges = new HashSet<>();\n            for (Privilege privilege : role.privileges()) {\n                Subject subject = privilege.subject();\n                Securable securable = subject.securable();\n                if (securable != Securable.TABLE && securable != Securable.VIEW) {\n                    continue;\n                }\n\n                String ident = subject.ident();\n                assert ident != null : \"ident must not be null for securable 'TABLE'\";\n                if (ident.equals(tableOrViewIdent)) {\n                    affectedPrivileges++;\n                } else {\n                    updatedPrivileges.add(privilege);\n                }\n            }\n            newRoles.put(role.name(), role.with(updatedPrivileges));\n        }\n        mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));\n        return affectedPrivileges;\n    }\n\n    public static RolesMetadata swapPrivileges(RolesMetadata oldMetadata,\n                                               RelationName source,\n                                               RelationName target) {\n        Map<String, Role> newRoles = HashMap.newHashMap(oldMetadata.roles().size());\n        for (Map.Entry<String, Role> entry : oldMetadata.roles().entrySet()) {\n            String user = entry.getKey();\n            var role = entry.getValue();\n            Set<Privilege> updatedPrivileges = new HashSet<>();\n            for (Privilege privilege : role.privileges()) {\n                Subject ident = privilege.subject();\n                if (ident.securable() == Securable.TABLE) {\n                    if (source.fqn().equals(ident.ident())) {\n                        updatedPrivileges.add(\n                            new Privilege(privilege.policy(), ident.permission(), ident.securable(), target.fqn(), privilege.grantor()));\n                    } else if (target.fqn().equals(ident.ident())) {",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
+      },
+      {
+        "hunk_index": 4,
+        "mainline_method": "hunk_4",
+        "target_file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "target_method": "applyPrivileges",
+        "start_line": 204,
+        "end_line": 204,
+        "code_snippet": "        for (Map.Entry<String, Role> entry : oldMetadata.roles().entrySet()) {\n            String user = entry.getKey();\n            var role = entry.getValue();\n            Set<Privilege> updatedPrivileges = new HashSet<>();\n            for (Privilege privilege : role.privileges()) {\n                Subject ident = privilege.subject();\n                if (ident.securable() == Securable.TABLE) {\n                    if (source.fqn().equals(ident.ident())) {\n                        updatedPrivileges.add(\n                            new Privilege(privilege.policy(), ident.permission(), ident.securable(), target.fqn(), privilege.grantor()));\n                    } else if (target.fqn().equals(ident.ident())) {\n                        updatedPrivileges.add(\n                            new Privilege(privilege.policy(), ident.permission(), ident.securable(), source.fqn(), privilege.grantor()));\n                    } else {\n                        updatedPrivileges.add(privilege);\n                    }\n                } else {\n                    updatedPrivileges.add(privilege);\n                }\n            }\n            newRoles.put(user, role.with(updatedPrivileges));\n        }\n        return new RolesMetadata(newRoles);\n    }\n}",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
+      }
+    ],
+    "server/src/main/java/io/crate/role/Role.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "with",
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "target_method": "with",
+        "start_line": 187,
+        "end_line": 187,
+        "code_snippet": "\n    public Role(StreamInput in) throws IOException {\n        name = in.readString();\n        int privSize = in.readVInt();\n        var privilegesList = new ArrayList<Privilege>(privSize);\n        for (int i = 0; i < privSize; i++) {\n            privilegesList.add(new Privilege(in));\n        }\n        privileges = new RolePrivileges(privilegesList);\n        int grantedRolesSize = in.readVInt();\n        Set<GrantedRole> grantedRoleSet = HashSet.newHashSet(grantedRolesSize);\n        for (int i = 0; i < grantedRolesSize; i++) {\n            grantedRoleSet.add(new GrantedRole(in));\n        }\n        grantedRoles = Collections.unmodifiableSet(grantedRoleSet);\n        isSuperUser = false;\n        properties = new Properties(in);\n\n    }\n\n    public Role with(Set<Privilege> privileges) {\n        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n    }\n\n    public Role with(@Nullable SecureHash password,\n                     @Nullable JwtProperties jwtProperties) {\n        return new Role(\n            name,\n            privileges,\n            grantedRoles,\n            new Properties(properties.login, password, jwtProperties),\n            false\n        );\n    }\n\n    public String name() {\n        return name;\n    }\n\n    @Nullable\n    public SecureHash password() {",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved",
+        "anchor_strategy": "deterministic_realign"
+      },
+      {
+        "hunk_index": 2,
+        "mainline_method": "hunk_2",
+        "target_file": "server/src/main/java/io/crate/role/Role.java",
+        "target_method": "with",
+        "start_line": 198,
+        "end_line": 198,
+        "code_snippet": "        for (int i = 0; i < grantedRolesSize; i++) {\n            grantedRoleSet.add(new GrantedRole(in));\n        }\n        grantedRoles = Collections.unmodifiableSet(grantedRoleSet);\n        isSuperUser = false;\n        properties = new Properties(in);\n\n    }\n\n    public Role with(Set<Privilege> privileges) {\n        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);\n    }\n\n    public Role with(@Nullable SecureHash password,\n                     @Nullable JwtProperties jwtProperties) {\n        return new Role(\n            name,\n            privileges,\n            grantedRoles,\n            new Properties(properties.login, password, jwtProperties),\n            false\n        );\n    }\n\n    public String name() {\n        return name;\n    }\n\n    @Nullable\n    public SecureHash password() {\n        return properties.password();\n    }\n\n    public boolean isUser() {\n        return properties.login();\n    }\n\n    @Nullable\n    public JwtProperties jwtProperties() {\n        return properties.jwtProperties();\n    }",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
+      }
+    ],
+    "server/src/main/java/io/crate/role/metadata/RolesMetadata.java": [
+      {
+        "hunk_index": 1,
+        "mainline_method": "hunk_1",
+        "target_file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+        "target_method": "applyRolePrivilegesToUser",
+        "start_line": 242,
+        "end_line": 242,
+        "code_snippet": "    private long applyRolePrivilegesToUser(String roleName, GrantedRolesChange newGrantedRolesChange) {\n        Role role = roles.get(roleName);\n\n        // Create a new set to avoid modifying in-place the granted roles as this will lead\n        // to no difference in previous and new metadata and thus cluster state\n        Set<GrantedRole> grantedRoles = new HashSet<>(role.grantedRoles());\n        long affectedCount = 0L;\n        for (var roleNameToApply : newGrantedRolesChange.roleNames()) {\n\n            if (newGrantedRolesChange.policy() == Policy.GRANT) {\n                if (grantedRoles.add(new GrantedRole(roleNameToApply, newGrantedRolesChange.grantor()))) {\n                    affectedCount++;\n                }\n            } else if (newGrantedRolesChange.policy() == Policy.REVOKE) {\n                if (grantedRoles.remove(new GrantedRole(roleNameToApply, newGrantedRolesChange.grantor()))) {\n                    affectedCount++;\n                }\n            }\n        }\n        if (affectedCount > 0) {\n            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));\n        }\n        return affectedCount;\n    }\n\n    @Override\n    public EnumSet<Metadata.XContentContext> context() {\n        return EnumSet.of(Metadata.XContentContext.GATEWAY, Metadata.XContentContext.SNAPSHOT);\n    }\n\n    @Override\n    public boolean equals(Object o) {\n        if (this == o) return true;\n        if (o == null || getClass() != o.getClass()) return false;\n\n        RolesMetadata that = (RolesMetadata) o;\n        return Objects.equals(roles, that.roles);\n    }\n\n    @Override\n    public int hashCode() {",
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
+      }
+    ]
+  },
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "reason": "llm_usage_not_collected_in_this_node"
+  }
+}

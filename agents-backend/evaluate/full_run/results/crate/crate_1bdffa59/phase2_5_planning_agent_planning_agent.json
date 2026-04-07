@@ -1,0 +1,915 @@
+{
+  "hunk_generation_plan": {
+    "server/src/main/java/io/crate/replication/logical/MetadataTracker.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import java.io.Closeable;",
+        "new_string": "import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;\nimport java.io.Closeable;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "import static io.crate.replication.logical.LogicalReplicationSettings.NON_REPLICATED_SETTINGS;",
+          "import static io.crate.replication.logical.LogicalReplicationSettings.PUBLISHER_INDEX_UUID;",
+          ""
+        ],
+        "surround_after_3": [
+          "import java.util.ArrayList;",
+          "import java.util.Collection;",
+          "import java.util.HashMap;"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 18,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "\n        Set<RelationName> existingRelations = publisherStateResponse.concreteIndices().stream()\n            .filter(index -> metadata.hasIndex(index))\n            .map(index -> RelationName.fromIndexName(index))\n            .filter(relationName -> currentlyReplicatedTables.contains(relationName) == false)",
+        "new_string": "\n        Set<RelationName> existingRelations = publisherStateResponse.concreteIndices().stream()\n            .filter(im -> metadata.hasIndex(im.getIndex().getName()))\n            .map(im -> RelationName.fromIndexName(im.getIndex().getName()))\n            .filter(relationName -> currentlyReplicatedTables.contains(relationName) == false)",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "location shifted by 20 lines, context matches, simple replacement|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "        // there are cases when attempt to subscribe to existing table happens later during the replication.",
+          "        var metadata = subscriberClusterState.metadata();",
+          "        Set<RelationName> currentlyReplicatedTables = subscription.relations().keySet();"
+        ],
+        "surround_after_3": [
+          "            .collect(Collectors.toCollection(() -> new HashSet<>()));",
+          "",
+          "        for (String t: publisherStateResponse.concreteTemplates()) {"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          ".filter(im -> metadata.hasIndex(im.getIndex().getName()))",
+          ".map(im -> RelationName.fromIndexName(im.getIndex().getName()))"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 18,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "        ArrayList<TableOrPartition> toRestore = new ArrayList<>();\n        Metadata subscriberMetadata = subscriberState.metadata();\n        for (var indexName : stateResponse.concreteIndices()) {\n            IndexParts indexParts = IndexName.decode(indexName);",
+        "new_string": "        var subscribedRelations = subscription.relations();\n        var relationNamesForStateUpdate = new HashSet<RelationName>();\n        var toRestoreIndices = new ArrayList<String>();\n        var toRestoreTemplates = new ArrayList<String>();\n\n        for (var indexName : stateResponse.concreteIndices()) {\n            var relationName = RelationName.fromIndexName(indexName);\n            if (subscriberState.metadata().hasIndex(indexName) == false) {\n                toRestoreIndices.add(indexName);\n                relationNamesForStateUpdate.add(relationName);\n            } else if (subscribedRelations.get(relationName) == null) {\n                relationNamesForStateUpdate.add(relationName);\n            }\n        }",
+        "verified": false,
+        "verification_result": "sanitize_old_not_found:not_found_multiline",
+        "notes": "required_op_replace|sanitize_old_not_found:not_found_multiline|type_v_repaired|sanitize_old_not_found:not_found_multiline|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "                                      ClusterState subscriberState,",
+          "                                      PublicationsStateAction.Response stateResponse) {",
+          "        Map<RelationName, RelationState> subscribedRelations = subscription.relations();"
+        ],
+        "surround_after_3": [
+          "            if (indexParts.isPartitioned()) {",
+          "                var relationName = indexParts.toRelationName();",
+          "                if (!subscriberState.metadata().templates().containsKey(templateName)"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [
+          {
+            "from": "var indexName",
+            "to": "IndexMetadata indexMetadata; String indexName = indexMetadata.getIndex().getName();",
+            "reason": "Mainline changed loop variable type from var indexName (String) to IndexMetadata, requiring extraction of indexName"
+          }
+        ],
+        "required_invariants": [
+          "for (IndexMetadata indexMetadata : stateResponse.concreteIndices()) {",
+          "String indexName = indexMetadata.getIndex().getName();",
+          "if (subscribedRelations.get(relationName) == null) {",
+          "relationNamesForStateUpdate.add(relationName);",
+          "if (REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata.getSettings()) == false) {",
+          "if (LOGGER.isDebugEnabled()) {",
+          "LOGGER.debug(\"Skipping index {} for subscription {} as it is not active\", indexName, subscription);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 18,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+        "operation_index": 1,
+        "edit_type": "insert_before",
+        "old_string": "            if (subscribedRelations.get(relationName) == null) {\n                relationNamesForStateUpdate.add(relationName);\n            }\n            if (REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata.getSettings()) == false) {\n                // If the index is not active, we cannot restore it\n                if (LOGGER.isDebugEnabled()) {\n                    LOGGER.debug(\"Skipping index {} for subscription {} as it is not active\", indexName, subscription);\n                }\n                continue;\n            }\n            if (!subscriberMetadata.hasIndex(indexName)) {",
+        "new_string": "",
+        "verified": false,
+        "verification_result": "sanitize_old_not_found:not_found_multiline",
+        "notes": "required_op_insert_before|sanitize_old_not_found:not_found_single|type_v_repaired|sanitize_old_not_found:not_found_multiline|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "        ArrayList<TableOrPartition> toRestore = new ArrayList<>();",
+          "        Metadata subscriberMetadata = subscriberState.metadata();",
+          "        for (var indexName : stateResponse.concreteIndices()) {"
+        ],
+        "surround_after_3": [
+          "            if (!subscriberMetadata.hasIndex(indexName)) {",
+          "                String partitionIdent = indexParts.isPartitioned() ? indexParts.partitionIdent() : null;",
+          "                toRestore.add(new TableOrPartition(relationName, partitionIdent));"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [
+          {
+            "from": "var indexName",
+            "to": "IndexMetadata indexMetadata; String indexName = indexMetadata.getIndex().getName();",
+            "reason": "Mainline changed loop variable type from var indexName (String) to IndexMetadata, requiring extraction of indexName"
+          }
+        ],
+        "required_invariants": [
+          "for (IndexMetadata indexMetadata : stateResponse.concreteIndices()) {",
+          "String indexName = indexMetadata.getIndex().getName();",
+          "if (subscribedRelations.get(relationName) == null) {",
+          "relationNamesForStateUpdate.add(relationName);",
+          "if (REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata.getSettings()) == false) {",
+          "if (LOGGER.isDebugEnabled()) {",
+          "LOGGER.debug(\"Skipping index {} for subscription {} as it is not active\", indexName, subscription);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 18,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+        "operation_index": 2,
+        "edit_type": "delete",
+        "old_string": "            } else if (subscribedRelations.get(relationName) == null) {\n                relationNamesForStateUpdate.add(relationName);",
+        "new_string": "",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_delete|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "            if (subscriberState.metadata().hasIndex(indexName) == false) {",
+          "                toRestoreIndices.add(indexName);",
+          "                relationNamesForStateUpdate.add(relationName);"
+        ],
+        "surround_after_3": [
+          "            }",
+          "        }",
+          "        for (var templateName : stateResponse.concreteTemplates()) {"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [
+          {
+            "from": "var indexName",
+            "to": "IndexMetadata indexMetadata; String indexName = indexMetadata.getIndex().getName();",
+            "reason": "Mainline changed loop variable type from var indexName (String) to IndexMetadata, requiring extraction of indexName"
+          }
+        ],
+        "required_invariants": [
+          "for (IndexMetadata indexMetadata : stateResponse.concreteIndices()) {",
+          "String indexName = indexMetadata.getIndex().getName();",
+          "if (subscribedRelations.get(relationName) == null) {",
+          "relationNamesForStateUpdate.add(relationName);",
+          "if (REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata.getSettings()) == false) {",
+          "if (LOGGER.isDebugEnabled()) {",
+          "LOGGER.debug(\"Skipping index {} for subscription {} as it is not active\", indexName, subscription);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 18,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+        "operation_index": 3,
+        "edit_type": "insert_before",
+        "old_string": "        for (var templateName : stateResponse.concreteTemplates()) {",
+        "new_string": "\n        for (var templateName : stateResponse.concreteTemplates()) {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "                relationNamesForStateUpdate.add(relationName);",
+          "            }",
+          "        }"
+        ],
+        "surround_after_3": [
+          "            var indexParts = IndexName.decode(templateName);",
+          "            if (indexParts.isPartitioned()) {",
+          "                var relationName = indexParts.toRelationName();"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [
+          {
+            "from": "var indexName",
+            "to": "IndexMetadata indexMetadata; String indexName = indexMetadata.getIndex().getName();",
+            "reason": "Mainline changed loop variable type from var indexName (String) to IndexMetadata, requiring extraction of indexName"
+          }
+        ],
+        "required_invariants": [
+          "for (IndexMetadata indexMetadata : stateResponse.concreteIndices()) {",
+          "String indexName = indexMetadata.getIndex().getName();",
+          "if (subscribedRelations.get(relationName) == null) {",
+          "relationNamesForStateUpdate.add(relationName);",
+          "if (REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata.getSettings()) == false) {",
+          "if (LOGGER.isDebugEnabled()) {",
+          "LOGGER.debug(\"Skipping index {} for subscription {} as it is not active\", indexName, subscription);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 18,
+          "target_declared_methods_count": 18,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ],
+    "server/src/main/java/io/crate/replication/logical/metadata/Publication.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import java.io.IOException;",
+        "new_string": "import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;\n\nimport java.io.IOException;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "",
+          "package io.crate.replication.logical.metadata;",
+          ""
+        ],
+        "surround_after_3": [
+          "import java.util.ArrayList;",
+          "import java.util.HashSet;",
+          "import java.util.List;"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [
+          "Detected target start line (30) differs from mainline old start line (21)",
+          "Pre-patch surrounding context in target does not match mainline pre-patch surrounding context",
+          "Build errors indicate method applyCustomIndexSettings(ClusterState) already defined, and missing symbols like Predicate",
+          "API drift map is empty but errors suggest structural or signature conflicts"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 10,
+          "target_declared_methods_count": 10,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "import java.util.Map;\nimport java.util.Objects;\nimport java.util.function.Predicate;\nimport java.util.stream.Collectors;",
+        "new_string": "import java.util.Map;\nimport java.util.Objects;\nimport java.util.function.Function;\nimport java.util.stream.Collectors;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "import java.util.ArrayList;",
+          "import java.util.HashSet;",
+          "import java.util.List;"
+        ],
+        "surround_after_3": [
+          "",
+          "import org.apache.logging.log4j.LogManager;",
+          "import org.apache.logging.log4j.Logger;"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [
+          "Detected target start line (30) differs from mainline old start line (21)",
+          "Pre-patch surrounding context in target does not match mainline pre-patch surrounding context",
+          "Build errors indicate method applyCustomIndexSettings(ClusterState) already defined, and missing symbols like Predicate",
+          "API drift map is empty but errors suggest structural or signature conflicts"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 10,
+          "target_declared_methods_count": 10,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+        "operation_index": 2,
+        "edit_type": "insert_before",
+        "old_string": "import org.elasticsearch.cluster.metadata.Metadata;",
+        "new_string": "import org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.metadata.Metadata;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "import org.apache.logging.log4j.LogManager;",
+          "import org.apache.logging.log4j.Logger;",
+          "import org.elasticsearch.cluster.ClusterState;"
+        ],
+        "surround_after_3": [
+          "import org.elasticsearch.common.io.stream.StreamInput;",
+          "import org.elasticsearch.common.io.stream.StreamOutput;",
+          "import org.elasticsearch.common.io.stream.Writeable;"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [
+          "Detected target start line (30) differs from mainline old start line (21)",
+          "Pre-patch surrounding context in target does not match mainline pre-patch surrounding context",
+          "Build errors indicate method applyCustomIndexSettings(ClusterState) already defined, and missing symbols like Predicate",
+          "API drift map is empty but errors suggest structural or signature conflicts"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 10,
+          "target_declared_methods_count": 10,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+        "operation_index": 3,
+        "edit_type": "insert_before",
+        "old_string": "import io.crate.metadata.IndexName;",
+        "new_string": "import org.elasticsearch.common.settings.Settings;\nimport org.jetbrains.annotations.VisibleForTesting;\nimport io.crate.metadata.IndexName;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "import org.elasticsearch.common.io.stream.Writeable;",
+          "import org.elasticsearch.index.IndexSettings;",
+          ""
+        ],
+        "surround_after_3": [
+          "import io.crate.metadata.IndexParts;",
+          "import io.crate.metadata.RelationName;",
+          "import io.crate.role.Permission;"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [
+          "Detected target start line (30) differs from mainline old start line (21)",
+          "Pre-patch surrounding context in target does not match mainline pre-patch surrounding context",
+          "Build errors indicate method applyCustomIndexSettings(ClusterState) already defined, and missing symbols like Predicate",
+          "API drift map is empty but errors suggest structural or signature conflicts"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 10,
+          "target_declared_methods_count": 10,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+        "operation_index": 0,
+        "edit_type": "delete",
+        "old_string": "        // skip indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned\n        Predicate<String> indexFilter = indexName -> {\n            var indexMetadata = state.metadata().index(indexName);\n            if (indexMetadata != null) {\n                var routingTable = state.routingTable().index(indexName);\n                assert routingTable != null : \"routingTable must not be null\";\n                return routingTable.allPrimaryShardsActive();\n\n            }\n            // Partitioned table case (template, no index).\n            return true;\n        };",
+        "new_string": "",
+        "verified": false,
+        "verification_result": "sanitize_old_not_found:not_found_multiline",
+        "notes": "Target file context mismatch prevents direct deletion; requires manual structural adjustment|sanitize_old_not_found:not_found_multiline|sanitize_old_not_found:not_found_multiline|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "                                                                       Role publicationOwner,",
+          "                                                                       Role subscriber,",
+          "                                                                       String publicationName) {"
+        ],
+        "surround_after_3": [
+          "            }",
+          "            // Partitioned table case (template, no index).",
+          "            return true;"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [
+          "Detected target start line (124) differs from mainline old-start line (119)",
+          "Build errors indicate missing symbols and duplicate method definitions, suggesting structural or API drift"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 10,
+          "target_declared_methods_count": 10,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+        "operation_index": 0,
+        "edit_type": "delete",
+        "old_string": "            .filter(relationName -> indexFilter.test(relationName.indexNameOrAlias()))",
+        "new_string": "",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_delete|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "        }",
+          "",
+          "        return relations.stream()"
+        ],
+        "surround_after_3": [
+          "            .filter(relationName -> userCanPublish(roles, relationName, publicationOwner, publicationName))",
+          "            .filter(relationName -> subscriberCanRead(roles, relationName, subscriber, publicationName))",
+          "            .map(relationName -> RelationMetadata.fromMetadata(relationName, state.metadata(), indexFilter))"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [
+          "Method applyCustomIndexSettings(ClusterState) already defined in target Publication.java",
+          "Symbol errors related to missing getState method and Predicate class in target"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          ".map(relationName -> RelationMetadata.fromMetadata(relationName, state.metadata(), applyCustomIndexSettings(state)))",
+          "@VisibleForTesting",
+          "public static Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings(ClusterState state) {",
+          "var routingTable = state.routingTable().index(im.getIndex());",
+          "assert routingTable != null : \"routingTable must not be null\";",
+          "boolean isActive = routingTable.allPrimaryShardsActive();",
+          "IndexMetadata.Builder builder = IndexMetadata.builder(im);",
+          "return builder.settings(Settings.builder()"
+        ],
+        "required_symbols": [
+          "applyCustomIndexSettings"
+        ],
+        "protected_symbols": [
+          "applyCustomIndexSettings"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 10,
+          "target_declared_methods_count": 10,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "applyCustomIndexSettings"
+          ]
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "            .filter(relationName -> userCanPublish(roles, relationName, publicationOwner, publicationName))\n            .filter(relationName -> subscriberCanRead(roles, relationName, subscriber, publicationName))\n            .map(relationName -> RelationMetadata.fromMetadata(relationName, state.metadata(), indexFilter))\n            .collect(Collectors.toMap(RelationMetadata::name, x -> x));",
+        "new_string": "            .filter(relationName -> userCanPublish(roles, relationName, publicationOwner, publicationName))\n            .filter(relationName -> subscriberCanRead(roles, relationName, subscriber, publicationName))\n            .map(relationName -> RelationMetadata.fromMetadata(relationName, state.metadata(), applyCustomIndexSettings(state)))\n            .collect(Collectors.toMap(RelationMetadata::name, x -> x));",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "",
+          "        return relations.stream()",
+          "            .filter(relationName -> indexFilter.test(relationName.indexNameOrAlias()))"
+        ],
+        "surround_after_3": [
+          "",
+          "    }",
+          ""
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [
+          "Method applyCustomIndexSettings(ClusterState) already defined in target Publication.java",
+          "Symbol errors related to missing getState method and Predicate class in target"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          ".map(relationName -> RelationMetadata.fromMetadata(relationName, state.metadata(), applyCustomIndexSettings(state)))",
+          "@VisibleForTesting",
+          "public static Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings(ClusterState state) {",
+          "var routingTable = state.routingTable().index(im.getIndex());",
+          "assert routingTable != null : \"routingTable must not be null\";",
+          "boolean isActive = routingTable.allPrimaryShardsActive();",
+          "IndexMetadata.Builder builder = IndexMetadata.builder(im);",
+          "return builder.settings(Settings.builder()"
+        ],
+        "required_symbols": [
+          "applyCustomIndexSettings"
+        ],
+        "protected_symbols": [
+          "applyCustomIndexSettings"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 10,
+          "target_declared_methods_count": 10,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "applyCustomIndexSettings"
+          ]
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+        "operation_index": 2,
+        "edit_type": "insert_before",
+        "old_string": "    private static boolean subscriberCanRead(Roles roles, RelationName relationName, Role subscriber, String publicationName) {",
+        "new_string": "    @VisibleForTesting\n    public static Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings(ClusterState state) {\n        // mark indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned\n        return im -> {\n            var routingTable = state.routingTable().index(im.getIndex());\n            assert routingTable != null : \"routingTable must not be null\";\n            boolean isActive = routingTable.allPrimaryShardsActive();\n            IndexMetadata.Builder builder = IndexMetadata.builder(im);\n            return builder.settings(Settings.builder()\n                    .put(im.getSettings())\n                    .put(REPLICATION_INDEX_ROUTING_ACTIVE.getKey(), isActive))\n                .build();\n        };\n    }\n\n    private static boolean subscriberCanRead(Roles roles, RelationName relationName, Role subscriber, String publicationName) {",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "",
+          "    }",
+          ""
+        ],
+        "surround_after_3": [
+          "        boolean canRead = roles.hasPrivilege(subscriber, Permission.DQL, Securable.TABLE, relationName.fqn());",
+          "        if (canRead == false) {",
+          "            if (LOGGER.isInfoEnabled()) {"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [
+          "Method applyCustomIndexSettings(ClusterState) already defined in target Publication.java",
+          "Symbol errors related to missing getState method and Predicate class in target"
+        ],
+        "namespace_only_possible": false,
+        "namespace_changes": [],
+        "required_invariants": [
+          ".map(relationName -> RelationMetadata.fromMetadata(relationName, state.metadata(), applyCustomIndexSettings(state)))",
+          "@VisibleForTesting",
+          "public static Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings(ClusterState state) {",
+          "var routingTable = state.routingTable().index(im.getIndex());",
+          "assert routingTable != null : \"routingTable must not be null\";",
+          "boolean isActive = routingTable.allPrimaryShardsActive();",
+          "IndexMetadata.Builder builder = IndexMetadata.builder(im);",
+          "return builder.settings(Settings.builder()"
+        ],
+        "required_symbols": [
+          "applyCustomIndexSettings"
+        ],
+        "protected_symbols": [
+          "applyCustomIndexSettings"
+        ],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 10,
+          "target_declared_methods_count": 10,
+          "matched_symbols_before": [],
+          "missing_symbols_before": [
+            "applyCustomIndexSettings"
+          ]
+        }
+      }
+    ],
+    "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_SUBSCRIPTION_NAME;",
+        "new_string": "import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;\nimport static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_SUBSCRIPTION_NAME;",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_insert_before|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "package io.crate.replication.logical.repository;",
+          "",
+          "import static io.crate.replication.logical.LogicalReplicationSettings.PUBLISHER_INDEX_UUID;"
+        ],
+        "surround_after_3": [
+          "",
+          "import java.io.IOException;",
+          "import java.io.UncheckedIOException;"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": true,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 27,
+          "target_declared_methods_count": 26,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
+        "operation_index": 0,
+        "edit_type": "replace",
+        "old_string": "        return getPublicationsState()\n            .thenApply(stateResponse ->\n                new SnapshotInfo(snapshotId, stateResponse.concreteIndices(), SnapshotState.SUCCESS, Version.CURRENT));\n    }",
+        "new_string": "        return getPublicationsState()\n            .thenApply(stateResponse ->\n                new SnapshotInfo(\n                    snapshotId,\n                    stateResponse.concreteIndices().stream()\n                        .filter(im -> REPLICATION_INDEX_ROUTING_ACTIVE.get(im.getSettings()))\n                        .map(im -> im.getIndex().getName()).toList(),\n                    SnapshotState.SUCCESS,\n                    Version.CURRENT\n                ));\n    }",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "required_op_replace|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "    @Override",
+          "    public CompletableFuture<SnapshotInfo> getSnapshotInfo(SnapshotId snapshotId) {",
+          "        assert SNAPSHOT_ID.equals(snapshotId) : \"SubscriptionRepository only supports \" + SNAPSHOT_ID + \" as the SnapshotId\";"
+        ],
+        "surround_after_3": [
+          "",
+          "    @Override",
+          "    public CompletableFuture<Metadata> getSnapshotGlobalMetadata(SnapshotId snapshotId) {"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_I",
+        "execution_type": "TYPE_V",
+        "location_match": true,
+        "surrounding_match": false,
+        "blockers": [],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          "stateResponse.concreteIndices().stream()",
+          ".filter(im -> REPLICATION_INDEX_ROUTING_ACTIVE.get(im.getSettings()))",
+          ".map(im -> im.getIndex().getName()).toList(),",
+          "SnapshotState.SUCCESS,"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 27,
+          "target_declared_methods_count": 26,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
+        "operation_index": 0,
+        "edit_type": "insert_before",
+        "old_string": "                var indexMdBuilder = IndexMetadata.builder(indexMetadata).settings(builder);",
+        "new_string": "                // Remove source routing active setting, it is only used as a marker to not restore these indices (yet)\n                builder.remove(REPLICATION_INDEX_ROUTING_ACTIVE.getKey());\n                var indexMdBuilder = IndexMetadata.builder(indexMetadata).settings(builder);",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "Insert removal of source routing active setting before indexMdBuilder creation|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "                // Store publishers original index UUID to be able to resolve the original index later on",
+          "                builder.put(PUBLISHER_INDEX_UUID.getKey(), indexMetadata.getIndexUUID());",
+          ""
+        ],
+        "surround_after_3": [
+          "                indexMetadata.getAliases().valuesIt().forEachRemaining(a -> indexMdBuilder.putAlias(a));",
+          "                result.add(indexMdBuilder.build());",
+          "            }"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [
+          "Detected target surrounding context differs from mainline pre-patch surrounding context",
+          "API drift indicates method signature changes in related methods, but this hunk is internal code block",
+          "Detected target start line (199) differs from mainline old start line (219), indicating code shifted",
+          "Surrounding lines before and after patch differ in target vs mainline"
+        ],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          "builder.remove(REPLICATION_INDEX_ROUTING_ACTIVE.getKey());",
+          "indexMetadata.getAliases().valuesIt().forEachRemaining(indexMdBuilder::putAlias);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 27,
+          "target_declared_methods_count": 26,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
+        "operation_index": 1,
+        "edit_type": "replace",
+        "old_string": "\n                var indexMdBuilder = IndexMetadata.builder(indexMetadata).settings(builder);\n                indexMetadata.getAliases().valuesIt().forEachRemaining(a -> indexMdBuilder.putAlias(a));\n                result.add(indexMdBuilder.build());",
+        "new_string": "\n                var indexMdBuilder = IndexMetadata.builder(indexMetadata).settings(builder);\n                indexMetadata.getAliases().valuesIt().forEachRemaining(indexMdBuilder::putAlias);\n                result.add(indexMdBuilder.build());",
+        "verified": true,
+        "verification_result": "sanitize_resolved:exact",
+        "notes": "Replace lambda with method reference for putAlias|forced_type_v:context_mismatch_with_build_api_or_syntax",
+        "surround_before_3": [
+          "                builder.put(REPLICATION_SUBSCRIPTION_NAME.getKey(), subscriptionName);",
+          "                // Store publishers original index UUID to be able to resolve the original index later on",
+          "                builder.put(PUBLISHER_INDEX_UUID.getKey(), indexMetadata.getIndexUUID());"
+        ],
+        "surround_after_3": [
+          "            }",
+          "            return result;",
+          "        });"
+        ],
+        "adaptation_type": "TYPE_V",
+        "base_adaptation_type": "TYPE_II",
+        "execution_type": "TYPE_V",
+        "location_match": false,
+        "surrounding_match": false,
+        "blockers": [
+          "Detected target surrounding context differs from mainline pre-patch surrounding context",
+          "API drift indicates method signature changes in related methods, but this hunk is internal code block",
+          "Detected target start line (199) differs from mainline old start line (219), indicating code shifted",
+          "Surrounding lines before and after patch differ in target vs mainline"
+        ],
+        "namespace_only_possible": true,
+        "namespace_changes": [],
+        "required_invariants": [
+          "builder.remove(REPLICATION_INDEX_ROUTING_ACTIVE.getKey());",
+          "indexMetadata.getAliases().valuesIt().forEachRemaining(indexMdBuilder::putAlias);"
+        ],
+        "required_symbols": [],
+        "protected_symbols": [],
+        "must_preserve_symbols": [],
+        "chain_constraints": [],
+        "api_inventory": {
+          "mainline_declared_methods_count": 27,
+          "target_declared_methods_count": 26,
+          "matched_symbols_before": [],
+          "missing_symbols_before": []
+        }
+      }
+    ]
+  },
+  "last_plan_signature": "09499ea34a737da8cf8276501e045d96f9f325a9b06a6b7bad649d865c8e6ee2",
+  "validation_repeated_plan_detected": false,
+  "force_type_v_until_success": true,
+  "force_type_v_reason": "context_mismatch_with_build_api_or_syntax",
+  "force_type_v_retry_files": [
+    "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+    "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+    "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java"
+  ],
+  "token_usage": {
+    "input_tokens": 30323,
+    "output_tokens": 6085,
+    "total_tokens": 36408,
+    "estimated": true,
+    "sources": [
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.type_v_subagent.tiktoken",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage",
+      "planning_agent.provider_usage"
+    ]
+  }
+}

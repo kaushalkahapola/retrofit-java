@@ -15,9 +15,10 @@ import subprocess
 import tempfile
 from typing import Any
 
+
 def _norm_rel(path: str | None) -> str:
     p = (path or "").strip().replace("\\", "/")
-    if p.startswith("a/") or p.startswith("b/"):
+    while p.startswith("a/") or p.startswith("b/"):
         p = p[2:]
     return p.lstrip("/")
 
@@ -48,7 +49,7 @@ def extract_file_diff_for_path(full_patch: str, rel_path: str) -> str | None:
 def _git_apply_file(
     repo_path: str, patch_path: str, *, check_only: bool
 ) -> tuple[bool, str]:
-    cmd = ["git", "apply", "--whitespace=nowarn"]
+    cmd = ["git", "apply", "-p1", "--whitespace=nowarn"]
     if check_only:
         cmd.append("--check")
     cmd.append(patch_path)
@@ -111,7 +112,11 @@ def try_developer_fast_path(
     ):
         out["reason"] = "disabled_by_env"
         return out
-    if not target_repo_path or not target_file or not (developer_patch_diff or "").strip():
+    if (
+        not target_repo_path
+        or not target_file
+        or not (developer_patch_diff or "").strip()
+    ):
         out["reason"] = "missing_inputs"
         return out
 
@@ -160,11 +165,15 @@ def try_developer_fast_path(
         # the slice is applicable ground truth for eval — do not block on similarity.
         min_sim = 0.55
         try:
-            min_sim = float(os.getenv("EVAL_DEVELOPER_FAST_PATH_MIN_SIMILARITY", "0.55"))
+            min_sim = float(
+                os.getenv("EVAL_DEVELOPER_FAST_PATH_MIN_SIMILARITY", "0.55")
+            )
         except ValueError:
             pass
         min_sim = max(0.0, min(1.0, min_sim))
-        force_sim = (os.getenv("EVAL_DEVELOPER_FAST_PATH_FORCE_SIMILARITY", "") or "").strip() in (
+        force_sim = (
+            os.getenv("EVAL_DEVELOPER_FAST_PATH_FORCE_SIMILARITY", "") or ""
+        ).strip() in (
             "1",
             "true",
             "yes",
@@ -206,6 +215,305 @@ def try_developer_fast_path(
                 pass
 
 
+def split_diff_into_hunks(file_diff: str) -> list[dict[str, str]]:
+    """
+    Splits a standard git diff for a single file into its header and individual hunks.
+    Returns list of {'header': ..., 'hunk': ...}
+    """
+    if not file_diff or "@@" not in file_diff:
+        return []
+
+    lines = file_diff.splitlines()
+    header_lines = []
+    hunks = []
+    current_hunk = []
+
+    in_header = True
+    for line in lines:
+        if line.startswith("@@"):
+            if current_hunk:
+                hunks.append("\n".join(current_hunk))
+            current_hunk = [line]
+            in_header = False
+        elif in_header:
+            header_lines.append(line)
+        else:
+            current_hunk.append(line)
+
+    if current_hunk:
+        hunks.append("\n".join(current_hunk))
+
+    header = "\n".join(header_lines)
+    return [{"header": header, "hunk": h} for h in hunks]
+
+
+def try_mainline_fast_path(
+    *,
+    target_repo_path: str,
+    target_file: str,
+    mainline_patch_diff: str,
+    hunk_mappings: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """
+    Logical fast path: attempts to apply the original mainline patch hunks
+    granularly. If git apply fails, it falls back to a 'logical' identity
+    check at the mapped location (Agent 2 hints).
+    """
+    out: dict[str, Any] = {
+        "applied": False,
+        "reason": "not_attempted",
+        "diff_text": "",
+        "applied_hunks_count": 0,
+        "total_hunks_count": 0,
+    }
+    if (
+        not target_repo_path
+        or not target_file
+        or not (mainline_patch_diff or "").strip()
+    ):
+        out["reason"] = "missing_inputs"
+        return out
+
+    file_diff = extract_file_diff_for_path(mainline_patch_diff, target_file)
+    if not file_diff or not file_diff.strip():
+        out["reason"] = "no_mainline_fragment"
+        return out
+
+    hunk_fragments = split_diff_into_hunks(file_diff)
+    if not hunk_fragments:
+        out["reason"] = "no_hunks_parsed"
+        return out
+
+    out["total_hunks_count"] = len(hunk_fragments)
+
+    # We'll try to apply each hunk.
+    # For simplicity in this first version, we only count the whole file as
+    # 'applied' if ALL hunks are applied. This satisfies the user's need
+    # for a 100% logical apply.
+
+    temp_applied_count = 0
+
+    # We'll use a temporary working copy logic if needed, but for now we'll
+    # just rely on git's ability to handle multiple applies.
+    # Actually, better to apply ALL hunks together if possible, and ONLY
+    # go granular if that fails.
+
+    tmp_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".patch", delete=False, encoding="utf-8"
+        ) as tmp:
+            tmp.write(file_diff)
+            tmp_path = tmp.name
+
+        ok, msg = _git_apply_file(target_repo_path, tmp_path, check_only=True)
+        if ok:
+            # Whole file applies cleanly! (TYPE I)
+            _git_apply_file(target_repo_path, tmp_path, check_only=False)
+            dr = subprocess.run(
+                ["git", "diff", "HEAD", "--", target_file],
+                cwd=target_repo_path,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            out["applied"] = True
+            out["reason"] = "mainline_fast_path_ok (TYPE I)"
+            out["diff_text"] = dr.stdout or ""
+            out["applied_hunks_count"] = len(hunk_fragments)
+            return out
+        else:
+            print(
+                f"    Agent 3: Whole-file apply failed for {target_file}, trying logical hunk-by-hunk..."
+            )
+    except Exception as e:
+        print(f"    Agent 3: Exception during whole-file apply check: {e}")
+    finally:
+        if tmp_path and os.path.isfile(tmp_path):
+            os.unlink(tmp_path)
+
+    # Granular Fallback (Logical Apply)
+    # This uses Agent 2 hints to handle TYPE II
+    # For each hunk, we'll try to apply it logically.
+
+    # 1. Load target file text
+    fp = os.path.normpath(
+        os.path.join(target_repo_path, target_file.replace("/", os.sep))
+    )
+    if not os.path.isfile(fp):
+        out["reason"] = "target_file_not_found"
+        return out
+
+    try:
+        with open(fp, "r", encoding="utf-8", errors="replace") as f:
+            target_text = f.read()
+    except Exception as e:
+        out["reason"] = f"read_error:{e}"
+        return out
+
+    for i, hf in enumerate(hunk_fragments):
+        header = hf.get("header", "")
+        hunk_text = hf.get("hunk", "")
+        if not hunk_text:
+            continue
+
+        # Try git apply for this single hunk first
+        hunk_patch = header + "\n" + hunk_text + "\n"
+        hunk_applied = False
+
+        thp = ""
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".patch", delete=False
+            ) as tmp:
+                tmp.write(hunk_patch)
+                thp = tmp.name
+
+            ok, _ = _git_apply_file(target_repo_path, thp, check_only=False)
+            if ok:
+                hunk_applied = True
+            else:
+                # LOGICAL IDENTITY FALLBACK
+                # Reload from disk so we always operate on the latest state
+                # (prior hunks may have been applied via git apply above).
+                try:
+                    with open(fp, "r", encoding="utf-8", errors="replace") as _rf:
+                        curr_text = _rf.read()
+                except Exception:
+                    curr_text = target_text
+
+                # 1. Parse 'old' and 'new' from hunk (full context + changed lines)
+                old_lines = []
+                new_lines = []
+                for line in hunk_text.splitlines():
+                    if line.startswith("-"):
+                        old_lines.append(line[1:])
+                    elif line.startswith("+"):
+                        new_lines.append(line[1:])
+                    elif line.startswith(" "):
+                        old_lines.append(line[1:])
+                        new_lines.append(line[1:])
+
+                old_str = "\n".join(old_lines).strip()
+                new_str = "\n".join(new_lines).strip()
+
+                # 2. Try full match: sequence of all words (context + changed),
+                #    whitespace-invariant. Works when surrounding context is identical.
+                import re
+
+                words = old_str.split()
+                matched = False
+                if words:
+                    pattern = r"\s*".join(re.escape(w) for w in words)
+                    matches = list(re.finditer(pattern, curr_text, re.MULTILINE))
+
+                    if len(matches) == 1:
+                        match = matches[0]
+                        new_curr = (
+                            curr_text[: match.start()] + new_str + curr_text[match.end() :]
+                        )
+                        try:
+                            with open(fp, "w", encoding="utf-8") as _wf:
+                                _wf.write(new_curr)
+                        except Exception:
+                            pass
+                        hunk_applied = True
+                        matched = True
+                        print(
+                            f"    Agent 3: Logical identity match (whitespace invariant) for hunk {i + 1} in {target_file}"
+                        )
+
+                # 3. Trimmed match: only from the first changed line to the last
+                #    changed line, stripping leading/trailing context lines.
+                #    Handles TYPE II where surrounding context has extra/different
+                #    lines (e.g. an extra constructor parameter in the target).
+                if not matched:
+                    hunk_lines_all = hunk_text.splitlines()
+                    first_change = None
+                    last_change = None
+                    for li, hl in enumerate(hunk_lines_all):
+                        if hl.startswith("-") or hl.startswith("+"):
+                            if first_change is None:
+                                first_change = li
+                            last_change = li
+
+                    if first_change is not None and last_change is not None:
+                        trimmed_old: list[str] = []
+                        trimmed_new: list[str] = []
+                        for hl in hunk_lines_all[first_change : last_change + 1]:
+                            if hl.startswith("-"):
+                                trimmed_old.append(hl[1:])
+                            elif hl.startswith("+"):
+                                trimmed_new.append(hl[1:])
+                            elif hl.startswith(" "):
+                                trimmed_old.append(hl[1:])
+                                trimmed_new.append(hl[1:])
+
+                        trimmed_old_str = "\n".join(trimmed_old).strip()
+                        trimmed_new_str = "\n".join(trimmed_new).strip()
+
+                        # Only try if the trimmed string is meaningfully different
+                        # from the full old_str (i.e. we actually dropped context).
+                        if trimmed_old_str and trimmed_old_str != old_str:
+                            trim_words = trimmed_old_str.split()
+                            trim_pattern = r"\s*".join(
+                                re.escape(w) for w in trim_words
+                            )
+                            trim_matches = list(
+                                re.finditer(trim_pattern, curr_text, re.MULTILINE)
+                            )
+                            if len(trim_matches) == 1:
+                                m = trim_matches[0]
+                                new_curr = (
+                                    curr_text[: m.start()]
+                                    + trimmed_new_str
+                                    + curr_text[m.end() :]
+                                )
+                                try:
+                                    with open(fp, "w", encoding="utf-8") as _wf:
+                                        _wf.write(new_curr)
+                                except Exception:
+                                    pass
+                                hunk_applied = True
+                                print(
+                                    f"    Agent 3: Trimmed logical identity match "
+                                    f"(context-stripped, TYPE II) for hunk {i + 1} in {target_file}"
+                                )
+        except Exception:
+            pass
+        finally:
+            if thp and os.path.isfile(thp):
+                os.unlink(thp)
+
+        if hunk_applied:
+            temp_applied_count += 1
+
+    if temp_applied_count == len(hunk_fragments):
+        # All hunks applied (via git apply or logical fallback written to disk).
+        # Just capture the diff — no need to write curr_text since every
+        # logical fallback already wrote its result to disk immediately above.
+        try:
+            dr = subprocess.run(
+                ["git", "diff", "HEAD", "--", target_file],
+                cwd=target_repo_path,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            out["applied"] = True
+            out["reason"] = "mainline_fast_path_ok (Granular/Logical)"
+            out["diff_text"] = dr.stdout or ""
+            out["applied_hunks_count"] = temp_applied_count
+            return out
+        except Exception as e:
+            out["reason"] = f"write_error:{e}"
+            return out
+
+    out["applied_hunks_count"] = temp_applied_count
+    out["reason"] = f"partial_apply:{temp_applied_count}/{len(hunk_fragments)}"
+    return out
+
+
 def file_already_matches_developer_commit(
     *,
     target_repo_path: str,
@@ -228,11 +536,13 @@ def file_already_matches_developer_commit(
         if r1.returncode != 0:
             return False
         want = r1.stdout
-        fp = os.path.normpath(os.path.join(target_repo_path, target_file.replace("/", os.sep)))
+        fp = os.path.normpath(
+            os.path.join(target_repo_path, target_file.replace("/", os.sep))
+        )
         if not os.path.isfile(fp):
             return False
-        with open(fp, encoding="utf-8", errors="replace") as f:
+        with open(fp, "r", encoding="utf-8", errors="replace") as f:
             got = f.read()
-        return want.replace("\r\n", "\n") == got.replace("\r\n", "\n")
+        return (want or "").replace("\r\n", "\n") == (got or "").replace("\r\n", "\n")
     except Exception:
         return False

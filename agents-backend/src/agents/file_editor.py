@@ -42,13 +42,21 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.prebuilt import create_react_agent
 
+try:
+    from langgraph.errors import GraphRecursionError
+except ImportError:  # Compatibility fallback for older langgraph versions
+
+    class GraphRecursionError(Exception):
+        pass
+
+
 from agents.hunk_generator_tools import HunkGeneratorToolkit
-from state import AdaptedHunk, AgentState, FileEdit, SemanticBlueprint
+from state import AdaptedHunk, AgentState, FileEdit, SemanticBlueprint, SurgicalOp
 from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_line
 from utils.java_ts_invocation_names import callee_names_from_java_snippet_lines
 from utils.llm_provider import get_llm
 from utils.patch_analyzer import PatchAnalyzer
-from utils.patch_apply_strategy import try_developer_fast_path
+from utils.patch_apply_strategy import try_mainline_fast_path
 from utils.plan_validator import (
     classify_syntax_failure_message,
     validate_plan_before_apply,
@@ -179,6 +187,14 @@ Here is the original git patch from the mainline project. You must backport the 
 {patch_diff}
 ```
 
+## str_replace Edit Plan
+The following plan entries contain candidate `old_string` / `new_string` pairs for each hunk.
+Entries marked `verified: true` match the target file exactly — try those with `edit_file()` first.
+Entries marked `verified: false` are best-effort hints; if `old_string` is not found, adapt the edit using the mainline diff and semantic blueprint above.
+```json
+{hunk_generation_plan}
+```
+
 ## Structural Mapping Hints
 The structural locator has provided hints about where these hunks might belong in the target file:
 {mapping_hints}
@@ -267,7 +283,7 @@ def _analyze_anchor_failure_semantic(
 
 def _normalize_rel_path(path: str) -> str:
     p = (path or "").strip().replace("\\", "/").lstrip("/")
-    if p.startswith("a/") or p.startswith("b/"):
+    while p.startswith("a/") or p.startswith("b/"):
         p = p[2:]
     return p
 
@@ -377,10 +393,72 @@ def _build_fallback_plan_entries(
         )
 
         if edit_type in {"insert_after", "insert_before"}:
-            context = _extract_context_lines(raw_hunk)
-            anchor = context[0] if context else ""
+            # For insert_after: the ideal anchor is the last context line BEFORE the
+            # additions in the hunk (the line right before the first `+`).  Using the
+            # first context line of the hunk places the insertion too early.
+            # For insert_before: use the first context line AFTER the additions.
+            hunk_body = (raw_hunk or "").splitlines()[1:]
+            before_adds: list[str] = []
+            after_adds: list[str] = []
+            found_add = False
+            for hl in hunk_body:
+                if hl.startswith("+") and not hl.startswith("+++"):
+                    found_add = True
+                elif hl.startswith(" "):
+                    (after_adds if found_add else before_adds).append(hl[1:])
+
+            if edit_type == "insert_after":
+                # Last non-blank context line before the additions
+                anchor = next(
+                    (c for c in reversed(before_adds) if c.strip()), ""
+                )
+            else:
+                # First non-blank context line after the additions
+                anchor = next((c for c in after_adds if c.strip()), "")
+                # Fall back to before_adds if no after context
+                if not anchor:
+                    anchor = next((c for c in reversed(before_adds) if c.strip()), "")
+
             old_string = anchor
             new_string = (anchor + "\n" + new_string) if anchor else new_string
+        elif edit_type == "replace":
+            # For replace edits, old_string is only the removed lines. If those lines
+            # appear multiple times in the file, validate_plan_before_apply will reject
+            # with ambiguous_old_string. Expand old_string with surrounding context
+            # lines (up to 2 before and 2 after) to make the match unique.
+            hunk_body = (raw_hunk or "").splitlines()[1:]
+            ctx_before: list[str] = []
+            ctx_after: list[str] = []
+            found_del = False
+            found_after_del = False
+            for hl in hunk_body:
+                is_add = hl.startswith("+") and not hl.startswith("+++")
+                is_del = hl.startswith("-") and not hl.startswith("---")
+                is_ctx = hl.startswith(" ")
+                if is_del:
+                    found_del = True
+                    found_after_del = False
+                elif is_ctx:
+                    if not found_del:
+                        ctx_before.append(hl[1:])
+                    elif not found_after_del:
+                        ctx_after.append(hl[1:])
+                elif is_add and found_del:
+                    found_after_del = True
+
+            # Use up to 2 context lines before and 2 after for disambiguation
+            prefix_lines = [l for l in ctx_before if l.strip()][-2:]
+            suffix_lines = [l for l in ctx_after if l.strip()][:2]
+
+            if prefix_lines or suffix_lines:
+                prefix = "\n".join(prefix_lines)
+                suffix = "\n".join(suffix_lines)
+                if prefix_lines:
+                    old_string = prefix + "\n" + old_string
+                    new_string = prefix + "\n" + new_string
+                if suffix_lines:
+                    old_string = old_string + "\n" + suffix
+                    new_string = new_string + "\n" + suffix
 
         entries.append(
             {
@@ -508,6 +586,7 @@ def _apply_edit_deterministically(
     target_repo_path: str,
     plan_entry: dict[str, Any],
     target_file: str,
+    strict_exact: bool = False,
 ) -> tuple[bool, str, str, str, str]:
     """
     Apply a single plan operation deterministically with anchor resolution.
@@ -563,7 +642,11 @@ def _apply_edit_deterministically(
             ]
             if len(line_matches) == 1:
                 return line_matches[0], "line_trimmed_unique"
-            if candidate.lstrip() != candidate and candidate.lstrip() in content_text:
+            if (
+                not strict_exact
+                and candidate.lstrip() != candidate
+                and candidate.lstrip() in content_text
+            ):
                 return candidate.lstrip(), "lstrip_exact"
             return "", "not_found_single"
 
@@ -584,6 +667,9 @@ def _apply_edit_deterministically(
                 hits.append("\n".join(file_lines[i : i + n]))
         if len(hits) == 1:
             return hits[0], "multiline_trimmed_unique"
+
+        if strict_exact:
+            return "", "not_found_multiline_strict"
 
         # Secondary fallback: anchor-line reconstruction for diverged multiline blocks.
         anchor_idx = -1
@@ -686,11 +772,46 @@ def _apply_edit_deterministically(
         if edit_type == "insert_after" and payload and not payload.startswith("\n"):
             payload = "\n" + payload
 
+        original_resolved_old = resolved_old
         resolved_new = (
             payload + resolved_old
             if edit_type == "insert_before"
             else resolved_old + payload
         )
+
+        # When an insert_before payload starts with `}` (e.g. `} else {`), the planning
+        # agent intends to *transform* the closing brace of the preceding if/else-if block
+        # into an else extension.  But str_replace only replaces resolved_old, leaving the
+        # preceding `}` untouched — giving `} } else {` (syntax error).  Fix: extend
+        # resolved_old backwards to include that preceding `}` line so the replacement is
+        # clean (old `}\n<anchor>` → new `} else {\n...\n}\n<anchor>`).
+        if (
+            edit_type == "insert_before"
+            and payload
+            and payload.lstrip().startswith("}")
+        ):
+            anchor_pos = content.find(resolved_old)
+            if anchor_pos > 0:
+                before = content[:anchor_pos].rstrip("\n")
+                last_nl = before.rfind("\n")
+                preceding_line = before[last_nl + 1 :] if last_nl >= 0 else before
+                if preceding_line.strip() in ("}", "};"):
+                    extended_old = preceding_line + "\n" + resolved_old
+                    if extended_old in content:
+                        resolved_old = extended_old
+                        # Also check whether the payload leaves any blocks unclosed
+                        # (e.g. planning agent forgot the closing `}` for `else {`).
+                        # Count opens/closes in payload after its leading `}` character.
+                        first_close = payload.index("}")
+                        payload_body = payload[first_close + 1 :]
+                        unclosed = payload_body.count("{") - payload_body.count("}")
+                        if unclosed > 0:
+                            first_line = payload.lstrip("\n").split("\n")[0]
+                            indent = " " * (len(first_line) - len(first_line.lstrip()))
+                            closing = (indent + "}\n") * unclosed
+                            resolved_new = payload + closing + original_resolved_old
+                        else:
+                            resolved_new = payload + original_resolved_old
 
     result = toolkit.str_replace_in_file(target_file, resolved_old, resolved_new)
     if result.startswith("SUCCESS"):
@@ -1486,6 +1607,128 @@ def _should_lock_coupled_retry(
     return False
 
 
+def _normalize_surgical_plan_map(
+    surgical_plans: dict[str, Any] | None,
+) -> dict[str, list[SurgicalOp]]:
+    out: dict[str, list[SurgicalOp]] = {}
+    for raw_file, raw_ops in (surgical_plans or {}).items():
+        file_key = _normalize_rel_path(str(raw_file or ""))
+        if not file_key or not isinstance(raw_ops, list):
+            continue
+        ops: list[SurgicalOp] = []
+        for op in raw_ops:
+            if not isinstance(op, dict):
+                continue
+            old_s = str(op.get("old_string") or "")
+            new_s = str(op.get("new_string") or "")
+            if not old_s:
+                continue
+            ops.append(
+                {
+                    "target_file": _normalize_rel_path(
+                        str(op.get("target_file") or file_key)
+                    ),
+                    "old_string": old_s,
+                    "new_string": new_s,
+                    "anchor_verified": bool(op.get("anchor_verified", False)),
+                    "verification_method": str(
+                        op.get("verification_method") or "exact"
+                    ),
+                    "confidence": float(op.get("confidence", 0.0) or 0.0),
+                }
+            )
+        if ops:
+            out[file_key] = ops
+    return out
+
+
+def _execute_surgical_plan(
+    *,
+    surgical_ops: list[SurgicalOp],
+    target_file: str,
+    mainline_file: str,
+    target_repo_path: str,
+    toolkit: HunkGeneratorToolkit,
+) -> tuple[bool, str, list[FileEdit]]:
+    """
+    Deterministic, pre-verified execution path for surgical operations.
+    """
+    edits: list[FileEdit] = []
+    per_file_plans: dict[str, list[SurgicalOp]] = {}
+    for op in surgical_ops or []:
+        tf = _normalize_rel_path(str(op.get("target_file") or target_file))
+        if not tf:
+            tf = _normalize_rel_path(target_file)
+        per_file_plans.setdefault(tf, []).append(op)
+
+    if not per_file_plans:
+        return False, "empty_surgical_plan", []
+
+    # Phase 1: verify all anchors in all target files before any mutation.
+    for tf, ops in per_file_plans.items():
+        full_path = os.path.join(target_repo_path, tf)
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+        except Exception as e:
+            return False, f"file_read_error:{tf}:{e}", []
+
+        for i, op in enumerate(ops):
+            if not bool(op.get("anchor_verified", False)):
+                return False, f"op_{i}_not_verified:{tf}", []
+            old_string = str(op.get("old_string") or "")
+            if not old_string:
+                return False, f"op_{i}_empty_old_string:{tf}", []
+            if old_string not in content:
+                return (
+                    False,
+                    json.dumps(
+                        {
+                            "type": "anchor_not_found",
+                            "operation_index": i,
+                            "failed_old_string_preview": old_string[:120],
+                            "target_file": tf,
+                        }
+                    ),
+                    [],
+                )
+
+    # Phase 2: apply edits grouped by target file.
+    for tf, ops in per_file_plans.items():
+        for i, op in enumerate(ops):
+            old_string = str(op.get("old_string") or "")
+            new_string = str(op.get("new_string") or "")
+            result = toolkit.str_replace_in_file(tf, old_string, new_string)
+            if not str(result).startswith("SUCCESS"):
+                return False, f"op_{i}_apply_failed:{tf}:{result}", edits
+
+            edits.append(
+                {
+                    "target_file": tf,
+                    "mainline_file": mainline_file,
+                    "old_string": old_string,
+                    "new_string": new_string,
+                    "edit_type": "replace",
+                    "verified": True,
+                    "verification_result": str(
+                        op.get("verification_method") or "exact"
+                    ),
+                    "applied": True,
+                    "apply_result": str(result),
+                }
+            )
+
+        syntax = toolkit.check_java_syntax(tf)
+        if not _syntax_is_valid(syntax):
+            return (
+                False,
+                f"post_surgical_syntax_failed:{tf}:{_syntax_output(syntax)[:500]}",
+                edits,
+            )
+
+    return True, "success", edits
+
+
 def _apply_plan_entries_deterministically(
     *,
     toolkit: HunkGeneratorToolkit,
@@ -1493,6 +1736,7 @@ def _apply_plan_entries_deterministically(
     target_file: str,
     plan_entries: list[dict[str, Any]],
     current_attempt_trajectory: list[dict[str, Any]],
+    strict_exact: bool = False,
 ) -> tuple[bool, str]:
     """
     Deterministic execution path with immediate syntax checks after each edit.
@@ -1503,20 +1747,24 @@ def _apply_plan_entries_deterministically(
             target_repo_path,
             entry,
             target_file,
+            strict_exact=strict_exact,
         )
         if not ok:
-            ok2, msg2, resolved_old2, resolved_new2, reason2 = _retry_with_file_check(
-                toolkit,
-                target_repo_path,
-                entry,
-                target_file,
-            )
-            if ok2:
-                ok = True
-                msg = msg2
-                resolved_old = resolved_old2
-                resolved_new = resolved_new2
-                reason = reason2
+            if not strict_exact:
+                ok2, msg2, resolved_old2, resolved_new2, reason2 = (
+                    _retry_with_file_check(
+                        toolkit,
+                        target_repo_path,
+                        entry,
+                        target_file,
+                    )
+                )
+                if ok2:
+                    ok = True
+                    msg = msg2
+                    resolved_old = resolved_old2
+                    resolved_new = resolved_new2
+                    reason = reason2
 
         if not ok:
             return False, f"deterministic_apply_failed: {msg}"
@@ -1590,6 +1838,8 @@ async def _invoke_react_with_backoff(
     for attempt in range(max_attempts):
         try:
             return await editor_agent.ainvoke(payload, config=cfg)
+        except GraphRecursionError:
+            raise
         except Exception as e:
             last_error = e
             err = str(e)
@@ -1611,6 +1861,108 @@ async def _invoke_react_with_backoff(
     raise RuntimeError("ReAct invocation failed without explicit exception")
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _to_int_env(
+    name: str, default: int, minimum: int = 0, maximum: int = 100000
+) -> int:
+    raw = os.getenv(name, "").strip()
+    try:
+        value = int(raw) if raw else int(default)
+    except Exception:
+        value = int(default)
+    return max(minimum, min(maximum, value))
+
+
+def _render_msg_content(content: Any) -> str:
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if text is not None:
+                    parts.append(str(text))
+            else:
+                parts.append(str(item))
+        return "\n".join([p for p in parts if p]).strip()
+    return str(content or "").strip()
+
+
+def _truncate_for_log(text: str, max_chars: int) -> str:
+    t = str(text or "")
+    if max_chars <= 0 or len(t) <= max_chars:
+        return t
+    head = max_chars // 2
+    tail = max_chars - head
+    return t[:head] + "\n... [TRUNCATED] ...\n" + t[-tail:]
+
+
+def _log_react_ai_messages(response: dict[str, Any], target_file: str) -> None:
+    """Log detailed ReAct trace (AI/tool/human) for runtime visibility."""
+    try:
+        if not _env_flag("FILE_EDITOR_LOG_REACT_TRACE", default=True):
+            return
+
+        max_chars = _to_int_env(
+            "FILE_EDITOR_LOG_REACT_MAX_CHARS", default=4000, minimum=200, maximum=50000
+        )
+        show_system = _env_flag("FILE_EDITOR_LOG_REACT_INCLUDE_SYSTEM", default=False)
+
+        messages = (response or {}).get("messages", []) or []
+        if not messages:
+            return
+
+        print(
+            f"    Agent 3: ReAct trace for {target_file} [BEGIN] "
+            f"(messages={len(messages)})"
+        )
+
+        for idx, msg in enumerate(messages, start=1):
+            role = str(getattr(msg, "type", "") or "unknown").strip().lower()
+            if role == "system" and not show_system:
+                continue
+
+            content = _render_msg_content(getattr(msg, "content", ""))
+            rendered = _truncate_for_log(content, max_chars).strip()
+
+            print(f"    Agent 3: [message {idx}] role={role}")
+
+            tool_calls = getattr(msg, "tool_calls", None) or []
+            if tool_calls:
+                for tc_i, tc in enumerate(tool_calls, start=1):
+                    tc_name = str((tc or {}).get("name") or "")
+                    tc_args = (tc or {}).get("args", {})
+                    try:
+                        args_text = json.dumps(tc_args, ensure_ascii=False, default=str)
+                    except Exception:
+                        args_text = str(tc_args)
+                    args_text = _truncate_for_log(args_text, max_chars)
+                    print(
+                        f"    Agent 3:   tool_call[{tc_i}] name={tc_name} args={args_text}"
+                    )
+
+            if rendered:
+                print(rendered)
+
+            if role == "tool":
+                tool_name = str(getattr(msg, "name", "") or "")
+                tool_call_id = str(getattr(msg, "tool_call_id", "") or "")
+                if tool_name or tool_call_id:
+                    print(
+                        f"    Agent 3:   tool_result name={tool_name} call_id={tool_call_id}"
+                    )
+
+        print(f"    Agent 3: ReAct trace for {target_file} [END]")
+    except Exception:
+        # Logging should never break file editing flow.
+        pass
+
+
 def _react_tool_budget_for_complexity(complexity: str) -> int:
     env_cap = os.getenv("FILE_EDITOR_REACT_TOOL_BUDGET", "").strip()
     if env_cap.isdigit():
@@ -1619,8 +1971,8 @@ def _react_tool_budget_for_complexity(complexity: str) -> int:
     if c == "TRIVIAL":
         return 4
     if c == "STRUCTURAL":
-        return 10
-    return 24
+        return 20
+    return 30
 
 
 def _tool_call_signature(name: str, args: Any) -> str:
@@ -1701,6 +2053,7 @@ async def _run_react_edit_pass(
     current_attempt_trajectory: list[dict[str, Any]],
     extra_retry_context: str = "",
     patch_complexity: str = "REWRITE",
+    type_v_mode: bool = False,
     token_usage: dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
     mapping_hints = []
@@ -1775,8 +2128,37 @@ async def _run_react_edit_pass(
         )
 
     tool_budget = _react_tool_budget_for_complexity(patch_complexity)
+    if type_v_mode:
+        # TYPE_V always gets at least 30 tool calls — enough for structural adaptation.
+        type_v_base_cap = _to_int_env(
+            "FILE_EDITOR_REACT_TYPE_V_RETRY_TOOL_BUDGET",
+            default=30,
+            minimum=10,
+            maximum=120,
+        )
+        tool_budget = max(tool_budget, type_v_base_cap)
     if validation_attempts > 0:
-        tool_budget = max(6, min(tool_budget, 12))
+        if type_v_mode:
+            type_v_retry_cap = _to_int_env(
+                "FILE_EDITOR_REACT_TYPE_V_RETRY_TOOL_BUDGET",
+                default=30,
+                minimum=10,
+                maximum=120,
+            )
+            tool_budget = max(tool_budget, type_v_retry_cap)
+        else:
+            retry_cap = _to_int_env(
+                "FILE_EDITOR_REACT_RETRY_TOOL_BUDGET",
+                default=12,
+                minimum=6,
+                maximum=120,
+            )
+            tool_budget = max(6, min(tool_budget, retry_cap))
+
+    print(
+        f"    Agent 3: ReAct tool budget for {target_file}: {tool_budget} "
+        f"(retry={validation_attempts}, type_v={type_v_mode}, complexity={patch_complexity})"
+    )
     editor_agent = create_react_agent(llm, toolkit.get_tools())
     try:
         react_recursion = int(os.getenv("FILE_EDITOR_REACT_RECURSION_LIMIT", "40"))
@@ -1794,15 +2176,16 @@ async def _run_react_edit_pass(
                 "messages": [
                     SystemMessage(content=system_prompt),
                     HumanMessage(
-                        content="Start your Todo list now.\n"
-                        "1. Analyze logic changes and structural differences.\n"
-                        "2. Apply changes using AST tools (Priority 1) or `edit_file` (Priority 2).\n"
-                        "3. Use `check_java_syntax` after edits to catch errors immediately.\n"
-                        "4. Use `read_file_window` to verify context and avoid duplication."
+                        content="Apply only the required edits for this file.\n"
+                        "- Prefer `edit_file` for exact replacement.\n"
+                        "- Use `read_file_window` only when needed to resolve anchor ambiguity.\n"
+                        "- Run `check_java_syntax`, then `git_diff_file`, then `verify_guidelines`.\n"
+                        "- Return DONE immediately after successful verification."
                     ),
                 ]
             },
         )
+        _log_react_ai_messages(response, target_file)
 
         tool_calls_count = 0
         tool_calls_flat: list[tuple[str, Any]] = []
@@ -1812,6 +2195,13 @@ async def _run_react_edit_pass(
                 for tc in m.tool_calls:
                     tool_calls_flat.append((tc.get("name", ""), tc.get("args", {})))
         if tool_calls_count > tool_budget:
+            print(
+                f"    Agent 3: tool budget exceeded for {target_file}: "
+                f"{tool_calls_count}>{tool_budget}. Tool call trace:"
+            )
+            for i, (nm, args) in enumerate(tool_calls_flat, start=1):
+                sig = _tool_call_signature(nm, args)
+                print(f"    Agent 3:   [{i}] {_truncate_for_log(sig, 1000)}")
             return False, f"tool_budget_exceeded:{tool_calls_count}>{tool_budget}"
 
         try:
@@ -1870,6 +2260,9 @@ async def _run_react_edit_pass(
             )
 
         return True, "react_apply_success"
+    except GraphRecursionError as e:
+        print(f"    Agent 3: ReAct recursion limit exceeded for {target_file}: {e}")
+        return False, f"react_recursion_limit_exceeded:{e}"
     except Exception as e:
         err = str(e)
         if "unsupported value" in err.lower() and "temperature" in err.lower():
@@ -1949,6 +2342,8 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
     mapped_target_context: dict = state.get("mapped_target_context") or {}
     hunk_generation_plan: dict = state.get("hunk_generation_plan") or {}
+    surgical_plans = _normalize_surgical_plan_map(state.get("surgical_plans") or {})
+    reasoning_iterations = int(state.get("reasoning_iterations") or 0)
     patch_complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
     semantic_blueprint: SemanticBlueprint = state.get("semantic_blueprint")
     patch_analysis: list = state.get("patch_analysis") or []
@@ -1999,6 +2394,11 @@ async def file_editor_node(state: AgentState, config) -> dict:
         print(
             f"  Agent 3: Retry #{validation_attempts} - deterministic re-application with failure context."
         )
+    if surgical_plans:
+        print(
+            "  Agent 3: Received surgical plans for "
+            f"{len(surgical_plans)} file(s) (reasoning_iterations={reasoning_iterations})."
+        )
 
     # Setup
     llm = get_llm(temperature=0)
@@ -2032,6 +2432,37 @@ async def file_editor_node(state: AgentState, config) -> dict:
             else fc.get("is_test_file", False)
         )
     ]
+    surgical_retry_mode = validation_attempts > 0 and bool(surgical_plans)
+    surgical_targets: set[str] = {
+        _normalize_rel_path(str(p or ""))
+        for p in (surgical_plans.keys() if isinstance(surgical_plans, dict) else [])
+        if _normalize_rel_path(str(p or ""))
+    }
+    if surgical_retry_mode and surgical_targets:
+        existing_change_files = {
+            _normalize_rel_path(
+                str(
+                    c.file_path
+                    if hasattr(c, "file_path")
+                    else (c or {}).get("file_path", "")
+                )
+            )
+            for c in code_changes
+        }
+        for st in sorted(surgical_targets):
+            if st in existing_change_files:
+                continue
+            code_changes.append(
+                {
+                    "file_path": st,
+                    "change_type": "MODIFIED",
+                    "is_test_file": False,
+                }
+            )
+        print(
+            "  Agent 3: Surgical retry mode active; restricting edits to reasoning-proposed files. "
+            f"targets={sorted(surgical_targets)}"
+        )
 
     adapted_file_edits: list[FileEdit] = []
     previous_adapted_code_hunks: list[AdaptedHunk] = list(
@@ -2053,6 +2484,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
         "plan_preflight_failures": 0,
         "react_escalations": 0,
         "react_skipped_statement_outside_block": 0,
+        "mainline_fast_path_hits": 0,
         "developer_fast_path_hits": 0,
     }
 
@@ -2105,8 +2537,19 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 op_plan["target_file"] = _ctx_target
                 op_plan["reason"] = "mapped_target_context_pair_mismatch"
 
-        # Skip files not in retry scope (on retries)
-        if retry_files and not coupled_retry_lock:
+        normalized_mainline_file = _normalize_rel_path(mainline_file)
+        normalized_target_file = _normalize_rel_path(target_file)
+        surgical_ops_for_file = []
+        if validation_attempts > 0:
+            surgical_ops_for_file = (
+                surgical_plans.get(normalized_target_file)
+                or surgical_plans.get(normalized_mainline_file)
+                or []
+            )
+
+        # Skip files not in retry scope (on retries), unless reasoning produced
+        # a surgical plan for this file.
+        if retry_files and not coupled_retry_lock and not surgical_ops_for_file:
             candidate_paths = {
                 _normalize_rel_path(mainline_file),
                 _normalize_rel_path(target_file),
@@ -2121,9 +2564,12 @@ async def file_editor_node(state: AgentState, config) -> dict:
             if not any(p for p in candidate_paths if p in retry_files):
                 continue
 
+        if surgical_retry_mode and not surgical_ops_for_file:
+            continue
+
         # Get plan entries for this file
         plan_entries: list[dict[str, Any]] = hunk_generation_plan.get(mainline_file, [])
-        if not plan_entries and patch_complexity in {"TRIVIAL", "STRUCTURAL"}:
+        if not plan_entries and not surgical_ops_for_file:
             fallback_raw_hunks = raw_hunks_by_file.get(mainline_file, [])
             plan_entries = _build_fallback_plan_entries(
                 raw_hunks=fallback_raw_hunks,
@@ -2135,11 +2581,11 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     f"  Agent 3: Built {len(plan_entries)} deterministic fallback edit(s) for {mainline_file}."
                 )
 
-        if not plan_entries:
+        if not plan_entries and not surgical_ops_for_file:
             print(f"  Agent 3: No plan entries for {mainline_file} - skipping.")
             continue
 
-        if any(
+        if not surgical_ops_for_file and any(
             "mapping_low_confidence" in str((e or {}).get("notes") or "")
             for e in plan_entries
         ):
@@ -2160,10 +2606,16 @@ async def file_editor_node(state: AgentState, config) -> dict:
             )
             continue
 
-        print(
-            f"  Agent 3: Processing {len(plan_entries)} edit(s) for "
-            f"{target_file} (op={change_type})"
-        )
+        if surgical_ops_for_file:
+            print(
+                f"  Agent 3: Processing surgical plan with {len(surgical_ops_for_file)} "
+                f"operation(s) for {target_file} (op={change_type})"
+            )
+        else:
+            print(
+                f"  Agent 3: Processing {len(plan_entries)} edit(s) for "
+                f"{target_file} (op={change_type})"
+            )
 
         adaptation_type = _classify_file_edit_type(
             mainline_file=mainline_file,
@@ -2198,16 +2650,25 @@ async def file_editor_node(state: AgentState, config) -> dict:
         if force_type_v_for_file:
             execution_types.add("TYPE_V")
         # Try deterministic path first for TYPE_IV when planner produced verified anchors.
+        first_pass_dumb_mode = validation_attempts == 0
+
         if adaptation_type == "TYPE_IV" and all(
             bool((e or {}).get("verified", False)) for e in (plan_entries or [])
         ):
             deterministic_only = True
         if "TYPE_V" in execution_types:
             deterministic_only = False
+        if first_pass_dumb_mode:
+            deterministic_only = True
         print(
             f"    Agent 3: Classified {target_file} as {adaptation_type} "
             f"({'deterministic' if deterministic_only else 'reactive'} path)"
         )
+        if first_pass_dumb_mode:
+            print(
+                "    Agent 3: First-pass dumb mode active: deterministic apply only; "
+                "deferring planning/reasoning until after validation feedback."
+            )
         if base_types or execution_types:
             print(
                 f"    Agent 3: base_types={sorted(base_types)} execution_types={sorted(execution_types)}"
@@ -2252,29 +2713,18 @@ async def file_editor_node(state: AgentState, config) -> dict:
         # After a failed validation, re-applying the developer slice via git apply
         # reproduces the same bytes and the same build error — skip fast path so
         # deterministic str_replace / ReAct can try to adapt (e.g. missing APIs).
-        _dfp: dict[str, Any] = {
-            "applied": False,
-            "reason": "not_attempted",
-        }
-        if validation_attempts <= 0:
-            _dfp = try_developer_fast_path(
-                target_repo_path=target_repo_path or "",
-                target_file=target_file,
-                developer_patch_diff=str(state.get("developer_patch_diff") or ""),
-                agent_eligible_patch=str(state.get("patch_diff") or ""),
-                evaluation_full_workflow=bool(state.get("evaluation_full_workflow")),
-                backport_commit=str(state.get("backport_commit") or ""),
-            )
-        else:
+        # Logical fast path: attempt to apply the original mainline hunk directly.
+        # This is non-cheating because it only uses the source branch patch.
+        _mfp = try_mainline_fast_path(
+            target_repo_path=target_repo_path or "",
+            target_file=target_file,
+            mainline_patch_diff=str(state.get("patch_diff") or ""),
+        )
+        if _mfp.get("applied"):
+            agent_metrics["mainline_fast_path_hits"] += 1
             print(
-                "    Agent 3: Skipping developer fast path "
-                f"(validation retry #{validation_attempts}; use deterministic/ReAct path)."
-            )
-        if _dfp.get("applied"):
-            agent_metrics["developer_fast_path_hits"] += 1
-            print(
-                f"    Agent 3: Developer patch fast path for {target_file} "
-                f"({_dfp.get('reason', '')})"
+                f"    Agent 3: Mainline patch fast path for {target_file} "
+                f"({_mfp.get('reason', '')})"
             )
             checks_ok, checks_reason, diff_text_fp = _run_mandatory_file_checks(
                 toolkit=toolkit,
@@ -2283,50 +2733,62 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 run_guideline=True,
             )
             if not checks_ok:
-                print(
-                    f"    Agent 3: Developer fast path failed checks: {checks_reason}"
+                print(f"    Agent 3: Mainline fast path failed checks: {checks_reason}")
+                _git_reset_file(target_repo_path, target_file)
+                # Fall back to deterministic/ReAct logic if checks fail
+            else:
+                task_entry["completed_steps"].extend(
+                    ["apply_edits", "capture_diff", "intent_check"]
                 )
-                _git_reset_file(target_repo_path, target_file)
-                task_entry["status"] = "failed"
-                task_entry["reason"] = "developer_fast_path_checks_failed"
-                task_entry["error"] = str(checks_reason)[:800]
+                agent_metrics["mainline_fast_path_hits"] += 1
+                fe_fp: FileEdit = {
+                    "target_file": target_file,
+                    "mainline_file": mainline_file,
+                    "old_string": "<mainline patch fast path>",
+                    "new_string": (diff_text_fp or "").strip(),
+                    "edit_type": "replace",
+                    "verified": True,
+                    "verification_result": str(
+                        _mfp.get("reason") or "mainline_fast_path"
+                    ),
+                    "applied": True,
+                    "apply_result": "SUCCESS",
+                }
+                adapted_file_edits.append(fe_fp)
+                hunk_fp: AdaptedHunk = {
+                    "target_file": target_file,
+                    "mainline_file": mainline_file,
+                    "hunk_text": diff_text_fp,
+                    "insertion_line": 1,
+                    "intent_verified": True,
+                    "file_operation": op_plan.get("effective_operation", change_type),
+                    "old_target_file": op_plan.get("old_target_file"),
+                    "file_operation_required": op_plan.get("operation_required", True),
+                    "path_resolution_reason": op_plan.get("reason", "unknown"),
+                }
+                _upsert_hunk_by_target_file(adapted_code_hunks, hunk_fp)
+                _upsert_hunk_by_target_file(best_effort_adapted_code_hunks, hunk_fp)
+                if toolkit and target_repo_path:
+                    _git_reset_file(target_repo_path, target_file)
+                task_entry["completed_steps"].append("restore_file")
+                task_entry["status"] = "success"
+                task_entry["reason"] = "mainline_fast_path"
                 continue
-
-            task_entry["completed_steps"].extend(
-                ["apply_edits", "capture_diff", "intent_check"]
+        else:
+            _mfp_reason = _mfp.get("reason", "unknown")
+            print(
+                f"    Agent 3: Mainline fast path skipped for {target_file}: "
+                f"{_mfp_reason}"
             )
-            fe_fp: FileEdit = {
-                "target_file": target_file,
-                "mainline_file": mainline_file,
-                "old_string": "<developer patch fast path>",
-                "new_string": (diff_text_fp or "").strip(),
-                "edit_type": "replace",
-                "verified": True,
-                "verification_result": str(_dfp.get("reason") or "developer_fast_path"),
-                "applied": True,
-                "apply_result": "SUCCESS",
-            }
-            adapted_file_edits.append(fe_fp)
-            hunk_fp: AdaptedHunk = {
-                "target_file": target_file,
-                "mainline_file": mainline_file,
-                "hunk_text": diff_text_fp,
-                "insertion_line": 1,
-                "intent_verified": True,
-                "file_operation": op_plan.get("effective_operation", change_type),
-                "old_target_file": op_plan.get("old_target_file"),
-                "file_operation_required": op_plan.get("operation_required", True),
-                "path_resolution_reason": op_plan.get("reason", "unknown"),
-            }
-            _upsert_hunk_by_target_file(adapted_code_hunks, hunk_fp)
-            _upsert_hunk_by_target_file(best_effort_adapted_code_hunks, hunk_fp)
-            if toolkit and target_repo_path:
+            # If the fast path applied some hunks but not all (partial_apply), the
+            # file is left dirty.  Reset it now so that plan-preflight and any
+            # subsequent deterministic / ReAct edits always start from a clean HEAD
+            # state.  Without this reset, the preflight sees partially-modified
+            # content and can produce wildly incorrect plans.
+            if "partial_apply" in _mfp_reason:
                 _git_reset_file(target_repo_path, target_file)
-            task_entry["completed_steps"].append("restore_file")
-            task_entry["status"] = "success"
-            task_entry["reason"] = "developer_fast_path"
-            continue
 
+        _preflight_fail_reason: str = ""
         if deterministic_only and target_file.lower().endswith(".java"):
             try:
                 fp = os.path.normpath(
@@ -2357,6 +2819,14 @@ async def file_editor_node(state: AgentState, config) -> dict:
                             "— falling back to ReAct (stale anchors after build failure or eval mode)."
                         )
                         deterministic_only = False
+                        # Force TYPE_V mode so the ReAct agent gets the structural-adaptation
+                        # system prompt instead of the naive "apply these edits" prompt.
+                        # Without this, the agent spends its whole budget on reads trying to
+                        # find anchors that don't exist in the target file.
+                        execution_types = execution_types | {"TYPE_V"}
+                        # Record the preflight reason so the else-branch ReAct call can
+                        # include it as extra_retry_context.
+                        _preflight_fail_reason = str(_pr.reason)
                     else:
                         print(
                             f"    Agent 3: PLAN_PREFLIGHT_FAILED {target_file}: {_pr.reason} "
@@ -2373,46 +2843,128 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     f"    Agent 3: Plan preflight read error for {target_file}: {_pex}"
                 )
 
-        # Step B: Apply edits via deterministic or ReAct path.
+        # Step B: Apply edits via surgical fast-path or deterministic/ReAct path.
         used_react = False
-        if "TYPE_V" in execution_types:
-            unverified_entries = _collect_unverified_entries(plan_entries)
-            if unverified_entries:
-                print(
-                    f"    Agent 3: TYPE_V has {len(unverified_entries)} unverified entries; "
-                    "attempting targeted ReAct repair instead of empty-generation fail-close."
-                )
-
-        if deterministic_only:
-            agent_metrics["deterministic_apply_attempts"] += 1
-            ok, apply_reason = _apply_plan_entries_deterministically(
-                toolkit=toolkit,
-                target_repo_path=target_repo_path,
+        used_surgical = False
+        if surgical_ops_for_file:
+            ok, apply_reason, surgical_edits = _execute_surgical_plan(
+                surgical_ops=surgical_ops_for_file,
                 target_file=target_file,
-                plan_entries=plan_entries,
-                current_attempt_trajectory=current_attempt_trajectory,
+                mainline_file=mainline_file,
+                target_repo_path=target_repo_path,
+                toolkit=toolkit,
             )
             if not ok:
-                agent_metrics["deterministic_apply_failures"] += 1
-                fail_bucket = classify_syntax_failure_message(apply_reason)
-                skip_react = fail_bucket == "statement_outside_block"
-                if skip_react:
-                    agent_metrics["react_skipped_statement_outside_block"] += 1
+                print(
+                    f"    Agent 3: Surgical plan execution failed for {target_file}: {apply_reason}"
+                )
+                task_entry["status"] = "failed"
+                task_entry["reason"] = "surgical_plan_execution_failed"
+                task_entry["error"] = str(apply_reason)[:1000]
+                _git_reset_file(target_repo_path, target_file)
+                continue
+            used_surgical = True
+            adapted_file_edits.extend(surgical_edits)
+        else:
+            if "TYPE_V" in execution_types:
+                unverified_entries = _collect_unverified_entries(plan_entries)
+                if unverified_entries:
+                    print(
+                        f"    Agent 3: TYPE_V has {len(unverified_entries)} unverified entries; "
+                        "attempting targeted ReAct repair instead of empty-generation fail-close."
+                    )
+                    # Apply verified entries deterministically BEFORE ReAct so the LLM
+                    # doesn't need to re-derive them (and doesn't accidentally skip them).
+                    verified_entries = [
+                        e for e in plan_entries if bool((e or {}).get("verified", False))
+                    ]
+                    if verified_entries:
+                        _pre_ok, _pre_reason = _apply_plan_entries_deterministically(
+                            toolkit=toolkit,
+                            target_repo_path=target_repo_path,
+                            target_file=target_file,
+                            plan_entries=verified_entries,
+                            current_attempt_trajectory=current_attempt_trajectory,
+                            strict_exact=False,
+                        )
+                        if _pre_ok:
+                            print(
+                                f"    Agent 3: TYPE_V pre-applied {len(verified_entries)} "
+                                "verified entries before ReAct."
+                            )
+                        else:
+                            print(
+                                f"    Agent 3: TYPE_V pre-apply of verified entries failed "
+                                f"({_pre_reason}); proceeding to ReAct with full plan."
+                            )
+                            _git_reset_file(target_repo_path, target_file)
+
+            if deterministic_only:
+                agent_metrics["deterministic_apply_attempts"] += 1
+                ok, apply_reason = _apply_plan_entries_deterministically(
+                    toolkit=toolkit,
+                    target_repo_path=target_repo_path,
+                    target_file=target_file,
+                    plan_entries=plan_entries,
+                    current_attempt_trajectory=current_attempt_trajectory,
+                    strict_exact=first_pass_dumb_mode,
+                )
+                if not ok:
+                    agent_metrics["deterministic_apply_failures"] += 1
+                    fail_bucket = classify_syntax_failure_message(apply_reason)
+                    skip_react = fail_bucket == "statement_outside_block"
+                    if skip_react:
+                        agent_metrics["react_skipped_statement_outside_block"] += 1
+                        print(
+                            f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}. "
+                            "ESCALATION_SKIP_REACT: statement_outside_block (avoid token burn)."
+                        )
+                        _git_reset_file(target_repo_path, target_file)
+                        task_entry["status"] = "failed"
+                        task_entry["reason"] = "deterministic_syntax_failed_no_react"
+                        task_entry["error"] = str(apply_reason)[:800]
+                        continue
+
                     print(
                         f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}. "
-                        "ESCALATION_SKIP_REACT: statement_outside_block (avoid token burn)."
+                        "Escalating to smart ReAct refinement."
                     )
                     _git_reset_file(target_repo_path, target_file)
-                    task_entry["status"] = "failed"
-                    task_entry["reason"] = "deterministic_syntax_failed_no_react"
-                    task_entry["error"] = str(apply_reason)[:800]
-                    continue
-
-                print(
-                    f"    Agent 3: Deterministic apply failed for {target_file}: {apply_reason}. "
-                    "Escalating to smart ReAct refinement."
-                )
-                _git_reset_file(target_repo_path, target_file)
+                    if first_pass_dumb_mode:
+                        print(
+                            "    Agent 3: Strict exact mode rejected adaptive fallback; "
+                            "escalating to planner with concrete failure context."
+                        )
+                        task_entry["status"] = "failed"
+                        task_entry["reason"] = "generation_contract_failed"
+                        task_entry["error"] = str(apply_reason)[:1000]
+                        continue
+                    used_react = True
+                    agent_metrics["react_escalations"] += 1
+                    react_ok, react_reason = await _run_react_edit_pass(
+                        llm=llm,
+                        toolkit=toolkit,
+                        state=state,
+                        mainline_file=mainline_file,
+                        target_file=target_file,
+                        plan_entries=plan_entries,
+                        validation_attempts=validation_attempts,
+                        error_context=error_context,
+                        current_attempt_trajectory=current_attempt_trajectory,
+                        extra_retry_context=apply_reason,
+                        patch_complexity=patch_complexity,
+                        type_v_mode=("TYPE_V" in execution_types),
+                        token_usage=token_usage,
+                    )
+                    if not react_ok:
+                        task_entry["status"] = "failed"
+                        task_entry["reason"] = "generation_contract_failed"
+                        task_entry["error"] = (
+                            f"react_refinement_failed: {react_reason}"[:1000]
+                        )
+                        _git_reset_file(target_repo_path, target_file)
+                        continue
+            else:
                 used_react = True
                 agent_metrics["react_escalations"] += 1
                 react_ok, react_reason = await _run_react_edit_pass(
@@ -2425,41 +2977,78 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     validation_attempts=validation_attempts,
                     error_context=error_context,
                     current_attempt_trajectory=current_attempt_trajectory,
-                    extra_retry_context=apply_reason,
                     patch_complexity=patch_complexity,
+                    type_v_mode=("TYPE_V" in execution_types),
+                    extra_retry_context=_preflight_fail_reason or None,
                     token_usage=token_usage,
                 )
                 if not react_ok:
+                    print(f"    Agent 3: Agent failed: {react_reason}")
+                    if "tool_budget_exceeded" in str(react_reason):
+                        checks_ok, checks_reason, diff_text = (
+                            _run_mandatory_file_checks(
+                                toolkit=toolkit,
+                                target_repo_path=target_repo_path,
+                                target_file=target_file,
+                                run_guideline=True,
+                            )
+                        )
+                        if checks_ok and diff_text.strip():
+                            print(
+                                "    Agent 3: ReAct budget exceeded but usable diff exists; "
+                                "salvaging deterministic output for validation."
+                            )
+                            task_entry["completed_steps"].append("apply_edits")
+                            task_entry["completed_steps"].append("capture_diff")
+                            task_entry["completed_steps"].append("intent_check")
+                            if toolkit and target_repo_path:
+                                _git_reset_file(target_repo_path, target_file)
+                            task_entry["completed_steps"].append("restore_file")
+                            task_entry["status"] = "success"
+                            task_entry["reason"] = "react_budget_salvaged"
+
+                            fe_salvage: FileEdit = {
+                                "target_file": target_file,
+                                "mainline_file": mainline_file,
+                                "old_string": "<react budget salvage>",
+                                "new_string": diff_text.strip(),
+                                "edit_type": "replace",
+                                "verified": True,
+                                "verification_result": "react_budget_salvaged",
+                                "applied": True,
+                                "apply_result": "SUCCESS",
+                            }
+                            adapted_file_edits.append(fe_salvage)
+
+                            hunk_salvage: AdaptedHunk = {
+                                "target_file": target_file,
+                                "mainline_file": mainline_file,
+                                "hunk_text": diff_text,
+                                "insertion_line": 1,
+                                "intent_verified": True,
+                                "file_operation": op_plan.get(
+                                    "effective_operation", change_type
+                                ),
+                                "old_target_file": op_plan.get("old_target_file"),
+                                "file_operation_required": op_plan.get(
+                                    "operation_required", True
+                                ),
+                                "path_resolution_reason": op_plan.get(
+                                    "reason", "unknown"
+                                ),
+                            }
+                            _upsert_hunk_by_target_file(
+                                adapted_code_hunks, hunk_salvage
+                            )
+                            _upsert_hunk_by_target_file(
+                                best_effort_adapted_code_hunks, hunk_salvage
+                            )
+                            continue
                     task_entry["status"] = "failed"
                     task_entry["reason"] = "generation_contract_failed"
-                    task_entry["error"] = f"react_refinement_failed: {react_reason}"[
-                        :1000
-                    ]
+                    task_entry["error"] = str(react_reason)[:500]
                     _git_reset_file(target_repo_path, target_file)
                     continue
-        else:
-            used_react = True
-            agent_metrics["react_escalations"] += 1
-            react_ok, react_reason = await _run_react_edit_pass(
-                llm=llm,
-                toolkit=toolkit,
-                state=state,
-                mainline_file=mainline_file,
-                target_file=target_file,
-                plan_entries=plan_entries,
-                validation_attempts=validation_attempts,
-                error_context=error_context,
-                current_attempt_trajectory=current_attempt_trajectory,
-                patch_complexity=patch_complexity,
-                token_usage=token_usage,
-            )
-            if not react_ok:
-                print(f"    Agent 3: Agent failed: {react_reason}")
-                task_entry["status"] = "failed"
-                task_entry["reason"] = "generation_contract_failed"
-                task_entry["error"] = str(react_reason)[:500]
-                _git_reset_file(target_repo_path, target_file)
-                continue
 
         task_entry["completed_steps"].append("apply_edits")
 
@@ -2480,7 +3069,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
             _git_reset_file(target_repo_path, target_file)
             continue
 
-        if "TYPE_V" in execution_types:
+        if "TYPE_V" in execution_types and not used_surgical:
             invariants = _collect_file_plan_invariants(plan_entries)
             target_after_text = _load_file_text(target_repo_path, target_file)
             inv_ok, inv_reason = _invariants_satisfied(
@@ -2805,23 +3394,25 @@ async def file_editor_node(state: AgentState, config) -> dict:
             f"({len(diff_text.splitlines())} lines)"
         )
 
-        # Record pseudo-FileEdit to satisfy legacy tracking and trace logging
-        fe: FileEdit = {
-            "target_file": target_file,
-            "mainline_file": mainline_file,
-            "old_string": "<deterministic file-editor diff>"
-            if not used_react
-            else "<line-based ReAct agent diff>",
-            "new_string": diff_text.strip(),
-            "edit_type": "replace",
-            "verified": True,
-            "verification_result": "Deterministic file editor applied"
-            if not used_react
-            else "ReAct agent applied",
-            "applied": True,
-            "apply_result": "SUCCESS",
-        }
-        adapted_file_edits.append(fe)
+        # Record pseudo-FileEdit to satisfy legacy tracking and trace logging.
+        # Surgical path already contributes concrete FileEdit rows per operation.
+        if not used_surgical:
+            fe: FileEdit = {
+                "target_file": target_file,
+                "mainline_file": mainline_file,
+                "old_string": "<deterministic file-editor diff>"
+                if not used_react
+                else "<line-based ReAct agent diff>",
+                "new_string": diff_text.strip(),
+                "edit_type": "replace",
+                "verified": True,
+                "verification_result": "Deterministic file editor applied"
+                if not used_react
+                else "ReAct agent applied",
+                "applied": True,
+                "apply_result": "SUCCESS",
+            }
+            adapted_file_edits.append(fe)
 
         # Step D: Extract just the hunk portions from the full git diff output
         # git diff HEAD produces: diff --git a/... b/... \n--- a/... \n+++ b/...\n@@...
@@ -2843,7 +3434,12 @@ async def file_editor_node(state: AgentState, config) -> dict:
                 break
 
         # Step E: Intent check (skip extra LLM call for deterministic TYPE I/II/III)
-        if deterministic_only and not used_react:
+        if used_surgical:
+            intent_ok = True
+            print(
+                f"    Agent 3: Skipping LLM intent check for {target_file} (surgical plan)."
+            )
+        elif deterministic_only and not used_react:
             intent_ok = True
             print(
                 f"    Agent 3: Skipping LLM intent check for {target_file} ({adaptation_type})."
@@ -2973,50 +3569,64 @@ async def file_editor_node(state: AgentState, config) -> dict:
         and current_patch_hash
         and previous_patch_hash == current_patch_hash
     ):
-        print(
-            "  Agent 3: Identical patch hash detected on retry; flagging for replanning."
-        )
-        return {
-            "messages": [
-                HumanMessage(
-                    content=(
-                        "Agent 3 (File Editor): identical generated patch detected on retry; "
-                        "requesting replanning."
+        if bool(state.get("evaluation_full_workflow")):
+            # In evaluation_full_workflow mode, Agent 4 runs a real Gradle
+            # build+test which is cheap compared to another planning round and
+            # gives actionable feedback even for an identical patch (e.g. a
+            # context-mismatch build error that the reasoning agent needs to
+            # diagnose).  Emitting generation_contract_failed here would cause
+            # validation_agent to defer the build entirely, burning a retry
+            # slot with no new information.  Fall through to the normal return.
+            print(
+                "  Agent 3: Identical patch hash detected on retry "
+                "(evaluation_full_workflow — suppressing contract_failed, "
+                "forwarding to Agent 4 for build/test feedback)."
+            )
+        else:
+            print(
+                "  Agent 3: Identical patch hash detected on retry; flagging for replanning."
+            )
+            return {
+                "messages": [
+                    HumanMessage(
+                        content=(
+                            "Agent 3 (File Editor): identical generated patch detected on retry; "
+                            "requesting replanning."
+                        )
                     )
-                )
-            ],
-            "adapted_file_edits": adapted_file_edits,
-            "all_adapted_file_edits": all_edits_history,
-            "agent_trajectory_edits": agent_trajectory_edits,
-            "adapted_code_hunks": adapted_code_hunks,
-            "best_effort_adapted_code_hunks": best_effort_adapted_code_hunks,
-            "adapted_test_hunks": [],
-            "generation_checklist": [
-                {
-                    "mainline_file": "<all>",
-                    "target_file": "<all>",
-                    "hunk_index": 0,
-                    "status": "failed",
-                    "reason": "generation_contract_failed",
-                    "todo_steps": ["replan"],
-                    "completed_steps": [],
-                }
-            ],
-            "validation_failed_stage": "generation_contract_failed",
-            "validation_repeated_patch_detected": True,
-            "validation_repeated_plan_detected": bool(
-                state.get("validation_repeated_plan_detected", False)
-            ),
-            "generated_patch_hash": current_patch_hash,
-            "force_type_v_until_success": force_type_v_latch,
-            "force_type_v_reason": force_type_v_reason,
-            "force_type_v_retry_files": sorted(force_type_v_scope_files)
-            if force_type_v_latch
-            else [],
-            "token_usage": token_usage,
-            "plan_preflight_results": plan_preflight_results,
-            "agent_metrics": agent_metrics,
-        }
+                ],
+                "adapted_file_edits": adapted_file_edits,
+                "all_adapted_file_edits": all_edits_history,
+                "agent_trajectory_edits": agent_trajectory_edits,
+                "adapted_code_hunks": adapted_code_hunks,
+                "best_effort_adapted_code_hunks": best_effort_adapted_code_hunks,
+                "adapted_test_hunks": [],
+                "generation_checklist": [
+                    {
+                        "mainline_file": "<all>",
+                        "target_file": "<all>",
+                        "hunk_index": 0,
+                        "status": "failed",
+                        "reason": "generation_contract_failed",
+                        "todo_steps": ["replan"],
+                        "completed_steps": [],
+                    }
+                ],
+                "validation_failed_stage": "generation_contract_failed",
+                "validation_repeated_patch_detected": True,
+                "validation_repeated_plan_detected": bool(
+                    state.get("validation_repeated_plan_detected", False)
+                ),
+                "generated_patch_hash": current_patch_hash,
+                "force_type_v_until_success": force_type_v_latch,
+                "force_type_v_reason": force_type_v_reason,
+                "force_type_v_retry_files": sorted(force_type_v_scope_files)
+                if force_type_v_latch
+                else [],
+                "token_usage": token_usage,
+                "plan_preflight_results": plan_preflight_results,
+                "agent_metrics": agent_metrics,
+            }
 
     return {
         "messages": [

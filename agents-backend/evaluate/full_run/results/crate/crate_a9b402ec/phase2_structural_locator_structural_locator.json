@@ -42,13 +42,13 @@
         "hunk_index": 4,
         "mainline_method": "hunk_4",
         "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
-        "target_method": null,
+        "target_method": "currentSnapshots",
         "start_line": 77,
         "end_line": 77,
         "code_snippet": "    @Inject\n    public SysSnapshots(RepositoriesService repositoriesService) {\n        this(repositoriesService::getRepositoriesList);\n    }\n\n    @VisibleForTesting\n    SysSnapshots(Supplier<Collection<Repository>> getRepositories) {\n        this.getRepositories = getRepositories;\n    }\n\n    public CompletableFuture<Iterable<SysSnapshot>> currentSnapshots() {\n        ArrayList<CompletableFuture<List<SysSnapshot>>> sysSnapshots = new ArrayList<>();\n        for (Repository repository : getRepositories.get()) {\n            var futureSnapshots = repository.getRepositoryData()\n                .thenCompose(repositoryData -> {\n                    Collection<SnapshotId> snapshotIds = repositoryData.getSnapshotIds();\n                    ArrayList<CompletableFuture<SysSnapshot>> snapshots = new ArrayList<>(snapshotIds.size());\n                    for (SnapshotId snapshotId : snapshotIds) {\n                        snapshots.add(createSysSnapshot(repository, snapshotId));\n                    }\n                    return CompletableFutures.allSuccessfulAsList(snapshots);\n                });\n            sysSnapshots.add(futureSnapshots);\n        }\n        return CompletableFutures.allSuccessfulAsList(sysSnapshots).thenApply(data -> {\n            ArrayList<SysSnapshot> result = new ArrayList<>();\n            for (Collection<SysSnapshot> datum : data) {\n                result.addAll(datum);\n            }\n            return result;\n        });\n    }\n\n    private static SysSnapshot toSysSnapshot(Repository repository,\n                                             SnapshotId snapshotId,\n                                             SnapshotInfo snapshotInfo,\n                                             List<String> partedTables) {\n        Version version = snapshotInfo.version();\n        return new SysSnapshot(\n            snapshotId.getName(),\n            repository.getMetadata().name(),",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       },
       {
         "hunk_index": 5,
@@ -66,13 +66,13 @@
         "hunk_index": 6,
         "mainline_method": "hunk_6",
         "target_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
-        "target_method": null,
+        "target_method": "createSysSnapshot",
         "start_line": 135,
         "end_line": 135,
         "code_snippet": "                }\n                return SysSnapshots.toSysSnapshot(repository, snapshotId, snapshotInfo, partedTables);\n            }).exceptionally(t -> {\n                var err = SQLExceptions.unwrap(t);\n                if (err instanceof SnapshotException) {\n                    if (LOGGER.isDebugEnabled()) {\n                        LOGGER.debug(\"Couldn't retrieve snapshotId={} error={}\", snapshotId, err);\n                    }\n                    return new SysSnapshot(\n                        snapshotId.getName(),\n                        repository.getMetadata().name(),\n                        Collections.emptyList(),\n                        Collections.emptyList(),\n                        null,\n                        null,\n                        null,\n                        SnapshotState.FAILED.name(),\n                        List.of()\n                    );\n                }\n                throw Exceptions.toRuntimeException(err);\n            });\n    }\n}",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ]
   },

@@ -5,6 +5,14 @@
 - Java-only files for agentic phases: 1
 - Developer auxiliary hunks (test + non-Java): 2
 
+## Commit Pair Consistency
+- Pair mismatch: False
+- Reason: scope_overlap_ok
+- Mainline Java files: ['server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java']
+- Developer Java files: ['server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java']
+- Overlap Java files: ['server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java']
+- Overlap ratio (mainline): 1.0
+
 ## Mainline Patch
 ```diff
 From 4f42b38d70b18e2b3c1d760e4f406c00b163c465 Mon Sep 17 00:00:00 2001
@@ -117,7 +125,7 @@ index 5e88e67fb0..0a5e8e5b64 100644
 +    }
  }
 -- 
-2.43.0
+2.53.0
 
 
 ```

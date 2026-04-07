@@ -124,20 +124,14 @@ index 8b700cd461..13290b6ad7 100644
      }
  }
 diff --git a/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java b/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java
-index 466ad54e85..a069ede78c 100644
+index 466ad54e85..a3b483f35c 100644
 --- a/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java
 +++ b/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java
-@@ -22,7 +22,6 @@
- package io.crate.execution.ddl.tables;
- 
- import java.util.HashSet;
--import java.util.List;
- import java.util.Set;
- 
- import org.elasticsearch.action.ActionType;
-@@ -83,19 +82,24 @@ public class TransportGCDanglingArtifacts extends AbstractDDLTransportAction<GCD
+@@ -81,21 +81,25 @@ public class TransportGCDanglingArtifacts extends AbstractDDLTransportAction<GCD
+             protected ClusterState execute(ClusterState currentState,
+                                            GCDanglingArtifactsRequest gcDanglingArtifactsRequest) {
                  Metadata metadata = currentState.metadata();
- 
+-
                  Set<Index> danglingIndicesToDelete = new HashSet<>();
 -                Set<Index> allTableIndices = new HashSet<>();
 -                for (RelationMetadata rm : metadata.relations(RelationMetadata.class)) {
@@ -187,17 +181,21 @@ index 637adb3b7b..28751dec36 100644
      }
  }
 diff --git a/server/src/main/java/org/elasticsearch/Version.java b/server/src/main/java/org/elasticsearch/Version.java
-index e0b2f2f0c8..fc2a7e5833 100644
+index e0b2f2f0c8..65db973f76 100644
 --- a/server/src/main/java/org/elasticsearch/Version.java
 +++ b/server/src/main/java/org/elasticsearch/Version.java
-@@ -206,6 +206,7 @@ public class Version implements Comparable<Version> {
-     public static final Version V_6_0_1 = new Version(9_00_01_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);
+@@ -207,8 +207,11 @@ public class Version implements Comparable<Version> {
      public static final Version V_6_0_2 = new Version(9_00_02_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);
      public static final Version V_6_0_3 = new Version(9_00_03_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);
-+    public static final Version V_6_0_4 = new Version(9_00_04_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);
  
++    public static final Version V_6_0_4 = new Version(9_00_04_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);
++
      public static final Version V_6_1_0 = new Version(9_01_00_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);
      public static final Version V_6_1_1 = new Version(9_01_01_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);
++    public static final Version V_6_1_1 = new Version(9_01_01_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);
+ 
+     public static final Version CURRENT = V_6_1_1;
+ 
 diff --git a/server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java b/server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java
 index 5fd8fdb7d7..9377993d6f 100644
 --- a/server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java

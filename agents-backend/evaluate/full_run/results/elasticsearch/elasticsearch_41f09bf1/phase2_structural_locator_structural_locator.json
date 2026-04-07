@@ -42,25 +42,25 @@
         "hunk_index": 4,
         "mainline_method": "hunk_4",
         "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
-        "target_method": null,
+        "target_method": "featureService",
         "start_line": 73,
         "end_line": 73,
         "code_snippet": "\n    @Inject\n    public TransportGetAllocationStatsAction(\n        TransportService transportService,\n        ClusterService clusterService,\n        ThreadPool threadPool,\n        ActionFilters actionFilters,\n        IndexNameExpressionResolver indexNameExpressionResolver,\n        AllocationStatsService allocationStatsService,\n        FeatureService featureService\n    ) {\n        super(\n            TYPE.name(),\n            transportService,\n            clusterService,\n            threadPool,\n            actionFilters,\n            TransportGetAllocationStatsAction.Request::new,\n            indexNameExpressionResolver,\n            TransportGetAllocationStatsAction.Response::new,\n            threadPool.executor(ThreadPool.Names.MANAGEMENT)\n        );\n        this.allocationStatsService = allocationStatsService;\n        this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());\n        this.featureService = featureService;\n    }\n\n    @Override\n    protected void doExecute(Task task, Request request, ActionListener<Response> listener) {\n        if (clusterService.state().getMinTransportVersion().before(TransportVersions.V_8_14_0)) {\n            // The action is not available before ALLOCATION_STATS\n            listener.onResponse(new Response(Map.of(), null));\n            return;\n        }\n        super.doExecute(task, request, listener);\n    }\n\n    @Override\n    protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {\n        listener.onResponse(\n            new Response(",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:field_declaration",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       },
       {
         "hunk_index": 5,
         "mainline_method": "hunk_5",
         "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
-        "target_method": null,
+        "target_method": "masterOperation",
         "start_line": 92,
         "end_line": 92,
         "code_snippet": "            TransportGetAllocationStatsAction.Response::new,\n            threadPool.executor(ThreadPool.Names.MANAGEMENT)\n        );\n        this.allocationStatsService = allocationStatsService;\n        this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());\n        this.featureService = featureService;\n    }\n\n    @Override\n    protected void doExecute(Task task, Request request, ActionListener<Response> listener) {\n        if (clusterService.state().getMinTransportVersion().before(TransportVersions.V_8_14_0)) {\n            // The action is not available before ALLOCATION_STATS\n            listener.onResponse(new Response(Map.of(), null));\n            return;\n        }\n        super.doExecute(task, request, listener);\n    }\n\n    @Override\n    protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {\n        listener.onResponse(\n            new Response(\n                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),\n                request.metrics().contains(Metric.FS)\n                    && featureService.clusterHasFeature(clusterService.state(), AllocationStatsFeatures.INCLUDE_DISK_THRESHOLD_SETTINGS)\n                        ? diskThresholdSettings\n                        : null\n            )\n        );\n    }\n\n    @Override\n    protected ClusterBlockException checkBlock(Request request, ClusterState state) {\n        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);\n    }\n\n    public static class Request extends MasterNodeReadRequest<Request> {\n\n        private final EnumSet<Metric> metrics;\n\n        @SuppressWarnings(\"this-escape\")",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ],
     "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java": [

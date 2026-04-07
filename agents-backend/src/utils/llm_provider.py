@@ -37,11 +37,113 @@ Configuration via environment variables:
 """
 
 import os
-from typing import Optional
+import threading
+from typing import Any, Optional
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.callbacks.base import BaseCallbackHandler
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+class _TerminalLogLLMCallback(BaseCallbackHandler):
+    """Print finalized LLM responses so they appear in terminal and runtime logs."""
+
+    def _stringify_generation(self, generation: Any) -> str:
+        if generation is None:
+            return ""
+
+        message = getattr(generation, "message", None)
+        if message is not None:
+            content = getattr(message, "content", "")
+            if isinstance(content, list):
+                parts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        text = item.get("text")
+                        if text is not None:
+                            parts.append(str(text))
+                    else:
+                        parts.append(str(item))
+                return "\n".join([p for p in parts if p])
+            return str(content)
+
+        text = getattr(generation, "text", None)
+        if text is not None:
+            return str(text)
+        return str(generation)
+
+    def _emit_response(self, response: Any) -> None:
+        try:
+            generations = getattr(response, "generations", None) or []
+            outputs: list[str] = []
+            for prompt_generations in generations:
+                if not prompt_generations:
+                    continue
+                rendered = self._stringify_generation(prompt_generations[0]).strip()
+                if rendered:
+                    outputs.append(rendered)
+
+            if not outputs:
+                return
+
+            print("\n[LLM OUTPUT BEGIN]")
+            for idx, text in enumerate(outputs, start=1):
+                if len(outputs) > 1:
+                    print(f"[response {idx}]")
+                print(text)
+            print("[LLM OUTPUT END]\n")
+        except Exception:
+            # Callback logging must never break the agent flow.
+            pass
+
+    def on_llm_end(self, response, **kwargs) -> None:  # noqa: ANN001
+        self._emit_response(response)
+
+    def on_chat_model_end(self, response, **kwargs) -> None:  # noqa: ANN001
+        self._emit_response(response)
+
+
+_LLM_CALLBACK = _TerminalLogLLMCallback()
+_LLM_SINGLETONS: dict[tuple[Any, ...], BaseChatModel] = {}
+_LLM_SINGLETON_LOCK = threading.Lock()
+
+
+def _provider_env_signature(provider: str) -> tuple[tuple[str, str], ...]:
+    provider = (provider or "").lower()
+    env_by_provider = {
+        "openai": ["OPENAI_BASE_URL", "OPENAI_API_KEY"],
+        "custom": ["OPENAI_BASE_URL", "OPENAI_API_KEY"],
+        "azure": [
+            "AZURE_ENDPOINT",
+            "AZURE_CHAT_DEPLOYMENT",
+            "AZURE_CHAT_VERSION",
+            "AZURE_OPENAI_API_KEY",
+            "OPENAI_API_KEY",
+        ],
+        "groq": ["GROQ_API_KEY", "OPENAI_API_KEY"],
+        "google": ["GOOGLE_API_KEY"],
+        "bedrock": [
+            "AWS_REGION",
+            "AWS_DEFAULT_REGION",
+            "AWS_PROFILE",
+            "BEDROCK_MODEL_PROVIDER",
+            "BEDROCK_INFERENCE_PROFILE_ARN",
+            "BEDROCK_INFERENCE_PROFILE_ID",
+        ],
+        "cerebras": ["CEREBRAS_API_KEY"],
+    }
+    names = env_by_provider.get(provider, [])
+    return tuple((name, os.getenv(name, "")) for name in names)
+
+
+def _singleton_key(provider: str, model: str, temperature: float) -> tuple[Any, ...]:
+    return (
+        (provider or "").lower(),
+        model or "",
+        float(temperature),
+        _provider_env_signature(provider),
+    )
 
 
 def _identifier_disallows_temperature(identifier: str) -> bool:
@@ -62,6 +164,7 @@ def _build_model_kwargs(
     )
     if not disallow:
         kwargs["temperature"] = temperature
+    kwargs["callbacks"] = [_LLM_CALLBACK]
     return kwargs
 
 
@@ -115,28 +218,38 @@ def get_llm(
         f"LLM Provider: {llm_provider}, Model: {llm_model}, Temperature: {temperature}"
     )
 
+    cache_key = _singleton_key(llm_provider, llm_model, temperature)
+    with _LLM_SINGLETON_LOCK:
+        cached = _LLM_SINGLETONS.get(cache_key)
+        if cached is not None:
+            return cached
+
     if llm_provider == "azure":
-        return _get_azure_openai(llm_model, temperature)
+        llm = _get_azure_openai(llm_model, temperature)
     elif llm_provider == "groq":
-        return _get_groq(llm_model, temperature)
+        llm = _get_groq(llm_model, temperature)
     elif llm_provider == "google":
-        return _get_google_gemini(llm_model, temperature)
+        llm = _get_google_gemini(llm_model, temperature)
     elif llm_provider == "bedrock":
-        return _get_bedrock(llm_model, temperature)
+        llm = _get_bedrock(llm_model, temperature)
     elif llm_provider == "cerebras":
-        return _get_cerebras(llm_model, temperature)
+        llm = _get_cerebras(llm_model, temperature)
     elif llm_provider == "custom" or llm_provider == "openai":
         # Try OpenAI-compatible endpoint first, then fallback to direct OpenAI
         base_url = os.getenv("OPENAI_BASE_URL")
         if base_url:
-            return _get_openai_compatible(llm_model, base_url, temperature)
+            llm = _get_openai_compatible(llm_model, base_url, temperature)
         else:
-            return _get_openai(llm_model, temperature)
+            llm = _get_openai(llm_model, temperature)
     else:
         raise ValueError(
             f"Unsupported LLM provider: {llm_provider}. "
             f"Supported: 'openai', 'azure', 'groq', 'google', 'bedrock', 'cerebras', 'custom'"
         )
+
+    with _LLM_SINGLETON_LOCK:
+        _LLM_SINGLETONS[cache_key] = llm
+    return llm
 
 
 def _get_openai(model: str, temperature: float) -> BaseChatModel:
@@ -284,7 +397,7 @@ def _get_bedrock(model: str, temperature: float) -> BaseChatModel:
     model_provider = explicit_provider or _infer_bedrock_model_provider(model)
     temp_value = _bedrock_temperature_value(model, temperature)
 
-    base_kwargs = {"region_name": region}
+    base_kwargs = {"region_name": region, "callbacks": [_LLM_CALLBACK]}
     if profile:
         base_kwargs["credentials_profile_name"] = profile
 

@@ -1,0 +1,18 @@
+patch_id=elasticsearch_da51c8cc
+project=elasticsearch
+mainline_commit=da51c8ccbf0171abefb2978810efd6db0f6f743e
+backport_commit=b25542fd147164cd0e89a803bbe49f865972abdb
+mode=full
+started_at=2026-04-06T18:33:51.373487
+----------------------------------------
+Running full workflow graph
+
+[elasticsearch/elasticsearch_da51c8cc] Setting up repositories for mode=full...
+[elasticsearch/elasticsearch_da51c8cc] Running full workflow graph...
+Router: Running Phase 0.
+Phase 0 (Optimistic): Checking direct patch applicability...
+Phase 0: Experiment mode — checking out parent of b25542fd147164cd0e89a803bbe49f865972abdb...
+Phase 0: Building baseline by applying developer backport test hunks only...
+  Validation: server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java - applying 2 hunk(s) one by one in bottom-to-top order: [421, 107]
+  Validation: server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java - applying 2 hunk(s) one by one in bottom-to-top order: [293, 165]
+    Agent 4: Executing elasticsearch helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/elasticsearch/run_tests.sh

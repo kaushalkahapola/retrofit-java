@@ -123,9 +123,6 @@ _HUNK_REWRITE_USER = """\
 ## Insertion Point in Target File
 Line {insertion_line} in `{target_file}`
 
-## Developer Auxiliary Hunk Signals (tests/non-Java file ops)
-{developer_aux_context}
-
 {retry_context}
 Rewrite the hunk now. Output ONLY the unified diff block starting with @@."""
 
@@ -144,9 +141,6 @@ _TEST_HUNK_REWRITE_USER = """\
 
 ## Root Cause Being Fixed (the test must target this)
 {root_cause}
-
-## Developer Auxiliary Hunk Signals (tests/non-Java file ops)
-{developer_aux_context}
 
 {retry_context}
 Rewrite the test hunk to exercise the same vulnerability in the target codebase.
@@ -908,58 +902,6 @@ def _build_import_hunk_for_target(
     return "\n".join([header] + body) + "\n"
 
 
-def _extract_auxiliary_signals(
-    developer_aux_hunks: list[dict[str, Any]],
-) -> tuple[dict[str, str], str]:
-    """
-    Derive conservative rename/file-op hints from developer auxiliary hunks.
-    """
-    if not developer_aux_hunks:
-        return {}, "(none)"
-
-    extra_map: dict[str, str] = {}
-    lines: list[str] = []
-
-    for h in developer_aux_hunks:
-        op = (h.get("file_operation") or "MODIFIED").upper()
-        new_path = _normalize_rel_path(h.get("target_file") or "")
-        old_path = _normalize_rel_path(
-            h.get("old_target_file") or h.get("mainline_file") or ""
-        )
-        hunk_text = h.get("hunk_text") or ""
-
-        if op == "RENAMED" and old_path and new_path and old_path != new_path:
-            old_stem = os.path.splitext(os.path.basename(old_path))[0]
-            new_stem = os.path.splitext(os.path.basename(new_path))[0]
-            if old_stem and new_stem and old_stem != new_stem:
-                extra_map.setdefault(old_stem, new_stem)
-            lines.append(f"- `{op}`: `{old_path}` -> `{new_path}`")
-        elif new_path:
-            lines.append(f"- `{op}`: `{new_path}`")
-
-        if hunk_text:
-            removed_class = None
-            added_class = None
-            for raw_line in hunk_text.splitlines():
-                s = raw_line.strip()
-                m_removed = re.match(
-                    r"^-\s*public\s+(?:final\s+)?(?:class|interface|enum)\s+(\w+)\b",
-                    s,
-                )
-                if m_removed:
-                    removed_class = m_removed.group(1)
-                m_added = re.match(
-                    r"^\+\s*public\s+(?:final\s+)?(?:class|interface|enum)\s+(\w+)\b",
-                    s,
-                )
-                if m_added:
-                    added_class = m_added.group(1)
-            if removed_class and added_class and removed_class != added_class:
-                extra_map.setdefault(removed_class, added_class)
-
-    return extra_map, ("\n".join(lines[:10]) if lines else "(none)")
-
-
 def _stabilize_hunk_structure(base_hunk: str, candidate_hunk: str) -> str:
     """
     Keeps the original hunk structure and replaces only '+' lines with candidate '+'.
@@ -1104,7 +1046,7 @@ def _check_generation_contract(
 
 def _normalize_rel_path(path: str) -> str:
     p = (path or "").strip().replace("\\", "/").lstrip("/")
-    if p.startswith("a/") or p.startswith("b/"):
+    while p.startswith("a/") or p.startswith("b/"):
         p = p[2:]
     return p
 
@@ -1384,17 +1326,8 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
     retry_hunks_raw = state.get("validation_retry_hunks") or []
     failed_stage: str = str(state.get("validation_failed_stage") or "").strip()
     with_test_changes: bool = state.get("with_test_changes", False)
-    developer_aux_hunks: list[dict[str, Any]] = (
-        state.get("developer_auxiliary_hunks") or []
-    )
     retry_files = {_normalize_rel_path(p) for p in retry_files_raw if p}
     retry_hunks = {int(h) for h in retry_hunks_raw if isinstance(h, int)}
-    aux_consistency_map, aux_context = _extract_auxiliary_signals(developer_aux_hunks)
-    if aux_consistency_map:
-        merged_cm = dict(consistency_map)
-        for old, new in aux_consistency_map.items():
-            merged_cm.setdefault(old, new)
-        consistency_map = merged_cm
 
     if not semantic_blueprint:
         msg = "Agent 3 Error: No semantic_blueprint in state. Agents 1 & 2 must run first."
@@ -1786,7 +1719,6 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                         dependent_apis=", ".join(dependent_apis),
                         insertion_line=insertion_line,
                         target_file=target_file,
-                        developer_aux_context=aux_context,
                         retry_context=retry_context_str,
                     )
 
@@ -1925,7 +1857,6 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                             dependent_apis=", ".join(dependent_apis),
                             insertion_line=insertion_line,
                             target_file=target_file,
-                            developer_aux_context=aux_context,
                             retry_context=retry_context_str,
                         )
                         try:
@@ -2238,7 +2169,6 @@ async def hunk_generator_node(state: AgentState, config) -> dict:
                     target_test_file=target_test_file,
                     consistency_map=cm_formatted,
                     root_cause=root_cause,
-                    developer_aux_context=aux_context,
                     retry_context=retry_context_str,
                 )
                 try:

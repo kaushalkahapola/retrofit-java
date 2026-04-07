@@ -1,0 +1,796 @@
+{
+  "project": "crate",
+  "patch_id": "crate_10643658",
+  "mainline_commit": "106436589bb5bde52346e54d66f681117fbc5a8d",
+  "backport_commit": "884f41f152d1b2892076f8e1adc4e15705c3d063",
+  "run_mode": "full",
+  "timestamp": "2026-04-07T10:21:23.519496",
+  "phases": {
+    "phase1_context_analyzer": {
+      "context_analyzer": {
+        "node": "context_analyzer",
+        "outputs": {
+          "semantic_blueprint": {
+            "root_cause_hypothesis": "The QueryProfiler class is not thread-safe, leading to potential data races and inconsistent profiling results when accessed concurrently.",
+            "fix_logic": "Synchronize key public methods (getProfileBreakdown and getTree) to ensure thread-safe access to shared mutable state, and reduce visibility of helper methods to private to limit external access and potential misuse.",
+            "dependent_apis": [
+              "createProfileBreakdown",
+              "createProfileBreakdown()",
+              "getDescriptionFromElement",
+              "getDescriptionFromElement(Query)",
+              "getProfileBreakdown",
+              "getProfileBreakdown(Query)",
+              "getTree",
+              "getTree()",
+              "getTypeFromElement",
+              "getTypeFromElement(Query)",
+              "synchronized"
+            ],
+            "patch_intent_summary": "Ensure thread safety in QueryProfiler by synchronizing critical methods and restricting method visibility.",
+            "hunk_chain": [
+              {
+                "hunk_index": 1,
+                "file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "summary": "Add synchronized modifier to getProfileBreakdown to prevent concurrent access issues.",
+                "role": "guard",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 1
+              },
+              {
+                "hunk_index": 2,
+                "file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "summary": "Change createProfileBreakdown method visibility from protected to private to limit external access.",
+                "role": "refactor",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 2
+              },
+              {
+                "hunk_index": 3,
+                "file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "summary": "Add synchronized modifier to getTree method to ensure thread-safe retrieval of profiling results.",
+                "role": "guard",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 3
+              },
+              {
+                "hunk_index": 4,
+                "file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "summary": "Change getTypeFromElement method visibility from protected to private to restrict access.",
+                "role": "refactor",
+                "connects_to_next": "Prepares next hunk in same file with related context.",
+                "global_index": 4
+              },
+              {
+                "hunk_index": 5,
+                "file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "summary": "Change getDescriptionFromElement method visibility from protected to private to restrict access.",
+                "role": "refactor",
+                "connects_to_next": "",
+                "global_index": 5
+              }
+            ]
+          },
+          "patch_diff": "diff --git a/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java b/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java\nindex 0000000..0000000 100644\n--- a/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java\n+++ b/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java\n@@ -66,7 +66,7 @@\n      * @param query The scoring query we wish to profile\n      * @return      A ProfileBreakdown for this query\n      */\n-    public QueryProfileBreakdown getProfileBreakdown(Query query) {\n+    public synchronized QueryProfileBreakdown getProfileBreakdown(Query query) {\n         int token = currentToken;\n \n         boolean stackEmpty = stack.isEmpty();\n@@ -122,7 +122,7 @@\n         return queryTimings;\n     }\n \n-    protected QueryProfileBreakdown createProfileBreakdown() {\n+    private QueryProfileBreakdown createProfileBreakdown() {\n         return new QueryProfileBreakdown();\n     }\n \n@@ -140,7 +140,7 @@\n      *\n      * @return a hierarchical representation of the profiled query tree\n      */\n-    public List<ProfileResult> getTree() {\n+    public synchronized List<ProfileResult> getTree() {\n         ArrayList<ProfileResult> results = new ArrayList<>(roots.size());\n         for (Integer root : roots) {\n             results.add(doGetTree(root));\n@@ -175,7 +175,7 @@\n         return new ProfileResult(type, description, timings, childrenProfileResults);\n     }\n \n-    protected String getTypeFromElement(Query query) {\n+    private String getTypeFromElement(Query query) {\n         // Anonymous classes won't have a name,\n         // we need to get the super class\n         if (query.getClass().getSimpleName().isEmpty()) {\n@@ -184,7 +184,7 @@\n         return query.getClass().getSimpleName();\n     }\n \n-    protected String getDescriptionFromElement(Query query) {\n+    private String getDescriptionFromElement(Query query) {\n         return query.toString();\n     }\n \n",
+          "token_usage": {
+            "input_tokens": 696,
+            "output_tokens": 474,
+            "total_tokens": 1170,
+            "estimated": false
+          }
+        }
+      }
+    },
+    "phase2_structural_locator": {
+      "structural_locator": {
+        "node": "structural_locator",
+        "outputs": {
+          "consistency_map": {},
+          "mapped_target_context": {
+            "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java": [
+              {
+                "hunk_index": 1,
+                "mainline_method": "getProfileBreakdown",
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "target_method": "getProfileBreakdown",
+                "start_line": 18,
+                "end_line": 18,
+                "code_snippet": "/*\n * Licensed to Elasticsearch under one or more contributor\n * license agreements. See the NOTICE file distributed with\n * this work for additional information regarding copyright\n * ownership. Elasticsearch licenses this file to you under\n * the Apache License, Version 2.0 (the \"License\"); you may\n * not use this file except in compliance with the License.\n * You may obtain a copy of the License at\n *\n *    http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing,\n * software distributed under the License is distributed on an\n * \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY\n * KIND, either express or implied.  See the License for the\n * specific language governing permissions and limitations\n * under the License.\n */\n\npackage org.elasticsearch.search.profile.query;\n\nimport org.apache.lucene.search.Query;\nimport org.elasticsearch.search.profile.AbstractProfiler;\n\n/**\n * This class acts as a thread-local storage for profiling a query.  It also\n * builds a representation of the query tree which is built constructed\n * \"online\" as the weights are wrapped by ContextIndexSearcher.  This allows us\n * to know the relationship between nodes in tree without explicitly\n * walking the tree or pre-wrapping everything\n *\n * A Profiler is associated with every Search, not per Search-Request. E.g. a\n * request may execute two searches (query + global agg).  A Profiler just\n * represents one of those\n */\npublic final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown, Query> {\n\n    public QueryProfiler() {",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved",
+                "anchor_strategy": "deterministic_realign"
+              },
+              {
+                "hunk_index": 2,
+                "mainline_method": "createProfileBreakdown",
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "target_method": "createProfileBreakdown",
+                "start_line": 41,
+                "end_line": 41,
+                "code_snippet": "\nimport org.apache.lucene.search.Query;\nimport org.elasticsearch.search.profile.AbstractProfiler;\n\n/**\n * This class acts as a thread-local storage for profiling a query.  It also\n * builds a representation of the query tree which is built constructed\n * \"online\" as the weights are wrapped by ContextIndexSearcher.  This allows us\n * to know the relationship between nodes in tree without explicitly\n * walking the tree or pre-wrapping everything\n *\n * A Profiler is associated with every Search, not per Search-Request. E.g. a\n * request may execute two searches (query + global agg).  A Profiler just\n * represents one of those\n */\npublic final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown, Query> {\n\n    public QueryProfiler() {\n        super(new InternalQueryProfileTree());\n    }\n}",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved",
+                "anchor_strategy": "deterministic_realign"
+              },
+              {
+                "hunk_index": 3,
+                "mainline_method": "getTree",
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "target_method": "getTree",
+                "start_line": 9,
+                "end_line": 9,
+                "code_snippet": "/*\n * Licensed to Elasticsearch under one or more contributor\n * license agreements. See the NOTICE file distributed with\n * this work for additional information regarding copyright\n * ownership. Elasticsearch licenses this file to you under\n * the Apache License, Version 2.0 (the \"License\"); you may\n * not use this file except in compliance with the License.\n * You may obtain a copy of the License at\n *\n *    http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing,\n * software distributed under the License is distributed on an\n * \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY\n * KIND, either express or implied.  See the License for the\n * specific language governing permissions and limitations\n * under the License.\n */\n\npackage org.elasticsearch.search.profile.query;\n\nimport org.apache.lucene.search.Query;\nimport org.elasticsearch.search.profile.AbstractProfiler;\n\n/**\n * This class acts as a thread-local storage for profiling a query.  It also\n * builds a representation of the query tree which is built constructed\n * \"online\" as the weights are wrapped by ContextIndexSearcher.  This allows us\n * to know the relationship between nodes in tree without explicitly",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved",
+                "anchor_strategy": "deterministic_realign"
+              },
+              {
+                "hunk_index": 4,
+                "mainline_method": "getTypeFromElement",
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "target_method": "getTypeFromElement",
+                "start_line": 41,
+                "end_line": 41,
+                "code_snippet": "\nimport org.apache.lucene.search.Query;\nimport org.elasticsearch.search.profile.AbstractProfiler;\n\n/**\n * This class acts as a thread-local storage for profiling a query.  It also\n * builds a representation of the query tree which is built constructed\n * \"online\" as the weights are wrapped by ContextIndexSearcher.  This allows us\n * to know the relationship between nodes in tree without explicitly\n * walking the tree or pre-wrapping everything\n *\n * A Profiler is associated with every Search, not per Search-Request. E.g. a\n * request may execute two searches (query + global agg).  A Profiler just\n * represents one of those\n */\npublic final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown, Query> {\n\n    public QueryProfiler() {\n        super(new InternalQueryProfileTree());\n    }\n}",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved",
+                "anchor_strategy": "deterministic_realign"
+              },
+              {
+                "hunk_index": 5,
+                "mainline_method": "getDescriptionFromElement",
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "target_method": "getDescriptionFromElement",
+                "start_line": 41,
+                "end_line": 41,
+                "code_snippet": "\nimport org.apache.lucene.search.Query;\nimport org.elasticsearch.search.profile.AbstractProfiler;\n\n/**\n * This class acts as a thread-local storage for profiling a query.  It also\n * builds a representation of the query tree which is built constructed\n * \"online\" as the weights are wrapped by ContextIndexSearcher.  This allows us\n * to know the relationship between nodes in tree without explicitly\n * walking the tree or pre-wrapping everything\n *\n * A Profiler is associated with every Search, not per Search-Request. E.g. a\n * request may execute two searches (query + global agg).  A Profiler just\n * represents one of those\n */\npublic final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown, Query> {\n\n    public QueryProfiler() {\n        super(new InternalQueryProfileTree());\n    }\n}",
+                "anchor_confidence": "high",
+                "anchor_reason": "line_and_method_resolved",
+                "anchor_strategy": "deterministic_realign"
+              }
+            ]
+          },
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "reason": "llm_usage_not_collected_in_this_node"
+          }
+        }
+      }
+    },
+    "phase3_hunk_generator": {
+      "hunk_generator": {
+        "node": "hunk_generator",
+        "outputs": {
+          "adapted_file_edits": [],
+          "all_adapted_file_edits": [
+            [],
+            [],
+            []
+          ],
+          "agent_trajectory_edits": [
+            [
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "center_line": 60,
+                  "radius": 20
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "center_line": 100,
+                  "radius": 20
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "center_line": 20,
+                  "radius": 20
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "find_method_definitions",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "getProfileBreakdown"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "createProfileBreakdown"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "getTree"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "getTypeFromElement"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "getDescriptionFromElement"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "read_full_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "check_java_syntax",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "git_diff_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "verify_guidelines",
+                "args": {
+                  "diff_text": ""
+                }
+              }
+            ],
+            [
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "center_line": 60,
+                  "radius": 20
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "center_line": 20,
+                  "radius": 20
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "find_method_definitions",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "getProfileBreakdown"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "createProfileBreakdown"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "getTree"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "getTypeFromElement"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "getDescriptionFromElement"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "check_java_syntax",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "git_diff_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "verify_guidelines",
+                "args": {
+                  "diff_text": ""
+                }
+              }
+            ],
+            [
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "center_line": 60,
+                  "radius": 20
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "read_file_window",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "center_line": 20,
+                  "radius": 20
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "find_method_definitions",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "getProfileBreakdown"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "createProfileBreakdown"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "getTree"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "getTypeFromElement"
+                }
+              },
+              {
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "tool": "grep_in_file",
+                "args": {
+                  "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                  "search_text": "getDescriptionFromElement"
+                }
+              }
+            ]
+          ],
+          "adapted_code_hunks": [],
+          "validation_repeated_patch_detected": false,
+          "validation_repeated_plan_detected": true,
+          "best_effort_adapted_code_hunks": [],
+          "adapted_test_hunks": [],
+          "generation_checklist": [
+            {
+              "mainline_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+              "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+              "hunk_index": 0,
+              "adaptation_type": "TYPE_II",
+              "execution_types": [
+                "TYPE_II"
+              ],
+              "status": "failed",
+              "reason": "generation_contract_failed",
+              "todo_steps": [
+                "reset_file",
+                "apply_edits",
+                "capture_diff",
+                "intent_check",
+                "restore_file"
+              ],
+              "completed_steps": [
+                "reset_file",
+                "apply_edits"
+              ],
+              "error": "no_diff_after_edits"
+            }
+          ],
+          "generated_patch_hash": "",
+          "force_type_v_until_success": false,
+          "force_type_v_reason": "",
+          "force_type_v_retry_files": [],
+          "token_usage": {
+            "input_tokens": 65327,
+            "output_tokens": 412,
+            "total_tokens": 65739,
+            "estimated": false,
+            "sources": [
+              "file_editor.react.aggregate_usage"
+            ]
+          }
+        }
+      }
+    },
+    "phase4_validation": {
+      "validation": {
+        "node": "validation",
+        "outputs": {
+          "validation_passed": false,
+          "validation_attempts": 3,
+          "validation_error_context": "Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors.",
+          "validation_failure_category": "empty_generation",
+          "validation_retry_files": [],
+          "validation_repeated_patch_detected": false,
+          "validation_repeated_plan_detected": true,
+          "force_type_v_until_success": false,
+          "force_type_v_reason": "",
+          "force_type_v_retry_files": []
+        }
+      }
+    },
+    "phase2_5_planning_agent": {
+      "planning_agent": {
+        "node": "planning_agent",
+        "outputs": {
+          "hunk_generation_plan": {
+            "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java": [
+              {
+                "hunk_index": 0,
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "operation_index": 0,
+                "edit_type": "replace",
+                "old_string": "     * @return      A ProfileBreakdown for this query\n     */\n    public QueryProfileBreakdown getProfileBreakdown(Query query) {\n        int token = currentToken;",
+                "new_string": "     * @return      A ProfileBreakdown for this query\n     */\n    public synchronized QueryProfileBreakdown getProfileBreakdown(Query query) {\n        int token = currentToken;",
+                "verified": false,
+                "verification_result": "sanitize_old_not_found:not_found_multiline",
+                "notes": "required_op_replace|sanitize_old_not_found:not_found_multiline|sanitize_old_not_found:not_found_multiline",
+                "surround_before_3": [],
+                "surround_after_3": [],
+                "adaptation_type": "TYPE_II",
+                "base_adaptation_type": "TYPE_II",
+                "execution_type": "TYPE_II",
+                "location_match": false,
+                "surrounding_match": false,
+                "blockers": [],
+                "namespace_only_possible": false,
+                "namespace_changes": [],
+                "required_invariants": [
+                  "public synchronized QueryProfileBreakdown getProfileBreakdown(Query query) {"
+                ],
+                "required_symbols": [
+                  "getProfileBreakdown"
+                ],
+                "protected_symbols": [
+                  "getProfileBreakdown"
+                ],
+                "must_preserve_symbols": [],
+                "chain_constraints": [],
+                "api_inventory": {
+                  "mainline_declared_methods_count": 9,
+                  "target_declared_methods_count": 0,
+                  "matched_symbols_before": [],
+                  "missing_symbols_before": [
+                    "getProfileBreakdown"
+                  ]
+                }
+              },
+              {
+                "hunk_index": 1,
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "operation_index": 0,
+                "edit_type": "replace",
+                "old_string": "    }\n\n    protected QueryProfileBreakdown createProfileBreakdown() {\n        return new QueryProfileBreakdown();",
+                "new_string": "    }\n\n    private QueryProfileBreakdown createProfileBreakdown() {\n        return new QueryProfileBreakdown();",
+                "verified": false,
+                "verification_result": "sanitize_old_not_found:not_found_multiline",
+                "notes": "required_op_replace|sanitize_old_not_found:not_found_multiline|sanitize_old_not_found:not_found_multiline",
+                "surround_before_3": [],
+                "surround_after_3": [],
+                "adaptation_type": "TYPE_II",
+                "base_adaptation_type": "TYPE_II",
+                "execution_type": "TYPE_II",
+                "location_match": false,
+                "surrounding_match": false,
+                "blockers": [],
+                "namespace_only_possible": false,
+                "namespace_changes": [],
+                "required_invariants": [
+                  "private QueryProfileBreakdown createProfileBreakdown() {"
+                ],
+                "required_symbols": [
+                  "createProfileBreakdown"
+                ],
+                "protected_symbols": [
+                  "createProfileBreakdown"
+                ],
+                "must_preserve_symbols": [],
+                "chain_constraints": [],
+                "api_inventory": {
+                  "mainline_declared_methods_count": 9,
+                  "target_declared_methods_count": 0,
+                  "matched_symbols_before": [],
+                  "missing_symbols_before": [
+                    "createProfileBreakdown"
+                  ]
+                }
+              },
+              {
+                "hunk_index": 2,
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "operation_index": 0,
+                "edit_type": "replace",
+                "old_string": "     * @return a hierarchical representation of the profiled query tree\n     */\n    public List<ProfileResult> getTree() {\n        ArrayList<ProfileResult> results = new ArrayList<>(roots.size());",
+                "new_string": "     * @return a hierarchical representation of the profiled query tree\n     */\n    public synchronized List<ProfileResult> getTree() {\n        ArrayList<ProfileResult> results = new ArrayList<>(roots.size());",
+                "verified": false,
+                "verification_result": "sanitize_old_not_found:not_found_multiline",
+                "notes": "required_op_replace|sanitize_old_not_found:not_found_multiline|sanitize_old_not_found:not_found_multiline",
+                "surround_before_3": [],
+                "surround_after_3": [],
+                "adaptation_type": "TYPE_II",
+                "base_adaptation_type": "TYPE_II",
+                "execution_type": "TYPE_II",
+                "location_match": false,
+                "surrounding_match": false,
+                "blockers": [],
+                "namespace_only_possible": false,
+                "namespace_changes": [],
+                "required_invariants": [
+                  "public synchronized List<ProfileResult> getTree() {"
+                ],
+                "required_symbols": [
+                  "getTree"
+                ],
+                "protected_symbols": [
+                  "getTree"
+                ],
+                "must_preserve_symbols": [],
+                "chain_constraints": [],
+                "api_inventory": {
+                  "mainline_declared_methods_count": 9,
+                  "target_declared_methods_count": 0,
+                  "matched_symbols_before": [],
+                  "missing_symbols_before": [
+                    "getTree"
+                  ]
+                }
+              },
+              {
+                "hunk_index": 3,
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "operation_index": 0,
+                "edit_type": "replace",
+                "old_string": "    }\n\n    protected String getTypeFromElement(Query query) {\n        // Anonymous classes won't have a name,",
+                "new_string": "    }\n\n    private String getTypeFromElement(Query query) {\n        // Anonymous classes won't have a name,",
+                "verified": false,
+                "verification_result": "sanitize_old_not_found:not_found_multiline",
+                "notes": "required_op_replace|sanitize_old_not_found:not_found_multiline|sanitize_old_not_found:not_found_multiline",
+                "surround_before_3": [],
+                "surround_after_3": [],
+                "adaptation_type": "TYPE_II",
+                "base_adaptation_type": "TYPE_II",
+                "execution_type": "TYPE_II",
+                "location_match": false,
+                "surrounding_match": false,
+                "blockers": [],
+                "namespace_only_possible": false,
+                "namespace_changes": [],
+                "required_invariants": [
+                  "private String getTypeFromElement(Query query) {"
+                ],
+                "required_symbols": [
+                  "getTypeFromElement"
+                ],
+                "protected_symbols": [
+                  "getTypeFromElement"
+                ],
+                "must_preserve_symbols": [],
+                "chain_constraints": [],
+                "api_inventory": {
+                  "mainline_declared_methods_count": 9,
+                  "target_declared_methods_count": 0,
+                  "matched_symbols_before": [],
+                  "missing_symbols_before": [
+                    "getTypeFromElement"
+                  ]
+                }
+              },
+              {
+                "hunk_index": 4,
+                "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+                "operation_index": 0,
+                "edit_type": "replace",
+                "old_string": "    }\n\n    protected String getDescriptionFromElement(Query query) {\n        return query.toString();",
+                "new_string": "    }\n\n    private String getDescriptionFromElement(Query query) {\n        return query.toString();",
+                "verified": false,
+                "verification_result": "sanitize_old_not_found:not_found_multiline",
+                "notes": "required_op_replace|sanitize_old_not_found:not_found_multiline|sanitize_old_not_found:not_found_multiline",
+                "surround_before_3": [],
+                "surround_after_3": [],
+                "adaptation_type": "TYPE_II",
+                "base_adaptation_type": "TYPE_II",
+                "execution_type": "TYPE_II",
+                "location_match": false,
+                "surrounding_match": false,
+                "blockers": [],
+                "namespace_only_possible": false,
+                "namespace_changes": [],
+                "required_invariants": [
+                  "private String getDescriptionFromElement(Query query) {"
+                ],
+                "required_symbols": [
+                  "getDescriptionFromElement"
+                ],
+                "protected_symbols": [
+                  "getDescriptionFromElement"
+                ],
+                "must_preserve_symbols": [],
+                "chain_constraints": [],
+                "api_inventory": {
+                  "mainline_declared_methods_count": 9,
+                  "target_declared_methods_count": 0,
+                  "matched_symbols_before": [],
+                  "missing_symbols_before": [
+                    "getDescriptionFromElement"
+                  ]
+                }
+              }
+            ]
+          },
+          "last_plan_signature": "40d6d2da00781634ec4665d63146f9e940c1d83c564947153d19f898aea008e1",
+          "validation_repeated_plan_detected": true,
+          "force_type_v_until_success": false,
+          "force_type_v_reason": "",
+          "force_type_v_retry_files": [],
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": false,
+            "sources": []
+          }
+        }
+      }
+    },
+    "reasoning_architect": {
+      "reasoning_architect": {
+        "node": "reasoning_architect",
+        "outputs": {
+          "surgical_plans": {},
+          "reasoning_context": {
+            "current_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+            "failure_kind": "anchor_not_found",
+            "build_diagnostics": {
+              "target_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+              "issues": [],
+              "failed_locations": [],
+              "symbol_errors": [],
+              "signature_errors": [],
+              "primary_failed_symbol": "",
+              "raw_error_preview": "Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors."
+            },
+            "side_files": [],
+            "iteration": 2,
+            "surgical_ops": []
+          },
+          "reasoning_iterations": 2,
+          "token_usage": {
+            "input_tokens": 109885,
+            "output_tokens": 1026,
+            "total_tokens": 110911,
+            "estimated": false,
+            "sources": [
+              "reasoning_architect.react.aggregate_usage"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "pair_consistency": {
+    "mainline_java_files": [
+      "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+    ],
+    "developer_java_files": [
+      "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java"
+    ],
+    "overlap_java_files": [],
+    "overlap_ratio_mainline": 0.0,
+    "pair_mismatch": true,
+    "reason": "mainline_backport_scope_mismatch"
+  },
+  "exact_developer_patch": true,
+  "developer_patch_comparison": {
+    "comparison_method": "file_state",
+    "compared_files": [
+      "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+    ],
+    "mismatched_files": [],
+    "developer_files": [
+      "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java"
+    ],
+    "generated_files": [],
+    "pair_consistency": {
+      "mainline_java_files": [
+        "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+      ],
+      "developer_java_files": [
+        "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java"
+      ],
+      "overlap_java_files": [],
+      "overlap_ratio_mainline": 0.0,
+      "pair_mismatch": true,
+      "reason": "mainline_backport_scope_mismatch"
+    },
+    "error": null
+  },
+  "generated_patch_files": {
+    "agent_only": "/home/kaushal/retrofit-java/agents-backend/evaluate/full_run/results/crate/crate_10643658/generated_patch_agent_only.patch",
+    "final_effective": "/home/kaushal/retrofit-java/agents-backend/evaluate/full_run/results/crate/crate_10643658/generated_patch_final_effective.patch"
+  },
+  "status": "completed"
+}

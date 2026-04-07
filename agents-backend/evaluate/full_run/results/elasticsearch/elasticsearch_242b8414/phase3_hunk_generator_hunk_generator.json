@@ -1,0 +1,100 @@
+{
+  "adapted_file_edits": [
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java",
+      "old_string": "<mainline patch fast path>",
+      "new_string": "diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java\nindex bd07d573881..3397a5f6adf 100644\n--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java\n+++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java\n@@ -11,10 +11,12 @@ import org.antlr.v4.runtime.ParserRuleContext;\n import org.antlr.v4.runtime.Token;\n import org.antlr.v4.runtime.tree.ParseTree;\n import org.elasticsearch.Build;\n+import org.elasticsearch.common.Strings;\n import org.elasticsearch.core.Tuple;\n import org.elasticsearch.dissect.DissectException;\n import org.elasticsearch.dissect.DissectParser;\n import org.elasticsearch.index.IndexMode;\n+import org.elasticsearch.transport.RemoteClusterAware;\n import org.elasticsearch.xpack.esql.VerificationException;\n import org.elasticsearch.xpack.esql.action.EsqlCapabilities;\n import org.elasticsearch.xpack.esql.common.Failure;\n@@ -545,6 +547,13 @@ public class LogicalPlanBuilder extends ExpressionBuilder {\n         if (rightPattern.contains(WILDCARD)) {\n             throw new ParsingException(source(target), \"invalid index pattern [{}], * is not allowed in LOOKUP JOIN\", rightPattern);\n         }\n+        if (RemoteClusterAware.isRemoteIndexName(rightPattern)) {\n+            throw new ParsingException(\n+                source(target),\n+                \"invalid index pattern [{}], remote clusters are not supported in LOOKUP JOIN\",\n+                rightPattern\n+            );\n+        }\n \n         UnresolvedRelation right = new UnresolvedRelation(\n             source(target),\n@@ -575,6 +584,20 @@ public class LogicalPlanBuilder extends ExpressionBuilder {\n             throw new ParsingException(source, \"JOIN ON clause only supports one field at the moment, found [{}]\", matchFieldsCount);\n         }\n \n-        return p -> new LookupJoin(source, p, right, joinFields);\n+        return p -> {\n+            p.forEachUp(UnresolvedRelation.class, r -> {\n+                for (var leftPattern : Strings.splitStringByCommaToArray(r.indexPattern().indexPattern())) {\n+                    if (RemoteClusterAware.isRemoteIndexName(leftPattern)) {\n+                        throw new ParsingException(\n+                            source(target),\n+                            \"invalid index pattern [{}], remote clusters are not supported in LOOKUP JOIN\",\n+                            r.indexPattern().indexPattern()\n+                        );\n+                    }\n+                }\n+            });\n+\n+            return new LookupJoin(source, p, right, joinFields);\n+        };\n     }\n }",
+      "edit_type": "replace",
+      "verified": true,
+      "verification_result": "mainline_fast_path_ok (Granular/Logical)",
+      "applied": true,
+      "apply_result": "SUCCESS"
+    }
+  ],
+  "all_adapted_file_edits": [
+    [
+      {
+        "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java",
+        "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java",
+        "old_string": "<mainline patch fast path>",
+        "new_string": "diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java\nindex bd07d573881..3397a5f6adf 100644\n--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java\n+++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java\n@@ -11,10 +11,12 @@ import org.antlr.v4.runtime.ParserRuleContext;\n import org.antlr.v4.runtime.Token;\n import org.antlr.v4.runtime.tree.ParseTree;\n import org.elasticsearch.Build;\n+import org.elasticsearch.common.Strings;\n import org.elasticsearch.core.Tuple;\n import org.elasticsearch.dissect.DissectException;\n import org.elasticsearch.dissect.DissectParser;\n import org.elasticsearch.index.IndexMode;\n+import org.elasticsearch.transport.RemoteClusterAware;\n import org.elasticsearch.xpack.esql.VerificationException;\n import org.elasticsearch.xpack.esql.action.EsqlCapabilities;\n import org.elasticsearch.xpack.esql.common.Failure;\n@@ -545,6 +547,13 @@ public class LogicalPlanBuilder extends ExpressionBuilder {\n         if (rightPattern.contains(WILDCARD)) {\n             throw new ParsingException(source(target), \"invalid index pattern [{}], * is not allowed in LOOKUP JOIN\", rightPattern);\n         }\n+        if (RemoteClusterAware.isRemoteIndexName(rightPattern)) {\n+            throw new ParsingException(\n+                source(target),\n+                \"invalid index pattern [{}], remote clusters are not supported in LOOKUP JOIN\",\n+                rightPattern\n+            );\n+        }\n \n         UnresolvedRelation right = new UnresolvedRelation(\n             source(target),\n@@ -575,6 +584,20 @@ public class LogicalPlanBuilder extends ExpressionBuilder {\n             throw new ParsingException(source, \"JOIN ON clause only supports one field at the moment, found [{}]\", matchFieldsCount);\n         }\n \n-        return p -> new LookupJoin(source, p, right, joinFields);\n+        return p -> {\n+            p.forEachUp(UnresolvedRelation.class, r -> {\n+                for (var leftPattern : Strings.splitStringByCommaToArray(r.indexPattern().indexPattern())) {\n+                    if (RemoteClusterAware.isRemoteIndexName(leftPattern)) {\n+                        throw new ParsingException(\n+                            source(target),\n+                            \"invalid index pattern [{}], remote clusters are not supported in LOOKUP JOIN\",\n+                            r.indexPattern().indexPattern()\n+                        );\n+                    }\n+                }\n+            });\n+\n+            return new LookupJoin(source, p, right, joinFields);\n+        };\n     }\n }",
+        "edit_type": "replace",
+        "verified": true,
+        "verification_result": "mainline_fast_path_ok (Granular/Logical)",
+        "applied": true,
+        "apply_result": "SUCCESS"
+      }
+    ]
+  ],
+  "agent_trajectory_edits": [
+    []
+  ],
+  "adapted_code_hunks": [
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java",
+      "hunk_text": "diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java\nindex bd07d573881..3397a5f6adf 100644\n--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java\n+++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java\n@@ -11,10 +11,12 @@ import org.antlr.v4.runtime.ParserRuleContext;\n import org.antlr.v4.runtime.Token;\n import org.antlr.v4.runtime.tree.ParseTree;\n import org.elasticsearch.Build;\n+import org.elasticsearch.common.Strings;\n import org.elasticsearch.core.Tuple;\n import org.elasticsearch.dissect.DissectException;\n import org.elasticsearch.dissect.DissectParser;\n import org.elasticsearch.index.IndexMode;\n+import org.elasticsearch.transport.RemoteClusterAware;\n import org.elasticsearch.xpack.esql.VerificationException;\n import org.elasticsearch.xpack.esql.action.EsqlCapabilities;\n import org.elasticsearch.xpack.esql.common.Failure;\n@@ -545,6 +547,13 @@ public class LogicalPlanBuilder extends ExpressionBuilder {\n         if (rightPattern.contains(WILDCARD)) {\n             throw new ParsingException(source(target), \"invalid index pattern [{}], * is not allowed in LOOKUP JOIN\", rightPattern);\n         }\n+        if (RemoteClusterAware.isRemoteIndexName(rightPattern)) {\n+            throw new ParsingException(\n+                source(target),\n+                \"invalid index pattern [{}], remote clusters are not supported in LOOKUP JOIN\",\n+                rightPattern\n+            );\n+        }\n \n         UnresolvedRelation right = new UnresolvedRelation(\n             source(target),\n@@ -575,6 +584,20 @@ public class LogicalPlanBuilder extends ExpressionBuilder {\n             throw new ParsingException(source, \"JOIN ON clause only supports one field at the moment, found [{}]\", matchFieldsCount);\n         }\n \n-        return p -> new LookupJoin(source, p, right, joinFields);\n+        return p -> {\n+            p.forEachUp(UnresolvedRelation.class, r -> {\n+                for (var leftPattern : Strings.splitStringByCommaToArray(r.indexPattern().indexPattern())) {\n+                    if (RemoteClusterAware.isRemoteIndexName(leftPattern)) {\n+                        throw new ParsingException(\n+                            source(target),\n+                            \"invalid index pattern [{}], remote clusters are not supported in LOOKUP JOIN\",\n+                            r.indexPattern().indexPattern()\n+                        );\n+                    }\n+                }\n+            });\n+\n+            return new LookupJoin(source, p, right, joinFields);\n+        };\n     }\n }\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "validation_repeated_patch_detected": false,
+  "validation_repeated_plan_detected": false,
+  "best_effort_adapted_code_hunks": [
+    {
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java",
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java",
+      "hunk_text": "diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java\nindex bd07d573881..3397a5f6adf 100644\n--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java\n+++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java\n@@ -11,10 +11,12 @@ import org.antlr.v4.runtime.ParserRuleContext;\n import org.antlr.v4.runtime.Token;\n import org.antlr.v4.runtime.tree.ParseTree;\n import org.elasticsearch.Build;\n+import org.elasticsearch.common.Strings;\n import org.elasticsearch.core.Tuple;\n import org.elasticsearch.dissect.DissectException;\n import org.elasticsearch.dissect.DissectParser;\n import org.elasticsearch.index.IndexMode;\n+import org.elasticsearch.transport.RemoteClusterAware;\n import org.elasticsearch.xpack.esql.VerificationException;\n import org.elasticsearch.xpack.esql.action.EsqlCapabilities;\n import org.elasticsearch.xpack.esql.common.Failure;\n@@ -545,6 +547,13 @@ public class LogicalPlanBuilder extends ExpressionBuilder {\n         if (rightPattern.contains(WILDCARD)) {\n             throw new ParsingException(source(target), \"invalid index pattern [{}], * is not allowed in LOOKUP JOIN\", rightPattern);\n         }\n+        if (RemoteClusterAware.isRemoteIndexName(rightPattern)) {\n+            throw new ParsingException(\n+                source(target),\n+                \"invalid index pattern [{}], remote clusters are not supported in LOOKUP JOIN\",\n+                rightPattern\n+            );\n+        }\n \n         UnresolvedRelation right = new UnresolvedRelation(\n             source(target),\n@@ -575,6 +584,20 @@ public class LogicalPlanBuilder extends ExpressionBuilder {\n             throw new ParsingException(source, \"JOIN ON clause only supports one field at the moment, found [{}]\", matchFieldsCount);\n         }\n \n-        return p -> new LookupJoin(source, p, right, joinFields);\n+        return p -> {\n+            p.forEachUp(UnresolvedRelation.class, r -> {\n+                for (var leftPattern : Strings.splitStringByCommaToArray(r.indexPattern().indexPattern())) {\n+                    if (RemoteClusterAware.isRemoteIndexName(leftPattern)) {\n+                        throw new ParsingException(\n+                            source(target),\n+                            \"invalid index pattern [{}], remote clusters are not supported in LOOKUP JOIN\",\n+                            r.indexPattern().indexPattern()\n+                        );\n+                    }\n+                }\n+            });\n+\n+            return new LookupJoin(source, p, right, joinFields);\n+        };\n     }\n }\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED",
+      "old_target_file": null,
+      "file_operation_required": true,
+      "path_resolution_reason": "modified_target_mapped"
+    }
+  ],
+  "adapted_test_hunks": [],
+  "generation_checklist": [
+    {
+      "mainline_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java",
+      "target_file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java",
+      "hunk_index": 0,
+      "adaptation_type": "TYPE_II",
+      "execution_types": [
+        "TYPE_II"
+      ],
+      "status": "success",
+      "reason": "mainline_fast_path",
+      "todo_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ],
+      "completed_steps": [
+        "reset_file",
+        "apply_edits",
+        "capture_diff",
+        "intent_check",
+        "restore_file"
+      ]
+    }
+  ],
+  "generated_patch_hash": "ae039e9736c7315b0985376ff6647055db609566e1c78e9c9a5df9fa29cf42c9",
+  "force_type_v_until_success": false,
+  "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "estimated": false,
+    "sources": []
+  }
+}

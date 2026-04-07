@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+import tempfile
 from unittest.mock import patch
 
 
@@ -99,6 +100,33 @@ class TestPatchComplexity(unittest.TestCase):
                 )
 
         self.assertEqual(out["complexity"], "REWRITE")
+
+    @patch("utils.patch_complexity._git_apply_check_passes")
+    def test_structural_with_repeated_diff_prefixes(self, mock_apply):
+        mock_apply.return_value = (False, "patch failed")
+
+        repeated_prefix_diff = """diff --git a/a/src/Foo.java b/b/src/Foo.java
+index 1111111..2222222 100644
+--- a/a/src/Foo.java
++++ b/b/src/Foo.java
+@@ -1,1 +1,1 @@
+-class Foo {}
++class Foo { int x; }
+"""
+
+        with tempfile.TemporaryDirectory() as tmp_repo:
+            src_dir = os.path.join(tmp_repo, "src")
+            os.makedirs(src_dir, exist_ok=True)
+            with open(os.path.join(src_dir, "Foo.java"), "w", encoding="utf-8") as f:
+                f.write("class Foo {}\n")
+
+            out = classify_patch_complexity(
+                patch_diff=repeated_prefix_diff,
+                target_repo_path=tmp_repo,
+                with_test_changes=False,
+            )
+
+        self.assertEqual(out["complexity"], "STRUCTURAL")
 
 
 if __name__ == "__main__":

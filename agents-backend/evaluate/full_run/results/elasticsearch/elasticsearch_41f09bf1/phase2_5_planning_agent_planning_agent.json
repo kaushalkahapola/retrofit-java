@@ -209,10 +209,10 @@
         "operation_index": 0,
         "edit_type": "replace",
         "old_string": "            indexNameExpressionResolver,\n            TransportGetAllocationStatsAction.Response::new,\n            threadPool.executor(ThreadPool.Names.MANAGEMENT)\n        );",
-        "new_string": "            TransportGetAllocationStatsAction.Request::new,\n            TransportGetAllocationStatsAction.Response::new,\n            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return\n            // very cheaply.\n            EsExecutors.DIRECT_EXECUTOR_SERVICE\n        );\n        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);\n        this.allocationStatsSupplier = new SingleResultDeduplicator<>(\n            threadPool.getThreadContext(),\n            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))\n        );",
+        "new_string": "            TransportGetAllocationStatsAction.Request::new,\n            indexNameExpressionResolver,\n            TransportGetAllocationStatsAction.Response::new,\n            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return\n            // very cheaply.\n            EsExecutors.DIRECT_EXECUTOR_SERVICE\n        );\n        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);\n        this.allocationStatsSupplier = new SingleResultDeduplicator<>(\n            threadPool.getThreadContext(),\n            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))\n        );",
         "verified": true,
-        "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "verification_result": "sanitize_resolved:multiline_anchor_reconstructed",
+        "notes": "required_op_replace|guard_revert_required_replace|required_replace_enforced",
         "surround_before_3": [
           "            threadPool,",
           "            actionFilters,",
@@ -304,7 +304,7 @@
         "new_string": "    @Override\n    protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {\n        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool\n\n        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)\n            ? SubscribableListener.newForked(allocationStatsSupplier::execute)\n            : SubscribableListener.newSucceeded(Map.of());\n\n        allocationStatsStep.andThenApply(\n            allocationStats -> new Response(\n                allocationStats,\n                request.metrics().contains(Metric.FS)",
         "verified": true,
         "verification_result": "sanitize_resolved:exact",
-        "notes": "required_op_replace",
+        "notes": "required_op_replace|guard_revert_required_replace",
         "surround_before_3": [
           "        super.doExecute(task, request, listener);",
           "    }",
@@ -475,10 +475,11 @@
       }
     ]
   },
-  "last_plan_signature": "7823ec25be8c43400f5220d8e432edbda9fbe58c797c22c9e6c6d3afc1145853",
+  "last_plan_signature": "05f62d559141c46791385949fcf9ccd7aa5d8a3e6177c93660f9425200c67487",
   "validation_repeated_plan_detected": false,
   "force_type_v_until_success": false,
   "force_type_v_reason": "",
+  "force_type_v_retry_files": [],
   "token_usage": {
     "input_tokens": 0,
     "output_tokens": 0,

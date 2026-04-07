@@ -18,13 +18,13 @@
         "hunk_index": 2,
         "mainline_method": "hunk_2",
         "target_file": "server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java",
-        "target_method": null,
+        "target_method": "close",
         "start_line": 267,
         "end_line": 267,
         "code_snippet": "                    });\n                } else {\n                    onError.accept(\"Failed to connect to the remote cluster\", err);\n                }\n            });\n        return finalFuture;\n    }\n\n    public void verifyTablesDoNotExist(String subscriptionName,\n                                       PublicationsStateAction.Response stateResponse) {\n        var metadata = clusterService.state().metadata();\n        Consumer<RelationName> onExists = (relation) -> {\n            var message = String.format(\n                Locale.ENGLISH,\n                \"Subscription '%s' cannot be created as included relation '%s' already exists\",\n                subscriptionName,\n                relation\n            );\n            throw new RelationAlreadyExists(relation, message);\n        };\n        for (var index : stateResponse.concreteIndices()) {\n            if (metadata.hasIndex(index)) {\n                onExists.accept(RelationName.fromIndexName(index));\n            }\n        }\n        for (var template : stateResponse.concreteTemplates()) {\n            if (metadata.templates().containsKey(template)) {\n                onExists.accept(PartitionName.fromIndexOrTemplate(template).relationName());\n            }\n        }\n    }\n\n    /**\n     * Restore new subscribed relations using the {@link RestoreService} and update the\n     * {@link Subscription.RelationState} of each given {@link RelationName} based on the result.\n     *\n     * @param subscriptionName      The name of the subscription relations will be restored for\n     * @param restoreSettings       The restore settings needed by the {@link RestoreService}\n     * @param relationNames         Collection of {@link RelationName}'s to update their {@link Subscription.RelationState}\n     * @param indicesToRestore      List of concrete indices to restore\n     * @param templatesToRestore    List of concrete templates to restore",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ],
     "server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java": [
@@ -32,25 +32,25 @@
         "hunk_index": 1,
         "mainline_method": "hunk_1",
         "target_file": "server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java",
-        "target_method": null,
+        "target_method": "LogicalReplicationSettings",
         "start_line": 92,
         "end_line": 92,
         "code_snippet": "        );\n\n    /**\n     * Controls the maximum number of file chunk requests that can be sent concurrently between clusters.\n     */\n    public static final Setting<Integer> REPLICATION_RECOVERY_MAX_CONCURRENT_FILE_CHUNKS =\n        Setting.intSetting(\"replication.logical.recovery.max_concurrent_file_chunks\",\n            2, 1, 5,\n            Property.Dynamic,\n            Property.NodeScope,\n            Property.Exposed\n        );\n\n    /**\n     * Internal index setting marking an index as subscribed/replicated and stores to what subscription\n     * this index belongs to.\n     */\n    public static final Setting<String> REPLICATION_SUBSCRIPTION_NAME = Setting.simpleString(\n        \"index.replication.logical.subscription_name\",\n        Setting.Property.InternalIndex,\n        Setting.Property.IndexScope\n    );\n\n    /**\n     * Internal index setting to store the original index UUID of the publisher cluster.\n     * The index UUID on the subscriber cluster will be re-generated thus it differs from the original one.\n     */\n    public static final Setting<String> PUBLISHER_INDEX_UUID = Setting.simpleString(\n        \"index.replication.logical.publisher_index_uuid\",\n        Setting.Property.InternalIndex,\n        Setting.Property.IndexScope\n    );\n\n    /**\n     * These settings are not suitable to replicate between subscribed/replicated indices\n     */\n    public static final Set<Setting<?>> NON_REPLICATED_SETTINGS = Set.of(\n        IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING,\n        AutoExpandReplicas.SETTING,\n        IndexMetadata.INDEX_ROUTING_EXCLUDE_GROUP_SETTING,\n        IndexMetadata.INDEX_ROUTING_INCLUDE_GROUP_SETTING,",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:class_signature",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       },
       {
         "hunk_index": 2,
         "mainline_method": "hunk_2",
         "target_file": "server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java",
-        "target_method": null,
+        "target_method": "LogicalReplicationSettings",
         "start_line": 149,
         "end_line": 149,
         "code_snippet": "        IndexSettings.INDEX_TRANSLOG_RETENTION_AGE_SETTING,\n        IndexSettings.INDEX_TRANSLOG_RETENTION_SIZE_SETTING,\n        IndexSettings.INDEX_TRANSLOG_GENERATION_THRESHOLD_SIZE_SETTING,\n        IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING,\n        IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING,\n        IndexSettings.INDEX_TRANSLOG_SYNC_INTERVAL_SETTING,\n        IndexSettings.INDEX_FLUSH_AFTER_MERGE_THRESHOLD_SIZE_SETTING,\n        IndexSettings.INDEX_GC_DELETES_SETTING,\n        IndexSettings.MAX_REFRESH_LISTENERS_PER_SHARD,\n        MergePolicyConfig.INDEX_COMPOUND_FORMAT_SETTING,\n        MergePolicyConfig.INDEX_MERGE_POLICY_MAX_MERGE_AT_ONCE_SETTING,\n        MergePolicyConfig.INDEX_MERGE_POLICY_SEGMENTS_PER_TIER_SETTING,\n        MergePolicyConfig.INDEX_MERGE_POLICY_DELETES_PCT_ALLOWED_SETTING,\n        MergePolicyConfig.INDEX_MERGE_POLICY_EXPUNGE_DELETES_ALLOWED_SETTING,\n        MergePolicyConfig.INDEX_MERGE_POLICY_FLOOR_SEGMENT_SETTING,\n        MergePolicyConfig.INDEX_MERGE_POLICY_MAX_MERGE_AT_ONCE_EXPLICIT_SETTING,\n        MergePolicyConfig.INDEX_MERGE_POLICY_MAX_MERGED_SEGMENT_SETTING,\n        MergeSchedulerConfig.AUTO_THROTTLE_SETTING,\n        MergeSchedulerConfig.MAX_MERGE_COUNT_SETTING,\n        MergeSchedulerConfig.MAX_THREAD_COUNT_SETTING,\n        EngineConfig.INDEX_CODEC_SETTING\n    );\n\n    private int batchSize;\n    private int maxConcurrentFileChunks;\n    private TimeValue pollDelay;\n    private ByteSizeValue recoveryChunkSize;\n\n    public LogicalReplicationSettings(Settings settings, ClusterService clusterService) {\n        batchSize = REPLICATION_CHANGE_BATCH_SIZE.get(settings);\n        pollDelay = REPLICATION_READ_POLL_DURATION.get(settings);\n        recoveryChunkSize = REPLICATION_RECOVERY_CHUNK_SIZE.get(settings);\n        maxConcurrentFileChunks = REPLICATION_RECOVERY_MAX_CONCURRENT_FILE_CHUNKS.get(settings);\n\n        clusterService.getClusterSettings().addSettingsUpdateConsumer(REPLICATION_CHANGE_BATCH_SIZE, this::batchSize);\n        clusterService.getClusterSettings().addSettingsUpdateConsumer(REPLICATION_READ_POLL_DURATION, this::pollDelay);\n        clusterService.getClusterSettings().addSettingsUpdateConsumer(REPLICATION_RECOVERY_CHUNK_SIZE, this::recoveryChunkSize);\n        clusterService.getClusterSettings().addSettingsUpdateConsumer(REPLICATION_RECOVERY_MAX_CONCURRENT_FILE_CHUNKS, this::maxConcurrentFileChunks);\n    }\n\n    public int batchSize() {",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:class_signature",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ],
     "server/src/main/java/io/crate/replication/logical/MetadataTracker.java": [
@@ -70,25 +70,25 @@
         "hunk_index": 2,
         "mainline_method": "hunk_2",
         "target_file": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
-        "target_method": null,
+        "target_method": "AckMetadataUpdateRequest",
         "start_line": 405,
         "end_line": 405,
         "code_snippet": "        } else {\n            return subscriberClusterState;\n        }\n    }\n\n    /**\n     * @return empty list if there is no validation error and all tables don't exist locally\n     * or list of existing tables otherwise.\n     * These tables will be reported\n     * and will be visible in pg_subscriptions_rel table.\n     */\n    private static Set<RelationName> getExistingLocallyTables(Subscription subscription,\n                                                               ClusterState subscriberClusterState,\n                                                               Response publisherStateResponse) {\n        // Table existence check is done on a subscription creation but\n        // there are cases when attempt to subscribe to existing table happens later during the replication.\n        var metadata = subscriberClusterState.metadata();\n        Set<RelationName> currentlyReplicatedTables = subscription.relations().keySet();\n\n        Set<RelationName> existingRelations = publisherStateResponse.concreteIndices().stream()\n            .filter(index -> metadata.hasIndex(index))\n            .map(index -> RelationName.fromIndexName(index))\n            .filter(relationName -> currentlyReplicatedTables.contains(relationName) == false)\n            .collect(Collectors.toCollection(() -> new HashSet<>()));\n\n        for (String t: publisherStateResponse.concreteTemplates()) {\n            if (metadata.templates().containsKey(t)) {\n                var relationName = PartitionName.fromIndexOrTemplate(t).relationName();\n                if (currentlyReplicatedTables.contains(relationName) == false) {\n                    existingRelations.add(relationName);\n                }\n            }\n        }\n        return existingRelations;\n    }\n\n    record RestoreDiff(List<String> indexNamesToRestore,\n                       List<String> templatesToRestore,\n                       Set<RelationName> relationsForStateUpdate) {\n\n        public boolean isEmpty() {",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:class_signature",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       },
       {
         "hunk_index": 3,
         "mainline_method": "hunk_3",
         "target_file": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
-        "target_method": null,
+        "target_method": "isEmpty",
         "start_line": 440,
         "end_line": 440,
         "code_snippet": "\n    record RestoreDiff(List<String> indexNamesToRestore,\n                       List<String> templatesToRestore,\n                       Set<RelationName> relationsForStateUpdate) {\n\n        public boolean isEmpty() {\n            return indexNamesToRestore.isEmpty() && templatesToRestore.isEmpty();\n        }\n    }\n\n    @VisibleForTesting\n    static RestoreDiff getRestoreDiff(Subscription subscription,\n                                      ClusterState subscriberState,\n                                      PublicationsStateAction.Response stateResponse) {\n\n        var subscribedRelations = subscription.relations();\n        var relationNamesForStateUpdate = new HashSet<RelationName>();\n        var toRestoreIndices = new ArrayList<String>();\n        var toRestoreTemplates = new ArrayList<String>();\n\n        for (var indexName : stateResponse.concreteIndices()) {\n            var relationName = RelationName.fromIndexName(indexName);\n            if (subscriberState.metadata().hasIndex(indexName) == false) {\n                toRestoreIndices.add(indexName);\n                relationNamesForStateUpdate.add(relationName);\n            } else if (subscribedRelations.get(relationName) == null) {\n                relationNamesForStateUpdate.add(relationName);\n            }\n        }\n        for (var templateName : stateResponse.concreteTemplates()) {\n            var indexParts = IndexName.decode(templateName);\n            if (indexParts.isPartitioned()) {\n                var relationName = indexParts.toRelationName();\n                if (subscriberState.metadata().templates().get(templateName) == null) {\n                    toRestoreTemplates.add(templateName);\n                }\n                if (subscribedRelations.get(relationName) == null) {\n                    relationNamesForStateUpdate.add(relationName);\n                }\n            }\n        }",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ],
     "server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java": [
@@ -134,13 +134,13 @@
         "hunk_index": 2,
         "mainline_method": "hunk_2",
         "target_file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-        "target_method": null,
+        "target_method": "toString",
         "start_line": 124,
         "end_line": 124,
         "code_snippet": "        Publication that = (Publication) o;\n        return forAllTables == that.forAllTables && owner.equals(that.owner) && tables.equals(that.tables);\n    }\n\n    @Override\n    public int hashCode() {\n        return Objects.hash(owner, tables, forAllTables);\n    }\n\n    @Override\n    public String toString() {\n        return \"Publication{forAllTables=\" + forAllTables + \", owner=\" + owner + \", tables=\" + tables + \"}\";\n    }\n\n\n    public Map<RelationName, RelationMetadata> resolveCurrentRelations(ClusterState state,\n                                                                       Roles roles,\n                                                                       Role publicationOwner,\n                                                                       Role subscriber,\n                                                                       String publicationName) {\n        // skip indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned\n        Predicate<String> indexFilter = indexName -> {\n            var indexMetadata = state.metadata().index(indexName);\n            if (indexMetadata != null) {\n                boolean softDeletes = IndexSettings.INDEX_SOFT_DELETES_SETTING.get(indexMetadata.getSettings());\n                if (softDeletes == false) {\n                    LOGGER.warn(\n                        \"Table '{}' won't be replicated as the required table setting \" +\n                            \"'soft_deletes.enabled' is set to: {}\",\n                        RelationName.fromIndexName(indexName),\n                        softDeletes\n                    );\n                    return false;\n                }\n                var routingTable = state.routingTable().index(indexName);\n                assert routingTable != null : \"routingTable must not be null\";\n                return routingTable.allPrimaryShardsActive();\n\n            }\n            // Partitioned table case (template, no index).\n            return true;",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       },
       {
         "hunk_index": 3,
@@ -184,13 +184,13 @@
         "hunk_index": 3,
         "mainline_method": "hunk_3",
         "target_file": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
-        "target_method": null,
+        "target_method": "fromMetadata",
         "start_line": 74,
         "end_line": 74,
         "code_snippet": "    @Override\n    public void writeTo(StreamOutput out) throws IOException {\n        name.writeTo(out);\n        out.writeList(indices);\n        out.writeOptionalWriteable(template);\n    }\n\n    public static RelationMetadata fromMetadata(RelationName table, Metadata metadata, Predicate<String> filter) {\n        String indexNameOrAlias = table.indexNameOrAlias();\n        var indexMetadata = metadata.index(indexNameOrAlias);\n        if (indexMetadata == null) {\n            String templateName = PartitionName.templateName(table.schema(), table.name());\n            var templateMetadata = metadata.templates().get(templateName);\n            String[] concreteIndices = IndexNameExpressionResolver.concreteIndexNames(\n                metadata,\n                IndicesOptions.LENIENT_EXPAND_OPEN,\n                indexNameOrAlias\n            );\n            ArrayList<IndexMetadata> indicesMetadata = new ArrayList<>(concreteIndices.length);\n            for (String concreteIndex : concreteIndices) {\n                if (filter.test(concreteIndex)) {\n                    indicesMetadata.add(metadata.index(concreteIndex));\n                }\n            }\n            return new RelationMetadata(table, indicesMetadata, templateMetadata);\n        }\n        return new RelationMetadata(table, List.of(indexMetadata), null);\n    }\n}",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ],
     "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java": [
@@ -210,25 +210,25 @@
         "hunk_index": 2,
         "mainline_method": "hunk_2",
         "target_file": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
-        "target_method": null,
+        "target_method": "getPublicationsState",
         "start_line": 152,
         "end_line": 152,
         "code_snippet": "    @Override\n    protected void doStop() {\n\n    }\n\n    @Override\n    protected void doClose() throws IOException {\n\n    }\n\n    @Override\n    public RepositoryMetadata getMetadata() {\n        return metadata;\n    }\n\n    @Override\n    public CompletableFuture<SnapshotInfo> getSnapshotInfo(SnapshotId snapshotId) {\n        assert SNAPSHOT_ID.equals(snapshotId) : \"SubscriptionRepository only supports \" + SNAPSHOT_ID + \" as the SnapshotId\";\n        return getPublicationsState()\n            .thenApply(stateResponse ->\n                new SnapshotInfo(snapshotId, stateResponse.concreteIndices(), SnapshotState.SUCCESS, Version.CURRENT));\n    }\n\n    @Override\n    public CompletableFuture<Metadata> getSnapshotGlobalMetadata(SnapshotId snapshotId) {\n        return getPublicationsState()\n            .thenCompose(resp -> getRemoteClusterState(false, true, resp.concreteIndices(), resp.concreteTemplates()))\n            .thenApply(remoteClusterStateResp -> {\n                ClusterState remoteClusterState = remoteClusterStateResp.getState();\n                var metadataBuilder = Metadata.builder(remoteClusterState.metadata());\n                for (var cursor : remoteClusterState.metadata().templates().values()) {\n                    // Add subscription name as a setting value which can be used to restrict operations on\n                    // partitioned tables (e.g. forbid writes/creating new partitions)\n                    var settings = Settings.builder()\n                        .put(cursor.value.settings())\n                        .put(REPLICATION_SUBSCRIPTION_NAME.getKey(), subscriptionName)\n                        .build();\n                    var templateMetadata = new IndexTemplateMetadata.Builder(cursor.value)\n                        .settings(settings);\n                    metadataBuilder.put(templateMetadata);\n                }",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       },
       {
         "hunk_index": 3,
         "mainline_method": "hunk_3",
         "target_file": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
-        "target_method": null,
+        "target_method": "getPublicationsState",
         "start_line": 199,
         "end_line": 199,
         "code_snippet": "                                                                                 SnapshotId snapshotId,\n                                                                                 Collection<IndexId> indexIds) {\n        assert SNAPSHOT_ID.equals(snapshotId) : \"SubscriptionRepository only supports \" + SNAPSHOT_ID + \" as the SnapshotId\";\n        var remoteIndices = indexIds.stream().map(IndexId::getName).toArray(String[]::new);\n        return getRemoteClusterState(remoteIndices).thenApply(response -> {\n            var result = new ArrayList<IndexMetadata>();\n            ClusterState remoteClusterState = response.getState();\n            for (var i : remoteClusterState.metadata().indices()) {\n                if (remoteClusterState.routingTable().index(i.key).allPrimaryShardsActive() == false) {\n                    // skip indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned\n                    continue;\n                }\n                var indexMetadata = i.value;\n                // Add replication specific settings, this setting will trigger a custom engine, see {@link SQLPlugin#getEngineFactory}\n                var builder = Settings.builder().put(indexMetadata.getSettings());\n                builder.put(REPLICATION_SUBSCRIPTION_NAME.getKey(), subscriptionName);\n                // Store publishers original index UUID to be able to resolve the original index later on\n                builder.put(PUBLISHER_INDEX_UUID.getKey(), indexMetadata.getIndexUUID());\n\n                var indexMdBuilder = IndexMetadata.builder(indexMetadata).settings(builder);\n                indexMetadata.getAliases().valuesIt().forEachRemaining(a -> indexMdBuilder.putAlias(a));\n                result.add(indexMdBuilder.build());\n            }\n            return result;\n        });\n    }\n\n    public CompletableFuture<IndexMetadata> getSnapshotIndexMetadata(RepositoryData repositoryData,\n                                                                     SnapshotId snapshotId,\n                                                                     IndexId index) {\n        assert SNAPSHOT_ID.equals(snapshotId) : \"SubscriptionRepository only supports \" + SNAPSHOT_ID + \" as the SnapshotId\";\n        return getRemoteClusterState(index.getName()).thenApply(response -> {\n            ClusterState remoteClusterState = response.getState();\n            var indexMetadata = remoteClusterState.metadata().index(index.getName());\n            // Add replication specific settings, this setting will trigger a custom engine, see {@link SQLPlugin#getEngineFactory}\n            var builder = Settings.builder().put(indexMetadata.getSettings());\n            builder.put(REPLICATION_SUBSCRIPTION_NAME.getKey(), subscriptionName);\n            // Store publishers original index UUID to be able to resolve the original index later on\n            builder.put(PUBLISHER_INDEX_UUID.getKey(), indexMetadata.getIndexUUID());\n\n            var indexMdBuilder = IndexMetadata.builder(indexMetadata).settings(builder);",
-        "anchor_confidence": "medium",
-        "anchor_reason": "line_resolved_method_unresolved",
-        "anchor_strategy": "deterministic_realign"
+        "anchor_confidence": "high",
+        "anchor_reason": "line_and_method_resolved; java_structure_locator:method",
+        "anchor_strategy": "deterministic_realign+structure_locator"
       }
     ]
   },

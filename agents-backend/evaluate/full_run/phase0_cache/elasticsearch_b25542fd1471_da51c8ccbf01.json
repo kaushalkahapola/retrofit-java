@@ -1,0 +1,88 @@
+{
+  "fast_path_success": false,
+  "phase_0_test_targets": {
+    "test_targets": [
+      "server:org.elasticsearch.transport.InboundDecoderTests",
+      "server:org.elasticsearch.transport.InboundPipelineTests"
+    ],
+    "source_modules": [
+      "modules/transport-netty4",
+      "server"
+    ],
+    "all_modules": [
+      "modules/transport-netty4",
+      "server"
+    ],
+    "raw": {
+      "source": "changed_files",
+      "changed_files": [
+        "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+        "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+        "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+        "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+        "server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java",
+        "server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java"
+      ]
+    }
+  },
+  "phase_0_baseline_test_result": {
+    "success": false,
+    "compile_error": false,
+    "output": "=== Running Elasticsearch Tests for 1a0ff3d ===\nTarget: server:org.elasticsearch.transport.InboundDecoderTests server:org.elasticsearch.transport.InboundPipelineTests\n--- Container user: 1000:1000 ---\n--- Using Docker Image: retrofit-elasticsearch-builder:local ---\nCPU detected: 16\ngradle-cache-es\ngradle-wrapper-es\n--- Setting cache permissions ---\n--- Executing: ./gradlew :server:test --tests \"org.elasticsearch.transport.InboundDecoderTests\" :server:test --tests \"org.elasticsearch.transport.InboundPipelineTests\" --no-daemon -Dbuild.docker=false -DfailIfNoTests=false --max-workers=16 --project-cache-dir /tmp/gradle-project-cache ---\nTo honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.2/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.\nDaemon JVM discovery is an incubating feature.\nDaemon will be stopped at the end of the build \n\n> Task :build-conventions:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: /repo/build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/LicensingPlugin.java uses unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\n> Task :build-conventions:pluginDescriptors\n> Task :build-conventions:processResources\n> Task :build-conventions:classes\n> Task :build-conventions:jar\n> Task :build-tools:reaper:compileJava\n> Task :build-tools:reaper:processResources NO-SOURCE\n> Task :build-tools:reaper:classes\n> Task :build-tools:reaper:jar\n\n> Task :build-tools:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: Some input files use unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\n> Task :build-tools:compileGroovy NO-SOURCE\n> Task :build-tools:generateVersionProperties\n> Task :build-tools:pluginDescriptors\n> Task :build-tools:processResources\n> Task :build-tools:classes\n> Task :build-tools-internal:extractPluginRequests\n> Task :build-tools-internal:generatePluginAdapters\n> Task :build-tools:jar\n> Task :build-tools-internal:pluginDescriptors\n\n> Task :build-tools-internal:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: Some input files use unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\n> Task :build-tools-internal:compileGroovy\n> Task :build-tools-internal:compileGroovyPlugins\n> Task :build-tools-internal:processResources\n> Task :build-tools-internal:classes\n> Task :build-tools-internal:jar\n\n[Incubating] Problems report is available at: file:///repo/build/reports/problems/problems-report.html\n\nFAILURE: Build failed with an exception.\n\n* What went wrong:\nA problem occurred configuring project ':x-pack:plugin:esql:compute'.\n> Could not load compiled classes for build file '/repo/x-pack/plugin/esql/compute/build.gradle' from cache.\n\n* Try:\n> Run with --stacktrace option to get the stack trace.\n> Run with --info or --debug option to get more log output.\n> Get more help at https://help.gradle.org.\n\nBUILD FAILED19 actionable tasks: 19 executed\n in 58s\n--- Test results are available in build/test-results/ ---\n\u274c Tests Failed",
+    "failed_tests": [],
+    "mode": "elasticsearch-helper-script",
+    "targets": {
+      "test_targets": [
+        "server:org.elasticsearch.transport.InboundDecoderTests",
+        "server:org.elasticsearch.transport.InboundPipelineTests"
+      ],
+      "source_modules": [
+        "modules/transport-netty4",
+        "server"
+      ],
+      "all_modules": [
+        "modules/transport-netty4",
+        "server"
+      ],
+      "raw": {
+        "source": "changed_files",
+        "changed_files": [
+          "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/Netty4MessageInboundHandler.java",
+          "modules/transport-netty4/src/main/java/org/elasticsearch/transport/netty4/NettyByteBufSizer.java",
+          "server/src/main/java/org/elasticsearch/transport/InboundDecoder.java",
+          "server/src/main/java/org/elasticsearch/transport/InboundPipeline.java",
+          "server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java",
+          "server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java"
+        ]
+      }
+    },
+    "test_state": {
+      "xml_reports": [],
+      "target_classes": [
+        "org.elasticsearch.transport.InboundDecoderTests",
+        "org.elasticsearch.transport.InboundPipelineTests"
+      ],
+      "test_cases": {},
+      "classes": {},
+      "summary": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "total": 0
+      }
+    }
+  },
+  "phase_0_post_patch_test_result": {},
+  "phase_0_transition_evaluation": {
+    "valid_backport_signal": false,
+    "reason": "Invalid: Build failed after patch apply.",
+    "fail_to_pass": [],
+    "pass_to_fail": [],
+    "newly_passing": []
+  },
+  "phase_0_build_result": {
+    "success": false,
+    "output": "--- Building Elasticsearch for 1a0ff3d ---\n--- Container user: 1000:1000 ---\nCPU detected: 16\n--- Changing directory to /home/cseroot/retrofit-java/temp_repo_storage/elasticsearch ---\ngradle-cache-es\ngradle-wrapper-es\n--- Building Docker image: retrofit-elasticsearch-builder:local ---\nSending build context to Docker daemon  23.04kB\n\nStep 1/8 : FROM eclipse-temurin:21-jdk-jammy\n ---> 6f2cc16588c8\nStep 2/8 : RUN apt-get update && apt-get install -y     git     rsync     && rm -rf /var/lib/apt/lists/*\n ---> Using cache\n ---> a0a7a71e07e7\nStep 3/8 : RUN groupadd --gid 1000 gradle &&     useradd --uid 1000 --gid 1000 --shell /bin/bash --create-home gradle\n ---> Using cache\n ---> 9ad0af41b09b\nStep 4/8 : RUN mkdir -p /home/gradle/.gradle &&     chown -R gradle:gradle /home/gradle/.gradle\n ---> Using cache\n ---> f58a64d61038\nStep 5/8 : RUN echo \"org.gradle.daemon=false\" >> /home/gradle/.gradle/gradle.properties &&     echo \"org.gradle.parallel=true\"  >> /home/gradle/.gradle/gradle.properties &&     echo \"org.gradle.caching=true\"   >> /home/gradle/.gradle/gradle.properties &&     echo \"org.gradle.jvmargs=-Xmx4g -XX:+UseG1GC\" >> /home/gradle/.gradle/gradle.properties\n ---> Using cache\n ---> b9344db50afd\nStep 6/8 : RUN mkdir -p /repo && chown gradle:gradle /repo\n ---> Using cache\n ---> 5854b2532193\nStep 7/8 : WORKDIR /repo\n ---> Using cache\n ---> c296d6b11a25\nStep 8/8 : CMD [\"/bin/bash\"]\n ---> Using cache\n ---> f0b83e6ff4ab\nSuccessfully built f0b83e6ff4ab\nSuccessfully tagged retrofit-elasticsearch-builder:local\n--- Setting cache permissions ---\n--- Compiling with Gradle (assemble + testClasses, skip tests) ---\nTo honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.2/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.\nDaemon JVM discovery is an incubating feature.\nDaemon will be stopped at the end of the build \n> Task :build-conventions:compileJava FROM-CACHE\n> Task :build-conventions:pluginDescriptors\n> Task :build-conventions:processResources\n> Task :build-conventions:classes\n> Task :build-conventions:jar\n> Task :build-tools:reaper:compileJava FROM-CACHE\n> Task :build-tools:reaper:processResources NO-SOURCE\n> Task :build-tools:reaper:classes UP-TO-DATE\n> Task :build-tools-internal:extractPluginRequests FROM-CACHE\n> Task :build-tools:reaper:jar\n> Task :build-tools-internal:generatePluginAdapters FROM-CACHE\n> Task :build-tools-internal:pluginDescriptors\n> Task :build-tools-internal:processResources\n> Task :build-tools:compileJava FROM-CACHE\n> Task :build-tools:compileGroovy NO-SOURCE\n> Task :build-tools:generateVersionProperties FROM-CACHE\n> Task :build-tools:pluginDescriptors\n> Task :build-tools:processResources\n> Task :build-tools:classes\n> Task :build-tools:jar\n> Task :build-tools-internal:compileJava FROM-CACHE\n> Task :build-tools-internal:compileGroovy FROM-CACHE\n> Task :build-tools-internal:compileGroovyPlugins FROM-CACHE\n> Task :build-tools-internal:classes\n> Task :build-tools-internal:jar\n\nFAILURE: Build failed with an exception.\n\n* What went wrong:\nA problem occurred configuring project ':x-pack:plugin:esql:compute'.\n> Could not load compiled classes for build file '/repo/x-pack/plugin/esql/compute/build.gradle' from cache.\n\n* Try:\n> Run with --stacktrace option to get the stack trace.\n> Run with --info or --debug option to get more log output.\n> Get more help at https://help.gradle.org.\n\nBUILD FAILED in 29s\n19 actionable tasks: 10 executed, 9 from cache\n\u274c Build Failed\n\nDEPRECATED: The legacy builder is deprecated and will be removed in a future release.\n            Install the buildx component to build images with BuildKit:\n            https://docs.docker.com/go/buildx/",
+    "mode": "elasticsearch-helper-script"
+  }
+}

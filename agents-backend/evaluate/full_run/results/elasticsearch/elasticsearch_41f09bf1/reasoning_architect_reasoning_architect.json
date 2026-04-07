@@ -1,0 +1,29 @@
+{
+  "surgical_plans": {},
+  "reasoning_context": {
+    "current_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+    "failure_kind": "anchor_not_found",
+    "build_diagnostics": {
+      "target_file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+      "issues": [],
+      "failed_locations": [],
+      "symbol_errors": [],
+      "signature_errors": [],
+      "primary_failed_symbol": "",
+      "raw_error_preview": "Relevant-test state transition check failed. Transition summary: reason=Invalid: No fail-to-pass or newly passing relevant tests were observed.; fail->pass(0): []; newly_passing(0): []; pass->fail(0): []"
+    },
+    "side_files": [],
+    "iteration": 1,
+    "surgical_ops": []
+  },
+  "reasoning_iterations": 1,
+  "token_usage": {
+    "input_tokens": 44716,
+    "output_tokens": 865,
+    "total_tokens": 45581,
+    "estimated": false,
+    "sources": [
+      "reasoning_architect.react.aggregate_usage"
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+# Phase 0 Cache Reuse
+
+- Cache file: /home/kaushal/retrofit-java/agents-backend/evaluate/full_run/phase0_cache/crate_96fc693d2705_23be7d11e41d.json
+- Reused targets: {'test_targets': ['server:io.crate.planner.optimizer.symbol.CollectQueryCastRulesTest'], 'source_modules': ['libs/sql-parser', 'server'], 'all_modules': ['libs/sql-parser', 'server'], 'raw': {'source': 'changed_files', 'changed_files': ['docs/appendices/release-notes/5.8.4.rst', 'libs/sql-parser/src/main/java/io/crate/sql/ExpressionFormatter.java', 'server/src/main/java/io/crate/expression/operator/any/AnyOperator.java', 'server/src/main/java/io/crate/planner/optimizer/symbol/Optimizer.java', 'server/src/main/java/io/crate/planner/optimizer/symbol/rule/MoveReferenceCastToLiteralCastOnArrayOperatorsWhenLeftIsReference.java', 'server/src/main/java/io/crate/planner/optimizer/symbol/rule/MoveReferenceCastToLiteralCastOnArrayOperatorsWhenRightIsReference.java', 'server/src/test/java/io/crate/planner/optimizer/symbol/CollectQueryCastRulesTest.java']}}
+- Reused baseline mode: crate-helper-script

@@ -1,0 +1,24 @@
+patch_id=crate_9879c7e2
+project=crate
+mainline_commit=9879c7e2b526903252e3fb761658fc893022918c
+backport_commit=9ad6785dded889401671a1679d4c154695df85bc
+mode=full
+started_at=2026-04-07T04:32:50.320868
+----------------------------------------
+Running full workflow graph
+Completed node=phase_0_optimistic
+Workflow completed successfully
+
+[crate/crate_9879c7e2] Setting up repositories for mode=full...
+[crate/crate_9879c7e2] Running full workflow graph...
+Router: Running Phase 0.
+Phase 0 (Optimistic): Checking direct patch applicability...
+Phase 0: Experiment mode — checking out parent of 9ad6785dded889401671a1679d4c154695df85bc...
+Phase 0: git apply --check SUCCEEDED. Attempting actual patch application and test run.
+    Agent 4: Executing crate helper build script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/crate/run_build.sh
+    Agent 4: Executing crate helper test script: /home/kaushal/retrofit-java/agents-backend/evaluate/helpers/crate/run_tests.sh
+Phase 0: Transition summary -> reason=Valid: Observed fail-to-pass and/or newly passing relevant tests with no regressions.; fail->pass(0): []; newly_passing(1): ['org.elasticsearch.cluster.metadata.MetadataTest#test_bwc_read_writes_with_6_1_0']; pass->fail(0): []
+Phase 0: Transition-based test validation passed. Fast-path success.
+Router: Phase 0 succeeded - taking fast-path exit.
+  Completed: phase_0_optimistic
+[crate/crate_9879c7e2] Full workflow completed!

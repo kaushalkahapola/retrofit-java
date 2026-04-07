@@ -10,12 +10,40 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 import os
+import re
 
-from langchain_core.messages import HumanMessage
-
+from langchain_core.messages import HumanMessage, SystemMessage
 from state import AgentState, SemanticBlueprint
 from utils.patch_analyzer import PatchAnalyzer
 from agents.hunk_variant_detector import HunkVariantDetector
+from utils.llm_provider import get_llm
+from utils.token_counter import count_messages_tokens, extract_usage_from_response, add_usage
+
+_ANALYZER_SYSTEM = """You are an expert Java architect analyzing a security patch for backporting.
+Your goal is to produce a Semantic Blueprint that explains the fix logic and identifies key dependencies.
+
+Analyze the provided diff and output a JSON blueprint with:
+1. root_cause_hypothesis: A technical explanation of the vulnerability being fixed.
+2. fix_logic: The core algorithm or logic change introduced by the patch.
+3. dependent_apis: A list of method names, class names, or constants that are critical to the fix.
+4. patch_intent_summary: A one-sentence summary of the overall goal.
+5. hunk_chain: An array of objects, one per hunk, describing its role:
+   - hunk_index: 1-based index in the file
+   - file: path
+   - role: "core_fix" | "guard" | "propagation" | "declaration" | "cleanup" | "refactor"
+   - summary: brief description of what this hunk does
+
+Output ONLY the JSON object."""
+
+_ANALYZER_USER = """## Patch Diff
+```diff
+{patch_diff}
+```
+
+## Commit Message
+{commit_message}
+
+Produce the Semantic Blueprint JSON now."""
 
 
 def _infer_role(raw_hunk: str) -> str:
@@ -108,6 +136,7 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
             continue
         file_hunks[file_path].extend(hunks or [])
 
+    # Initial hunk chain generation strictly from mainline patch
     hunk_chain: list[dict[str, Any]] = []
     hunk_variants_map: dict[int, Any] = {}  # global_idx → variants
     global_idx = 1
@@ -198,8 +227,73 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
         "hunk_chain": hunk_chain,
     }
 
+    # --- Option 1: LLM-based analysis for REWRITE patches ---
+    complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
+    token_usage = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "estimated": False,
+    }
+
+    if complexity == "REWRITE":
+        print("Agent 1: Patch complexity is REWRITE - running LLM-based semantic analysis...")
+        llm = get_llm(temperature=0)
+        messages = [
+            SystemMessage(content=_ANALYZER_SYSTEM),
+            HumanMessage(content=_ANALYZER_USER.format(
+                patch_diff=patch_diff[:10000], # Cap to avoid context overflow
+                commit_message=state.get("commit_message", "")
+            ))
+        ]
+        
+        try:
+            response = await llm.ainvoke(messages)
+            content = response.content if hasattr(response, "content") else str(response)
+            
+            # Extract JSON from response
+            import json
+            json_match = re.search(r"\{.*\}", content, re.DOTALL)
+            if json_match:
+                llm_blueprint = json.loads(json_match.group(0))
+                
+                # Merge or replace deterministic consolidated with LLM output
+                # We prioritize LLM for high-level logic but keep deterministic hunk list
+                # for exact tracking if LLM returns a different structure.
+                consolidated["root_cause_hypothesis"] = llm_blueprint.get("root_cause_hypothesis", consolidated["root_cause_hypothesis"])
+                consolidated["fix_logic"] = llm_blueprint.get("fix_logic", consolidated["fix_logic"])
+                consolidated["patch_intent_summary"] = llm_blueprint.get("patch_intent_summary", consolidated["patch_intent_summary"])
+                
+                llm_apis = llm_blueprint.get("dependent_apis", [])
+                if isinstance(llm_apis, list):
+                    consolidated["dependent_apis"] = sorted(list(set(consolidated["dependent_apis"] + llm_apis)))
+                
+                # Update hunk roles if provided
+                llm_hunks = llm_blueprint.get("hunk_chain", [])
+                if isinstance(llm_hunks, list) and len(llm_hunks) == len(consolidated["hunk_chain"]):
+                    for i, h in enumerate(consolidated["hunk_chain"]):
+                        if i < len(llm_hunks):
+                            h["role"] = llm_hunks[i].get("role", h["role"])
+                            h["summary"] = llm_hunks[i].get("summary", h["summary"])
+                
+                print(f"Agent 1: LLM analysis successful. Logic: {consolidated['fix_logic'][:100]}...")
+            
+            # Track usage
+            usage = extract_usage_from_response(response)
+            if usage:
+                token_usage.update(usage)
+            else:
+                token_usage["input_tokens"] = count_messages_tokens(messages)
+                token_usage["output_tokens"] = len(content) // 4
+                token_usage["total_tokens"] = token_usage["input_tokens"] + token_usage["output_tokens"]
+                token_usage["estimated"] = True
+                
+        except Exception as e:
+            print(f"Agent 1: LLM analysis failed: {e} - falling back to deterministic.")
+            token_usage["reason"] = f"llm_failed: {e}"
+
     print(
-        f"Agent 1: Complete. Files={len(file_hunks)} hunks={len(hunk_chain)} (deterministic)."
+        f"Agent 1: Complete. Files={len(file_hunks)} hunks={len(hunk_chain)} (complexity={complexity})."
     )
     if hunk_variants_map:
         print(f"Agent 1: Detected {len(hunk_variants_map)} hunk(s) with variants.")
@@ -208,20 +302,14 @@ async def context_analyzer_node(state: AgentState, config) -> dict:
         "messages": [
             HumanMessage(
                 content=(
-                    f"Agent 1 complete (deterministic). "
+                    f"Agent 1 complete ({complexity}). "
                     f"Hunk chain entries: {len(hunk_chain)}"
                 )
             )
         ],
         "semantic_blueprint": consolidated,
         "patch_diff": patch_diff,
-        "token_usage": {
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "total_tokens": 0,
-            "estimated": False,
-            "reason": "deterministic_no_llm",
-        },
+        "token_usage": token_usage,
     }
 
     # Add variants to state if any were detected

@@ -5,6 +5,14 @@
 - Java-only files for agentic phases: 1
 - Developer auxiliary hunks (test + non-Java): 4
 
+## Commit Pair Consistency
+- Pair mismatch: False
+- Reason: scope_overlap_ok
+- Mainline Java files: ['extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java']
+- Developer Java files: ['extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java']
+- Overlap Java files: ['extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java']
+- Overlap ratio (mainline): 1.0
+
 ## Mainline Patch
 ```diff
 From 3247cc6e48a2d4da79bf8aa4ca77d750af5e164a Mon Sep 17 00:00:00 2001
@@ -102,7 +110,7 @@ index 165cc85468..44a9477dcb 100644
      public void testCallWithInvalidPrecisionResultsInAnError() {
          assertThatThrownBy(
 -- 
-2.43.0
+2.53.0
 
 
 ```

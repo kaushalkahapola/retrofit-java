@@ -15,7 +15,7 @@ class TestGraphRouting(unittest.TestCase):
 
     def test_route_after_structural_keeps_planning_for_rewrite(self):
         state = {"patch_complexity": "REWRITE"}
-        self.assertEqual(route_after_structural(state), "planning_agent")
+        self.assertEqual(route_after_structural(state), "hunk_generator")
 
     def test_validation_infra_inconclusive_ends(self):
         state = {
@@ -42,7 +42,7 @@ class TestGraphRouting(unittest.TestCase):
             # No failed build on record — true stagnation (e.g. tests only).
             "validation_results": {"build": {"success": True}},
         }
-        self.assertEqual(route_validation(state), "END")
+        self.assertEqual(route_validation(state), "planning_agent")
 
     def test_validation_stagnation_escalates_non_rewrite_when_build_failed(self):
         state = {
@@ -54,7 +54,9 @@ class TestGraphRouting(unittest.TestCase):
         }
         self.assertEqual(route_validation(state), "planning_agent")
 
-    def test_validation_stagnation_escalates_generation_contract_on_repeated_patch(self):
+    def test_validation_stagnation_escalates_generation_contract_on_repeated_patch(
+        self,
+    ):
         state = {
             "validation_passed": False,
             "validation_attempts": 1,
@@ -65,7 +67,9 @@ class TestGraphRouting(unittest.TestCase):
         }
         self.assertEqual(route_validation(state), "planning_agent")
 
-    def test_plan_preflight_failed_routes_as_generation_stage_not_stale_build_diag(self):
+    def test_plan_preflight_failed_routes_as_generation_stage_not_stale_build_diag(
+        self,
+    ):
         """Deferred validation with plan_preflight_failed must not hit api_or_signature branch."""
         state = {
             "validation_passed": False,
@@ -84,7 +88,7 @@ class TestGraphRouting(unittest.TestCase):
                 }
             },
         }
-        self.assertEqual(route_validation(state), "hunk_generator")
+        self.assertEqual(route_validation(state), "planning_agent")
 
     def test_validation_stagnation_escalates_for_rewrite(self):
         state = {

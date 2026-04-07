@@ -27,6 +27,7 @@ import logging
 import os
 import re
 import time
+from typing import Any
 
 from langchain_core.messages import HumanMessage
 from langgraph.prebuilt import create_react_agent
@@ -44,6 +45,7 @@ except ImportError:  # Compatibility fallback for older langgraph versions
 
 from agents.reasoning_tools import ReasoningToolkit
 from utils.llm_provider import get_llm
+from utils.method_discovery import JavaStructureLocator
 from utils.retrieval.ensemble_retriever import EnsembleRetriever
 
 logger = logging.getLogger(__name__)
@@ -309,6 +311,78 @@ def _infer_anchor_confidence(
     return "high", "line_and_method_resolved"
 
 
+def _is_unresolved_target_method(value: Any) -> bool:
+    s = str(value or "").strip()
+    if not s:
+        return True
+    lowered = s.lower()
+    return lowered in {"none", "null", "?"} or s.startswith("hunk_")
+
+
+def _recover_with_structure_locator(
+    *,
+    target_repo_path: str,
+    target_file: str,
+    raw_hunk: str,
+    target_method: str | None,
+    start_line: int | None,
+    end_line: int | None,
+    code_snippet: str,
+) -> tuple[str | None, int | None, int | None, str, str]:
+    """
+    Recover missing structural anchors (method/constructor/field/class) via
+    JavaStructureLocator when LLM/deterministic mapping yields no target_method.
+    """
+    target_lines = _load_target_file_lines(target_repo_path, target_file)
+    if not target_lines:
+        return target_method, start_line, end_line, code_snippet, "target_unreadable"
+
+    file_content = "\n".join(target_lines)
+    locator = JavaStructureLocator(file_content)
+
+    line_hint = start_line
+    if not isinstance(line_hint, int) or line_hint < 1 or line_hint > len(target_lines):
+        line_hint = _extract_target_start_from_hunk(raw_hunk)
+    if not isinstance(line_hint, int) or line_hint < 1:
+        line_hint = 1
+
+    end_hint = end_line
+    if not isinstance(end_hint, int) or end_hint < line_hint:
+        end_hint = line_hint
+
+    recovered = locator.find_enclosing_structure(line_hint, end_hint)
+    if not recovered:
+        return target_method, start_line, end_line, code_snippet, "no_structure_match"
+
+    recovered_type = str(recovered.get("type") or "unknown")
+    recovered_name = str(recovered.get("name") or "").strip() or target_method
+    recovered_line = recovered.get("line")
+
+    new_start = start_line
+    new_end = end_line
+    if (not isinstance(new_start, int) or new_start < 1) and isinstance(
+        recovered_line, int
+    ):
+        new_start = recovered_line
+        new_end = recovered_line
+    elif isinstance(new_start, int) and (
+        not isinstance(new_end, int) or new_end < new_start
+    ):
+        new_end = new_start
+
+    new_snippet = str(code_snippet or "")
+    if (not new_snippet.strip()) and isinstance(new_start, int):
+        new_snippet = _build_window_snippet(target_lines, new_start)
+
+    return (
+        recovered_name,
+        new_start,
+        new_end,
+        new_snippet,
+        f"java_structure_locator:{recovered_type}",
+    )
+
+
 def _realign_mapping_to_target(
     *,
     target_repo_path: str,
@@ -532,7 +606,7 @@ def _deterministic_map_hunks_for_file(
 
 def _normalize_rel_path(path: str) -> str:
     p = (path or "").strip().replace("\\", "/").lstrip("/")
-    if p.startswith("a/") or p.startswith("b/"):
+    while p.startswith("a/") or p.startswith("b/"):
         p = p[2:]
     return p
 
@@ -979,6 +1053,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
             for hunk_idx_in_hunks, hunk in enumerate(file_hunks):
                 hunk_idx = hunk.get("hunk_index", hunk_idx_in_hunks)
                 hunk_role = hunk.get("role", "")
+                fallback_anchor_reason = ""
 
                 # Get the mapping for this hunk (should be at same index)
                 if hunk_idx_in_hunks < len(mappings):
@@ -1073,6 +1148,47 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                     # This is a fallback - the LLM mapping should ideally have provided this
                     trace += f"  ⚠️ Import hunk {hunk_idx} has no target start_line. Hunk generator will extract from hunk header.\n"
 
+                # Final structural fallback when method anchor is unresolved.
+                target_method_raw = m.get("target_method")
+                is_import_mapping = str(target_method_raw or "").strip() == "<import>"
+                if not is_import_mapping and _is_unresolved_target_method(
+                    target_method_raw
+                ):
+                    (
+                        recovered_method,
+                        recovered_start,
+                        recovered_end,
+                        recovered_snippet,
+                        fallback_anchor_reason,
+                    ) = _recover_with_structure_locator(
+                        target_repo_path=target_repo_path,
+                        target_file=str(m.get("target_file") or target_file),
+                        raw_hunk=raw_hunk,
+                        target_method=str(target_method_raw or "") or None,
+                        start_line=m.get("start_line"),
+                        end_line=m.get("end_line"),
+                        code_snippet=str(m.get("code_snippet", "")),
+                    )
+
+                    if recovered_method and recovered_method != target_method_raw:
+                        m["target_method"] = recovered_method
+                        logger.info(
+                            "Recovered target_method via JavaStructureLocator file=%s hunk_index=%s method=%s",
+                            mainline_file,
+                            hunk_idx,
+                            recovered_method,
+                        )
+                        trace += (
+                            f"  - JavaStructureLocator recovered target_method for hunk {hunk_idx}: "
+                            f"{recovered_method} ({fallback_anchor_reason})\n"
+                        )
+
+                    if recovered_start != m.get("start_line"):
+                        m["start_line"] = recovered_start
+                        m["end_line"] = recovered_end
+                    if recovered_snippet and not str(m.get("code_snippet", "")).strip():
+                        m["code_snippet"] = recovered_snippet
+
                 trace += (
                     f"| {hunk_idx} | {hunk_role} | `{m.get('mainline_method', '?')}` | "
                     f"`{m.get('target_method', '?')}` | {m.get('start_line', '?')}–{m.get('end_line', '?')} |\n"
@@ -1085,6 +1201,12 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                     m.get("start_line"),
                     m.get("target_method"),
                 )
+                anchor_strategy = (
+                    "deterministic_realign" if used_deterministic else "llm_realign"
+                )
+                if fallback_anchor_reason.startswith("java_structure_locator:"):
+                    anchor_reason = f"{anchor_reason}; {fallback_anchor_reason}"
+                    anchor_strategy += "+structure_locator"
                 mapped_target_context[mainline_file].append(
                     {
                         "hunk_index": hunk_idx,
@@ -1096,9 +1218,7 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                         "code_snippet": m.get("code_snippet", ""),
                         "anchor_confidence": anchor_confidence,
                         "anchor_reason": anchor_reason,
-                        "anchor_strategy": "deterministic_realign"
-                        if used_deterministic
-                        else "llm_realign",
+                        "anchor_strategy": anchor_strategy,
                     }
                 )
                 print(
@@ -1161,24 +1281,49 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                     )
                 else:
                     # Regular hunks
+                    (
+                        recovered_method,
+                        recovered_start,
+                        recovered_end,
+                        recovered_snippet,
+                        fallback_anchor_reason,
+                    ) = _recover_with_structure_locator(
+                        target_repo_path=target_repo_path,
+                        target_file=git_target,
+                        raw_hunk=raw_hunk,
+                        target_method=None,
+                        start_line=start_line,
+                        end_line=end_line,
+                        code_snippet=str(snippet or ""),
+                    )
+                    if recovered_start != start_line:
+                        start_line = recovered_start
+                        end_line = recovered_end
+                    if recovered_snippet and not str(snippet or "").strip():
+                        snippet = recovered_snippet
+
                     anchor_confidence, anchor_reason = _infer_anchor_confidence(
                         target_repo_path,
                         git_target,
                         start_line,
-                        None,
+                        recovered_method,
                     )
+                    anchor_strategy = "git_fallback_realign"
+                    if fallback_anchor_reason.startswith("java_structure_locator:"):
+                        anchor_reason = f"{anchor_reason}; {fallback_anchor_reason}"
+                        anchor_strategy += "+structure_locator"
                     mapped_target_context[mainline_file].append(
                         {
                             "hunk_index": hunk_idx,
                             "mainline_method": f"hunk_{hunk_idx}",
                             "target_file": git_target,
-                            "target_method": None,
+                            "target_method": recovered_method,
                             "start_line": start_line,
                             "end_line": end_line,
                             "code_snippet": snippet,
                             "anchor_confidence": anchor_confidence,
                             "anchor_reason": anchor_reason,
-                            "anchor_strategy": "git_fallback_realign",
+                            "anchor_strategy": anchor_strategy,
                         }
                     )
                     print(f"  Agent 2: Fallback mapped hunk {hunk_idx} to {git_target}")

@@ -1,6 +1,6 @@
 # Post-Pipeline Developer Patch Comparison
 
-**Exact Developer Patch (code-only)**: True
+**Exact Developer Patch (code-only)**: False
 
 **Comparison Method**: file_state
 
@@ -15,7 +15,7 @@
 
 ## File State Comparison
 - Compared files: ['server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java', 'server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java', 'server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java']
-- Mismatched files: []
+- Mismatched files: ['server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java', 'server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java', 'server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java']
 - Error: None
 
 ## Comparison Scope
@@ -27,7 +27,7 @@
 ### server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 
 - Developer hunks: 6
-- Generated hunks: 6
+- Generated hunks: 5
 
 #### Hunk 1
 
@@ -47,10 +47,12 @@ Developer
 
 Generated
 ```diff
-@@ -21,6 +21,8 @@
+@@ -21,6 +21,10 @@
  
  package io.crate.execution.engine.distribution;
  
++import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
++
 +import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
 +
  import java.util.ArrayList;
@@ -61,7 +63,18 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,9 +1,11 @@-@@ -21,6 +21,8 @@
++@@ -21,6 +21,10 @@
+  
+  package io.crate.execution.engine.distribution;
+  
+ +import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
+ +
+++import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
+++
+  import java.util.ArrayList;
+  import java.util.Collection;
+  import java.util.List;
 
 ```
 
@@ -83,7 +96,7 @@ Developer
 
 Generated
 ```diff
-@@ -40,6 +42,8 @@
+@@ -40,6 +44,8 @@
  import io.crate.data.Row;
  import io.crate.data.RowConsumer;
  import io.crate.exceptions.SQLExceptions;
@@ -97,7 +110,11 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,4 +1,4 @@-@@ -40,6 +42,8 @@
++@@ -40,6 +44,8 @@
+  import io.crate.data.Row;
+  import io.crate.data.RowConsumer;
+  import io.crate.exceptions.SQLExceptions;
 
 ```
 
@@ -120,13 +137,12 @@ Developer
 
 Generated
 ```diff
-@@ -75,6 +79,9 @@
+@@ -75,6 +81,8 @@
  
      private volatile Throwable failure;
  
 +    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
 +    private final String localNodeId;
-+
      public DistributingConsumer(Executor responseExecutor,
                                  UUID jobId,
                                  MultiBucketBuilder multiBucketBuilder,
@@ -135,7 +151,17 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,10 +1,9 @@-@@ -75,6 +79,9 @@
++@@ -75,6 +81,8 @@
+  
+      private volatile Throwable failure;
+  
+ +    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
+ +    private final String localNodeId;
+-+
+      public DistributingConsumer(Executor responseExecutor,
+                                  UUID jobId,
+                                  MultiBucketBuilder multiBucketBuilder,
 
 ```
 
@@ -157,7 +183,7 @@ Developer
 
 Generated
 ```diff
-@@ -83,6 +90,8 @@
+@@ -83,6 +91,8 @@
                                  int bucketIdx,
                                  Collection<String> downstreamNodeIds,
                                  ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
@@ -171,7 +197,11 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,4 +1,4 @@-@@ -83,6 +90,8 @@
++@@ -83,6 +91,8 @@
+                                  int bucketIdx,
+                                  Collection<String> downstreamNodeIds,
+                                  ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
 
 ```
 
@@ -193,10 +223,14 @@ Developer
 
 Generated
 ```diff
-@@ -92,6 +101,8 @@
+@@ -92,6 +102,12 @@
          this.inputId = inputId;
          this.bucketIdx = bucketIdx;
          this.distributedResultAction = distributedResultAction;
++        this.killNodeAction = killNodeAction;
++        this.localNodeId = localNodeId;
++        this.killNodeAction = killNodeAction;
++        this.localNodeId = localNodeId;
 +        this.killNodeAction = killNodeAction;
 +        this.localNodeId = localNodeId;
          this.pageSize = pageSize;
@@ -207,7 +241,20 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,9 +1,13 @@-@@ -92,6 +101,8 @@
++@@ -92,6 +102,12 @@
+          this.inputId = inputId;
+          this.bucketIdx = bucketIdx;
+          this.distributedResultAction = distributedResultAction;
+ +        this.killNodeAction = killNodeAction;
+ +        this.localNodeId = localNodeId;
+++        this.killNodeAction = killNodeAction;
+++        this.localNodeId = localNodeId;
+++        this.killNodeAction = killNodeAction;
+++        this.localNodeId = localNodeId;
+          this.pageSize = pageSize;
+          this.buckets = new StreamBucket[downstreamNodeIds.size()];
+          this.completionFuture = new CompletableFuture<>();
 
 ```
 
@@ -236,29 +283,28 @@ Developer
 
 Generated
 ```diff
-@@ -227,10 +238,11 @@
-                                 downstream.nodeId,
-                                 t
-                             );
--                            failure = t;
--                            downstream.needsMoreData = false;
--                            // continue because it's necessary to send something to downstreams still waiting for data
--                            countdownAndMaybeContinue(it, numActiveRequests, false);
-+                            failure = SQLExceptions.unwrap(t);
-+                            String reason = "An error was encountered: " + failure;
-+                            broadcastKill(killNodeAction, jobId, localNodeId, reason);
-+                            it.close();
-+                            completionFuture.completeExceptionally(failure);
-                         }
-                     }
-                 );
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,16 +1 @@-@@ -227,10 +238,11 @@
+-                                 downstream.nodeId,
+-                                 t
+-                             );
+--                            failure = t;
+--                            downstream.needsMoreData = false;
+--                            // continue because it's necessary to send something to downstreams still waiting for data
+--                            countdownAndMaybeContinue(it, numActiveRequests, false);
+-+                            failure = SQLExceptions.unwrap(t);
+-+                            String reason = "An error was encountered: " + failure;
+-+                            broadcastKill(killNodeAction, jobId, localNodeId, reason);
+-+                            it.close();
+-+                            completionFuture.completeExceptionally(failure);
+-                         }
+-                     }
+-                 );
++*No hunk*
 ```
 
 
@@ -356,11 +402,12 @@ Developer
 
 Generated
 ```diff
-@@ -57,6 +61,7 @@
+@@ -57,6 +61,8 @@
          this.clusterService = clusterService;
          this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
          this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
 +        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);
++
      }
  
      public DistributingConsumer create(NodeOperation nodeOperation,
@@ -369,7 +416,16 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,8 +1,9 @@-@@ -57,6 +61,7 @@
++@@ -57,6 +61,8 @@
+          this.clusterService = clusterService;
+          this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
+          this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
+ +        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);
+++
+      }
+  
+      public DistributingConsumer create(NodeOperation nodeOperation,
 
 ```
 
@@ -391,7 +447,7 @@ Developer
 
 Generated
 ```diff
-@@ -110,6 +115,8 @@
+@@ -110,6 +116,8 @@
              bucketIdx,
              nodeOperation.downstreamNodes(),
              distributedResultAction,
@@ -405,7 +461,11 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
+--- developer+++ generated@@ -1,4 +1,4 @@-@@ -110,6 +115,8 @@
++@@ -110,6 +116,8 @@
+              bucketIdx,
+              nodeOperation.downstreamNodes(),
+              distributedResultAction,
 
 ```
 
@@ -413,7 +473,7 @@ Developer -> Generated (Unified Diff)
 ### server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
 
 - Developer hunks: 3
-- Generated hunks: 3
+- Generated hunks: 0
 
 #### Hunk 1
 
@@ -432,21 +492,20 @@ Developer
 
 Generated
 ```diff
-@@ -25,6 +25,7 @@
- import java.util.Iterator;
- import java.util.List;
- import java.util.Locale;
-+import java.util.UUID;
- import java.util.concurrent.CompletableFuture;
- import java.util.concurrent.ScheduledExecutorService;
- import java.util.concurrent.TimeUnit;
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,8 +1 @@-@@ -25,6 +25,7 @@
+- import java.util.Iterator;
+- import java.util.List;
+- import java.util.Locale;
+-+import java.util.UUID;
+- import java.util.concurrent.CompletableFuture;
+- import java.util.concurrent.ScheduledExecutorService;
+- import java.util.concurrent.TimeUnit;
++*No hunk*
 ```
 
 #### Hunk 2
@@ -470,25 +529,24 @@ Developer
 
 Generated
 ```diff
-@@ -110,10 +111,7 @@
-             DistributedResultAction.NAME,
-             ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures
-             true,
--            // Don't trip breaker on transport layer, but instead depend on ram-accounting in PageBucketReceivers
--            // We need to always handle requests to avoid jobs from getting stuck.
--            // (If we receive a request, but don't handle it, a task would remain open indefinitely)
--            false,
-+            true,
-             DistributedResultRequest::new,
-             new NodeActionRequestHandler<>(nodeAction));
-     }
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,12 +1 @@-@@ -110,10 +111,7 @@
+-             DistributedResultAction.NAME,
+-             ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures
+-             true,
+--            // Don't trip breaker on transport layer, but instead depend on ram-accounting in PageBucketReceivers
+--            // We need to always handle requests to avoid jobs from getting stuck.
+--            // (If we receive a request, but don't handle it, a task would remain open indefinitely)
+--            false,
+-+            true,
+-             DistributedResultRequest::new,
+-             new NodeActionRequestHandler<>(nodeAction));
+-     }
++*No hunk*
 ```
 
 #### Hunk 3
@@ -561,74 +619,73 @@ Developer
 
 Generated
 ```diff
-@@ -204,33 +202,43 @@
-             if (LOGGER.isTraceEnabled()) {
-                 LOGGER.trace("Received a result for job={} but couldn't find a RootTask for it", request.jobId());
-             }
--            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());
-             /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.
-              * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.
-              *
-              * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke
-              * a kill to make sure that doesn't happen.
-              */
--            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
--                excludedNodeIds,
--                List.of(request.jobId()),
--                Role.CRATE_USER.name(),
--                "Received data for job=" + request.jobId() + " but there is no job context present. " +
--                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load"
--            );
--            killNodeAction
--                .execute(killRequest)
--                .whenComplete(
--                    (resp, t) -> {
--                        if (t != null) {
--                            LOGGER.debug("Could not kill " + request.jobId(), t);
--                        }
--                    }
--                );
-+            String reason = "Received data for job=" + request.jobId() + " but there is no job context present. " +
-+                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load";
-+            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);
-             return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));
-         }
-     }
- 
-+    /**
-+     * Sends KILL request to all nodes (excluding sender node).
-+     */
-+    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                     UUID jobId,
-+                                     String localNodeId,
-+                                     String reason) {
-+        List<String> excludedNodeIds = Collections.singletonList(localNodeId);
-+
-+        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
-+            excludedNodeIds,
-+            List.of(jobId),
-+            Role.CRATE_USER.name(),
-+            reason
-+        );
-+        killNodeAction
-+            .execute(killRequest)
-+            .whenComplete((_, t) -> {
-+                if (t != null) {
-+                    LOGGER.debug("Could not kill " + jobId, t);
-+                }
-+            });
-+    }
-+
-     private static class SendResponsePageResultListener implements PageResultListener {
-         private final CompletableFuture<DistributedResultResponse> future = new CompletableFuture<>();
- 
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,61 +1 @@-@@ -204,33 +202,43 @@
+-             if (LOGGER.isTraceEnabled()) {
+-                 LOGGER.trace("Received a result for job={} but couldn't find a RootTask for it", request.jobId());
+-             }
+--            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());
+-             /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.
+-              * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.
+-              *
+-              * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke
+-              * a kill to make sure that doesn't happen.
+-              */
+--            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
+--                excludedNodeIds,
+--                List.of(request.jobId()),
+--                Role.CRATE_USER.name(),
+--                "Received data for job=" + request.jobId() + " but there is no job context present. " +
+--                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load"
+--            );
+--            killNodeAction
+--                .execute(killRequest)
+--                .whenComplete(
+--                    (resp, t) -> {
+--                        if (t != null) {
+--                            LOGGER.debug("Could not kill " + request.jobId(), t);
+--                        }
+--                    }
+--                );
+-+            String reason = "Received data for job=" + request.jobId() + " but there is no job context present. " +
+-+                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load";
+-+            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);
+-             return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));
+-         }
+-     }
+- 
+-+    /**
+-+     * Sends KILL request to all nodes (excluding sender node).
+-+     */
+-+    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
+-+                                     UUID jobId,
+-+                                     String localNodeId,
+-+                                     String reason) {
+-+        List<String> excludedNodeIds = Collections.singletonList(localNodeId);
+-+
+-+        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
+-+            excludedNodeIds,
+-+            List.of(jobId),
+-+            Role.CRATE_USER.name(),
+-+            reason
+-+        );
+-+        killNodeAction
+-+            .execute(killRequest)
+-+            .whenComplete((_, t) -> {
+-+                if (t != null) {
+-+                    LOGGER.debug("Could not kill " + jobId, t);
+-+                }
+-+            });
+-+    }
+-+
+-     private static class SendResponsePageResultListener implements PageResultListener {
+-         private final CompletableFuture<DistributedResultResponse> future = new CompletableFuture<>();
+- 
++*No hunk*
 ```
 
 
@@ -636,19 +693,21 @@ Developer -> Generated (Unified Diff)
 ## Full Generated Patch (Agent-Only, code-only)
 ```diff
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-index 12171a4a54..203889b1e5 100644
+index 12171a4a54..c33511e4c9 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-@@ -21,6 +21,8 @@
+@@ -21,6 +21,10 @@
  
  package io.crate.execution.engine.distribution;
  
 +import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
 +
++import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
++
  import java.util.ArrayList;
  import java.util.Collection;
  import java.util.List;
-@@ -40,6 +42,8 @@ import io.crate.data.Paging;
+@@ -40,6 +44,8 @@ import io.crate.data.Paging;
  import io.crate.data.Row;
  import io.crate.data.RowConsumer;
  import io.crate.exceptions.SQLExceptions;
@@ -657,17 +716,16 @@ index 12171a4a54..203889b1e5 100644
  import io.crate.execution.support.ActionExecutor;
  import io.crate.execution.support.NodeRequest;
  
-@@ -75,6 +79,9 @@ public class DistributingConsumer implements RowConsumer {
+@@ -75,6 +81,8 @@ public class DistributingConsumer implements RowConsumer {
  
      private volatile Throwable failure;
  
 +    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
 +    private final String localNodeId;
-+
      public DistributingConsumer(Executor responseExecutor,
                                  UUID jobId,
                                  MultiBucketBuilder multiBucketBuilder,
-@@ -83,6 +90,8 @@ public class DistributingConsumer implements RowConsumer {
+@@ -83,6 +91,8 @@ public class DistributingConsumer implements RowConsumer {
                                  int bucketIdx,
                                  Collection<String> downstreamNodeIds,
                                  ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
@@ -676,33 +734,21 @@ index 12171a4a54..203889b1e5 100644
                                  int pageSize) {
          this.traceEnabled = LOGGER.isTraceEnabled();
          this.responseExecutor = responseExecutor;
-@@ -92,6 +101,8 @@ public class DistributingConsumer implements RowConsumer {
+@@ -92,6 +102,12 @@ public class DistributingConsumer implements RowConsumer {
          this.inputId = inputId;
          this.bucketIdx = bucketIdx;
          this.distributedResultAction = distributedResultAction;
 +        this.killNodeAction = killNodeAction;
 +        this.localNodeId = localNodeId;
++        this.killNodeAction = killNodeAction;
++        this.localNodeId = localNodeId;
++        this.killNodeAction = killNodeAction;
++        this.localNodeId = localNodeId;
          this.pageSize = pageSize;
          this.buckets = new StreamBucket[downstreamNodeIds.size()];
          this.completionFuture = new CompletableFuture<>();
-@@ -227,10 +238,11 @@ public class DistributingConsumer implements RowConsumer {
-                                 downstream.nodeId,
-                                 t
-                             );
--                            failure = t;
--                            downstream.needsMoreData = false;
--                            // continue because it's necessary to send something to downstreams still waiting for data
--                            countdownAndMaybeContinue(it, numActiveRequests, false);
-+                            failure = SQLExceptions.unwrap(t);
-+                            String reason = "An error was encountered: " + failure;
-+                            broadcastKill(killNodeAction, jobId, localNodeId, reason);
-+                            it.close();
-+                            completionFuture.completeExceptionally(failure);
-                         }
-                     }
-                 );
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-index 3dc1921a76..ee47d15116 100644
+index 3dc1921a76..2130479fdf 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 @@ -37,6 +37,9 @@ import io.crate.data.breaker.RamAccounting;
@@ -723,15 +769,16 @@ index 3dc1921a76..ee47d15116 100644
  
      @Inject
      public DistributingConsumerFactory(ClusterService clusterService,
-@@ -57,6 +61,7 @@ public class DistributingConsumerFactory {
+@@ -57,6 +61,8 @@ public class DistributingConsumerFactory {
          this.clusterService = clusterService;
          this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
          this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
 +        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);
++
      }
  
      public DistributingConsumer create(NodeOperation nodeOperation,
-@@ -110,6 +115,8 @@ public class DistributingConsumerFactory {
+@@ -110,6 +116,8 @@ public class DistributingConsumerFactory {
              bucketIdx,
              nodeOperation.downstreamNodes(),
              distributedResultAction,
@@ -740,110 +787,27 @@ index 3dc1921a76..ee47d15116 100644
              pageSize
          );
      }
-diff --git a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
-index 4d64814dd5..d34fc3eb6a 100644
---- a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
-+++ b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
-@@ -25,6 +25,7 @@ import java.util.Collections;
- import java.util.Iterator;
- import java.util.List;
- import java.util.Locale;
-+import java.util.UUID;
- import java.util.concurrent.CompletableFuture;
- import java.util.concurrent.ScheduledExecutorService;
- import java.util.concurrent.TimeUnit;
-@@ -110,10 +111,7 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques
-             DistributedResultAction.NAME,
-             ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures
-             true,
--            // Don't trip breaker on transport layer, but instead depend on ram-accounting in PageBucketReceivers
--            // We need to always handle requests to avoid jobs from getting stuck.
--            // (If we receive a request, but don't handle it, a task would remain open indefinitely)
--            false,
-+            true,
-             DistributedResultRequest::new,
-             new NodeActionRequestHandler<>(nodeAction));
-     }
-@@ -204,33 +202,43 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques
-             if (LOGGER.isTraceEnabled()) {
-                 LOGGER.trace("Received a result for job={} but couldn't find a RootTask for it", request.jobId());
-             }
--            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());
-             /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.
-              * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.
-              *
-              * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke
-              * a kill to make sure that doesn't happen.
-              */
--            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
--                excludedNodeIds,
--                List.of(request.jobId()),
--                Role.CRATE_USER.name(),
--                "Received data for job=" + request.jobId() + " but there is no job context present. " +
--                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load"
--            );
--            killNodeAction
--                .execute(killRequest)
--                .whenComplete(
--                    (resp, t) -> {
--                        if (t != null) {
--                            LOGGER.debug("Could not kill " + request.jobId(), t);
--                        }
--                    }
--                );
-+            String reason = "Received data for job=" + request.jobId() + " but there is no job context present. " +
-+                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load";
-+            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);
-             return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));
-         }
-     }
- 
-+    /**
-+     * Sends KILL request to all nodes (excluding sender node).
-+     */
-+    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                     UUID jobId,
-+                                     String localNodeId,
-+                                     String reason) {
-+        List<String> excludedNodeIds = Collections.singletonList(localNodeId);
-+
-+        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
-+            excludedNodeIds,
-+            List.of(jobId),
-+            Role.CRATE_USER.name(),
-+            reason
-+        );
-+        killNodeAction
-+            .execute(killRequest)
-+            .whenComplete((_, t) -> {
-+                if (t != null) {
-+                    LOGGER.debug("Could not kill " + jobId, t);
-+                }
-+            });
-+    }
-+
-     private static class SendResponsePageResultListener implements PageResultListener {
-         private final CompletableFuture<DistributedResultResponse> future = new CompletableFuture<>();
- 
 
 ```
 
 ## Full Generated Patch (Final Effective, code-only)
 ```diff
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-index 12171a4a54..203889b1e5 100644
+index 12171a4a54..c33511e4c9 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-@@ -21,6 +21,8 @@
+@@ -21,6 +21,10 @@
  
  package io.crate.execution.engine.distribution;
  
 +import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
 +
++import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
++
  import java.util.ArrayList;
  import java.util.Collection;
  import java.util.List;
-@@ -40,6 +42,8 @@ import io.crate.data.Paging;
+@@ -40,6 +44,8 @@ import io.crate.data.Paging;
  import io.crate.data.Row;
  import io.crate.data.RowConsumer;
  import io.crate.exceptions.SQLExceptions;
@@ -852,17 +816,16 @@ index 12171a4a54..203889b1e5 100644
  import io.crate.execution.support.ActionExecutor;
  import io.crate.execution.support.NodeRequest;
  
-@@ -75,6 +79,9 @@ public class DistributingConsumer implements RowConsumer {
+@@ -75,6 +81,8 @@ public class DistributingConsumer implements RowConsumer {
  
      private volatile Throwable failure;
  
 +    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
 +    private final String localNodeId;
-+
      public DistributingConsumer(Executor responseExecutor,
                                  UUID jobId,
                                  MultiBucketBuilder multiBucketBuilder,
-@@ -83,6 +90,8 @@ public class DistributingConsumer implements RowConsumer {
+@@ -83,6 +91,8 @@ public class DistributingConsumer implements RowConsumer {
                                  int bucketIdx,
                                  Collection<String> downstreamNodeIds,
                                  ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
@@ -871,33 +834,21 @@ index 12171a4a54..203889b1e5 100644
                                  int pageSize) {
          this.traceEnabled = LOGGER.isTraceEnabled();
          this.responseExecutor = responseExecutor;
-@@ -92,6 +101,8 @@ public class DistributingConsumer implements RowConsumer {
+@@ -92,6 +102,12 @@ public class DistributingConsumer implements RowConsumer {
          this.inputId = inputId;
          this.bucketIdx = bucketIdx;
          this.distributedResultAction = distributedResultAction;
 +        this.killNodeAction = killNodeAction;
 +        this.localNodeId = localNodeId;
++        this.killNodeAction = killNodeAction;
++        this.localNodeId = localNodeId;
++        this.killNodeAction = killNodeAction;
++        this.localNodeId = localNodeId;
          this.pageSize = pageSize;
          this.buckets = new StreamBucket[downstreamNodeIds.size()];
          this.completionFuture = new CompletableFuture<>();
-@@ -227,10 +238,11 @@ public class DistributingConsumer implements RowConsumer {
-                                 downstream.nodeId,
-                                 t
-                             );
--                            failure = t;
--                            downstream.needsMoreData = false;
--                            // continue because it's necessary to send something to downstreams still waiting for data
--                            countdownAndMaybeContinue(it, numActiveRequests, false);
-+                            failure = SQLExceptions.unwrap(t);
-+                            String reason = "An error was encountered: " + failure;
-+                            broadcastKill(killNodeAction, jobId, localNodeId, reason);
-+                            it.close();
-+                            completionFuture.completeExceptionally(failure);
-                         }
-                     }
-                 );
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-index 3dc1921a76..ee47d15116 100644
+index 3dc1921a76..2130479fdf 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 @@ -37,6 +37,9 @@ import io.crate.data.breaker.RamAccounting;
@@ -918,15 +869,16 @@ index 3dc1921a76..ee47d15116 100644
  
      @Inject
      public DistributingConsumerFactory(ClusterService clusterService,
-@@ -57,6 +61,7 @@ public class DistributingConsumerFactory {
+@@ -57,6 +61,8 @@ public class DistributingConsumerFactory {
          this.clusterService = clusterService;
          this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
          this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
 +        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);
++
      }
  
      public DistributingConsumer create(NodeOperation nodeOperation,
-@@ -110,6 +115,8 @@ public class DistributingConsumerFactory {
+@@ -110,6 +116,8 @@ public class DistributingConsumerFactory {
              bucketIdx,
              nodeOperation.downstreamNodes(),
              distributedResultAction,
@@ -935,91 +887,6 @@ index 3dc1921a76..ee47d15116 100644
              pageSize
          );
      }
-diff --git a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
-index 4d64814dd5..d34fc3eb6a 100644
---- a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
-+++ b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
-@@ -25,6 +25,7 @@ import java.util.Collections;
- import java.util.Iterator;
- import java.util.List;
- import java.util.Locale;
-+import java.util.UUID;
- import java.util.concurrent.CompletableFuture;
- import java.util.concurrent.ScheduledExecutorService;
- import java.util.concurrent.TimeUnit;
-@@ -110,10 +111,7 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques
-             DistributedResultAction.NAME,
-             ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures
-             true,
--            // Don't trip breaker on transport layer, but instead depend on ram-accounting in PageBucketReceivers
--            // We need to always handle requests to avoid jobs from getting stuck.
--            // (If we receive a request, but don't handle it, a task would remain open indefinitely)
--            false,
-+            true,
-             DistributedResultRequest::new,
-             new NodeActionRequestHandler<>(nodeAction));
-     }
-@@ -204,33 +202,43 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques
-             if (LOGGER.isTraceEnabled()) {
-                 LOGGER.trace("Received a result for job={} but couldn't find a RootTask for it", request.jobId());
-             }
--            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());
-             /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.
-              * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.
-              *
-              * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke
-              * a kill to make sure that doesn't happen.
-              */
--            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
--                excludedNodeIds,
--                List.of(request.jobId()),
--                Role.CRATE_USER.name(),
--                "Received data for job=" + request.jobId() + " but there is no job context present. " +
--                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load"
--            );
--            killNodeAction
--                .execute(killRequest)
--                .whenComplete(
--                    (resp, t) -> {
--                        if (t != null) {
--                            LOGGER.debug("Could not kill " + request.jobId(), t);
--                        }
--                    }
--                );
-+            String reason = "Received data for job=" + request.jobId() + " but there is no job context present. " +
-+                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load";
-+            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);
-             return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));
-         }
-     }
- 
-+    /**
-+     * Sends KILL request to all nodes (excluding sender node).
-+     */
-+    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                     UUID jobId,
-+                                     String localNodeId,
-+                                     String reason) {
-+        List<String> excludedNodeIds = Collections.singletonList(localNodeId);
-+
-+        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
-+            excludedNodeIds,
-+            List.of(jobId),
-+            Role.CRATE_USER.name(),
-+            reason
-+        );
-+        killNodeAction
-+            .execute(killRequest)
-+            .whenComplete((_, t) -> {
-+                if (t != null) {
-+                    LOGGER.debug("Could not kill " + jobId, t);
-+                }
-+            });
-+    }
-+
-     private static class SendResponsePageResultListener implements PageResultListener {
-         private final CompletableFuture<DistributedResultResponse> future = new CompletableFuture<>();
- 
 
 ```
 ## Full Developer Backport Patch (full commit diff)

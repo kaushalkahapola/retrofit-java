@@ -6,7 +6,7 @@
 **server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java** [replace]
 ```java
 // --- OLD ---
-<developer patch fast path>
+<mainline patch fast path>
 // --- NEW ---
 diff --git a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
 index 259a244bff9..a22173a4c5b 100644
@@ -90,7 +90,7 @@ index 259a244bff9..a22173a4c5b 100644
 **server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java** [replace]
 ```java
 // --- OLD ---
-<developer patch fast path>
+<mainline patch fast path>
 // --- NEW ---
 diff --git a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java
 index 3651f560e6d..fa4d60c83e5 100644
