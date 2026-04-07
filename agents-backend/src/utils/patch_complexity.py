@@ -8,6 +8,13 @@ from typing import Any
 from utils.patch_analyzer import PatchAnalyzer
 
 
+def _normalize_rel_path(path: str | None) -> str:
+    p = (path or "").strip().replace("\\", "/").lstrip("/")
+    while p.startswith("a/") or p.startswith("b/"):
+        p = p[2:]
+    return p
+
+
 def _git_apply_check_passes(diff_text: str, target_repo_path: str) -> tuple[bool, str]:
     if not diff_text or not target_repo_path:
         return False, "missing_diff_or_repo"
@@ -38,6 +45,7 @@ def _git_apply_check_passes(diff_text: str, target_repo_path: str) -> tuple[bool
 def _anchor_match_ratio(diff_text: str, target_repo_path: str, file_path: str) -> float:
     analyzer = PatchAnalyzer()
     hunks_by_file = analyzer.extract_raw_hunks(diff_text, with_test_changes=True)
+    file_path = _normalize_rel_path(file_path)
     hunks = hunks_by_file.get(file_path, [])
     if not hunks:
         return 1.0
@@ -135,19 +143,24 @@ def classify_patch_complexity(
     for c in code_changes:
         if c.change_type in {"ADDED", "DELETED", "RENAMED"}:
             structural_ops = True
-        full_path = os.path.join(target_repo_path, c.file_path)
+        c_file = _normalize_rel_path(c.file_path)
+        full_path = os.path.join(target_repo_path, c_file)
         if not os.path.isfile(full_path):
             files_exist = False
-        ratios.append(_anchor_match_ratio(patch_diff, target_repo_path, c.file_path))
+        ratios.append(_anchor_match_ratio(patch_diff, target_repo_path, c_file))
 
     avg_ratio = sum(ratios) / max(1, len(ratios))
 
     # Prefer STRUCTURAL over REWRITE when overlap is decent but git apply still fails
     # (whitespace/path drift). Single-file backports often sit in the 0.38–0.44 band.
-    eligible_structural = files_exist and not structural_ops and (
-        avg_ratio >= 0.45
-        or (len(code_changes) == 1 and avg_ratio >= 0.38)
-        or (len(code_changes) <= 3 and avg_ratio >= 0.40)
+    eligible_structural = (
+        files_exist
+        and not structural_ops
+        and (
+            avg_ratio >= 0.45
+            or (len(code_changes) == 1 and avg_ratio >= 0.38)
+            or (len(code_changes) <= 3 and avg_ratio >= 0.40)
+        )
     )
 
     if eligible_structural:

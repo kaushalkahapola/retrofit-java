@@ -8,11 +8,11 @@ H-MABS Orchestrator Graph (Phase 1)
        '-- fast_path_success=False
               -> context_analyzer   (Agent 1: Semantic Blueprint)
               -> structural_locator (Agent 2: Consistency Map + Mapped Context)
-              -> planning_agent     (Phase 2.5: str_replace Edit Plans)
-              -> hunk_generator     (Agent 3: File Editor - direct edits + git diff)
+              -> hunk_generator     (Agent 3: initial deterministic apply)
               -> validation         (Agent 4: "Prove Red, Make Green" loop)
                  |-- passed          -> END
-                 |-- failed, attempts < MAX_VALIDATION_ATTEMPTS -> hunk_generator (retry)
+                 |-- failed, attempts < MAX_VALIDATION_ATTEMPTS -> planning_agent
+                        -> reasoning_architect -> hunk_generator (failure-aware retry)
                  '-- failed, attempts >= MAX_VALIDATION_ATTEMPTS -> END (give up)
 
 Note: The graph node "hunk_generator" is now backed by file_editor_node.
@@ -80,29 +80,13 @@ def route_phase_0(state: AgentState) -> str:
 
 def route_after_structural(state: AgentState) -> str:
     """
-    Route after structural locator using deterministic complexity class.
+    Route after structural locator.
 
-    - REWRITE: keep planning node.
-    - TRIVIAL/STRUCTURAL: skip planning and go directly to file editor.
+    Always go directly to Agent 3 (file editor) for an initial
+    deterministic "dumb apply" pass. Planning/reasoning are reserved for
+    post-validation retries with concrete failure diagnostics.
     """
-    complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
-    git_match_method = (
-        str(state.get("structural_locator_git_match_method") or "").strip().upper()
-    )
-    if git_match_method in {"GIT_BLOB", "GIT_EXACT"} and complexity == "REWRITE":
-        print(
-            "Router: structural locator reported exact/blob git match; "
-            "downgrading REWRITE to STRUCTURAL path (skip planning)."
-        )
-        return "hunk_generator"
-
-    if complexity == "REWRITE":
-        print("Router: complexity=REWRITE -> planning_agent.")
-        return "planning_agent"
-
-    print(
-        f"Router: complexity={complexity or 'UNKNOWN'} -> skip planning, go hunk_generator."
-    )
+    print("Router: structural mapping complete -> hunk_generator (initial pass).")
     return "hunk_generator"
 
 
@@ -110,7 +94,7 @@ def route_validation(state: AgentState) -> str:
     """
     After Agent 4 (validation):
       - If validation passed -> END.
-      - If failed but attempts remain -> hunk_generator (retry loop).
+      - If failed but attempts remain -> planning_agent (failure-aware retry).
       - If failed and exhausted retries -> END (give up, output failure).
     """
     passed = state.get("validation_passed", False)
@@ -155,175 +139,13 @@ def route_validation(state: AgentState) -> str:
         return "END"
 
     if attempts < MAX_VALIDATION_ATTEMPTS:
-
-        def _get_build_issue_types(state_obj: AgentState) -> set[str]:
-            diagnostics = (
-                (state_obj.get("validation_results") or {}).get("build") or {}
-            ).get("diagnostics") or {}
-            issues = diagnostics.get("issues") if isinstance(diagnostics, dict) else []
-            out: set[str] = set()
-            for issue in issues or []:
-                if not isinstance(issue, dict):
-                    continue
-                err = str(issue.get("error_type") or "").strip().lower()
-                if err:
-                    out.add(err)
-            return out
-
-        failed_stage = (state.get("validation_failed_stage") or "").strip().lower()
-        complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
-        needs_reasoning = (
-            complexity in {"REWRITE"}
-            and attempts >= 1
-            and not bool(state.get("validation_repeated_patch_detected"))
-            and (
-                "api_or_signature_mismatch" in _get_build_issue_types(state)
-                or bool(state.get("force_type_v_until_success"))
-                or failed_stage
-                in {"generation_contract_failed", "surgical_plan_execution_failed"}
-            )
-        )
-        if needs_reasoning:
-            print(
-                "Router: Routing to reasoning_architect "
-                f"(complexity={complexity}, category={failure_category})."
-            )
-            return "reasoning_architect"
-
-        failed_stage = (state.get("validation_failed_stage") or "").strip().lower()
-        complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
-        repeated_patch = bool(state.get("validation_repeated_patch_detected", False))
-        repeated_plan = bool(state.get("validation_repeated_plan_detected", False))
-        if repeated_patch or repeated_plan:
-            if complexity == "REWRITE":
-                print(
-                    "Router: Stagnation detected (repeated plan/patch) on REWRITE. "
-                    "Escalating once via planning_agent."
-                )
-                return "planning_agent"
-            if _validation_build_failed_in_state(state):
-                print(
-                    "Router: Stagnation (repeated plan/patch) on non-REWRITE after a "
-                    "failed build; escalating to planning_agent for adaptation "
-                    "(API/signature fixes, alternate str_replace plans)."
-                )
-                return "planning_agent"
-            # Deterministic retry produced the same patch + generator contract flag;
-            # continuing would loop forever without an LLM/planning pass.
-            if repeated_patch and failed_stage == "generation_contract_failed":
-                print(
-                    "Router: Stagnation (repeated patch + generation_contract_failed) "
-                    "on non-REWRITE; escalating to planning_agent."
-                )
-                return "planning_agent"
-            print(
-                "Router: Stagnation detected (repeated plan/patch) on non-REWRITE. "
-                "Stopping retries to prevent token burn."
-            )
-            return "END"
-
-        # 1. Identical Patch Guard: force replanning if the patch didn't change
-        # but validation still fails.
-        if failed_stage == "generation_contract_failed":
-            if complexity == "REWRITE":
-                print(
-                    "Router: Generation contract FAILED on REWRITE patch. "
-                    "Routing to planning_agent."
-                )
-                return "planning_agent"
-            print(
-                "Router: Generation contract FAILED on non-REWRITE patch. "
-                "Routing to hunk_generator deterministic/reactive retry."
-            )
-            return "hunk_generator"
-
-        build_diagnostics = (
-            (state.get("validation_results") or {}).get("build") or {}
-        ).get("diagnostics") or {}
-        build_issue_types = {
-            str((issue or {}).get("error_type") or "").strip().lower()
-            for issue in (build_diagnostics.get("issues") or [])
-            if isinstance(issue, dict)
-        }
-        latest_hunk_apply_failed = bool(
-            ((state.get("validation_results") or {}).get("hunk_application") or {}).get(
-                "success"
-            )
-            is False
-        )
-        if latest_hunk_apply_failed and failure_category in {
-            "path_or_file_operation",
-            "mapping_required",
-        }:
-            print(
-                f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
-                "path/file-operation issue. Routing back to structural_locator for remap."
-            )
-            return "structural_locator"
-        if latest_hunk_apply_failed and failure_category in {
-            "context_mismatch",
-            "hunk_application_failed",
-        }:
-            if complexity == "REWRITE":
-                print(
-                    f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
-                    "context mismatch on REWRITE patch. Routing to planning_agent."
-                )
-                return "planning_agent"
-            print(
-                f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
-                "context mismatch on non-REWRITE patch. Routing to hunk_generator."
-            )
-            return "hunk_generator"
-        if failure_category == "context_mismatch" and failed_stage in {
-            "hunk_sanity_failed",
-            "generation_contract_failed",
-            "incomplete_todo_steps",
-            "plan_preflight_failed",
-        }:
-            if complexity == "REWRITE":
-                print(
-                    f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) due "
-                    f"generation stage '{failed_stage}' on REWRITE patch. Routing to planning_agent."
-                )
-                return "planning_agent"
-            print(
-                f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) due "
-                f"generation stage '{failed_stage}' on non-REWRITE patch. Routing to hunk_generator."
-            )
-            return "hunk_generator"
-        if failure_category == "context_mismatch" and (
-            "api_or_signature_mismatch" in build_issue_types
-            or "java_syntax_or_patch_artifact" in build_issue_types
-        ):
-            if complexity == "REWRITE":
-                print(
-                    f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
-                    f"build diagnostics {sorted(build_issue_types)} on REWRITE patch. Routing to planning_agent."
-                )
-                return "planning_agent"
-            print(
-                f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
-                f"build diagnostics {sorted(build_issue_types)} on non-REWRITE patch. Routing to hunk_generator."
-            )
-            return "hunk_generator"
-        if failure_category == "empty_generation":
-            if complexity == "REWRITE":
-                print(
-                    f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
-                    "empty generation output on REWRITE patch. Routing to planning_agent."
-                )
-                return "planning_agent"
-            print(
-                f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}) with "
-                "empty generation output on non-REWRITE patch. Routing to hunk_generator."
-            )
-            return "hunk_generator"
+        # Simple failure loop: after we get concrete validation feedback, always
+        # re-enter planner + reasoning before another edit pass.
         print(
             f"Router: Validation FAILED (attempt {attempts}/{MAX_VALIDATION_ATTEMPTS}). "
-            "Routing back to hunk_generator for retry."
+            "Routing to planning_agent for failure-aware repair."
         )
-        return "hunk_generator"
+        return "planning_agent"
 
     print(
         f"Router: Validation FAILED after {MAX_VALIDATION_ATTEMPTS} attempt(s). "
@@ -379,7 +201,7 @@ workflow.add_conditional_edges(
         "hunk_generator": "hunk_generator",
     },
 )
-workflow.add_edge("planning_agent", "hunk_generator")
+workflow.add_edge("planning_agent", "reasoning_architect")
 workflow.add_edge("reasoning_architect", "hunk_generator")
 workflow.add_edge("hunk_generator", "validation")
 

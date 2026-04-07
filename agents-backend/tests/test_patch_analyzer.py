@@ -1,6 +1,7 @@
 """
 Tests for the PatchAnalyzer — including the new extract_raw_hunks() method.
 """
+
 import unittest
 import sys
 import os
@@ -16,9 +17,9 @@ SAMPLE_DIFF = (
     "+++ b/src/main/java/com/example/App.java\n"
     "@@ -10,4 +10,5 @@ public class App {\n"
     "     public void oldMethod() {\n"
-    "-        System.out.println(\"Old\");\n"
+    '-        System.out.println("Old");\n'
     "+        if (buf == null) return;\n"
-    "+        System.out.println(\"New\");\n"
+    '+        System.out.println("New");\n'
     "     }\n"
     " }\n"
     "diff --git a/src/test/java/com/example/AppTest.java b/src/test/java/com/example/AppTest.java\n"
@@ -96,7 +97,9 @@ class TestExtractRawHunks(unittest.TestCase):
         self.assertNotIn("src/test/java/com/example/AppTest.java", result)
 
         # But when requesting test changes, they should be included
-        result_with_tests = self.analyzer.extract_raw_hunks(SAMPLE_DIFF, with_test_changes=True)
+        result_with_tests = self.analyzer.extract_raw_hunks(
+            SAMPLE_DIFF, with_test_changes=True
+        )
         self.assertIn("src/test/java/com/example/AppTest.java", result_with_tests)
 
     def test_code_file_has_one_hunk(self):
@@ -121,7 +124,9 @@ class TestExtractRawHunks(unittest.TestCase):
         self.assertNotIn("src/test/java/com/example/AppTest.java", result)
 
         # But when requesting test changes, the file should be there with one hunk
-        result_with_tests = self.analyzer.extract_raw_hunks(SAMPLE_DIFF, with_test_changes=True)
+        result_with_tests = self.analyzer.extract_raw_hunks(
+            SAMPLE_DIFF, with_test_changes=True
+        )
         test_hunks = result_with_tests["src/test/java/com/example/AppTest.java"]
         self.assertGreaterEqual(len(test_hunks), 1)
 
@@ -141,7 +146,9 @@ class TestExtractRawHunks(unittest.TestCase):
         tests_with_tests = [c for c in changes_with_tests if c.is_test_file]
         self.assertEqual(len(code_with_tests), 1)
         self.assertEqual(len(tests_with_tests), 1)
-        self.assertEqual(tests_with_tests[0].file_path, "src/test/java/com/example/AppTest.java")
+        self.assertEqual(
+            tests_with_tests[0].file_path, "src/test/java/com/example/AppTest.java"
+        )
 
     def test_rename_records_previous_file_path(self):
         diff_text = """\
@@ -149,15 +156,33 @@ diff --git a/src/main/java/com/example/LegacyFoo.java b/src/main/java/com/exampl
 similarity index 95%
 rename from src/main/java/com/example/LegacyFoo.java
 rename to src/main/java/com/example/NewFoo.java
-@@ -10,3 +10,3 @@ public class NewFoo {
--    void readLegacy() {}
-+    void readNew() {}
- }"""
+"""
         changes = self.analyzer.analyze(diff_text)
         self.assertEqual(len(changes), 1)
         self.assertEqual(changes[0].change_type, "RENAMED")
         self.assertEqual(changes[0].file_path, "src/main/java/com/example/NewFoo.java")
-        self.assertEqual(changes[0].previous_file_path, "src/main/java/com/example/LegacyFoo.java")
+        self.assertEqual(
+            changes[0].previous_file_path, "src/main/java/com/example/LegacyFoo.java"
+        )
+
+    def test_repeated_prefix_paths_are_normalized_and_not_marked_rename(self):
+        diff_text = """\
+diff --git a/a/src/main/java/com/example/Foo.java b/b/src/main/java/com/example/Foo.java
+index 1111111..2222222 100644
+--- a/a/src/main/java/com/example/Foo.java
++++ b/b/src/main/java/com/example/Foo.java
+@@ -1,1 +1,1 @@
+-class Foo {}
++class Foo { int x; }
+"""
+        changes = self.analyzer.analyze(diff_text)
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(changes[0].file_path, "src/main/java/com/example/Foo.java")
+        self.assertEqual(changes[0].change_type, "MODIFIED")
+        self.assertIsNone(changes[0].previous_file_path)
+
+        hunks = self.analyzer.extract_raw_hunks(diff_text)
+        self.assertIn("src/main/java/com/example/Foo.java", hunks)
 
 
 if __name__ == "__main__":

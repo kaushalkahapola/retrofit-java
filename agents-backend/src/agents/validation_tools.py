@@ -1693,7 +1693,7 @@ class ValidationToolkit:
 
         def _normalize_rel_path(path: str) -> str:
             p = (path or "").strip().replace("\\", "/").lstrip("/")
-            if p.startswith("a/") or p.startswith("b/"):
+            while p.startswith("a/") or p.startswith("b/"):
                 p = p[2:]
             if p == "dev/null":
                 return ""
@@ -2595,7 +2595,7 @@ class ValidationToolkit:
         """
         # Normalize path separators and strip optional diff prefixes.
         p = (target_file_path or "").strip().replace("\\", "/").lstrip("/")
-        if p.startswith("a/") or p.startswith("b/"):
+        while p.startswith("a/") or p.startswith("b/"):
             p = p[2:]
 
         if not p:
@@ -2607,7 +2607,7 @@ class ValidationToolkit:
             if old_file_path
             else p
         )
-        if old_p.startswith("a/") or old_p.startswith("b/"):
+        while old_p.startswith("a/") or old_p.startswith("b/"):
             old_p = old_p[2:]
 
         # Handle structural operations (no hunks)
@@ -2753,7 +2753,7 @@ class ValidationToolkit:
         """
         # Step 1: Normalize path
         target_file = (target_file_path or "").strip().replace("\\", "/").lstrip("/")
-        if target_file.startswith("a/") or target_file.startswith("b/"):
+        while target_file.startswith("a/") or target_file.startswith("b/"):
             target_file = target_file[2:]
 
         full_path = os.path.normpath(os.path.join(self.target_repo_path, target_file))

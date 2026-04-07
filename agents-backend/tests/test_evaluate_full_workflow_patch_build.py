@@ -1,8 +1,11 @@
+import io
 import os
 import sys
 import types
 import unittest
 from unittest.mock import patch
+
+from unidiff import PatchSet
 
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
@@ -36,25 +39,32 @@ def _import_workflow_module():
     return efw
 
 
-class TestFullWorkflowComplexityInjection(unittest.TestCase):
-    def test_classifier_available_for_cached_phase0_inputs(self):
+class TestBuildAgentEligiblePatch(unittest.TestCase):
+    def test_does_not_emit_double_prefix_paths(self):
         efw = _import_workflow_module()
 
-        with patch.object(efw, "classify_patch_complexity") as mock_cls:
-            mock_cls.return_value = {
-                "complexity": "STRUCTURAL",
-                "reason": "files_present_with_anchor_overlap",
-                "details": {"avg_anchor_ratio": 0.9},
-            }
+        patch_diff = """diff --git a/server/src/main/java/org/example/Foo.java b/server/src/main/java/org/example/Foo.java
+index 1111111..2222222 100644
+--- a/server/src/main/java/org/example/Foo.java
++++ b/server/src/main/java/org/example/Foo.java
+@@ -1,1 +1,1 @@
+-class Foo {}
++class Foo { int x; }
+"""
 
-            # Smoke-call classifier as orchestrator would for base inputs.
-            out = efw.classify_patch_complexity(
-                patch_diff="diff --git a/a.java b/a.java\n",
-                target_repo_path="/tmp/repo",
-                with_test_changes=False,
-            )
+        out = efw._build_agent_eligible_patch(patch_diff)
+        self.assertIn(
+            "diff --git a/server/src/main/java/org/example/Foo.java b/server/src/main/java/org/example/Foo.java",
+            out,
+        )
+        self.assertNotIn("a/a/server/", out)
+        self.assertNotIn("b/b/server/", out)
 
-            self.assertIn("complexity", out)
+        patch_set = PatchSet(io.StringIO(out))
+        self.assertEqual(len(list(patch_set)), 1)
+        parsed = list(patch_set)[0]
+        self.assertFalse(parsed.is_rename)
+        self.assertEqual(parsed.path, "server/src/main/java/org/example/Foo.java")
 
 
 if __name__ == "__main__":

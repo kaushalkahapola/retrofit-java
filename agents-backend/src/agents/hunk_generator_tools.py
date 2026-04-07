@@ -31,6 +31,15 @@ from utils.java_diff_syntax_guards import should_flag_dangling_equals_on_added_l
 MAX_READ_FILE_WINDOW_RADIUS = 50
 
 
+def _mcp_available() -> bool:
+    try:
+        import mcp_client  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
 class HunkGeneratorToolkit:
     """
     Lightweight toolkit bound to a single target repository.
@@ -52,7 +61,7 @@ class HunkGeneratorToolkit:
     def _full_path(self, rel_path: str) -> str:
         """Resolve a repo-relative path to an absolute path."""
         p = (rel_path or "").strip().replace("\\", "/").lstrip("/")
-        if p.startswith("a/") or p.startswith("b/"):
+        while p.startswith("a/") or p.startswith("b/"):
             p = p[2:]
         full = os.path.normpath(os.path.join(self.target_repo_path, p))
         return full
@@ -1475,6 +1484,54 @@ class HunkGeneratorToolkit:
 
     def get_tools(self) -> list[StructuredTool]:
         """Return all tools as LangChain StructuredTool objects."""
+        ast_tools: list[StructuredTool] = []
+        if _mcp_available():
+            ast_tools = [
+                StructuredTool.from_function(
+                    func=self.replace_method_body,
+                    name="replace_method_body",
+                    description=(
+                        "Replace method body using AST-based approach via Java MCP server. "
+                        "Immune to line number drift. Locates method by signature not line numbers. "
+                        "Supports wildcards: 'method(...)' matches any params, 'method(String, *)' matches String and any type."
+                    ),
+                ),
+                StructuredTool.from_function(
+                    func=self.get_method_boundaries,
+                    name="get_method_boundaries",
+                    description=(
+                        "Get exact line boundaries of a method using AST analysis. "
+                        "Returns start_line and end_line without drift. Useful for verifying "
+                        "line ranges after multiple edits."
+                    ),
+                ),
+                StructuredTool.from_function(
+                    func=self.replace_field,
+                    name="replace_field",
+                    description=(
+                        "Replace a field declaration in a Java file using AST-based approach. "
+                        "Immune to line drift. Specify field name and new declaration."
+                    ),
+                ),
+                StructuredTool.from_function(
+                    func=self.insert_import,
+                    name="insert_import",
+                    description=(
+                        "Insert an import statement into a Java file using AST-based approach. "
+                        "Automatically avoids duplicate imports. "
+                        "Examples: 'java.util.List' or 'java.util.*'"
+                    ),
+                ),
+                StructuredTool.from_function(
+                    func=self.remove_method,
+                    name="remove_method",
+                    description=(
+                        "Remove a method from a Java file using AST-based approach. "
+                        "Supports wildcard signatures like 'method(...)' to match any parameters."
+                    ),
+                ),
+            ]
+
         return [
             StructuredTool.from_function(
                 func=self.read_file_window,
@@ -1644,47 +1701,4 @@ class HunkGeneratorToolkit:
                     "edits. Use if edits went wrong and you need to start over for a file."
                 ),
             ),
-            StructuredTool.from_function(
-                func=self.replace_method_body,
-                name="replace_method_body",
-                description=(
-                    "Replace method body using AST-based approach via Java MCP server. "
-                    "Immune to line number drift. Locates method by signature not line numbers. "
-                    "Supports wildcards: 'method(...)' matches any params, 'method(String, *)' matches String and any type."
-                ),
-            ),
-            StructuredTool.from_function(
-                func=self.get_method_boundaries,
-                name="get_method_boundaries",
-                description=(
-                    "Get exact line boundaries of a method using AST analysis. "
-                    "Returns start_line and end_line without drift. Useful for verifying "
-                    "line ranges after multiple edits."
-                ),
-            ),
-            StructuredTool.from_function(
-                func=self.replace_field,
-                name="replace_field",
-                description=(
-                    "Replace a field declaration in a Java file using AST-based approach. "
-                    "Immune to line drift. Specify field name and new declaration."
-                ),
-            ),
-            StructuredTool.from_function(
-                func=self.insert_import,
-                name="insert_import",
-                description=(
-                    "Insert an import statement into a Java file using AST-based approach. "
-                    "Automatically avoids duplicate imports. "
-                    "Examples: 'java.util.List' or 'java.util.*'"
-                ),
-            ),
-            StructuredTool.from_function(
-                func=self.remove_method,
-                name="remove_method",
-                description=(
-                    "Remove a method from a Java file using AST-based approach. "
-                    "Supports wildcard signatures like 'method(...)' to match any parameters."
-                ),
-            ),
-        ]
+        ] + ast_tools

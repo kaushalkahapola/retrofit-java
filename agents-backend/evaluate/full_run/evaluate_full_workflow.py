@@ -505,8 +505,8 @@ def _build_auxiliary_hunks_from_developer_patch(
     hunks: list[dict[str, Any]] = []
 
     def _norm_path(path: str | None) -> str:
-        p = (path or "").strip().replace("\\", "/")
-        if p.startswith("a/") or p.startswith("b/"):
+        p = (path or "").strip().replace("\\", "/").lstrip("/")
+        while p.startswith("a/") or p.startswith("b/"):
             p = p[2:]
         if p == "dev/null":
             return ""
@@ -621,7 +621,8 @@ def _build_agent_eligible_patch(
 
     def _norm_path(path: str | None) -> str:
         p = (path or "").strip().replace("\\", "/")
-        if p.startswith("a/") or p.startswith("b/"):
+        p = p.lstrip("/")
+        while p.startswith("a/") or p.startswith("b/"):
             p = p[2:]
         if p == "dev/null":
             return ""
@@ -661,14 +662,19 @@ def _build_agent_eligible_patch(
         # If the file has eligible hunks, include it in the output patch
         if eligible_hunks:
             # Write the file header
-            source_file = (
+            source_file_raw = (
                 getattr(patched_file, "source_file", None) or patched_file.path
             )
-            target_file = (
+            target_file_raw = (
                 getattr(patched_file, "target_file", None) or patched_file.path
             )
+            source_file = _norm_path(source_file_raw)
+            target_file = _norm_path(target_file_raw)
 
-            output_lines.append(f"diff --git a/{source_file} b/{target_file}\n")
+            diff_source = source_file or target_file
+            diff_target = target_file or source_file
+
+            output_lines.append(f"diff --git a/{diff_source} b/{diff_target}\n")
 
             # Write file operation markers
             if patched_file.is_added_file:
@@ -680,10 +686,10 @@ def _build_agent_eligible_patch(
             output_lines.append(f"index 0000000..0000000 100644\n")
 
             # Write --- and +++ lines
-            src = source_file if not patched_file.is_added_file else "/dev/null"
-            tgt = target_file if not patched_file.is_removed_file else "/dev/null"
-            output_lines.append(f"--- a/{src}\n")
-            output_lines.append(f"+++ b/{tgt}\n")
+            src = "/dev/null" if patched_file.is_added_file else f"a/{source_file}"
+            tgt = "/dev/null" if patched_file.is_removed_file else f"b/{target_file}"
+            output_lines.append(f"--- {src}\n")
+            output_lines.append(f"+++ {tgt}\n")
 
             # Write hunks
             for hunk in eligible_hunks:
@@ -883,8 +889,8 @@ def _build_generated_patch_from_hunks(adapted_code_hunks: list[dict[str, Any]]) 
     """
 
     def _norm(path: str | None) -> str:
-        p = (path or "").strip().replace("\\", "/")
-        if p.startswith("a/") or p.startswith("b/"):
+        p = (path or "").strip().replace("\\", "/").lstrip("/")
+        while p.startswith("a/") or p.startswith("b/"):
             p = p[2:]
         if p == "dev/null":
             return ""

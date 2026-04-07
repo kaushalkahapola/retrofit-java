@@ -365,7 +365,9 @@ def _recover_with_structure_locator(
     ):
         new_start = recovered_line
         new_end = recovered_line
-    elif isinstance(new_start, int) and (not isinstance(new_end, int) or new_end < new_start):
+    elif isinstance(new_start, int) and (
+        not isinstance(new_end, int) or new_end < new_start
+    ):
         new_end = new_start
 
     new_snippet = str(code_snippet or "")
@@ -604,7 +606,7 @@ def _deterministic_map_hunks_for_file(
 
 def _normalize_rel_path(path: str) -> str:
     p = (path or "").strip().replace("\\", "/").lstrip("/")
-    if p.startswith("a/") or p.startswith("b/"):
+    while p.startswith("a/") or p.startswith("b/"):
         p = p[2:]
     return p
 
@@ -1149,7 +1151,9 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                 # Final structural fallback when method anchor is unresolved.
                 target_method_raw = m.get("target_method")
                 is_import_mapping = str(target_method_raw or "").strip() == "<import>"
-                if not is_import_mapping and _is_unresolved_target_method(target_method_raw):
+                if not is_import_mapping and _is_unresolved_target_method(
+                    target_method_raw
+                ):
                     (
                         recovered_method,
                         recovered_start,
@@ -1277,7 +1281,13 @@ async def structural_locator_node(state: AgentState, config) -> dict:
                     )
                 else:
                     # Regular hunks
-                    recovered_method, recovered_start, recovered_end, recovered_snippet, fallback_anchor_reason = _recover_with_structure_locator(
+                    (
+                        recovered_method,
+                        recovered_start,
+                        recovered_end,
+                        recovered_snippet,
+                        fallback_anchor_reason,
+                    ) = _recover_with_structure_locator(
                         target_repo_path=target_repo_path,
                         target_file=git_target,
                         raw_hunk=raw_hunk,

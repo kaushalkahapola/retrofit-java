@@ -143,9 +143,9 @@ def _classify_build_failure(
         # If we have a project-specific identifier, great.
         # Otherwise, if it's a .java file in a likely source tree, include it.
         return (
-            "src/main/java" in p 
-            or "org/elasticsearch" in p 
-            or "io/crate" in p 
+            "src/main/java" in p
+            or "org/elasticsearch" in p
+            or "io/crate" in p
             or "org/apache/hbase" in p
             or "src/java" in p
         )
@@ -242,7 +242,9 @@ def _classify_build_failure(
         for ln in text.splitlines():
             ll = ln.strip()
             # Handle both Maven [ERROR] and raw Gradle/javac output
-            if ("error: cannot find symbol" in ll or "error: method" in ll) and len(concrete_errors) < 10:
+            if ("error: cannot find symbol" in ll or "error: method" in ll) and len(
+                concrete_errors
+            ) < 10:
                 # Extract the symbol name to see if it's actually relevant
                 sym_match = re.search(
                     r"symbol:\s+(?:variable|method|class)\s+(\w+)",
@@ -381,10 +383,16 @@ def _extract_structured_failure_context(
     if symbol_errors:
         primary_s = str(symbol_errors[0].get("name") or "")
 
-    res_locations = failed_locations[:20] if len(failed_locations) > 20 else failed_locations
+    res_locations = (
+        failed_locations[:20] if len(failed_locations) > 20 else failed_locations
+    )
     res_symbols = symbol_errors[:20] if len(symbol_errors) > 20 else symbol_errors
     res_sigs = sig_errors[:20] if len(sig_errors) > 20 else sig_errors
-    res_hunks = failed_hunk_targets[:20] if len(failed_hunk_targets) > 20 else failed_hunk_targets
+    res_hunks = (
+        failed_hunk_targets[:20]
+        if len(failed_hunk_targets) > 20
+        else failed_hunk_targets
+    )
 
     return {
         "raw_error": str(text[:10000]),
@@ -651,7 +659,7 @@ async def validation_agent(state: AgentState, config) -> dict:
                 item["missing_steps"] = sorted(required_steps - completed_steps)
                 incomplete_generation_items.append(item)
 
-    if incomplete_generation_items:
+    if incomplete_generation_items and not evaluation_full_workflow:
         retry_hunks = sorted(
             {
                 int(item.get("hunk_index"))
@@ -700,6 +708,11 @@ async def validation_agent(state: AgentState, config) -> dict:
             # after checklist-short-circuit returns.
             "validation_results": dict(state.get("validation_results") or {}),
         }
+    elif incomplete_generation_items and evaluation_full_workflow:
+        print(
+            "  Agent 4: Generator checklist incomplete, but evaluation_full_workflow "
+            "is enabled; continuing to build/tests for concrete failure diagnostics."
+        )
 
     # Ensure clean repo
     toolkit.restore_repo_state()

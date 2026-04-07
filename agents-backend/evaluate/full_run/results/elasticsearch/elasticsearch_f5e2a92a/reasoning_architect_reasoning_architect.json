@@ -1,0 +1,56 @@
+{
+  "surgical_plans": {},
+  "reasoning_context": {
+    "current_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+    "failure_kind": "anchor_not_found",
+    "build_diagnostics": {
+      "target_file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+      "issues": [
+        {
+          "error_type": "api_or_signature_mismatch",
+          "suggested_action": "replan_and_regenerate_with_api_compatibility",
+          "compiler_errors": [
+            "/repo/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java:62: error: cannot find symbol",
+            "/repo/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java:62: error: cannot find symbol"
+          ]
+        }
+      ],
+      "failed_locations": [
+        {
+          "file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+          "line": 62
+        },
+        {
+          "file": "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java",
+          "line": 62
+        }
+      ],
+      "symbol_errors": [
+        {
+          "kind": "method",
+          "name": "value"
+        },
+        {
+          "kind": "method",
+          "name": "value"
+        }
+      ],
+      "signature_errors": [],
+      "primary_failed_symbol": "value",
+      "raw_error_preview": "Build failed: API/signature mismatch in generated patch against target branch. Compiler errors: /repo/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java:62: error: cannot find symbol | /repo/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java:62: error: cannot find symbol"
+    },
+    "side_files": [],
+    "iteration": 1,
+    "surgical_ops": []
+  },
+  "reasoning_iterations": 1,
+  "token_usage": {
+    "input_tokens": 181372,
+    "output_tokens": 1043,
+    "total_tokens": 182415,
+    "estimated": false,
+    "sources": [
+      "reasoning_architect.react.aggregate_usage"
+    ]
+  }
+}

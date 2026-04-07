@@ -4,6 +4,15 @@ from unidiff import PatchSet
 import io
 
 
+def _normalize_patch_path(path: str | None) -> str:
+    p = (path or "").strip().replace("\\", "/").lstrip("/")
+    while p.startswith("a/") or p.startswith("b/"):
+        p = p[2:]
+    if p == "dev/null":
+        return ""
+    return p
+
+
 @dataclass
 class FileChange:
     file_path: str
@@ -52,7 +61,7 @@ class PatchAnalyzer:
                 change_type = "RENAMED"
                 source_file = getattr(patched_file, "source_file", None)
                 if source_file:
-                    previous_file_path = source_file.lstrip("a/").lstrip("b/")
+                    previous_file_path = _normalize_patch_path(source_file)
 
             added_lines = []
             removed_lines = []
@@ -64,7 +73,15 @@ class PatchAnalyzer:
                     elif line.is_removed:
                         removed_lines.append(line.value.strip())
 
-            file_path = patched_file.path
+            file_path = _normalize_patch_path(patched_file.path)
+
+            # Some synthetic diffs can look like renames due to malformed
+            # a/a/... or b/b/... prefixes. If normalized paths are equal,
+            # treat as MODIFIED to avoid false structural classification.
+            if change_type == "RENAMED" and previous_file_path == file_path:
+                change_type = "MODIFIED"
+                previous_file_path = None
+
             is_test_file = self._is_test_file(file_path)
 
             # Skip test file changes if with_test_changes is False
@@ -112,9 +129,7 @@ class PatchAnalyzer:
         result: dict[str, list[str]] = {}
 
         for patched_file in patch_set:
-            file_path = patched_file.path
-            # Strip a/ and b/ prefixes from unified diff notation
-            file_path = file_path.lstrip("a/").lstrip("b/")
+            file_path = _normalize_patch_path(patched_file.path)
 
             # Skip test files if with_test_changes is False
             if not with_test_changes and self._is_test_file(file_path):
@@ -167,7 +182,7 @@ class PatchAnalyzer:
 
         for patched_file in patch_set:
             # For renames, path is the new path, source_file contains the old path
-            file_path = patched_file.path
+            file_path = _normalize_patch_path(patched_file.path)
             is_test = self._is_test_file(file_path)
 
             # Skip test files if with_test_changes is False
@@ -192,9 +207,13 @@ class PatchAnalyzer:
                 # Extract old path from source_file (which has a/ prefix)
                 source_file = getattr(patched_file, "source_file", None)
                 if source_file:
-                    old_path = source_file.lstrip("a/").lstrip("b/")
+                    old_path = _normalize_patch_path(source_file)
                 else:
                     old_path = file_path
+
+                if old_path == new_path:
+                    change_type = "MODIFIED"
+                    new_path = None
 
             result.append(
                 {
