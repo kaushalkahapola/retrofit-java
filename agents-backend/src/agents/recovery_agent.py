@@ -104,8 +104,8 @@ The TARGET repository is older and has different code structure, constructors, f
 2. Prefer small, precise edits using exact matching anchors from the target (max ~50 lines per edit).
 3. Avoid no-op edits, comment-only changes, or unnecessary modifications.
 4. Never use placeholder text like "// ... omitted for brevity" in new_string — write real code.
-5. After calling recovery_done the first time you will be asked to self-review. Re-read each
-   edited file, verify intent coverage, then call recovery_done again to finalize.
+5. After calling recovery_done the first time you will be asked to self-review. Use grep or
+   get_class_context to verify intent coverage, then call recovery_done again to finalize.
 6. Use apply_edit and recovery_done — do NOT call submit_recovery_plan.
 </rules>
 
@@ -114,10 +114,12 @@ A) Read <deterministic_recovery_brief> and <impact_obligations> first.
 B) Summarize required adaptation and why it is needed.
 C) Extract the main intent from the <mainline_patch>.
 D) Examine <target_files> for actual signatures, declarations, and structure.
+   For anything not in <target_files>, use grep (find a method/symbol) or
+   get_class_context (get class skeleton). Avoid read_file on files already shown.
 E) Compare mainline intent vs. target's current code.
 F) Decide each obligation as edited or verified_no_change, with evidence.
 G) Build adapted edits: use old_string from target, new_string reflecting the intended change.
-H) Submit the plan.
+H) Apply edits and call recovery_done.
 </analysis_steps>
 
 <thinking_protocol>
@@ -150,7 +152,8 @@ If the mainline patch adds parameters to a constructor that looks different in t
 - Explicitly handle all obligations: either edit the file or call mark_no_change with a reason.
 - Prioritize files in <retry_scope>.
 - After completing all edits, call recovery_done once. You will receive a self-review prompt.
-  Re-read each edited file, fix any issues, then call recovery_done again to finalize.
+  Verify edits (use grep or get_class_context — NOT read_file on files already in context),
+  fix any issues, then call recovery_done again to finalize.
 </completion_rules>
 
 <deterministic_recovery_brief>
@@ -429,6 +432,42 @@ def _extract_modified_methods_from_patch(patch_diff: str, rel_path: str) -> list
     return methods
 
 
+def _extract_added_methods_from_patch(patch_diff: str, rel_path: str) -> list[str]:
+    """Return method names that the patch *adds* (appear only on '+' lines, not '-' lines).
+
+    A method is considered newly introduced if its declaration appears in '+' lines
+    but NOT in any '-' line in the same file section of the diff.
+    """
+    _SKIP = {"if", "for", "while", "switch", "catch", "return", "new"}
+    _METHOD_RE = re.compile(
+        r"(?:(?:public|private|protected|static|final|synchronized|abstract|default|native)\s+)+"
+        r"[\w<>\[\],\s]+?\s+(\w+)\s*\("
+    )
+    added: set[str] = set()
+    removed: set[str] = set()
+    in_file = False
+    for line in patch_diff.splitlines():
+        if line.startswith("diff --git"):
+            in_file = rel_path in line or rel_path.rsplit("/", 1)[-1] in line
+            continue
+        if not in_file:
+            continue
+        if line.startswith("+") and not line.startswith("+++"):
+            mm = _METHOD_RE.search(line)
+            if mm:
+                name = str(mm.group(1) or "")
+                if name and name not in _SKIP:
+                    added.add(name)
+        elif line.startswith("-") and not line.startswith("---"):
+            mm = _METHOD_RE.search(line)
+            if mm:
+                name = str(mm.group(1) or "")
+                if name and name not in _SKIP:
+                    removed.add(name)
+    # Truly new = appears in added lines but never in removed lines
+    return [m for m in added if m not in removed]
+
+
 def _verify_and_remap_obligations(
     state: AgentState,
     obligations: list[dict[str, Any]],
@@ -512,11 +551,25 @@ def _verify_and_remap_obligations(
             matches = []
 
         if not matches:
-            # Method not found anywhere — keep obligation as-is but flag it
-            ob2 = dict(ob)
-            ob2["_verification"] = f"absent_methods_not_found_in_repo:{absent_methods}"
-            remapped.append(ob2)
-            print(f"[Recovery] {search_method} not found anywhere in target repo — keeping obligation as-is")
+            # Distinguish: is the symbol genuinely absent from the target, or is it
+            # being *introduced* by this patch (i.e. it appears only on '+' lines in the diff)?
+            patch_added_methods = _extract_added_methods_from_patch(patch_diff, rel)
+            must_insert = [m for m in absent_methods if m in patch_added_methods]
+            if must_insert:
+                # Symbol is introduced by the patch — obligation is to INSERT it, not remap.
+                ob2 = dict(ob)
+                ob2["_verification"] = f"must_insert:{must_insert}"
+                remapped.append(ob2)
+                print(
+                    f"[Recovery] {must_insert} introduced by patch (absent from target as expected) "
+                    f"— obligation tagged must_insert"
+                )
+            else:
+                # Method not found anywhere — keep obligation as-is but flag it
+                ob2 = dict(ob)
+                ob2["_verification"] = f"absent_methods_not_found_in_repo:{absent_methods}"
+                remapped.append(ob2)
+                print(f"[Recovery] {search_method} not found anywhere in target repo — keeping obligation as-is")
             continue
 
         # Find the best candidate: prefer files in the same package directory
@@ -948,6 +1001,12 @@ class RecoveryPlanToolkit:
             return "ERROR: target_file is required"
         if not old_string and edit_type not in {"insert_after", "insert_before"}:
             return "ERROR: old_string is required for replace/delete"
+        if not old_string and edit_type in {"insert_after", "insert_before"}:
+            return (
+                f"ERROR: old_string is required for {edit_type} — provide the exact "
+                "verbatim line(s) from the target file to use as the insertion anchor. "
+                "Read the file first and copy a unique nearby line into old_string."
+            )
 
         # Guard: reject LLM placeholder bodies that would corrupt the file.
         _PLACEHOLDER_PATTERNS = [
@@ -1011,10 +1070,65 @@ class RecoveryPlanToolkit:
             return f"ERROR: apply_edit crashed: {exc}"
 
         if not ok:
+            # Wrong-file detection: when the anchor text isn't in target_file,
+            # check whether it actually lives in a DIFFERENT file we know about
+            # (preloaded cache + required patch files). This catches the common
+            # LLM confusion where it uses an anchor from mainline_patch for
+            # fileA but sets target_file to fileB. Without this nudge, the
+            # agent loops on `not_found_multiline` until round budget exhausts.
+            suggestion = ""
+            try:
+                anchor = (old_string or "").strip()
+                # Use the first distinctive non-empty line as the search key;
+                # fall back to the first ~200 chars if the first line is too
+                # generic (e.g. a lone brace).
+                first_line = ""
+                for ln in anchor.splitlines():
+                    s = ln.strip()
+                    if len(s) >= 15 and not s.startswith(("//", "/*", "*")):
+                        first_line = s
+                        break
+                key = first_line or anchor[:200]
+                if key and len(key) >= 10:
+                    candidates: list[str] = []
+                    # Search preloaded cache first (cheap, in-memory)
+                    cache = getattr(self, "_preloaded_cache", None) or {}
+                    for other_rel, other_content in cache.items():
+                        if other_rel == rel:
+                            continue
+                        if key in other_content:
+                            candidates.append(other_rel)
+                    # If cache miss, search other required_patch_files on disk
+                    if not candidates:
+                        required = getattr(self, "_required_patch_files", None) or []
+                        for other_rel in required:
+                            if other_rel == rel or other_rel in cache:
+                                continue
+                            try:
+                                abs_other = os.path.join(self.target_repo_path, other_rel)
+                                with open(abs_other, "r", encoding="utf-8", errors="replace") as _fh:
+                                    if key in _fh.read():
+                                        candidates.append(other_rel)
+                            except Exception:
+                                pass
+                    if len(candidates) == 1:
+                        suggestion = (
+                            f" WRONG FILE: the anchor text was NOT found in "
+                            f"'{rel}', but it IS present in '{candidates[0]}'. "
+                            f"Retry apply_edit with target_file='{candidates[0]}'."
+                        )
+                    elif len(candidates) > 1:
+                        suggestion = (
+                            f" WRONG FILE: anchor not in '{rel}' but found in: "
+                            f"{candidates}. Pick the correct one and retry."
+                        )
+            except Exception:
+                pass  # best-effort hint; never block the error path
             return (
-                f"FAILED: {msg} (reason={reason}). "
-                f"Tip: read the target file and copy old_string VERBATIM "
-                f"from the on-disk content; do NOT use mainline `-` lines."
+                f"FAILED: {msg} (reason={reason})."
+                + suggestion
+                + " Tip: read the target file and copy old_string VERBATIM "
+                "from the on-disk content; do NOT use mainline `-` lines."
             )
 
         self._applied_edits.append(
@@ -1029,6 +1143,15 @@ class RecoveryPlanToolkit:
         )
         # If model previously claimed no_change for this file, clear it.
         self._direct_no_change_files.discard(rel)
+        # Fix: refresh preloaded_cache so subsequent read_file calls in the same
+        # loop see the post-edit content rather than the stale pre-edit snapshot.
+        if hasattr(self, "_preloaded_cache") and self._preloaded_cache is not None and rel in self._preloaded_cache:
+            abs_path = os.path.join(self.target_repo_path, rel)
+            try:
+                with open(abs_path, "r", encoding="utf-8", errors="replace") as _fh:
+                    self._preloaded_cache[rel] = _fh.read()
+            except Exception:
+                pass  # non-fatal; stale cache is better than a crash
         print(f"[Recovery] apply_edit OK: {rel} ({reason})")
         return f"SUCCESS: {msg} (resolution={reason})"
 
@@ -1065,8 +1188,8 @@ class RecoveryPlanToolkit:
                     f"WARNING: mark_no_change rejected for '{rel}' — the mainline "
                     f"patch adds {added_lines} line(s) to this file. mark_no_change "
                     f"is only valid if the target ALREADY contains the equivalent of "
-                    f"every addition. Read the target file with read_file, compare "
-                    f"line-by-line against the patch, then either:\n"
+                    f"every addition. Use grep or get_class_context to verify the target "
+                    f"already contains the equivalent code, then either:\n"
                     f"  (a) call apply_edit for the missing pieces, OR\n"
                     f"  (b) call mark_no_change again with reason starting "
                     f'"verified: <evidence>" to override this guard.'
@@ -1108,7 +1231,8 @@ class RecoveryPlanToolkit:
             return (
                 f"SELF_REVIEW: {len(self._applied_edits)} edit(s) applied to "
                 f"{sorted(edited)} file(s). "
-                "Now re-read each edited file with read_file and verify:\n"
+                "Now verify each edited file — use grep or get_class_context for targeted checks "
+                "(avoid re-reading whole files you already have in context):\n"
                 "1. Every mainline intent is implemented (no missing methods, fields, or imports).\n"
                 "2. No placeholder comments ('omitted for brevity', etc.) remain.\n"
                 "3. No surrounding code was accidentally destroyed.\n"
@@ -1228,17 +1352,38 @@ class RecoveryPlanToolkit:
         """Run multiple independent tool tasks in one call.
 
         Supported task kinds: read_file, read_mainline_file, grep, glob, bash,
-        summarize_failure, todoread.
+        get_class_context, summarize_failure, todoread.
+
+        Each task can be in either of two formats:
+          {"tool": "read_file", "args": {"file_path": "..."}}   ← preferred
+          {"read_file": {"file_path": "..."}}                   ← shorthand also accepted
         """
         if not isinstance(tasks, list) or not tasks:
             return "ERROR: tasks must be a non-empty list"
+
+        _KNOWN_TOOLS = {
+            "read_file", "read_mainline_file", "grep", "glob", "bash",
+            "get_class_context", "summarize_failure", "todoread",
+        }
 
         max_tasks = 8
         selected = tasks[:max_tasks]
 
         def _run_one(item: dict[str, Any]) -> dict[str, Any]:
-            kind = str((item or {}).get("tool") or "").strip()
-            args = (item or {}).get("args") or {}
+            item = item or {}
+            kind = str(item.get("tool") or "").strip()
+            args = item.get("args") or {}
+
+            # Accept shorthand format: {"get_class_context": {"file_path": "..."}}
+            # where the tool name is used as the dict key instead of "tool".
+            if not kind:
+                for k, v in item.items():
+                    if k in _KNOWN_TOOLS:
+                        kind = k
+                        if isinstance(v, dict):
+                            args = v
+                        break
+
             if not isinstance(args, dict):
                 args = {}
             try:
@@ -1252,12 +1397,17 @@ class RecoveryPlanToolkit:
                     res = self.glob(**args)
                 elif kind == "bash":
                     res = self.bash(**args)
+                elif kind == "get_class_context":
+                    res = self.get_class_context(**args)
                 elif kind == "summarize_failure":
                     res = self.summarize_failure()
                 elif kind == "todoread":
                     res = self.todoread()
                 else:
-                    res = f"ERROR: unsupported tool '{kind}' in batch_tools"
+                    res = (
+                        f"ERROR: unsupported tool '{kind}' in batch_tools. "
+                        f"Supported: {sorted(_KNOWN_TOOLS)}"
+                    )
             except Exception as e:
                 res = f"ERROR: {kind} failed: {e}"
             return {"tool": kind, "result": res}
@@ -2047,7 +2197,10 @@ Do NOT submit any recovery plan. Stay concise."""
                 name="batch_tools",
                 description=(
                     "Run multiple independent tool tasks in parallel in a single call. "
-                    "Use this to reduce round-trips and token overhead."
+                    "Use this to reduce round-trips and token overhead. "
+                    "Supported tools: read_file, read_mainline_file, grep, glob, bash, get_class_context, summarize_failure, todoread. "
+                    "Each task must be {\"tool\": \"<name>\", \"args\": {...}} "
+                    "OR shorthand {\"<tool_name>\": {<args>}}."
                 ),
             ),
             StructuredTool.from_function(
@@ -2934,10 +3087,24 @@ async def _run_parallel_tool_loop(
             if len(recent_tool_calls) > 32:
                 recent_tool_calls = recent_tool_calls[-32:]
 
-            stagnating, reason = _detect_stagnation(recent_tool_calls[-12:], limit=3)
+            stagnating, reason = _detect_stagnation(recent_tool_calls[-12:], limit=5)
             if stagnating and round_num < max_investigation_rounds:
-                print(f"[Recovery] Stagnation detected; forcing submit early: {reason}")
-                max_investigation_rounds = round_num
+                print(f"[Recovery] Stagnation detected; injecting nudge: {reason}")
+                # Inject a hint to break the loop instead of killing remaining rounds.
+                # Setting max_investigation_rounds = round_num would force-submit
+                # immediately, cutting off a capable model before it can self-correct.
+                messages = messages + [
+                    HumanMessage(
+                        content=(
+                            "<stagnation_warning>You have called the same tool with the "
+                            "same arguments multiple times without progress. Try a "
+                            "different approach: use grep to locate the exact text in the "
+                            "file, pick a different (shorter, more unique) old_string anchor, "
+                            "or target a different location. "
+                            "Do NOT repeat the failing call.</stagnation_warning>"
+                        )
+                    )
+                ]
 
             # Special case: if the last tool result was a size-cap rejection
             # and the model is repeating the same call, inject a concrete
@@ -3188,6 +3355,11 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
         )
         preloaded_file_parts.append(f'<file path="{rel}">\n{numbered}\n</file>')
 
+    # Wire the live cache dict into the toolkit so apply_edit can refresh it
+    # on each successful edit. This prevents subsequent read_file calls from
+    # returning stale pre-edit content within the same tool loop.
+    toolkit._preloaded_cache = preloaded_cache
+
     # ── Per-hunk snippets from structural_locator mappings ───────────────────
     # Give the agent laser-focused context at each mapped location so it can
     # copy exact old_string anchors without guessing line numbers.
@@ -3276,14 +3448,15 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
     )
     if all_patch_files_preloaded:
         read_files_note = (
-            "NOTE: All primary target files are already loaded in <target_files> above. "
-            "Use the preloaded content for the listed files. "
-            "Use grep/get_class_context/read_file to explore connected files "
-            "(superclasses, callers, etc.) before editing."
+            "NOTE: All primary target files are already in <target_files> above — "
+            "do NOT call read_file on them again, you already have the full content. "
+            "Use grep to find specific lines/methods, get_class_context for structure overview, "
+            "or read_file ONLY for files NOT listed in <target_files>."
         )
     else:
         read_files_note = (
-            "Use read_file or other tools to fetch file content needed for anchors."
+            "Use grep or get_class_context first for targeted lookups. "
+            "Use read_file only when you need full content of a file not yet shown."
         )
 
     task_xml = (
@@ -3297,6 +3470,11 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
         "   - new_string = the adapted replacement\n"
         "   - edit_type = 'replace' (preferred), 'insert_before', 'insert_after', or 'delete'\n"
         "   - target_file = the target repo relative path\n"
+        "   IMPORTANT — mapped locations: when a hunk has a mapped target location shown in\n"
+        "   <hunk_snippets>, your edit for that hunk MUST anchor inside that snippet's line range.\n"
+        "   Do NOT introduce a new top-level method as a substitute for modifying the mapped location.\n"
+        "   If the mainline patch modifies code inside an existing method, edit that method in the target;\n"
+        "   only add a new method when the mainline patch's '+' lines define one that is truly absent.\n"
         "4. Submit your COMPLETE plan in a SINGLE call to submit_recovery_plan:\n"
         "   {\n"
         '     "investigation_evidence": [{"kind":"...","details":"..."}],\n'
@@ -3340,7 +3518,7 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
     # that moved to a superclass in the target branch.
     # submit_recovery_plan is always excluded: the direct-apply path is the contract.
     exclude_tools = {"submit_recovery_plan"}
-    max_inv_rounds = 12  # allow many apply_edit + investigation rounds
+    max_inv_rounds = 20  # allow many apply_edit + investigation rounds
 
     print("Recovery Agent: starting parallel batch tool loop...")
     print(

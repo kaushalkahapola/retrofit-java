@@ -764,13 +764,11 @@ def _apply_edit_deterministically(
                             payload = "\n" + payload
 
         if payload is None:
-            return (
-                False,
-                "insert_payload_derivation_failed",
-                resolved_old,
-                "",
-                "payload_missing",
-            )
+            # Final fallback: model passed new_string as the pure insertion content
+            # without embedding the anchor — the natural, intuitive usage.
+            # resolved_old was already confirmed present in the file, so we know
+            # where to anchor; treat new_string as the complete payload.
+            payload = new_string
 
         if edit_type == "insert_before" and payload and not payload.endswith("\n"):
             payload += "\n"

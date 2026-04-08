@@ -27,7 +27,7 @@
 ### server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 
 - Developer hunks: 6
-- Generated hunks: 1
+- Generated hunks: 0
 
 #### Hunk 1
 
@@ -47,99 +47,21 @@ Developer
 
 Generated
 ```diff
-@@ -103,6 +103,39 @@
-         this.maxBytes = Math.max(Paging.MAX_PAGE_BYTES / downstreams.size(), 2 * 1024 * 1024);
-     }
- 
-+    private void forwardFailure(@Nullable final BatchIterator<?> it, final Throwable f) {
-+        Throwable failure = SQLExceptions.unwrap(f); // make sure it's streamable
-+        AtomicInteger numActiveRequests = new AtomicInteger(downstreams.size());
-+        var builder = new DistributedResultRequest.Builder(jobId, targetPhaseId, inputId, bucketIdx, failure, false);
-+        for (int i = 0; i < downstreams.size(); i++) {
-+            Downstream downstream = downstreams.get(i);
-+            if (downstream.needsMoreData == false) {
-+                countdownAndMaybeCloseIt(numActiveRequests, it);
-+            } else {
-+                if (traceEnabled) {
-+                    LOGGER.trace("forwardFailure targetNode={} jobId={} targetPhase={}/{} bucket={} failure={}", downstream.nodeId, jobId, targetPhaseId, inputId, bucketIdx, failure);
-+                }
-+                distributedResultAction
-+                    .execute(builder.build(downstream.nodeId))
-+                    .whenComplete(
-+                        (resp, t) -> {
-+                            if (t == null) {
-+                                downstream.needsMoreData = false;
-+                                countdownAndMaybeCloseIt(numActiveRequests, it);
-+                            } else {
-+                                if (traceEnabled) {
-+                                    LOGGER.trace(
-+                                        "Error sending failure to downstream={} jobId={} targetPhase={}/{} bucket={} failure={}", downstream.nodeId, jobId, targetPhaseId, inputId, bucketIdx, t
-+                                    );
-+                                }
-+                                countdownAndMaybeCloseIt(numActiveRequests, it);
-+                            }
-+                        }
-+                    );
-+            }
-+        }
-+    }
-+
-     @Override
-     public void accept(BatchIterator<Row> iterator, @Nullable Throwable failure) {
-         if (failure == null) {
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,9 +1,40 @@-@@ -21,6 +21,8 @@
-+@@ -103,6 +103,39 @@
-+         this.maxBytes = Math.max(Paging.MAX_PAGE_BYTES / downstreams.size(), 2 * 1024 * 1024);
-+     }
-  
+--- developer+++ generated@@ -1,9 +1 @@-@@ -21,6 +21,8 @@
+- 
 - package io.crate.execution.engine.distribution;
 - 
 -+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-++    private void forwardFailure(@Nullable final BatchIterator<?> it, final Throwable f) {
-++        Throwable failure = SQLExceptions.unwrap(f); // make sure it's streamable
-++        AtomicInteger numActiveRequests = new AtomicInteger(downstreams.size());
-++        var builder = new DistributedResultRequest.Builder(jobId, targetPhaseId, inputId, bucketIdx, failure, false);
-++        for (int i = 0; i < downstreams.size(); i++) {
-++            Downstream downstream = downstreams.get(i);
-++            if (downstream.needsMoreData == false) {
-++                countdownAndMaybeCloseIt(numActiveRequests, it);
-++            } else {
-++                if (traceEnabled) {
-++                    LOGGER.trace("forwardFailure targetNode={} jobId={} targetPhase={}/{} bucket={} failure={}", downstream.nodeId, jobId, targetPhaseId, inputId, bucketIdx, failure);
-++                }
-++                distributedResultAction
-++                    .execute(builder.build(downstream.nodeId))
-++                    .whenComplete(
-++                        (resp, t) -> {
-++                            if (t == null) {
-++                                downstream.needsMoreData = false;
-++                                countdownAndMaybeCloseIt(numActiveRequests, it);
-++                            } else {
-++                                if (traceEnabled) {
-++                                    LOGGER.trace(
-++                                        "Error sending failure to downstream={} jobId={} targetPhase={}/{} bucket={} failure={}", downstream.nodeId, jobId, targetPhaseId, inputId, bucketIdx, t
-++                                    );
-++                                }
-++                                countdownAndMaybeCloseIt(numActiveRequests, it);
-++                            }
-++                        }
-++                    );
-++            }
-++        }
-++    }
- +
+-+
 - import java.util.ArrayList;
 - import java.util.Collection;
 - import java.util.List;
-+     @Override
-+     public void accept(BatchIterator<Row> iterator, @Nullable Throwable failure) {
-+         if (failure == null) {
-
++*No hunk*
 ```
 
 #### Hunk 2
@@ -337,7 +259,7 @@ Developer -> Generated (Unified Diff)
 ### server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 
 - Developer hunks: 4
-- Generated hunks: 1
+- Generated hunks: 0
 
 #### Hunk 1
 
@@ -358,20 +280,12 @@ Developer
 
 Generated
 ```diff
-@@ -130,6 +130,6 @@
-         ArrayList<String> server = new ArrayList<>(nodeIds);
-         server.sort(null);
-         int nodeId = Math.max(server.indexOf(clusterService.localNode().getId()), 0);
--        return nodeId | (phaseInputId << 24);
-+        return (phaseInputId << 24) | nodeId;
-     }
- }
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,10 +1,8 @@-@@ -37,6 +37,9 @@
+--- developer+++ generated@@ -1,10 +1 @@-@@ -37,6 +37,9 @@
 - import io.crate.execution.dsl.phases.ExecutionPhases;
 - import io.crate.execution.dsl.phases.NodeOperation;
 - import io.crate.execution.jobs.PageBucketReceiver;
@@ -381,15 +295,7 @@ Developer -> Generated (Unified Diff)
 - import io.crate.execution.support.ActionExecutor;
 - import io.crate.execution.support.NodeRequest;
 - import io.crate.planner.distribution.DistributionInfo;
-+@@ -130,6 +130,6 @@
-+         ArrayList<String> server = new ArrayList<>(nodeIds);
-+         server.sort(null);
-+         int nodeId = Math.max(server.indexOf(clusterService.localNode().getId()), 0);
-+-        return nodeId | (phaseInputId << 24);
-++        return (phaseInputId << 24) | nodeId;
-+     }
-+ }
-
++*No hunk*
 ```
 
 #### Hunk 2
@@ -716,123 +622,11 @@ Developer -> Generated (Unified Diff)
 
 ## Full Generated Patch (Agent-Only, code-only)
 ```diff
-diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-index 3dc1921a76..6c096ea758 100644
---- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-@@ -130,6 +130,6 @@ public class DistributingConsumerFactory {
-         ArrayList<String> server = new ArrayList<>(nodeIds);
-         server.sort(null);
-         int nodeId = Math.max(server.indexOf(clusterService.localNode().getId()), 0);
--        return nodeId | (phaseInputId << 24);
-+        return (phaseInputId << 24) | nodeId;
-     }
- }
-diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-index 12171a4a54..85a64d1adf 100644
---- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-@@ -103,6 +103,39 @@ public class DistributingConsumer implements RowConsumer {
-         this.maxBytes = Math.max(Paging.MAX_PAGE_BYTES / downstreams.size(), 2 * 1024 * 1024);
-     }
- 
-+    private void forwardFailure(@Nullable final BatchIterator<?> it, final Throwable f) {
-+        Throwable failure = SQLExceptions.unwrap(f); // make sure it's streamable
-+        AtomicInteger numActiveRequests = new AtomicInteger(downstreams.size());
-+        var builder = new DistributedResultRequest.Builder(jobId, targetPhaseId, inputId, bucketIdx, failure, false);
-+        for (int i = 0; i < downstreams.size(); i++) {
-+            Downstream downstream = downstreams.get(i);
-+            if (downstream.needsMoreData == false) {
-+                countdownAndMaybeCloseIt(numActiveRequests, it);
-+            } else {
-+                if (traceEnabled) {
-+                    LOGGER.trace("forwardFailure targetNode={} jobId={} targetPhase={}/{} bucket={} failure={}", downstream.nodeId, jobId, targetPhaseId, inputId, bucketIdx, failure);
-+                }
-+                distributedResultAction
-+                    .execute(builder.build(downstream.nodeId))
-+                    .whenComplete(
-+                        (resp, t) -> {
-+                            if (t == null) {
-+                                downstream.needsMoreData = false;
-+                                countdownAndMaybeCloseIt(numActiveRequests, it);
-+                            } else {
-+                                if (traceEnabled) {
-+                                    LOGGER.trace(
-+                                        "Error sending failure to downstream={} jobId={} targetPhase={}/{} bucket={} failure={}", downstream.nodeId, jobId, targetPhaseId, inputId, bucketIdx, t
-+                                    );
-+                                }
-+                                countdownAndMaybeCloseIt(numActiveRequests, it);
-+                            }
-+                        }
-+                    );
-+            }
-+        }
-+    }
-+
-     @Override
-     public void accept(BatchIterator<Row> iterator, @Nullable Throwable failure) {
-         if (failure == null) {
 
 ```
 
 ## Full Generated Patch (Final Effective, code-only)
 ```diff
-diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-index 3dc1921a76..6c096ea758 100644
---- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-@@ -130,6 +130,6 @@ public class DistributingConsumerFactory {
-         ArrayList<String> server = new ArrayList<>(nodeIds);
-         server.sort(null);
-         int nodeId = Math.max(server.indexOf(clusterService.localNode().getId()), 0);
--        return nodeId | (phaseInputId << 24);
-+        return (phaseInputId << 24) | nodeId;
-     }
- }
-diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-index 12171a4a54..85a64d1adf 100644
---- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-@@ -103,6 +103,39 @@ public class DistributingConsumer implements RowConsumer {
-         this.maxBytes = Math.max(Paging.MAX_PAGE_BYTES / downstreams.size(), 2 * 1024 * 1024);
-     }
- 
-+    private void forwardFailure(@Nullable final BatchIterator<?> it, final Throwable f) {
-+        Throwable failure = SQLExceptions.unwrap(f); // make sure it's streamable
-+        AtomicInteger numActiveRequests = new AtomicInteger(downstreams.size());
-+        var builder = new DistributedResultRequest.Builder(jobId, targetPhaseId, inputId, bucketIdx, failure, false);
-+        for (int i = 0; i < downstreams.size(); i++) {
-+            Downstream downstream = downstreams.get(i);
-+            if (downstream.needsMoreData == false) {
-+                countdownAndMaybeCloseIt(numActiveRequests, it);
-+            } else {
-+                if (traceEnabled) {
-+                    LOGGER.trace("forwardFailure targetNode={} jobId={} targetPhase={}/{} bucket={} failure={}", downstream.nodeId, jobId, targetPhaseId, inputId, bucketIdx, failure);
-+                }
-+                distributedResultAction
-+                    .execute(builder.build(downstream.nodeId))
-+                    .whenComplete(
-+                        (resp, t) -> {
-+                            if (t == null) {
-+                                downstream.needsMoreData = false;
-+                                countdownAndMaybeCloseIt(numActiveRequests, it);
-+                            } else {
-+                                if (traceEnabled) {
-+                                    LOGGER.trace(
-+                                        "Error sending failure to downstream={} jobId={} targetPhase={}/{} bucket={} failure={}", downstream.nodeId, jobId, targetPhaseId, inputId, bucketIdx, t
-+                                    );
-+                                }
-+                                countdownAndMaybeCloseIt(numActiveRequests, it);
-+                            }
-+                        }
-+                    );
-+            }
-+        }
-+    }
-+
-     @Override
-     public void accept(BatchIterator<Row> iterator, @Nullable Throwable failure) {
-         if (failure == null) {
 
 ```
 ## Full Developer Backport Patch (full commit diff)

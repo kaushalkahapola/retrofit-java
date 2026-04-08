@@ -1,17 +1,25 @@
 {
   "adapted_code_hunks": [
     {
-      "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-      "mainline_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java\nindex 3dc1921a76..6c096ea758 100644\n--- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java\n+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java\n@@ -130,6 +130,6 @@ public class DistributingConsumerFactory {\n         ArrayList<String> server = new ArrayList<>(nodeIds);\n         server.sort(null);\n         int nodeId = Math.max(server.indexOf(clusterService.localNode().getId()), 0);\n-        return nodeId | (phaseInputId << 24);\n+        return (phaseInputId << 24) | nodeId;\n     }\n }\n",
+      "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+      "mainline_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java\nindex 12171a4a54..8db7cc4286 100644\n--- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java\n+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java\n@@ -21,6 +21,7 @@\n \n package io.crate.execution.engine.distribution;\n \n+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;\\n\n import java.util.ArrayList;\n import java.util.Collection;\n import java.util.List;\n@@ -40,6 +41,7 @@ import io.crate.data.Paging;\n import io.crate.data.Row;\n import io.crate.data.RowConsumer;\n import io.crate.exceptions.SQLExceptions;\n+import io.crate.execution.jobs.kill.KillJobsNodeRequest;\\nimport io.crate.execution.jobs.kill.KillResponse;\n import io.crate.execution.support.ActionExecutor;\n import io.crate.execution.support.NodeRequest;\n \n@@ -73,17 +75,20 @@ public class DistributingConsumer implements RowConsumer {\n     @VisibleForTesting\n     final MultiBucketBuilder multiBucketBuilder;\n \n+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\\n    private final String localNodeId;\\n\n     private volatile Throwable failure;\n \n     public DistributingConsumer(Executor responseExecutor,\n-                                UUID jobId,\n-                                MultiBucketBuilder multiBucketBuilder,\n-                                int targetPhaseId,\n-                                byte inputId,\n-                                int bucketIdx,\n-                                Collection<String> downstreamNodeIds,\n-                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n-                                int pageSize) {\n+                                 UUID jobId,\n+                                 MultiBucketBuilder multiBucketBuilder,\n+                                 int targetPhaseId,\n+                                 byte inputId,\n+                                 int bucketIdx,\n+                                 Collection<String> downstreamNodeIds,\n+                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n+                                 ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n+                                 String localNodeId,\n+                                 int pageSize) {\n         this.traceEnabled = LOGGER.isTraceEnabled();\n         this.responseExecutor = responseExecutor;\n         this.jobId = jobId;\n@@ -92,6 +97,8 @@ public class DistributingConsumer implements RowConsumer {\n         this.inputId = inputId;\n         this.bucketIdx = bucketIdx;\n         this.distributedResultAction = distributedResultAction;\n+        this.killNodeAction = killNodeAction;\n+        this.localNodeId = localNodeId;\n         this.pageSize = pageSize;\n         this.buckets = new StreamBucket[downstreamNodeIds.size()];\n         this.completionFuture = new CompletableFuture<>();\n",
       "insertion_line": 1,
       "intent_verified": true,
       "file_operation": "MODIFIED"
     },
     {
-      "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-      "mainline_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java\nindex 12171a4a54..85a64d1adf 100644\n--- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java\n+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java\n@@ -103,6 +103,39 @@ public class DistributingConsumer implements RowConsumer {\n         this.maxBytes = Math.max(Paging.MAX_PAGE_BYTES / downstreams.size(), 2 * 1024 * 1024);\n     }\n \n+    private void forwardFailure(@Nullable final BatchIterator<?> it, final Throwable f) {\n+        Throwable failure = SQLExceptions.unwrap(f); // make sure it's streamable\n+        AtomicInteger numActiveRequests = new AtomicInteger(downstreams.size());\n+        var builder = new DistributedResultRequest.Builder(jobId, targetPhaseId, inputId, bucketIdx, failure, false);\n+        for (int i = 0; i < downstreams.size(); i++) {\n+            Downstream downstream = downstreams.get(i);\n+            if (downstream.needsMoreData == false) {\n+                countdownAndMaybeCloseIt(numActiveRequests, it);\n+            } else {\n+                if (traceEnabled) {\n+                    LOGGER.trace(\"forwardFailure targetNode={} jobId={} targetPhase={}/{} bucket={} failure={}\", downstream.nodeId, jobId, targetPhaseId, inputId, bucketIdx, failure);\n+                }\n+                distributedResultAction\n+                    .execute(builder.build(downstream.nodeId))\n+                    .whenComplete(\n+                        (resp, t) -> {\n+                            if (t == null) {\n+                                downstream.needsMoreData = false;\n+                                countdownAndMaybeCloseIt(numActiveRequests, it);\n+                            } else {\n+                                if (traceEnabled) {\n+                                    LOGGER.trace(\n+                                        \"Error sending failure to downstream={} jobId={} targetPhase={}/{} bucket={} failure={}\", downstream.nodeId, jobId, targetPhaseId, inputId, bucketIdx, t\n+                                    );\n+                                }\n+                                countdownAndMaybeCloseIt(numActiveRequests, it);\n+                            }\n+                        }\n+                    );\n+            }\n+        }\n+    }\n+\n     @Override\n     public void accept(BatchIterator<Row> iterator, @Nullable Throwable failure) {\n         if (failure == null) {\n",
+      "target_file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+      "mainline_file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java\nindex 4d64814dd5..7988d3b457 100644\n--- a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java\n+++ b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java\n@@ -211,26 +211,33 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques\n              * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke\n              * a kill to make sure that doesn't happen.\n              */\n-            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n-                excludedNodeIds,\n-                List.of(request.jobId()),\n-                Role.CRATE_USER.name(),\n-                \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n-                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\"\n-            );\n-            killNodeAction\n-                .execute(killRequest)\n-                .whenComplete(\n-                    (resp, t) -> {\n-                        if (t != null) {\n-                            LOGGER.debug(\"Could not kill \" + request.jobId(), t);\n-                        }\n-                    }\n-                );\n+            String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n+                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";\n+            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n             return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));\n         }\n     }\n \n+    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n+                                     UUID jobId,\n+                                     String localNodeId,\n+                                     String reason) {\n+        List<String> excludedNodeIds = Collections.singletonList(localNodeId);\n+\n+        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n+            excludedNodeIds,\n+            List.of(jobId),\n+            Role.CRATE_USER.name(),\n+            reason\n+        );\n+        killNodeAction\n+            .execute(killRequest)\n+            .whenComplete((_, t) -> {\n+                if (t != null) {\n+                    LOGGER.debug(\"Could not kill \" + jobId, t);\n+                }\n+            });\n+    }\n     private static class SendResponsePageResultListener implements PageResultListener {\n         private final CompletableFuture<DistributedResultResponse> future = new CompletableFuture<>();\n \n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
+      "mainline_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java\nindex 3dc1921a76..32f20ce00d 100644\n--- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java\n+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java\n@@ -110,6 +110,8 @@ public class DistributingConsumerFactory {\n             bucketIdx,\n             nodeOperation.downstreamNodes(),\n             distributedResultAction,\n+            req -> node.client().execute(KillJobsNodeAction.INSTANCE, req),\n+            clusterService.localNode().getId(),\n             pageSize\n         );\n     }\n",
       "insertion_line": 1,
       "intent_verified": true,
       "file_operation": "MODIFIED"
@@ -21,20 +29,18 @@
   "recovery_applied_directly": true,
   "recovery_agent_mode": true,
   "recovery_agent_status": "ok",
-  "recovery_agent_summary": "Recovery Agent (direct-apply): applied 3 edit(s) to 2 file(s); 0 file(s) marked no_change.",
+  "recovery_agent_summary": "Recovery Agent (direct-apply): applied 8 edit(s) to 3 file(s); 0 file(s) marked no_change.",
   "recovery_brief": {
     "version": 1,
     "primary_mainline_file": "",
-    "primary_target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-    "failed_symbol": "ThreadPool",
+    "primary_target_file": "",
+    "failed_symbol": "",
     "diagnosis": {
-      "kind": "logic_moved",
-      "confidence": 0.55,
-      "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-      "failed_symbol": "ThreadPool",
-      "candidate_files": [
-        "extensions/jmx-monitoring/src/main/java/io/crate/beans/ThreadPools.java"
-      ],
+      "kind": "unknown",
+      "confidence": 0.0,
+      "target_file": "",
+      "failed_symbol": "",
+      "candidate_files": [],
       "candidate_methods": [],
       "old_signature": "",
       "new_signature": "",
@@ -42,195 +48,16 @@
       "side_files": [],
       "parent_class": "",
       "parent_file": "",
-      "suggested_strategy": "remap_to_candidate_file",
+      "suggested_strategy": "escalate_to_full_react",
       "evidence": [
-        "Symbol 'ThreadPool' not declared in server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java but found in: ['extensions/jmx-monitoring/src/main/java/io/crate/beans/ThreadPools.java']"
+        "No deterministic diagnosis found. Build error: Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors."
       ]
     },
-    "rulebook_decision": {
-      "action": "full_react",
-      "confidence": 0.3,
-      "override_target_file": "",
-      "override_target_method": "",
-      "additional_files": [],
-      "target_signature": "",
-      "param_adaptation_notes": "",
-      "new_anchor_file": "",
-      "new_anchor_line": 0,
-      "investigation_summary": "No deterministic diagnosis found. Build error: Build failed: API/signature mismatch in generated patch against target branch. Compiler errors: [ERROR] /repo/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java:[24] error: cannot find symbol | [ERROR] /repo/server/src"
-    },
+    "rulebook_decision": {},
     "api_drift_map": {},
-    "structured_failure": {
-      "raw_error": "--- Building code for 78c80d3 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/retrofit-java/temp_repo_storage/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] crate-libs-azure-testing                                           [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-copy-azure                                                   [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      [jar]\n[INFO] crate-jmx-monitoring                                               [jar]\n[INFO] jlink-jdk                                                        [jlink]\n[INFO] crate-app                                                          [jar]\n[INFO] crate-benchmarks                                                   [jar]\n[INFO] \n[INFO] Using the MultiThreadedBuilder implementation with a thread count of 12\n[INFO] \n[INFO] ---------------------------< io.crate:crate >---------------------------\n[INFO] Building crate 5.10.12                                            [1/26]\n[INFO]   from pom.xml\n[INFO] --------------------------------[ pom ]---------------------------------\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate ---\n[INFO] Deleting /repo/target\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate ---\n[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireMavenVersion passed\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ crate ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Begin to install JDK 23.0.2\n[INFO] Download OpenJDK23U-jdk_x64_linux_hotspot_23.0.2_7.tar.gz from https://github.com/adoptium/temurin23-binaries/releases/download/jdk-23.0.2%2B7/OpenJDK23U-jdk_x64_linux_hotspot_23.0.2_7.tar.gz\n[INFO] Extract OpenJDK23U-jdk_x64_linux_hotspot_23.0.2_7.tar.gz\n[INFO] JDK installed: /root/.m2/jdks/jdk-23.0.2+7\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/target/jacoco.exec\n[INFO] \n[INFO] --- forbiddenapis:3.8:check (default) @ crate ---\n[INFO] Skipping execution for packaging \"pom\"\n[INFO] \n[INFO] --- install:3.1.3:install (default-install) @ crate ---\n[INFO] Installing /repo/pom.xml to /root/.m2/repository/io/crate/crate/5.10.12/crate-5.10.12.pom\n[INFO] \n[INFO] \n[INFO] ---------------------< io.crate:crate-libs-shared >---------------------\n[INFO] ---------------------< io.crate:crate-libs-guice >----------------------\n[INFO] Building crate-libs-shared 5.10.12                                [2/26]\n[INFO] Building crate-libs-guice 5.10.12                                 [3/26]\n[INFO] \n[INFO]   from libs/guice/pom.xml\n[INFO]   from libs/shared/pom.xml\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] ---------------------< io.crate:crate-libs-pgwire >---------------------\n[INFO] \n[INFO] Building crate-libs-pgwire 5.10.12                                [4/26]\n[INFO]   from libs/pgwire/pom.xml\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] -------------------------< io.crate:jlink-jdk >-------------------------\n[INFO] Building jlink-jdk 5.10.12                                        [5/26]\n[INFO]   from jlink-jdk/pom.xml\n[INFO] -------------------------------[ jlink ]--------------------------------\n[WARNING] *****************************************************************\n[WARNING] * Your build is requesting parallel execution, but this         *\n[WARNING] * project contains the following plugin(s) that have goals not  *\n[WARNING] * marked as thread-safe to support parallel execution.          *\n[WARNING] * While this /may/ work fine, please look for plugin updates    *\n[WARNING] * and/or request plugins be made thread-safe.                   *\n[WARNING] * If reporting an issue, report it against the plugin in        *\n[WARNING] * question, not against Apache Maven.                           *\n[WARNING] *****************************************************************\n[WARNING] The following plugins are not marked as thread-safe in jlink-jdk:\n[WARNING]   org.apache.maven.plugins:maven-jlink-plugin:3.1.0\n[WARNING] \n[WARNING] Enable debug to see precisely which goals are not marked as thread-safe.\n[WARNING] *****************************************************************\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ jlink-jdk ---\n[INFO] Deleting /repo/jlink-jdk/target\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate-libs-guice ---\n[INFO] Deleting /repo/libs/guice/target\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate-libs-shared ---\n[INFO] Deleting /repo/libs/shared/target\n[INFO] \n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate-libs-guice ---\n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate-libs-shared ---\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ jlink-jdk ---\n[INFO] \n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ crate-libs-shared ---\n[INFO] --- checkstyle:3.6.0:check (validate) @ crate-libs-guice ---\n[INFO] \n[INFO] --- clean:3.4.0:clean (default-clean) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ jlink-jdk ---\n[INFO] Deleting /repo/libs/pgwire/target\n[INFO] \n[INFO] --- enforcer:3.5.0:enforce (enforce-maven) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- checkstyle:3.6.0:check (validate) @ crate-libs-pgwire ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ jlink-jdk ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ jlink-jdk ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/jlink-jdk/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ jlink-jdk ---\n[INFO] skip non existing resourceDirectory /repo/jlink-jdk/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ jlink-jdk ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ jlink-jdk ---\n[INFO] skip non existing resourceDirectory /repo/jlink-jdk/src/test/resources\n[INFO] \n[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ jlink-jdk ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- surefire:3.5.1:test (default-test) @ jlink-jdk ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jlink:3.1.0:jlink (default-jlink) @ jlink-jdk ---\n[INFO] Toolchain in maven-jlink-plugin: jlink [ /root/.m2/jdks/jdk-23.0.2+7/bin/jlink ]\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-pgwire ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='23.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-23.0.2+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-pgwire ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/pgwire/target/jacoco.exec\n[INFO] \n[INFO] --- antlr4:4.13.2:antlr4 (antlr) @ crate-libs-pgwire ---\n[INFO] ANTLR 4: Processing source directory /repo/libs/pgwire/src/main/antlr\n[INFO] Processing grammar: io/crate/protocols/postgres/antlr/PgArray.g4\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-pgwire ---\n[INFO] skip non existing resourceDirectory /repo/libs/pgwire/src/main/resources\n[INFO] \n[INFO] --- compiler:3.13.0:compile (default-compile) @ crate-l",
-      "failed_locations": [
-        {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "line": 96
-        },
-        {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "line": 296
-        },
-        {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "line": 301
-        },
-        {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "line": 96
-        },
-        {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "line": 296
-        },
-        {
-          "file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "line": 301
-        }
-      ],
-      "symbol_errors": [
-        {
-          "kind": "class",
-          "name": "ThreadPool"
-        },
-        {
-          "kind": "variable",
-          "name": "Collections"
-        },
-        {
-          "kind": "class",
-          "name": "ThreadPool"
-        },
-        {
-          "kind": "variable",
-          "name": "Collections"
-        }
-      ],
-      "signature_errors": [],
-      "failed_hunk_targets": [
-        {
-          "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "mainline_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "error_line": 96
-        },
-        {
-          "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "mainline_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "error_line": 296
-        },
-        {
-          "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "mainline_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "error_line": 301
-        },
-        {
-          "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "mainline_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "error_line": 96
-        },
-        {
-          "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "mainline_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "error_line": 296
-        },
-        {
-          "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "mainline_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "error_line": 301
-        }
-      ],
-      "primary_failed_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-      "primary_failed_symbol": "ThreadPool",
-      "symbol_to_file_candidates": [
-        {
-          "symbol": "ThreadPool",
-          "kind": "class",
-          "candidate_files": [
-            "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-            "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-            "server/src/test/java/io/crate/execution/engine/distribution/DistributingConsumerTest.java",
-            "server/src/test/java/io/crate/integrationtests/GroupByAggregateTest.java"
-          ],
-          "source": "compiler_error_plus_effective_hunks"
-        },
-        {
-          "symbol": "Collections",
-          "kind": "variable",
-          "candidate_files": [
-            "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-            "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-            "server/src/test/java/io/crate/execution/engine/distribution/DistributingConsumerTest.java",
-            "server/src/test/java/io/crate/integrationtests/GroupByAggregateTest.java"
-          ],
-          "source": "compiler_error_plus_effective_hunks"
-        },
-        {
-          "symbol": "ThreadPool",
-          "kind": "class",
-          "candidate_files": [
-            "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-            "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-            "server/src/test/java/io/crate/execution/engine/distribution/DistributingConsumerTest.java",
-            "server/src/test/java/io/crate/integrationtests/GroupByAggregateTest.java"
-          ],
-          "source": "compiler_error_plus_effective_hunks"
-        },
-        {
-          "symbol": "Collections",
-          "kind": "variable",
-          "candidate_files": [
-            "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-            "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-            "server/src/test/java/io/crate/execution/engine/distribution/DistributingConsumerTest.java",
-            "server/src/test/java/io/crate/integrationtests/GroupByAggregateTest.java"
-          ],
-          "source": "compiler_error_plus_effective_hunks"
-        }
-      ],
-      "method_mismatch_details": []
-    }
+    "structured_failure": {}
   },
   "recovery_obligations": [
-    {
-      "obligation_id": "retry_file:server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java:",
-      "kind": "retry_file",
-      "required_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-      "symbol": "",
-      "source": "validation_retry_files",
-      "status": "pending"
-    },
-    {
-      "obligation_id": "failed_location:server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java:",
-      "kind": "failed_location",
-      "required_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-      "symbol": "",
-      "source": "validation_error_context_structured.failed_locations",
-      "status": "pending"
-    },
-    {
-      "obligation_id": "failed_hunk_target:server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java:",
-      "kind": "failed_hunk_target",
-      "required_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-      "symbol": "",
-      "source": "validation_error_context_structured.failed_hunk_targets",
-      "status": "pending"
-    },
-    {
-      "obligation_id": "symbol_error:server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java:ThreadPool",
-      "kind": "symbol_error",
-      "required_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-      "symbol": "ThreadPool",
-      "source": "validation_error_context_structured.symbol_errors",
-      "status": "pending"
-    },
-    {
-      "obligation_id": "symbol_error:server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java:Collections",
-      "kind": "symbol_error",
-      "required_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-      "symbol": "Collections",
-      "source": "validation_error_context_structured.symbol_errors",
-      "status": "pending"
-    },
     {
       "obligation_id": "patch_file:server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java:",
       "kind": "patch_file",
@@ -254,7 +81,7 @@
       "symbol": "",
       "source": "patch_diff",
       "status": "pending",
-      "_verification": "absent_methods_not_found_in_repo:['broadcastKill']"
+      "_verification": "must_insert:['broadcastKill']"
     }
   ],
   "recovery_scope_files": [
@@ -266,9 +93,9 @@
   "recovery_plan_version": 1,
   "recovery_risk_notes": [],
   "token_usage": {
-    "input_tokens": 417594,
-    "output_tokens": 4693,
-    "total_tokens": 422287,
+    "input_tokens": 369311,
+    "output_tokens": 2640,
+    "total_tokens": 371951,
     "estimated": false,
     "sources": [
       "recovery_agent.direct_apply"
