@@ -823,6 +823,37 @@ class RecoveryPlanToolkit:
         rel = _normalize_rel_path(target_file)
         if not rel:
             return "ERROR: target_file is required"
+
+        # Guard: if the mainline patch substantially adds new code to this file,
+        # mark_no_change is almost certainly wrong. Force the model to verify
+        # by reading the file before it can override.
+        try:
+            patch_diff = str((self.state or {}).get("patch_diff") or "") if hasattr(self, "state") else ""
+        except Exception:
+            patch_diff = ""
+        if patch_diff:
+            added_lines = 0
+            in_file = False
+            basename = rel.rsplit("/", 1)[-1]
+            for line in patch_diff.splitlines():
+                if line.startswith("diff --git") or line.startswith("+++ ") or line.startswith("--- "):
+                    in_file = (rel in line) or (basename in line)
+                    continue
+                if in_file and line.startswith("+") and not line.startswith("+++"):
+                    added_lines += 1
+            override = "verified:" in (reason or "").lower()
+            if added_lines > 5 and not override:
+                return (
+                    f"WARNING: mark_no_change rejected for '{rel}' — the mainline "
+                    f"patch adds {added_lines} line(s) to this file. mark_no_change "
+                    f"is only valid if the target ALREADY contains the equivalent of "
+                    f"every addition. Read the target file with read_file, compare "
+                    f"line-by-line against the patch, then either:\n"
+                    f"  (a) call apply_edit for the missing pieces, OR\n"
+                    f"  (b) call mark_no_change again with reason starting "
+                    f'"verified: <evidence>" to override this guard.'
+                )
+
         self._direct_no_change_files.add(rel)
         print(f"[Recovery] mark_no_change: {rel} ({reason})")
         return f"SUCCESS: marked {rel} as no_change ({reason})"
@@ -2237,27 +2268,27 @@ def _cleanup_unused_java_imports(repo_path: str, rel_path: str) -> list[str]:
         lines = f.readlines()
 
     import_indices: list[tuple[int, str, str]] = []  # (line_idx, simple_name, raw_line)
-    body_parts: list[str] = []
+    non_import_lines: list[str] = []
     for i, line in enumerate(lines):
         stripped = line.strip()
         if stripped.startswith("import "):
-            # "import static foo.Bar.baz;" → "baz"
-            # "import foo.Bar;"            → "Bar"
-            # "import foo.*;"              → skip (wildcard)
             if stripped.rstrip(";").endswith(".*"):
-                continue
+                continue  # keep wildcards
             m = re.search(r"[\.\s](\w+)\s*;", stripped)
             if m:
                 import_indices.append((i, m.group(1), line))
         else:
-            body_parts.append(line)
-    body = "".join(body_parts)
+            non_import_lines.append(line)
+
+    # Strip block + line comments so commented-out references don't block removal.
+    body_raw = "".join(non_import_lines)
+    body_no_block = re.sub(r"/\*.*?\*/", " ", body_raw, flags=re.DOTALL)
+    body_no_comments = re.sub(r"//[^\n]*", " ", body_no_block)
 
     to_remove: set[int] = set()
     removed: list[str] = []
     for idx, name, raw in import_indices:
-        # Word-boundary match so "List" doesn't match "ArrayList".
-        if not re.search(rf"\b{re.escape(name)}\b", body):
+        if not re.search(rf"\b{re.escape(name)}\b", body_no_comments):
             to_remove.add(idx)
             removed.append(raw.strip())
 
@@ -3107,8 +3138,14 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
 
         # Strip orphaned Java imports that became unused after the edits.
         # Checkstyle fails the build on unused imports, so do this BEFORE
-        # capturing the diff.
-        for tf in modified_files:
+        # capturing the diff. Also clean mark_no_change files — the mainline
+        # patch may remove code that orphans imports even when the target
+        # didn't need our edits.
+        no_change_set = set(getattr(toolkit, "_direct_no_change_files", set()) or set())
+        files_to_clean = list(modified_files) + [
+            f for f in sorted(no_change_set) if f not in set(modified_files)
+        ]
+        for tf in files_to_clean:
             if tf.endswith(".java"):
                 try:
                     removed = _cleanup_unused_java_imports(target_repo_path, tf)
@@ -3117,6 +3154,8 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
                             f"[Recovery] cleaned {len(removed)} unused import(s) "
                             f"from {tf}: {removed}"
                         )
+                        if tf not in modified_files:
+                            modified_files.append(tf)
                 except Exception as exc:
                     print(f"[Recovery] import cleanup crashed for {tf}: {exc}")
 
