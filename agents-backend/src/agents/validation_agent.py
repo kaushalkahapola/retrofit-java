@@ -7,6 +7,7 @@ H-MABS Phase 4 — "Prove Red, Make Green" Loop
 import json
 import os
 import re
+from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -402,7 +403,59 @@ def _extract_structured_failure_context(
         "failed_hunk_targets": list(res_hunks),
         "primary_failed_file": str(primary_f),
         "primary_failed_symbol": str(primary_s),
+        "symbol_to_file_candidates": _build_symbol_to_file_candidates(
+            text,
+            effective_hunks,
+        ),
+        "method_mismatch_details": _extract_method_mismatch_details(text),
     }
+
+
+def _build_symbol_to_file_candidates(
+    raw_error: str,
+    effective_hunks: list,
+) -> list[dict[str, Any]]:
+    text = str(raw_error or "")
+    symbols = []
+    for m in re.finditer(r"symbol:\s+(variable|method|class)\s+(\w+)", text):
+        symbols.append({"kind": m.group(1), "name": m.group(2)})
+    if not symbols:
+        return []
+
+    files = {
+        str((h or {}).get("target_file") or "").replace("\\", "/")
+        for h in (effective_hunks or [])
+        if str((h or {}).get("target_file") or "").strip()
+    }
+    out = []
+    for s in symbols[:25]:
+        out.append(
+            {
+                "symbol": str(s.get("name") or ""),
+                "kind": str(s.get("kind") or ""),
+                "candidate_files": sorted(files),
+                "source": "compiler_error_plus_effective_hunks",
+            }
+        )
+    return out
+
+
+def _extract_method_mismatch_details(raw_error: str) -> list[dict[str, Any]]:
+    text = str(raw_error or "")
+    out = []
+    for m in re.finditer(
+        r"method\s+(\w+)\(([^)]*)\)\s+in class\s+(\S+)\s+cannot be applied",
+        text,
+    ):
+        out.append(
+            {
+                "method": str(m.group(1) or ""),
+                "arg_types_in_error": str(m.group(2) or ""),
+                "class": str(m.group(3) or ""),
+                "source": "compiler_cannot_be_applied",
+            }
+        )
+    return out
 
 
 def _detect_type_v_retry_scope(

@@ -1,11 +1,11 @@
 {
-  "input_tokens": 167051,
-  "output_tokens": 19931,
-  "total_tokens": 186982,
+  "input_tokens": 571473,
+  "output_tokens": 24520,
+  "total_tokens": 595993,
   "messages_with_usage": 1,
   "estimated_messages": 4,
   "tokenizer": {
-    "model": "gpt-4.1-mini",
+    "model": "gpt-4.1",
     "library": "tiktoken",
     "available": true
   },
@@ -42,9 +42,9 @@
       ]
     },
     "recovery_agent": {
-      "input_tokens": 166931,
-      "output_tokens": 19931,
-      "total_tokens": 186862,
+      "input_tokens": 571353,
+      "output_tokens": 24520,
+      "total_tokens": 595873,
       "estimated_events": 0,
       "exact_events": 1,
       "sources": [
@@ -52,5 +52,5 @@
       ]
     }
   },
-  "finished_at": "2026-04-08T06:48:49.949098"
+  "finished_at": "2026-04-08T14:06:51.632509"
 }

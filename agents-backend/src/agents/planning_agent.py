@@ -215,6 +215,13 @@ Rules:
 - Prefer deterministic, minimal changes.
 - old_string must be directly applicable on target.
 - No prose outside JSON.
+
+Thinking protocol (follow in order):
+1) Intent lock: identify the exact mainline behavior/security intent.
+2) Target fit check: can the same edit apply, or must it adapt to target context?
+3) Drift scan: variable names, method names, signatures, types/classes, constructors/fields.
+4) Connected impact scan: callers/callees, parent/child classes, overrides, imports, helpers, side files.
+5) Final check: mainline intent fully covered and no obvious target breakage introduced.
 """
 
 
@@ -1115,6 +1122,8 @@ Follow this exact TODO:
 5. If blocked, list blockers.
 6. Check whether blockers can be solved with namespace-only changes based on context (do not assume; justify).
 7. If namespace-only is insufficient, do structural rewrite.
+8. Connected impact scan: identify whether callers/callees, parent/child classes, overrides, imports, helpers, or side files also require edits.
+9. Final check: confirm full mainline intent coverage and low breakage risk in target.
 
 Return JSON ONLY in this shape:
 {{
@@ -1132,7 +1141,7 @@ Return JSON ONLY in this shape:
       "new_string": "",
       "verified": true,
       "verification_result": "",
-      "notes": "",
+      "notes": "include: intent_coverage=<yes|partial>; connected_scan=<done>; drift_scan=<done>; breakage_risk=<low|medium|high>",
       "surround_before_3": ["","",""],
       "surround_after_3": ["","",""]
     }}

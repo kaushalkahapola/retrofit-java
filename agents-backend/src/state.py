@@ -338,6 +338,28 @@ class AgentState(TypedDict):
     recovery_agent_summary: NotRequired[
         str
     ]  # Short summary of latest recovery planning outcome
+    recovery_brief: NotRequired[
+        dict[str, Any]
+    ]  # Deterministic recovery pre-analysis (diagnosis/rulebook/drift)
+    recovery_obligations: NotRequired[
+        list[dict[str, Any]]
+    ]  # Required connected-impact obligations for recovery
+    recovery_investigation: NotRequired[
+        list[dict[str, Any]]
+    ]  # Evidence gathered by recovery agent
+    recovery_decisions: NotRequired[
+        list[dict[str, Any]]
+    ]  # Per-obligation decisions: edited | verified_no_change | blocked
+    recovery_scope_files: NotRequired[
+        list[str]
+    ]  # Files in required recovery scope for this retry
+    recovery_strategy_history: NotRequired[
+        list[str]
+    ]  # Anti-stagnation strategy sequence attempted during recovery
+    recovery_plan_version: NotRequired[int]  # Monotonic recovery plan contract version
+    recovery_risk_notes: NotRequired[
+        list[str]
+    ]  # Risk notes emitted by recovery self-review
     recovery_agent_status: NotRequired[
         str
     ]  # Optional terminal status from recovery agent (e.g. no_fix_found)

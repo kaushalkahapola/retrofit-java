@@ -1451,6 +1451,112 @@ def _build_transition_summary_markdown(
     )
 
 
+def _extract_recovery_outputs(phase_outputs: dict[str, Any]) -> dict[str, Any]:
+    primary = (
+        phase_outputs.get("phase_recovery_agent", {})
+        .get("recovery_agent", {})
+        .get("outputs", {})
+    )
+    if primary:
+        return primary
+    return (
+        phase_outputs.get("recovery_agent", {})
+        .get("recovery_agent", {})
+        .get("outputs", {})
+    )
+
+
+def _extract_validation_outputs(phase_outputs: dict[str, Any]) -> dict[str, Any]:
+    return (
+        phase_outputs.get("phase4_validation", {})
+        .get("validation", {})
+        .get("outputs", {})
+    )
+
+
+def _extract_file_editor_outputs(phase_outputs: dict[str, Any]) -> dict[str, Any]:
+    return (
+        phase_outputs.get("phase3_hunk_generator", {})
+        .get("hunk_generator", {})
+        .get("outputs", {})
+    )
+
+
+def _build_recovery_intelligence_report(
+    phase_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    ro = _extract_recovery_outputs(phase_outputs)
+    vo = _extract_validation_outputs(phase_outputs)
+    fo = _extract_file_editor_outputs(phase_outputs)
+
+    brief = ro.get("recovery_brief") if isinstance(ro, dict) else {}
+    obligations = ro.get("recovery_obligations") if isinstance(ro, dict) else []
+    decisions = ro.get("recovery_decisions") if isinstance(ro, dict) else []
+    strategy_history = (
+        ro.get("recovery_strategy_history") if isinstance(ro, dict) else []
+    )
+    scope_files = ro.get("recovery_scope_files") if isinstance(ro, dict) else []
+
+    diag = brief.get("diagnosis") if isinstance(brief, dict) else {}
+    drift_type = str((diag or {}).get("kind") or "")
+
+    obligations_total = len(obligations) if isinstance(obligations, list) else 0
+    obligations_covered = 0
+    if isinstance(decisions, list):
+        obligations_covered = sum(
+            1
+            for d in decisions
+            if isinstance(d, dict)
+            and str(d.get("status") or "").strip().lower()
+            in {"edited", "verified_no_change", "blocked"}
+        )
+
+    side_files = []
+    if isinstance(brief, dict):
+        rb = brief.get("rulebook_decision") or {}
+        if isinstance(rb, dict):
+            side_files = list(rb.get("additional_files") or [])
+
+    retries_to_success = int(vo.get("validation_attempts") or 0)
+    status = str(ro.get("recovery_agent_status") or "")
+    stagnation_break_reason = ""
+    if status == "no_fix_found":
+        stagnation_break_reason = str(ro.get("recovery_agent_summary") or "")
+
+    recovery_tokens = ro.get("token_usage") if isinstance(ro, dict) else {}
+
+    edited_files = {
+        str((e or {}).get("target_file") or "")
+        for e in (fo.get("adapted_file_edits") or [])
+        if isinstance(e, dict)
+    }
+    side_file_edits_count = len([f for f in side_files if str(f) in edited_files])
+
+    return {
+        "recovered_drift_type": drift_type,
+        "connected_files_discovered": sorted(
+            {str(f) for f in (scope_files or []) if str(f).strip()}
+        ),
+        "side_files_suggested": [str(f) for f in side_files if str(f).strip()],
+        "side_file_edits_count": int(side_file_edits_count),
+        "obligation_coverage": {
+            "total": int(obligations_total),
+            "covered": int(obligations_covered),
+            "ratio": (float(obligations_covered) / float(obligations_total))
+            if obligations_total
+            else 1.0,
+        },
+        "retries_to_success": retries_to_success,
+        "stagnation_break_reason": stagnation_break_reason,
+        "strategy_history": [
+            str(s) for s in (strategy_history or []) if str(s).strip()
+        ],
+        "recovery_token_usage": recovery_tokens
+        if isinstance(recovery_tokens, dict)
+        else {},
+    }
+
+
 async def run_full_pipeline(
     project,
     patch_id,
@@ -2188,6 +2294,16 @@ async def run_full_pipeline(
                 phase_outputs=dict(phase_outputs),
                 phase0_cache=phase0_cache,
             ),
+        )
+
+        recovery_intelligence = _build_recovery_intelligence_report(dict(phase_outputs))
+        results["recovery_intelligence"] = recovery_intelligence
+        save_pipeline_log(
+            project,
+            patch_id,
+            "recovery_intelligence",
+            "# Recovery Intelligence\n\n"
+            + json.dumps(recovery_intelligence, indent=2, default=str),
         )
 
         results["phases"] = dict(phase_outputs)

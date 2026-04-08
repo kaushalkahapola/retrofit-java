@@ -1,0 +1,62 @@
+{
+  "hunk_generation_plan": {},
+  "last_plan_signature": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "validation_repeated_plan_detected": false,
+  "recovery_brief": {
+    "version": 1,
+    "primary_mainline_file": "",
+    "primary_target_file": "",
+    "failed_symbol": "",
+    "diagnosis": {
+      "kind": "unknown",
+      "confidence": 0.0,
+      "target_file": "",
+      "failed_symbol": "",
+      "candidate_files": [],
+      "candidate_methods": [],
+      "old_signature": "",
+      "new_signature": "",
+      "param_diff": [],
+      "side_files": [],
+      "parent_class": "",
+      "parent_file": "",
+      "suggested_strategy": "escalate_to_full_react",
+      "evidence": [
+        "No deterministic diagnosis found. Build error: Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors."
+      ]
+    },
+    "rulebook_decision": {},
+    "api_drift_map": {},
+    "structured_failure": {}
+  },
+  "recovery_obligations": [
+    {
+      "obligation_id": "patch_file:server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java:",
+      "kind": "patch_file",
+      "required_file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+      "symbol": "",
+      "source": "patch_diff",
+      "status": "pending"
+    }
+  ],
+  "recovery_investigation": [],
+  "recovery_decisions": [],
+  "recovery_scope_files": [
+    "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java"
+  ],
+  "recovery_strategy_history": [],
+  "recovery_plan_version": 1,
+  "recovery_agent_status": "no_fix_found",
+  "recovery_agent_summary": "Recovery Agent complete: planned 0 operation(s) across 0 file(s). Stagnation: max_rounds_exceeded. Recovery produced no actionable edits.",
+  "validation_failed_stage": "recovery_no_fix_found",
+  "recovery_risk_notes": [],
+  "token_usage": {
+    "input_tokens": 24846,
+    "output_tokens": 1188,
+    "total_tokens": 26034,
+    "estimated": false,
+    "sources": [
+      "recovery_agent.parallel_loop"
+    ]
+  }
+}

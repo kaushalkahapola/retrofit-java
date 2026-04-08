@@ -61,7 +61,9 @@ def route_start(state: AgentState) -> str:
     Otherwise, run phase_0_optimistic.
     """
     if state.get("skip_phase_0", False):
-        print("Router: Skipping Phase 0 - entering context_analyzer for semantic blueprint.")
+        print(
+            "Router: Skipping Phase 0 - entering context_analyzer for semantic blueprint."
+        )
         return "context_analyzer"
     print("Router: Running Phase 0.")
     return "phase_0_optimistic"
@@ -75,7 +77,9 @@ def route_phase_0(state: AgentState) -> str:
     if state.get("fast_path_success", False):
         print("Router: Phase 0 succeeded - taking fast-path exit.")
         return "END"
-    print("Router: Phase 0 failed - entering dumb apply pipeline (context_analyzer -> structural_locator -> file_editor dumb mode).")
+    print(
+        "Router: Phase 0 failed - entering dumb apply pipeline (context_analyzer -> structural_locator -> file_editor dumb mode)."
+    )
     return "context_analyzer"
 
 
@@ -153,6 +157,41 @@ def route_validation(state: AgentState) -> str:
     return "END"
 
 
+def route_after_recovery(state: AgentState) -> str:
+    """
+    After recovery planning:
+      - DIRECT-APPLY: if recovery_agent already mutated files on disk via
+        apply_edit and produced adapted_code_hunks, skip hunk_generator and
+        go straight to validation.
+      - If deterministic brief indicates file remap / logic moved, re-run locator.
+      - Otherwise apply planned edits in file editor.
+    """
+    if state.get("recovery_applied_directly"):
+        print(
+            "Router: Recovery applied edits directly. "
+            "Routing straight to validation (skipping hunk_generator)."
+        )
+        return "validation"
+
+    brief = state.get("recovery_brief") or {}
+    diag = brief.get("diagnosis") if isinstance(brief, dict) else {}
+    rule = brief.get("rulebook_decision") if isinstance(brief, dict) else {}
+
+    kind = str((diag or {}).get("kind") or "").strip().lower()
+    action = str((rule or {}).get("action") or "").strip().lower()
+    remap_actions = {"remap_file", "remap_anchor"}
+
+    if kind in {"logic_moved", "target_file_missing"} or action in remap_actions:
+        print(
+            "Router: Recovery brief indicates remap/logic move. "
+            "Routing to structural_locator before file_editor."
+        )
+        return "structural_locator"
+
+    print("Router: Recovery produced actionable plan. Routing to hunk_generator.")
+    return "hunk_generator"
+
+
 # ---------------------------------------------------------------------------
 # Build the graph
 # ---------------------------------------------------------------------------
@@ -193,7 +232,15 @@ workflow.add_conditional_edges(
 workflow.add_edge("context_analyzer", "structural_locator")
 workflow.add_edge("structural_locator", "hunk_generator")
 workflow.add_edge("hunk_generator", "validation")
-workflow.add_edge("recovery_agent", "hunk_generator")
+workflow.add_conditional_edges(
+    "recovery_agent",
+    route_after_recovery,
+    {
+        "structural_locator": "structural_locator",
+        "hunk_generator": "hunk_generator",
+        "validation": "validation",
+    },
+)
 
 # Validation feedback loop: pass -> END, fail -> retry Agent 3 or give up
 workflow.add_conditional_edges(

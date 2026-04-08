@@ -1,11 +1,11 @@
 {
   "validation_passed": false,
-  "validation_attempts": 3,
+  "validation_attempts": 2,
   "validation_error_context": "Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors.",
   "validation_failure_category": "empty_generation",
   "validation_retry_files": [],
   "validation_repeated_patch_detected": false,
-  "validation_repeated_plan_detected": true,
+  "validation_repeated_plan_detected": false,
   "force_type_v_until_success": false,
   "force_type_v_reason": "",
   "force_type_v_retry_files": []

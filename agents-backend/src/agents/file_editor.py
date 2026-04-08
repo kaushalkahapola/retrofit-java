@@ -124,6 +124,13 @@ You MUST follow this exact Todo Checklist loop to complete your task:
 4. VERIFY all changes: After ALL edits are complete, call `check_java_syntax` one last time. If it reports structural errors, you MUST fix them. Finally, call `git_diff_file` and `verify_guidelines`.
 5. Output "DONE" only when logic is perfectly edited AND all verification tools pass.
 
+Thinking helpers (use in order while working):
+- "Can I apply the same edit, or do I need to adapt for target context?"
+- "Will this edit break connected locations in target code?"
+- "Do I need to account for variable/method/signature/type changes before applying this edit?"
+- "Final check: did I fully achieve mainline patch intent?"
+- "Final check: did I likely break anything in target version?"
+
 ## Tool Selection Priority (CRITICAL)
 1. **HIGHEST PRIORITY: AST tools (`replace_method_body`, `replace_field`, `insert_import`, `remove_method`)**
    - Use these first! They are immune to line drift.
@@ -1727,6 +1734,28 @@ def _execute_surgical_plan(
     return True, "success", edits
 
 
+def _plan_entry_target_files(
+    *,
+    plan_entries: list[dict[str, Any]],
+    default_target_file: str,
+) -> list[str]:
+    files: list[str] = []
+    seen: set[str] = set()
+    fallback = _normalize_rel_path(default_target_file)
+    if fallback:
+        seen.add(fallback)
+        files.append(fallback)
+    for entry in plan_entries or []:
+        if not isinstance(entry, dict):
+            continue
+        tf = _normalize_rel_path(str(entry.get("target_file") or fallback))
+        if not tf or tf in seen:
+            continue
+        seen.add(tf)
+        files.append(tf)
+    return files
+
+
 def _apply_plan_entries_deterministically(
     *,
     toolkit: HunkGeneratorToolkit,
@@ -1739,12 +1768,21 @@ def _apply_plan_entries_deterministically(
     """
     Deterministic execution path with immediate syntax checks after each edit.
     """
+    touched_files: set[str] = set()
     for entry in plan_entries:
+        entry_target_file = _normalize_rel_path(
+            str((entry or {}).get("target_file") or target_file)
+        )
+        if not entry_target_file:
+            entry_target_file = _normalize_rel_path(target_file)
+        if entry_target_file:
+            touched_files.add(entry_target_file)
+
         ok, msg, resolved_old, resolved_new, reason = _apply_edit_deterministically(
             toolkit,
             target_repo_path,
             entry,
-            target_file,
+            entry_target_file,
             strict_exact=strict_exact,
         )
         if not ok:
@@ -1754,7 +1792,7 @@ def _apply_plan_entries_deterministically(
                         toolkit,
                         target_repo_path,
                         entry,
-                        target_file,
+                        entry_target_file,
                     )
                 )
                 if ok2:
@@ -1765,14 +1803,16 @@ def _apply_plan_entries_deterministically(
                     reason = reason2
 
         if not ok:
+            for tf in sorted(touched_files):
+                _git_reset_file(target_repo_path, tf)
             return False, f"deterministic_apply_failed: {msg}"
 
         current_attempt_trajectory.append(
             {
-                "target_file": target_file,
+                "target_file": entry_target_file,
                 "tool": "str_replace_in_file",
                 "args": {
-                    "file_path": target_file,
+                    "file_path": entry_target_file,
                     "edit_type": str((entry or {}).get("edit_type") or "replace"),
                     "resolution_reason": reason,
                     "resolved_old_preview": resolved_old[:200],
@@ -1781,8 +1821,10 @@ def _apply_plan_entries_deterministically(
             }
         )
 
-        syntax = toolkit.check_java_syntax(target_file)
+        syntax = toolkit.check_java_syntax(entry_target_file)
         if not _syntax_is_valid(syntax):
+            for tf in sorted(touched_files):
+                _git_reset_file(target_repo_path, tf)
             return (
                 False,
                 f"post_edit_syntax_failed: {_syntax_output(syntax)[:500]}",
@@ -2430,10 +2472,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
     # Fail fast so recovery_agent runs (or we exit cleanly if recovery already failed).
     # This also covers the retry case where recovery_agent returned an empty plan —
     # we must NOT fall through to ReAct, which would butcher the files.
-    if (
-        patch_complexity not in ("TRIVIAL", "")
-        and not hunk_generation_plan
-    ):
+    if patch_complexity not in ("TRIVIAL", "") and not hunk_generation_plan:
         stage = "dumb apply" if validation_attempts == 0 else "retry apply"
         msg = (
             f"Agent 3: Skipping {stage} for {patch_complexity} patch without plan. "
@@ -2747,9 +2786,9 @@ async def file_editor_node(state: AgentState, config) -> dict:
             execution_types.add("TYPE_V")
         # Try deterministic path first for TYPE_IV when planner produced verified anchors.
         # Dumb mode is only safe for TRIVIAL patches. STRUCTURAL/REWRITE require planning.
-        first_pass_dumb_mode = (
-            validation_attempts == 0
-            and patch_complexity in ("TRIVIAL", "")
+        first_pass_dumb_mode = validation_attempts == 0 and patch_complexity in (
+            "TRIVIAL",
+            "",
         )
 
         if adaptation_type == "TYPE_IV" and all(
@@ -2803,9 +2842,13 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
         # Step A: Reset file to HEAD (clean starting state)
         if toolkit and target_repo_path:
-            reset_ok = _git_reset_file(target_repo_path, target_file)
-            if not reset_ok:
-                print(f"    Agent 3: Warning - could not reset {target_file} to HEAD.")
+            for rf in _plan_entry_target_files(
+                plan_entries=plan_entries,
+                default_target_file=target_file,
+            ):
+                reset_ok = _git_reset_file(target_repo_path, rf)
+                if not reset_ok:
+                    print(f"    Agent 3: Warning - could not reset {rf} to HEAD.")
         task_entry["completed_steps"].append("reset_file")
 
         if not toolkit:
@@ -3175,6 +3218,24 @@ async def file_editor_node(state: AgentState, config) -> dict:
             target_file=target_file,
             run_guideline=True,
         )
+        for side_tf in _plan_entry_target_files(
+            plan_entries=plan_entries,
+            default_target_file=target_file,
+        ):
+            if side_tf == target_file:
+                continue
+            side_ok, side_reason, side_diff = _run_mandatory_file_checks(
+                toolkit=toolkit,
+                target_repo_path=target_repo_path,
+                target_file=side_tf,
+                run_guideline=True,
+            )
+            if not side_ok:
+                checks_ok = False
+                checks_reason = f"{checks_reason}; side_file={side_tf}:{side_reason}"
+                break
+            if side_diff.strip():
+                diff_text = (diff_text.rstrip() + "\n\n" + side_diff.strip()).strip()
         if not checks_ok:
             print(
                 f"    Agent 3: Mandatory checks failed for {target_file}: {checks_reason}"
@@ -3182,7 +3243,11 @@ async def file_editor_node(state: AgentState, config) -> dict:
             task_entry["status"] = "failed"
             task_entry["reason"] = "generation_contract_failed"
             task_entry["error"] = checks_reason
-            _git_reset_file(target_repo_path, target_file)
+            for rf in _plan_entry_target_files(
+                plan_entries=plan_entries,
+                default_target_file=target_file,
+            ):
+                _git_reset_file(target_repo_path, rf)
             continue
 
         if "TYPE_V" in execution_types and not used_surgical:
@@ -3636,7 +3701,11 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
         # Step F: Reset file to HEAD (leave repo clean for validation)
         if toolkit and target_repo_path:
-            _git_reset_file(target_repo_path, target_file)
+            for rf in _plan_entry_target_files(
+                plan_entries=plan_entries,
+                default_target_file=target_file,
+            ):
+                _git_reset_file(target_repo_path, rf)
         task_entry["completed_steps"].append("restore_file")
 
         task_entry["status"] = "success"
