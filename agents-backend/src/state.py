@@ -363,3 +363,9 @@ class AgentState(TypedDict):
     recovery_agent_status: NotRequired[
         str
     ]  # Optional terminal status from recovery agent (e.g. no_fix_found)
+    recovery_applied_directly: NotRequired[
+        bool
+    ]  # True when recovery agent mutated files via apply_edit; router skips hunk_generator
+    recovery_agent_mode: NotRequired[
+        bool
+    ]  # True while in recovery agent execution context
