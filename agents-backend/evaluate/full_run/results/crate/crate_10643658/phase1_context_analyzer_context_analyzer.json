@@ -1,7 +1,7 @@
 {
   "semantic_blueprint": {
-    "root_cause_hypothesis": "The QueryProfiler class methods that access and modify shared profiling state are not synchronized, leading to potential race conditions and inconsistent profiling data in concurrent environments.",
-    "fix_logic": "Add synchronized keyword to key public methods (getProfileBreakdown and getTree) to ensure thread-safe access and modification of shared state, and reduce method visibility for internal helper methods to private to limit access scope.",
+    "root_cause_hypothesis": "The QueryProfiler class is not thread-safe, leading to potential data races and inconsistent profiling results when accessed concurrently.",
+    "fix_logic": "Synchronize key public methods that access and modify shared state (getProfileBreakdown and getTree) to ensure thread-safe access and prevent concurrent modification issues.",
     "dependent_apis": [
       "createProfileBreakdown",
       "createProfileBreakdown()",
@@ -15,12 +15,12 @@
       "getTypeFromElement(Query)",
       "synchronized"
     ],
-    "patch_intent_summary": "Ensure thread safety in QueryProfiler by synchronizing key methods and restricting method visibility.",
+    "patch_intent_summary": "Ensure thread safety in QueryProfiler by synchronizing methods that access shared mutable state.",
     "hunk_chain": [
       {
         "hunk_index": 1,
         "file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
-        "summary": "Add synchronized modifier to getProfileBreakdown to prevent concurrent access issues.",
+        "summary": "Add synchronized modifier to getProfileBreakdown method to prevent concurrent access issues.",
         "role": "guard",
         "connects_to_next": "Prepares next hunk in same file with related context.",
         "global_index": 1
@@ -28,7 +28,7 @@
       {
         "hunk_index": 2,
         "file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
-        "summary": "Change createProfileBreakdown method visibility from protected to private to restrict access.",
+        "summary": "Change createProfileBreakdown method visibility from protected to private, restricting access.",
         "role": "refactor",
         "connects_to_next": "Prepares next hunk in same file with related context.",
         "global_index": 2
@@ -36,7 +36,7 @@
       {
         "hunk_index": 3,
         "file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
-        "summary": "Add synchronized modifier to getTree method to ensure thread-safe retrieval of profiling tree.",
+        "summary": "Add synchronized modifier to getTree method to ensure thread-safe retrieval of profiling results.",
         "role": "guard",
         "connects_to_next": "Prepares next hunk in same file with related context.",
         "global_index": 3
@@ -44,7 +44,7 @@
       {
         "hunk_index": 4,
         "file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
-        "summary": "Change getTypeFromElement method visibility from protected to private to restrict access.",
+        "summary": "Change getTypeFromElement method visibility from protected to private, encapsulating implementation details.",
         "role": "refactor",
         "connects_to_next": "Prepares next hunk in same file with related context.",
         "global_index": 4
@@ -52,7 +52,7 @@
       {
         "hunk_index": 5,
         "file": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
-        "summary": "Change getDescriptionFromElement method visibility from protected to private to restrict access.",
+        "summary": "Change getDescriptionFromElement method visibility from protected to private, encapsulating implementation details.",
         "role": "refactor",
         "connects_to_next": "",
         "global_index": 5
@@ -62,8 +62,8 @@
   "patch_diff": "diff --git a/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java b/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java\nindex 0000000..0000000 100644\n--- a/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java\n+++ b/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java\n@@ -66,7 +66,7 @@\n      * @param query The scoring query we wish to profile\n      * @return      A ProfileBreakdown for this query\n      */\n-    public QueryProfileBreakdown getProfileBreakdown(Query query) {\n+    public synchronized QueryProfileBreakdown getProfileBreakdown(Query query) {\n         int token = currentToken;\n \n         boolean stackEmpty = stack.isEmpty();\n@@ -122,7 +122,7 @@\n         return queryTimings;\n     }\n \n-    protected QueryProfileBreakdown createProfileBreakdown() {\n+    private QueryProfileBreakdown createProfileBreakdown() {\n         return new QueryProfileBreakdown();\n     }\n \n@@ -140,7 +140,7 @@\n      *\n      * @return a hierarchical representation of the profiled query tree\n      */\n-    public List<ProfileResult> getTree() {\n+    public synchronized List<ProfileResult> getTree() {\n         ArrayList<ProfileResult> results = new ArrayList<>(roots.size());\n         for (Integer root : roots) {\n             results.add(doGetTree(root));\n@@ -175,7 +175,7 @@\n         return new ProfileResult(type, description, timings, childrenProfileResults);\n     }\n \n-    protected String getTypeFromElement(Query query) {\n+    private String getTypeFromElement(Query query) {\n         // Anonymous classes won't have a name,\n         // we need to get the super class\n         if (query.getClass().getSimpleName().isEmpty()) {\n@@ -184,7 +184,7 @@\n         return query.getClass().getSimpleName();\n     }\n \n-    protected String getDescriptionFromElement(Query query) {\n+    private String getDescriptionFromElement(Query query) {\n         return query.toString();\n     }\n \n",
   "token_usage": {
     "input_tokens": 696,
-    "output_tokens": 482,
-    "total_tokens": 1178,
+    "output_tokens": 469,
+    "total_tokens": 1165,
     "estimated": false
   }
 }

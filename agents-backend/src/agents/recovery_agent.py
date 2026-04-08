@@ -1863,9 +1863,9 @@ Do NOT submit any recovery plan. Stay concise."""
                 ),
             ),
         ]
-        if exclude_names:
-            tools = [t for t in tools if t.name not in exclude_names]
-        if include_submit:
+        if include_submit and (
+            not exclude_names or "submit_recovery_plan" not in exclude_names
+        ):
             tools.append(
                 StructuredTool.from_function(
                     func=self.submit_recovery_plan,
@@ -1897,6 +1897,8 @@ Do NOT submit any recovery plan. Stay concise."""
                     ),
                 )
             )
+        if exclude_names:
+            tools = [t for t in tools if t.name not in exclude_names]
         return tools
 
 
@@ -2217,6 +2219,53 @@ def _should_force_full_recovery_prompt(state: AgentState) -> bool:
         if complexity in {"STRUCTURAL", "REWRITE"}:
             return True
     return False
+
+
+def _cleanup_unused_java_imports(repo_path: str, rel_path: str) -> list[str]:
+    """Remove import lines whose simple class name doesn't appear in the file body.
+
+    Deterministic post-edit cleanup: when the recovery agent removes a code
+    block, the imports it referenced may become orphaned. Checkstyle treats
+    those as build failures, so we strip them before capturing the diff.
+    """
+    import os
+
+    full = os.path.join(repo_path, rel_path)
+    if not os.path.isfile(full):
+        return []
+    with open(full, "r", encoding="utf-8", errors="replace") as f:
+        lines = f.readlines()
+
+    import_indices: list[tuple[int, str, str]] = []  # (line_idx, simple_name, raw_line)
+    body_parts: list[str] = []
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("import "):
+            # "import static foo.Bar.baz;" → "baz"
+            # "import foo.Bar;"            → "Bar"
+            # "import foo.*;"              → skip (wildcard)
+            if stripped.rstrip(";").endswith(".*"):
+                continue
+            m = re.search(r"[\.\s](\w+)\s*;", stripped)
+            if m:
+                import_indices.append((i, m.group(1), line))
+        else:
+            body_parts.append(line)
+    body = "".join(body_parts)
+
+    to_remove: set[int] = set()
+    removed: list[str] = []
+    for idx, name, raw in import_indices:
+        # Word-boundary match so "List" doesn't match "ArrayList".
+        if not re.search(rf"\b{re.escape(name)}\b", body):
+            to_remove.add(idx)
+            removed.append(raw.strip())
+
+    if to_remove:
+        new_lines = [l for i, l in enumerate(lines) if i not in to_remove]
+        with open(full, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+    return removed
 
 
 async def _run_parallel_tool_loop(
@@ -3055,6 +3104,21 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
             if tf and tf not in seen:
                 seen.add(tf)
                 modified_files.append(tf)
+
+        # Strip orphaned Java imports that became unused after the edits.
+        # Checkstyle fails the build on unused imports, so do this BEFORE
+        # capturing the diff.
+        for tf in modified_files:
+            if tf.endswith(".java"):
+                try:
+                    removed = _cleanup_unused_java_imports(target_repo_path, tf)
+                    if removed:
+                        print(
+                            f"[Recovery] cleaned {len(removed)} unused import(s) "
+                            f"from {tf}: {removed}"
+                        )
+                except Exception as exc:
+                    print(f"[Recovery] import cleanup crashed for {tf}: {exc}")
 
         # Capture diffs FIRST (while files are still mutated), THEN reset the
         # files to HEAD so validation's git apply step can re-apply cleanly.

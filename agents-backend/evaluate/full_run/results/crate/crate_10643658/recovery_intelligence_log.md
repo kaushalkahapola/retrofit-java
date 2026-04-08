@@ -13,15 +13,15 @@
     "ratio": 0.0
   },
   "retries_to_success": 2,
-  "stagnation_break_reason": "Recovery Agent complete: planned 0 operation(s) across 0 file(s). Stagnation: max_rounds_exceeded. Recovery produced no actionable edits.",
+  "stagnation_break_reason": "",
   "strategy_history": [],
   "recovery_token_usage": {
-    "input_tokens": 24846,
-    "output_tokens": 1188,
-    "total_tokens": 26034,
+    "input_tokens": 11331,
+    "output_tokens": 493,
+    "total_tokens": 11824,
     "estimated": false,
     "sources": [
-      "recovery_agent.parallel_loop"
+      "recovery_agent.direct_apply"
     ]
   }
 }

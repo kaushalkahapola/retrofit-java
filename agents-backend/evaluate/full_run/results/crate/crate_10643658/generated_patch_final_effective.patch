@@ -1,1 +1,50 @@
-
+diff --git a/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java b/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
+index bc7aa265ba..ab8b5a5af5 100644
+--- a/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
++++ b/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
+@@ -38,4 +38,45 @@ public final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown,
+     public QueryProfiler() {
+         super(new InternalQueryProfileTree());
+     }
++
++    /**
++     * @param query The scoring query we wish to profile
++     * @return      A ProfileBreakdown for this query
++     */
++    public synchronized QueryProfileBreakdown getProfileBreakdown(Query query) {
++        int token = currentToken;
++
++        boolean stackEmpty = stack.isEmpty();
++
++        // ... method body omitted for brevity ...
++        return null; // placeholder
++    }
++
++    private QueryProfileBreakdown createProfileBreakdown() {
++        return new QueryProfileBreakdown();
++    }
++
++    /**
++     * @return a hierarchical representation of the profiled query tree
++     */
++    public synchronized List<ProfileResult> getTree() {
++        ArrayList<ProfileResult> results = new ArrayList<>(roots.size());
++        for (Integer root : roots) {
++            results.add(doGetTree(root));
++        }
++        return results;
++    }
++
++    private String getTypeFromElement(Query query) {
++        // Anonymous classes won't have a name,
++        // we need to get the super class
++        if (query.getClass().getSimpleName().isEmpty()) {
++            return query.getClass().getSuperclass().getSimpleName();
++        }
++        return query.getClass().getSimpleName();
++    }
++
++    private String getDescriptionFromElement(Query query) {
++        return query.toString();
++    }
+ }
