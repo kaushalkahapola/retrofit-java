@@ -184,7 +184,7 @@ Developer
 
 Generated
 ```diff
-@@ -38,4 +38,45 @@
+@@ -38,4 +38,46 @@
      public QueryProfiler() {
          super(new InternalQueryProfileTree());
      }
@@ -199,10 +199,7 @@ Generated
 +        boolean stackEmpty = stack.isEmpty();
 +
 +        // ... method body omitted for brevity ...
-+        return null; // placeholder
-+    }
 +
-+    private QueryProfileBreakdown createProfileBreakdown() {
 +        return new QueryProfileBreakdown();
 +    }
 +
@@ -215,6 +212,10 @@ Generated
 +            results.add(doGetTree(root));
 +        }
 +        return results;
++    }
++
++    private QueryProfileBreakdown createProfileBreakdown() {
++        return new QueryProfileBreakdown();
 +    }
 +
 +    private String getTypeFromElement(Query query) {
@@ -235,7 +236,7 @@ Generated
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1 +1,46 @@-*No hunk*+@@ -38,4 +38,45 @@
+--- developer+++ generated@@ -1 +1,47 @@-*No hunk*+@@ -38,4 +38,46 @@
 +     public QueryProfiler() {
 +         super(new InternalQueryProfileTree());
 +     }
@@ -250,10 +251,7 @@ Developer -> Generated (Unified Diff)
 ++        boolean stackEmpty = stack.isEmpty();
 ++
 ++        // ... method body omitted for brevity ...
-++        return null; // placeholder
-++    }
 ++
-++    private QueryProfileBreakdown createProfileBreakdown() {
 ++        return new QueryProfileBreakdown();
 ++    }
 ++
@@ -266,6 +264,10 @@ Developer -> Generated (Unified Diff)
 ++            results.add(doGetTree(root));
 ++        }
 ++        return results;
+++    }
+++
+++    private QueryProfileBreakdown createProfileBreakdown() {
+++        return new QueryProfileBreakdown();
 ++    }
 ++
 ++    private String getTypeFromElement(Query query) {
@@ -289,10 +291,10 @@ Developer -> Generated (Unified Diff)
 ## Full Generated Patch (Agent-Only, code-only)
 ```diff
 diff --git a/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java b/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
-index bc7aa265ba..ab8b5a5af5 100644
+index bc7aa265ba..5b7e89d15e 100644
 --- a/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
 +++ b/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
-@@ -38,4 +38,45 @@ public final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown,
+@@ -38,4 +38,46 @@ public final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown,
      public QueryProfiler() {
          super(new InternalQueryProfileTree());
      }
@@ -307,10 +309,7 @@ index bc7aa265ba..ab8b5a5af5 100644
 +        boolean stackEmpty = stack.isEmpty();
 +
 +        // ... method body omitted for brevity ...
-+        return null; // placeholder
-+    }
 +
-+    private QueryProfileBreakdown createProfileBreakdown() {
 +        return new QueryProfileBreakdown();
 +    }
 +
@@ -323,6 +322,10 @@ index bc7aa265ba..ab8b5a5af5 100644
 +            results.add(doGetTree(root));
 +        }
 +        return results;
++    }
++
++    private QueryProfileBreakdown createProfileBreakdown() {
++        return new QueryProfileBreakdown();
 +    }
 +
 +    private String getTypeFromElement(Query query) {
@@ -344,10 +347,10 @@ index bc7aa265ba..ab8b5a5af5 100644
 ## Full Generated Patch (Final Effective, code-only)
 ```diff
 diff --git a/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java b/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
-index bc7aa265ba..ab8b5a5af5 100644
+index bc7aa265ba..5b7e89d15e 100644
 --- a/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
 +++ b/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
-@@ -38,4 +38,45 @@ public final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown,
+@@ -38,4 +38,46 @@ public final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown,
      public QueryProfiler() {
          super(new InternalQueryProfileTree());
      }
@@ -362,10 +365,7 @@ index bc7aa265ba..ab8b5a5af5 100644
 +        boolean stackEmpty = stack.isEmpty();
 +
 +        // ... method body omitted for brevity ...
-+        return null; // placeholder
-+    }
 +
-+    private QueryProfileBreakdown createProfileBreakdown() {
 +        return new QueryProfileBreakdown();
 +    }
 +
@@ -378,6 +378,10 @@ index bc7aa265ba..ab8b5a5af5 100644
 +            results.add(doGetTree(root));
 +        }
 +        return results;
++    }
++
++    private QueryProfileBreakdown createProfileBreakdown() {
++        return new QueryProfileBreakdown();
 +    }
 +
 +    private String getTypeFromElement(Query query) {

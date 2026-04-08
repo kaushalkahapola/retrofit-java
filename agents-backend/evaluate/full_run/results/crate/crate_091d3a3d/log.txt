@@ -3,7 +3,7 @@ project=crate
 mainline_commit=091d3a3d551f92a57f2c1ab729b1946fddfc43d3
 backport_commit=94d0e18a1d9fd2f899e48815c66a790b9466603a
 mode=full
-started_at=2026-04-08T14:26:35.525932
+started_at=2026-04-08T15:10:20.281675
 ----------------------------------------
 Running full workflow graph
 Completed node=context_analyzer
@@ -67,52 +67,232 @@ LLM Provider: azure, Model: gpt-4.1, Temperature: 0.0
 Recovery Agent: starting parallel batch tool loop...
 Recovery Agent: all_files_preloaded=True, max_inv_rounds=12, submit_only=True
 [Recovery] === Round 0 ===
-[Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java", "old_string": "    private CompletableFuture<Long> resize(BoundAlterTable analysis) {\n        final TableInfo table = analysis.table();\n        PartitionName partitionName = analysis.partitionName();\n     )
+[Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java", "old_string": "import org.elasticsearch.action.admin.indices.shrink.TransportResize;", "new_string": "import org.elasticsearch.action.admin.indices.shrink.TransportResize;\nimport org.elasticsearch.action.adm)
+[Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java", "old_string": "        List<String> partitionValues = partitionName == null\n            ? List.of()\n            : partitionName.values();\n        IndexMetadata sourceIndexMetadata = currentState.metadata())
+[Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java", "old_string": "        final int targetNumberOfShards = getNumberOfShards(analysis.settings());\n        validateNumberOfShardsForResize(sourceIndexMetadata, targetNumberOfShards);\n        validateReadOnlyIn)
 [Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java", "old_string": "public class GCDanglingArtifactsRequest extends AcknowledgedRequest<GCDanglingArtifactsRequest> {\n\n    public static final GCDanglingArtifactsRequest INSTANCE = new GCDanglingArtifa)
-[Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java", "old_string": "@Singleton\npublic class TransportGCDanglingArtifacts extends AbstractDDLTransportAction<GCDanglingArtifactsRequest, AcknowledgedResponse> {\n\n    public static final Action ACTION)
+[Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java", "old_string": "    private final DDLClusterStateTaskExecutor<GCDanglingArtifactsRequest> executor;\n\n    @Inject\n    public TransportGCDanglingArtifacts(TransportService transportService,\n     )
 [Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java", "old_string": "public final class GCDanglingArtifactsPlan implements Plan {\n\n    @Override\n    public StatementType type() {\n        return StatementType.MANAGEMENT;\n    }\n\n    @Override\n    public void exe)
-[Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/org/elasticsearch/Version.java", "old_string": "    public static final Version V_6_0_3 = new Version(9_00_03_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);\n\n    public static final Version V_6_1_0 = new Version(9_01_00_99, false, org.apache.lucene.)
+[Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/org/elasticsearch/Version.java", "old_string": "    public static final Version V_6_1_1 = new Version(9_01_01_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);\n\n    public static final Version V_6_2_0 = new Version(9_02_00_99, true, org.apache.lucene.ut)
 [Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java", "old_string": "import java.io.IOException;\n\nimport org.elasticsearch.Version;\nimport org.elasticsearch.action.ActionListener;\nimport org.elasticsearch.action.ActionType;\nimport org.elastic)
-[Recovery] apply_edit OK: server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java (exact)
+[Recovery] apply_edit OK: server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java (exact)
+[Recovery] apply_edit OK: server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java (exact)
 [Recovery] apply_edit OK: server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java (exact)
 [Recovery] apply_edit OK: server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java (exact)
+[Recovery] apply_edit OK: server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java (exact)
 [Recovery] apply_edit OK: server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java (exact)
-[Recovery] apply_edit OK: server/src/main/java/org/elasticsearch/Version.java (exact)
 [Recovery] apply_edit OK: server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java (exact)
-[Recovery] tool_result[ok] apply_edit: SUCCESS: SUCCESS: replaced at approx line 189 in 'server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java'. (resolution=exact)
+[Recovery] tool_result[ok] apply_edit: SUCCESS: SUCCESS: replaced at approx line 38 in 'server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java'. (resolution=exact)
+[Recovery] tool_result[ok] apply_edit: SUCCESS: SUCCESS: replaced at approx line 193 in 'server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java'. (resolution=exact)
+[Recovery] tool_result[ok] apply_edit: SUCCESS: SUCCESS: replaced at approx line 202 in 'server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java'. (resolution=exact)
 [Recovery] tool_result[ok] apply_edit: SUCCESS: SUCCESS: replaced at approx line 29 in 'server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java'. (resolution=exact)
-[Recovery] tool_result[ok] apply_edit: SUCCESS: SUCCESS: replaced at approx line 49 in 'server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java'. (resolution=exact)
+[Recovery] tool_result[ok] apply_edit: SUCCESS: SUCCESS: replaced at approx line 62 in 'server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java'. (resolution=exact)
 [Recovery] tool_result[ok] apply_edit: SUCCESS: SUCCESS: replaced at approx line 31 in 'server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java'. (resolution=exact)
-[Recovery] tool_result[ok] apply_edit: SUCCESS: SUCCESS: replaced at approx line 208 in 'server/src/main/java/org/elasticsearch/Version.java'. (resolution=exact)
-[Recovery] tool_result[ok] apply_edit: SUCCESS: SUCCESS: replaced at approx line 21 in 'server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java'. (resolution=exact)Completed node=recovery_agent
+[Recovery] tool_result[ok] apply_edit: FAILED: old_resolution_failed:not_found_multiline (reason=not_found_multiline). Tip: read the target file and copy old_string VERBATIM from the on-disk content; do NOT use mainline `-` lines.
+[Recovery] tool_result[ok] apply_edit: SUCCESS: SUCCESS: replaced at approx line 21 in 'server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java'. (resolution=exact)
+[Recovery] Round 0: executed 8 unique call(s) (8 total)
+[Recovery] === Round 1 ===
+[Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/org/elasticsearch/Version.java", "old_string": "    public static final Version V_6_1_1 = new Version(9_01_01_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);\n\n    public static final Version V_6_2_0 = new Version(9_02_00_99, true, org.apache.lucene.ut)
+[Recovery] tool_result[ok] apply_edit: FAILED: old_resolution_failed:not_found_multiline (reason=not_found_multiline). Tip: read the target file and copy old_string VERBATIM from the on-disk content; do NOT use mainline `-` lines.
+[Recovery] Round 1: executed 1 unique call(s) (1 total)
+[Recovery] === Round 2 ===
+[Recovery] tool_call: apply_edit({"target_file": "server/src/main/java/org/elasticsearch/Version.java", "old_string": "    public static final Version V_6_1_1 = new Version(9_01_01_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);\n\n    public static final Version CURRENT = V_6_1_1;\n\n    private static final ImmutableOpen)
+[Recovery] apply_edit OK: server/src/main/java/org/elasticsearch/Version.java (exact)
+[Recovery] tool_result[ok] apply_edit: SUCCESS: SUCCESS: replaced at approx line 211 in 'server/src/main/java/org/elasticsearch/Version.java'. (resolution=exact)
+[Recovery] Round 2: executed 1 unique call(s) (1 total)
+[Recovery] === Round 3 ===
+
+[LLM OUTPUT BEGIN]
+{
+  "investigation_evidence": [
+    {
+      "kind": "patch_analysis",
+      "details": "Mainline patch adds imports, modifies resize method in AlterTableClient to handle staleIndexUUID and GC dangling artifacts, extends GCDanglingArtifactsRequest with indicesToDelete list, modifies TransportGCDanglingArtifacts to filter indices to delete, updates GCDanglingArtifactsPlan to use new constructor, adjusts Version.java to set CURRENT to V_6_1_1, and modifies TransportResize to handle dangling artifacts with specific indices."
+    },
+    {
+      "kind": "target_code_analysis",
+      "details": "Target code has similar structure but lacks some new fields and logic. Resize method in AlterTableClient lacks staleIndexUUID handling and GC call with specific indices. GCDanglingArtifactsRequest is minimal. TransportGCDanglingArtifacts does not filter indices. Version.java CURRENT is V_6_2_0 instead of V_6_1_1. TransportResize uses GCDanglingArtifactsRequest.INSTANCE without indices."
+    }
+  ],
+  "obligation_decisions": [
+    {
+      "obligation_id": "patch_file:server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java:",
+      "status": "edited",
+      "reason": "Adapted imports and resize method to add staleIndexUUID detection and GC call with specific indices as per mainline intent.",
+      "evidence": [
+        "Added imports for ResizeResponse and Metadata.",
+        "Replaced resize method to include staleIndexUUID detection loop and GC call with indices list.",
+        "Used exact target anchors for replacement."
+      ]
+    },
+    {
+      "obligation_id": "patch_file:server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java:",
+      "status": "edited",
+      "reason": "Extended GCDanglingArtifactsRequest to include indicesToDelete list and serialization as per mainline patch.",
+      "evidence": [
+        "Replaced entire class with new version including indicesToDelete field, constructors, and serialization methods.",
+        "Used exact target anchors for replacement."
+      ]
+    },
+    {
+      "obligation_id": "patch_file:server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java:",
+      "status": "edited",
+      "reason": "Modified executor to filter dangling indices by indicesToDelete list if provided, matching mainline behavior.",
+      "evidence": [
+        "Replaced executor method to add filtering logic for indicesToDelete.",
+        "Used exact target anchors for replacement."
+      ]
+    },
+    {
+      "obligation_id": "patch_file:server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java:",
+      "status": "edited",
+      "reason": "Changed executeOrFail to use new GCDanglingArtifactsRequest() constructor instead of INSTANCE singleton.",
+      "evidence": [
+        "Replaced executeOrFail method call argument to new GCDanglingArtifactsRequest().",
+        "Used exact target anchors for replacement."
+      ]
+    },
+    {
+      "obligation_id": "patch_file:server/src/main/java/org/elasticsearch/Version.java:",
+      "status": "edited",
+      "reason": "Changed CURRENT version constant from V_6_2_0 to V_6_1_1 as per mainline patch.",
+      "evidence": [
+        "Replaced version constant declarations to set CURRENT = V_6_1_1.",
+        "Used exact target anchors for replacement."
+      ]
+    },
+    {
+      "obligation_id": "patch_file:server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java:",
+      "status": "edited",
+      "reason": "Added import for java.util.List and modified masterOperation to call GC with specific indices list on resize failure.",
+      "evidence": [
+        "Inserted import java.util.List.",
+        "Replaced masterOperation method to call gcDanglingArtifactsAction.execute with new GCDanglingArtifactsRequest(List.of(resizedIndexUUID)) instead of INSTANCE.",
+        "Used exact target anchors for replacement."
+      ]
+    }
+  ],
+  "edit_ops": {
+    "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
+        "edit_type": "insert_after",
+        "old_string": "import org.elasticsearch.action.admin.indices.shrink.TransportResize;",
+        "new_string": "import org.elasticsearch.action.admin.indices.shrink.TransportResize;\nimport org.elasticsearch.action.admin.indices.shrink.ResizeResponse;\nimport org.elasticsearch.cluster.metadata.Metadata;",
+        "verified": true,
+        "verification_result": "ready_to_apply",
+        "notes": "Add imports for ResizeResponse and Metadata as in mainline patch."
+      },
+      {
+        "hunk_index": 1,
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
+        "edit_type": "replace",
+        "old_string": "        List<String> partitionValues = partitionName == null\n            ? List.of()\n            : partitionName.values();\n        IndexMetadata sourceIndexMetadata = currentState.metadata().getIndex(table.ident(), partitionValues, true, im -> im);\n        if (sourceIndexMetadata == null) {\n            throw new RelationUnknown(\n                String.format(Locale.ENGLISH, \"Table/Partition '%s' does not exist\", table.ident().fqn()));\n        }",
+        "new_string": "        List<String> partitionValues = partitionName == null\n            ? List.of()\n            : partitionName.values();\n        Metadata metadata = currentState.metadata();\n        IndexMetadata sourceIndexMetadata = metadata.getIndex(table.ident(), partitionValues, true, im -> im);\n        if (sourceIndexMetadata == null) {\n            throw new RelationUnknown(\n                String.format(Locale.ENGLISH, \"Table/Partition '%s' does not exist\", table.ident().fqn()));\n        }",
+        "verified": true,
+        "verification_result": "ready_to_apply",
+        "notes": "Replace metadata access to use Metadata variable as in mainline."
+      },
+      {
+        "hunk_index": 2,
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
+        "edit_type": "replace",
+        "old_string": "        final int targetNumberOfShards = getNumberOfShards(analysis.settings());\n        validateNumberOfShardsForResize(sourceIndexMetadata, targetNumberOfShards);\n        validateReadOnlyIndexForResize(sourceIndexMetadata);\n\n        final ResizeRequest request = new ResizeRequest(\n            table.ident(),\n            partitionName == null ? List.of() : partitionName.values(),\n            targetNumberOfShards\n        );\n        return deleteTempIndices()\n            .thenCompose(_ -> client.execute(TransportResize.ACTION, request))\n            .thenApply(_ -> 0L);",
+        "new_string": "        final int targetNumberOfShards = getNumberOfShards(analysis.settings());\n        validateNumberOfShardsForResize(sourceIndexMetadata, targetNumberOfShards);\n        validateReadOnlyIndexForResize(sourceIndexMetadata);\n\n        String staleIndexUUID = null;\n        for (var cursor : metadata.indices().values()) {\n            IndexMetadata indexMetadata = cursor.value;\n            Settings settings = indexMetadata.getSettings();\n            String sourceUUID = IndexMetadata.INDEX_RESIZE_SOURCE_UUID.get(settings);\n            if (sourceUUID != null && sourceUUID.equals(sourceIndexMetadata.getIndexUUID())) {\n                staleIndexUUID = indexMetadata.getIndexUUID();\n                break;\n            }\n        }\n\n        final ResizeRequest request = new ResizeRequest(\n            table.ident(),\n            partitionName == null ? List.of() : partitionName.values(),\n            targetNumberOfShards\n        );\n\n        return deleteTempIndices()\n            .thenCompose(_ -> client.execute(TransportResize.ACTION, request))\n            .thenCompose(resizeResp -> {\n                if (staleIndexUUID != null) {\n                    GCDanglingArtifactsRequest gcReq = new GCDanglingArtifactsRequest(List.of(staleIndexUUID));\n                    return client.execute(TransportGCDanglingArtifacts.ACTION, gcReq).thenApply(ignored -> resizeResp);\n                }\n                return CompletableFuture.completedFuture(resizeResp);\n            })\n            .thenApply(_ -> 0L);",
+        "verified": true,
+        "verification_result": "ready_to_apply",
+        "notes": "Add staleIndexUUID detection and GC call with indices list as in mainline."
+      }
+    ],
+    "server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java",
+        "edit_type": "replace",
+        "old_string": "public class GCDanglingArtifactsRequest extends AcknowledgedRequest<GCDanglingArtifactsRequest> {\n\n    public static final GCDanglingArtifactsRequest INSTANCE = new GCDanglingArtifactsRequest();\n\n    private GCDanglingArtifactsRequest() {\n        super();\n    }\n\n    public GCDanglingArtifactsRequest(StreamInput in) throws IOException {\n        super(in);\n    }\n}",
+        "new_string": "import java.util.List;\n\npublic class GCDanglingArtifactsRequest extends AcknowledgedRequest<GCDanglingArtifactsRequest> {\n\n    public static final GCDanglingArtifactsRequest INSTANCE = new GCDanglingArtifactsRequest();\n\n    private final List<String> indicesToDelete;\n\n    public GCDanglingArtifactsRequest() {\n        this(List.of());\n    }\n\n    public GCDanglingArtifactsRequest(List<String> indicesToDelete) {\n        super();\n        this.indicesToDelete = indicesToDelete;\n    }\n\n    public GCDanglingArtifactsRequest(StreamInput in) throws IOException {\n        super(in);\n        this.indicesToDelete = in.readStringList();\n    }\n\n    public List<String> indicesToDelete() {\n        return indicesToDelete;\n    }\n\n    @Override\n    public void writeTo(StreamOutput out) throws IOException {\n        super.writeTo(out);\n        out.writeStringCollection(indicesToDelete);\n    }\n}",
+        "verified": true,
+        "verification_result": "ready_to_apply",
+        "notes": "Extend GCDanglingArtifactsRequest with indicesToDelete list and serialization."
+      }
+    ],
+    "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java",
+        "edit_type": "replace",
+        "old_string": "    private final DDLClusterStateTaskExecutor<GCDanglingArtifactsRequest> executor;\n\n    @Inject\n    public TransportGCDanglingArtifacts(TransportService transportService,\n                                        ClusterService clusterService,\n                                        ThreadPool threadPool,\n                                        MetadataDeleteIndexService deleteIndexService) {\n        super(\n            ACTION.name(),\n            transportService,\n            clusterService,\n            threadPool,\n            GCDanglingArtifactsRequest::new,\n            AcknowledgedResponse::new,\n            AcknowledgedResponse::new,\n            \"gc\"\n        );\n        executor = new DDLClusterStateTaskExecutor<>() {\n            @Override\n            protected ClusterState execute(ClusterState currentState,\n                                           GCDanglingArtifactsRequest gcDanglingArtifactsRequest) {\n                Metadata metadata = currentState.metadata();\n\n                Set<Index> danglingIndicesToDelete = new HashSet<>();\n                Set<Index> allTableIndices = new HashSet<>();\n                for (RelationMetadata rm : metadata.relations(RelationMetadata.class)) {\n                    allTableIndices.addAll(metadata.getIndices(\n                        rm.name(),\n                        List.of(),\n                        false,\n                        IndexMetadata::getIndex)\n                    );\n                }\n                for (ObjectCursor<IndexMetadata> indexMetadata : metadata.indices().values()) {\n                    Index index = indexMetadata.value.getIndex();\n                    if (allTableIndices.contains(index) == false) {\n                        danglingIndicesToDelete.add(index);\n                    }\n                }\n\n                if (danglingIndicesToDelete.isEmpty()) {\n                    return currentState;\n                }\n                return deleteIndexService.deleteIndices(currentState, danglingIndicesToDelete);\n            }\n        };\n    }",
+        "new_string": "    private final DDLClusterStateTaskExecutor<GCDanglingArtifactsRequest> executor;\n\n    @Inject\n    public TransportGCDanglingArtifacts(TransportService transportService,\n                                        ClusterService clusterService,\n                                        ThreadPool threadPool,\n                                        MetadataDeleteIndexService deleteIndexService) {\n        super(\n            ACTION.name(),\n            transportService,\n            clusterService,\n            threadPool,\n            GCDanglingArtifactsRequest::new,\n            AcknowledgedResponse::new,\n            AcknowledgedResponse::new,\n            \"gc\"\n        );\n        executor = new DDLClusterStateTaskExecutor<>() {\n            @Override\n            protected ClusterState execute(ClusterState currentState,\n                                           GCDanglingArtifactsRequest gcDanglingArtifactsRequest) {\n                Metadata metadata = currentState.metadata();\n\n                Set<Index> danglingIndicesToDelete = new HashSet<>();\n                Set<Index> allTableIndices = new HashSet<>();\n                for (RelationMetadata rm : metadata.relations(RelationMetadata.class)) {\n                    allTableIndices.addAll(metadata.getIndices(\n                        rm.name(),\n                        List.of(),\n                        false,\n                        IndexMetadata::getIndex)\n                    );\n                }\n                for (ObjectCursor<IndexMetadata> indexMetadata : metadata.indices().values()) {\n                    Index index = indexMetadata.value.getIndex();\n                    if (gcDanglingArtifactsRequest.indicesToDelete().isEmpty() == false && gcDanglingArtifactsRequest.indicesToDelete().contains(index.getUUID()) == false) {\n                        continue;\n                    }\n                    if (allTableIndices.contains(index) == false) {\n                        danglingIndicesToDelete.add(index);\n                    }\n                }\n\n                if (danglingIndicesToDelete.isEmpty()) {\n                    return currentState;\n                }\n                return deleteIndexService.deleteIndices(currentState, danglingIndicesToDelete);\n            }\n        };\n    }",
+        "verified": true,
+        "verification_result": "ready_to_apply",
+        "notes": "Add filtering of dangling indices by indicesToDelete list if provided."
+      }
+    ],
+    "server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java",
+        "edit_type": "replace",
+        "old_string": "public final class GCDanglingArtifactsPlan implements Plan {\n\n    @Override\n    public StatementType type() {\n        return StatementType.MANAGEMENT;\n    }\n\n    @Override\n    public void executeOrFail(DependencyCarrier dependencies,\n                              PlannerContext plannerContext,\n                              RowConsumer consumer,\n                              Row params,\n                              SubQueryResults subQueryResults) {\n        var listener = OneRowActionListener.oneIfAcknowledged(consumer);\n        dependencies.client().execute(TransportGCDanglingArtifacts.ACTION, GCDanglingArtifactsRequest.INSTANCE)\n            .whenComplete(listener);\n    }\n}",
+        "new_string": "public final class GCDanglingArtifactsPlan implements Plan {\n\n    @Override\n    public StatementType type() {\n        return StatementType.MANAGEMENT;\n    }\n\n    @Override\n    public void executeOrFail(DependencyCarrier dependencies,\n                              PlannerContext plannerContext,\n                              RowConsumer consumer,\n                              Row params,\n                              SubQueryResults subQueryResults) {\n        var listener = OneRowActionListener.oneIfAcknowledged(consumer);\n        dependencies.client().execute(TransportGCDanglingArtifacts.ACTION, new GCDanglingArtifactsRequest())\n            .whenComplete(listener);\n    }\n}",
+        "verified": true,
+        "verification_result": "ready_to_apply",
+        "notes": "Change to use new GCDanglingArtifactsRequest() constructor instead of INSTANCE."
+      }
+    ],
+    "server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java": [
+      {
+        "hunk_index": 0,
+        "target_file": "server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java",
+        "edit_type": "replace",
+        "old_string": "import java.io.IOException;\n\nimport org.elasticsearch.Version;\nimport org.elasticsearch.action.ActionListener;\nimport org.elasticsearch.action.ActionType;\nimport org.elasticsearch.action.admin.indices.stats.IndicesStatsRequest;\nimport org.elasticsearch.action.support.master.TransportMasterNodeAction;\nimport org.elasticsearch.client.Client;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.block.ClusterBlockException;\nimport org.elasticsearch.cluster.block.ClusterBlockLevel;\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.metadata.MetadataCreateIndexService;\nimport org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.UUIDs;\nimport org.elasticsearch.common.inject.Inject;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.threadpool.ThreadPool;\nimport org.elasticsearch.transport.TransportService;\n\nimport io.crate.execution.ddl.index.SwapAndDropIndexRequest;\nimport io.crate.execution.ddl.index.TransportSwapAndDropIndexName;\nimport io.crate.execution.ddl.tables.GCDanglingArtifactsRequest;\nimport io.crate.execution.ddl.tables.TransportGCDanglingArtifacts;\nimport io.crate.metadata.PartitionName;\n\n/**\n * Main class to initiate resizing (shrink / split) an index into a new index\n */\npublic class TransportResize extends TransportMasterNodeAction<ResizeRequest, ResizeResponse> {\n\n    public static final Action ACTION = new Action();\n\n    public static class Action extends ActionType<ResizeResponse> {\n        private static final String NAME = \"indices:admin/resize\";\n\n        private Action() {\n            super(NAME);\n        }\n    }\n\n    private final MetadataCreateIndexService createIndexService;\n    private final Client client;\n    private final TransportSwapAndDropIndexName swapAndDropIndexAction;\n    private final TransportGCDanglingArtifacts gcDanglingArtifactsAction;\n\n    @Inject\n    public TransportResize(TransportService transportService,\n                           ClusterService clusterService,\n                           ThreadPool threadPool,\n                           MetadataCreateIndexService createIndexService,\n                           TransportSwapAndDropIndexName swapAndDropIndexAction,\n                           TransportGCDanglingArtifacts gcDanglingArtifactsAction,\n                           Client client) {\n        super(ACTION.name(), transportService, clusterService, threadPool, ResizeRequest::new);\n        this.createIndexService = createIndexService;\n        this.swapAndDropIndexAction = swapAndDropIndexAction;\n        this.gcDanglingArtifactsAction = gcDanglingArtifactsAction;\n        this.client = client;\n    }\n\n\n    @Override\n    protected String executor() {\n        // we go async right away\n        return ThreadPool.Names.SAME;\n    }\n\n    @Override\n    protected ResizeResponse read(StreamInput in) throws IOException {\n        return new ResizeResponse(in);\n    }\n\n    @Override\n    protected ClusterBlockException checkBlock(ResizeRequest request, ClusterState state) {\n        String[] indices = state.metadata().getIndices(\n            request.table(),\n            request.partitionValues(),\n            false,\n            idxMd -> idxMd.getIndex().getUUID()\n        ).toArray(String[]::new);\n        return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, indices);\n    }\n\n    @Override\n    protected void masterOperation(final ResizeRequest request,\n                                   final ClusterState state,\n                                   final ActionListener<ResizeResponse> listener) {\n        if (state.nodes().getMinNodeVersion().onOrAfter(Version.V_6_0_0) == false) {\n            throw new IllegalStateException(\"Cannot resize a table/partition until all nodes are upgraded to 6.0\");\n        }\n\n        final String sourceIndexUUID = state.metadata().getIndex(request.table(), request.partitionValues(), true, IndexMetadata::getIndexUUID);\n        final String resizedIndexUUID = UUIDs.randomBase64UUID();\n\n        client.stats(new IndicesStatsRequest(new PartitionName(request.table(), request.partitionValues()))\n            .clear()\n            .docs(true))\n            .thenCompose(statsResponse -> createIndexService.resizeIndex(request, sourceIndexUUID, resizedIndexUUID, statsResponse))\n            .thenCompose(resizeResp -> {\n                if (resizeResp.isAcknowledged() && resizeResp.isShardsAcknowledged()) {\n                    SwapAndDropIndexRequest req = new SwapAndDropIndexRequest(resizedIndexUUID, sourceIndexUUID);\n                    return swapAndDropIndexAction.execute(req).thenApply(ignored -> resizeResp);\n                } else {\n                    return gcDanglingArtifactsAction.execute(GCDanglingArtifactsRequest.INSTANCE).handle(\n                        (ignored, err) -> {\n                            throw new IllegalStateException(\n                                \"Resize operation wasn't acknowledged. Check shard allocation and retry\", err);\n                        });\n                }\n            })\n\n            .whenComplete(listener);\n    }\n}","new_string":"import java.io.IOException;\nimport java.util.List;\n\nimport org.elasticsearch.Version;\nimport org.elasticsearch.action.ActionListener;\nimport org.elasticsearch.action.ActionType;\nimport org.elasticsearch.action.admin.indices.stats.IndicesStatsRequest;\nimport org.elasticsearch.action.support.master.TransportMasterNodeAction;\nimport org.elasticsearch.client.Client;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.block.ClusterBlockException;\nimport org.elasticsearch.cluster.block.ClusterBlockLevel;\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.metadata.MetadataCreateIndexService;\nimport org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.UUIDs;\nimport org.elasticsearch.common.inject.Inject;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.threadpool.ThreadPool;\nimport org.elasticsearch.transport.TransportService;\n\nimport io.crate.execution.ddl.index.SwapAndDropIndexRequest;\nimport io.crate.execution.ddl.index.TransportSwapAndDropIndexName;\nimport io.crate.execution.ddl.tables.GCDanglingArtifactsRequest;\nimport io.crate.execution.ddl.tables.TransportGCDanglingArtifacts;\nimport io.crate.metadata.PartitionName;\n\n/**\n * Main class to initiate resizing (shrink / split) an index into a new index\n */\npublic class TransportResize extends TransportMasterNodeAction<ResizeRequest, ResizeResponse> {\n\n    public static final Action ACTION = new Action();\n\n    public static class Action extends ActionType<ResizeResponse> {\n        private static final String NAME = \"indices:admin/resize\";\n\n        private Action() {\n            super(NAME);\n        }\n    }\n\n    private final MetadataCreateIndexService createIndexService;\n    private final Client client;\n    private final TransportSwapAndDropIndexName swapAndDropIndexAction;\n    private final TransportGCDanglingArtifacts gcDanglingArtifactsAction;\n\n    @Inject\n    public TransportResize(TransportService transportService,\n                           ClusterService clusterService,\n                           ThreadPool threadPool,\n                           MetadataCreateIndexService createIndexService,\n                           TransportSwapAndDropIndexName swapAndDropIndexAction,\n                           TransportGCDanglingArtifacts gcDanglingArtifactsAction,\n                           Client client) {\n        super(ACTION.name(), transportService, clusterService, threadPool, ResizeRequest::new);\n        this.createIndexService = createIndexService;\n        this.swapAndDropIndexAction = swapAndDropIndexAction;\n        this.gcDanglingArtifactsAction = gcDanglingArtifactsAction;\n        this.client = client;\n    }\n\n\n    @Override\n    protected String executor() {\n        // we go async right away\n        return ThreadPool.Names.SAME;\n    }\n\n    @Override\n    protected ResizeResponse read(StreamInput in) throws IOException {\n        return new ResizeResponse(in);\n    }\n\n    @Override\n    protected ClusterBlockException checkBlock(ResizeRequest request, ClusterState state) {\n        String[] indices = state.metadata().getIndices(\n            request.table(),\n            request.partitionValues(),\n            false,\n            idxMd -> idxMd.getIndex().getUUID()\n        ).toArray(String[]::new);\n        return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, indices);\n    }\n\n    @Override\n    protected void masterOperation(final ResizeRequest request,\n                                   final ClusterState state,\n                                   final ActionListener<ResizeResponse> listener) {\n        if (state.nodes().getMinNodeVersion().onOrAfter(Version.V_6_0_0) == false) {\n            throw new IllegalStateException(\"Cannot resize a table/partition until all nodes are upgraded to 6.0\");\n        }\n\n        final String sourceIndexUUID = state.metadata().getIndex(request.table(), request.partitionValues(), true, IndexMetadata::getIndexUUID);\n        final String resizedIndexUUID = UUIDs.randomBase64UUID();\n\n        client.stats(new IndicesStatsRequest(new PartitionName(request.table(), request.partitionValues()))\n            .clear()\n            .docs(true))\n            .thenCompose(statsResponse -> createIndexService.resizeIndex(request, sourceIndexUUID, resizedIndexUUID, statsResponse))\n            .thenCompose(resizeResp -> {\n                if (resizeResp.isAcknowledged() && resizeResp.isShardsAcknowledged()) {\n                    SwapAndDropIndexRequest req = new SwapAndDropIndexRequest(resizedIndexUUID, sourceIndexUUID);\n                    return swapAndDropIndexAction.execute(req).thenApply(_ -> resizeResp);\n                } else {\n                    GCDanglingArtifactsRequest gcReq = new GCDanglingArtifactsRequest(List.of(resizedIndexUUID));\n                    return gcDanglingArtifactsAction.execute(gcReq).handle(\n                        (_, err) -> {\n                            throw new IllegalStateException(\n                                \"Resize operation wasn't acknowledged. Check shard allocation and retry\", err);\n                        });\n                }\n            })\n\n            .whenComplete(listener);\n    }\n}",
+        "verified": true,
+        "verification_result": "ready_to_apply",
+        "notes": "Add import for List and modify masterOperation to call GC with specific indices list on resize failure."
+      }
+    ]
+  },
+  "risk_notes": [
+    "The edits fully implement the mainline patch intent adapted to the target code structure.",
+    "All changes are localized and use exact anchors from the target files.",
+    "No breaking API changes introduced; compatibility with existing code preserved.",
+    "Test coverage should verify resize and GC dangling artifacts behavior."
+  ]
+}Completed node=recovery_agent
 Completed node=validation
 Workflow completed successfully
 
-[Recovery] Round 0: executed 6 unique call(s) (6 total)
-[Recovery] === Round 1 ===
-[Recovery] tool_call: recovery_done({"summary": "Adapted all mandated files to include new fields, imports, and logic for resize and GC dangling artifacts handling. Verified version bump and error handling changes in TransportResize. All edits based on exact target file anchors and adapted for target repo structure."})
-[Recovery] recovery_done: 6 edits applied across 6 file(s); 0 no_change.
-[Recovery] tool_result[ok] recovery_done: SUCCESS: recovery complete. 6 edit(s) applied. You may stop calling tools now.
-[Recovery] Round 1: executed 1 unique call(s) (1 total)
-[Recovery] recovery_done acknowledged — exiting loop. applied=6 no_change=0
+[LLM OUTPUT END]
+
+[Recovery] LLM text: {
+  "investigation_evidence": [
+    {
+      "kind": "patch_analysis",
+      "details": "Mainline patch adds imports, modifies resize method in AlterTableClient to handle staleIndexUUID and GC dangling artifacts, extends GCDanglingArtifactsRequest with indicesToDelete list, modifies TransportGCDanglingArtifacts to filter indices to delete, updates GCDanglingArtifactsPlan to use new constructor, adjusts Version.java to set CURRENT to V_6_1_1, and modifies TransportResize to handle dangling artifac
+[Recovery] tool_call: recovery_done({"summary": "Adapted all mandated files to implement mainline patch intent in target repo structure: imports and resize method in AlterTableClient, extended GCDanglingArtifactsRequest, filtered indices in TransportGCDanglingArtifacts, updated GCDanglingArtifactsPlan usage, adjusted Version.java CURR)
+[Recovery] recovery_done: 8 edits applied across 6 file(s); 0 no_change.
+[Recovery] tool_result[ok] recovery_done: SUCCESS: recovery complete. 8 edit(s) applied. You may stop calling tools now.
+[Recovery] Round 3: executed 1 unique call(s) (1 total)
+[Recovery] recovery_done acknowledged — exiting loop. applied=8 no_change=0
 Recovery Agent: loop finished, reason=applied_directly
-[Recovery] direct-apply: no diff for server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java (already reverted?)
-[Recovery] reset server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java → ok
 [Recovery] reset server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java → ok
 [Recovery] reset server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java → ok
+[Recovery] reset server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java → ok
 [Recovery] reset server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java → ok
-[Recovery] reset server/src/main/java/org/elasticsearch/Version.java → ok
 [Recovery] reset server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java → ok
-[Recovery] direct-apply handoff: Recovery Agent (direct-apply): applied 6 edit(s) to 5 file(s); 0 file(s) marked no_change.
+[Recovery] reset server/src/main/java/org/elasticsearch/Version.java → ok
+[Recovery] direct-apply handoff: Recovery Agent (direct-apply): applied 8 edit(s) to 6 file(s); 0 file(s) marked no_change.
 Router: Recovery applied edits directly. Routing straight to validation (skipping hunk_generator).
   Completed: recovery_agent
 Agent 4 (Validation): Starting 'Prove Red, Make Green' loop...
   Agent 4: Evaluation full-workflow mode (apply -> build -> relevant tests)...
-  Validation: server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
   Validation: server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
   Validation: server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
-  Validation: server/src/main/java/org/elasticsearch/Version.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
   Validation: server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
+  Validation: server/src/main/java/org/elasticsearch/Version.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]
   Validation: docs/appendices/release-notes/6.0.4.rst - applying 1 hunk(s) one by one in bottom-to-top order: [46]
   Validation: docs/appendices/release-notes/6.1.1.rst - applying 1 hunk(s) one by one in bottom-to-top order: [46]
   Validation: server/src/test/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequestTest.java - applying 1 hunk(s) one by one in bottom-to-top order: [1]

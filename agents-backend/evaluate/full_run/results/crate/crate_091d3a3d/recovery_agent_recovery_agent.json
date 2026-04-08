@@ -1,17 +1,9 @@
 {
   "adapted_code_hunks": [
     {
-      "target_file": "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java",
-      "mainline_file": "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java",
-      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java b/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java\nindex 466ad54e85..369f10983f 100644\n--- a/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java\n+++ b/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java\n@@ -92,8 +92,9 @@ public class TransportGCDanglingArtifacts extends AbstractDDLTransportAction<GCD\n                         IndexMetadata::getIndex)\n                     );\n                 }\n-                for (ObjectCursor<IndexMetadata> indexMetadata : metadata.indices().values()) {\n-                    Index index = indexMetadata.value.getIndex();\n+                for (var cursor : metadata.indices().values()) {\n+                    IndexMetadata indexMetadata = cursor.value;\n+                    Index index = indexMetadata.getIndex();\n                     if (allTableIndices.contains(index) == false) {\n                         danglingIndicesToDelete.add(index);\n                     }\n",
-      "insertion_line": 1,
-      "intent_verified": true,
-      "file_operation": "MODIFIED"
-    },
-    {
       "target_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
       "mainline_file": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
-      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java\nindex f81a2a8d77..2a107ad757 100644\n--- a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java\n+++ b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java\n@@ -193,12 +193,24 @@ public class AlterTableClient {\n         List<String> partitionValues = partitionName == null\n             ? List.of()\n             : partitionName.values();\n-        IndexMetadata sourceIndexMetadata = currentState.metadata().getIndex(table.ident(), partitionValues, true, im -> im);\n+        Metadata metadata = currentState.metadata();\n+        IndexMetadata sourceIndexMetadata = metadata.getIndex(table.ident(), partitionValues, true, im -> im);\n         if (sourceIndexMetadata == null) {\n             throw new RelationUnknown(\n                 String.format(Locale.ENGLISH, \"Table/Partition '%s' does not exist\", table.ident().fqn()));\n         }\n \n+        String staleIndexUUID = null;\n+        for (var cursor : metadata.indices().values()) {\n+            IndexMetadata indexMetadata = cursor.value;\n+            Settings settings = indexMetadata.getSettings();\n+            String sourceUUID = IndexMetadata.INDEX_RESIZE_SOURCE_UUID.get(settings);\n+            if (sourceUUID != null && sourceUUID.equals(sourceIndexMetadata.getIndexUUID())) {\n+                staleIndexUUID = indexMetadata.getIndexUUID();\n+                break;\n+            }\n+        }\n+\n         final int targetNumberOfShards = getNumberOfShards(analysis.settings());\n         validateNumberOfShardsForResize(sourceIndexMetadata, targetNumberOfShards);\n         validateReadOnlyIndexForResize(sourceIndexMetadata);\n@@ -208,6 +220,9 @@ public class AlterTableClient {\n             partitionName == null ? List.of() : partitionName.values(),\n             targetNumberOfShards\n         );\n+        if (staleIndexUUID != null) {\n+            request.setStaleShardsIndexUUID(staleIndexUUID);\n+        }\n         return deleteTempIndices()\n             .thenCompose(_ -> client.execute(TransportResize.ACTION, request))\n             .thenApply(_ -> 0L);\n",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java\nindex f81a2a8d77..ea44d47d6e 100644\n--- a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java\n+++ b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java\n@@ -193,7 +193,8 @@ public class AlterTableClient {\n         List<String> partitionValues = partitionName == null\n             ? List.of()\n             : partitionName.values();\n-        IndexMetadata sourceIndexMetadata = currentState.metadata().getIndex(table.ident(), partitionValues, true, im -> im);\n+        Metadata metadata = currentState.metadata();\n+        IndexMetadata sourceIndexMetadata = metadata.getIndex(table.ident(), partitionValues, true, im -> im);\n         if (sourceIndexMetadata == null) {\n             throw new RelationUnknown(\n                 String.format(Locale.ENGLISH, \"Table/Partition '%s' does not exist\", table.ident().fqn()));\n@@ -203,13 +204,32 @@ public class AlterTableClient {\n         validateNumberOfShardsForResize(sourceIndexMetadata, targetNumberOfShards);\n         validateReadOnlyIndexForResize(sourceIndexMetadata);\n \n+        String staleIndexUUID = null;\n+        for (var cursor : metadata.indices().values()) {\n+            IndexMetadata indexMetadata = cursor.value;\n+            Settings settings = indexMetadata.getSettings();\n+            String sourceUUID = IndexMetadata.INDEX_RESIZE_SOURCE_UUID.get(settings);\n+            if (sourceUUID != null && sourceUUID.equals(sourceIndexMetadata.getIndexUUID())) {\n+                staleIndexUUID = indexMetadata.getIndexUUID();\n+                break;\n+            }\n+        }\n+\n         final ResizeRequest request = new ResizeRequest(\n             table.ident(),\n             partitionName == null ? List.of() : partitionName.values(),\n             targetNumberOfShards\n         );\n+\n         return deleteTempIndices()\n             .thenCompose(_ -> client.execute(TransportResize.ACTION, request))\n+            .thenCompose(resizeResp -> {\n+                if (staleIndexUUID != null) {\n+                    GCDanglingArtifactsRequest gcReq = new GCDanglingArtifactsRequest(List.of(staleIndexUUID));\n+                    return client.execute(TransportGCDanglingArtifacts.ACTION, gcReq).thenApply(ignored -> resizeResp);\n+                }\n+                return CompletableFuture.completedFuture(resizeResp);\n+            })\n             .thenApply(_ -> 0L);\n     }\n \n",
       "insertion_line": 1,
       "intent_verified": true,
       "file_operation": "MODIFIED"
@@ -19,15 +11,23 @@
     {
       "target_file": "server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java",
       "mainline_file": "server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java",
-      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java b/server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java\nindex 8b700cd461..01abab1b31 100644\n--- a/server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java\n+++ b/server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java\n@@ -30,11 +30,29 @@ public class GCDanglingArtifactsRequest extends AcknowledgedRequest<GCDanglingAr\n \n     public static final GCDanglingArtifactsRequest INSTANCE = new GCDanglingArtifactsRequest();\n \n-    private GCDanglingArtifactsRequest() {\n+    private final List<String> indicesToDelete;\n+\n+    public GCDanglingArtifactsRequest() {\n+        this(List.of());\n+    }\n+\n+    public GCDanglingArtifactsRequest(List<String> indicesToDelete) {\n         super();\n+        this.indicesToDelete = indicesToDelete;\n     }\n \n     public GCDanglingArtifactsRequest(StreamInput in) throws IOException {\n         super(in);\n+        this.indicesToDelete = in.readStringList();\n+    }\n+\n+    @Override\n+    public void writeTo(StreamOutput out) throws IOException {\n+        super.writeTo(out);\n+        out.writeStringCollection(indicesToDelete);\n+    }\n+\n+    public List<String> indicesToDelete() {\n+        return indicesToDelete;\n     }\n }\n",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java b/server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java\nindex 8b700cd461..92590ee9d0 100644\n--- a/server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java\n+++ b/server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java\n@@ -26,15 +26,35 @@ import java.io.IOException;\n import org.elasticsearch.action.support.master.AcknowledgedRequest;\n import org.elasticsearch.common.io.stream.StreamInput;\n \n+import java.util.List;\n+\n public class GCDanglingArtifactsRequest extends AcknowledgedRequest<GCDanglingArtifactsRequest> {\n \n     public static final GCDanglingArtifactsRequest INSTANCE = new GCDanglingArtifactsRequest();\n \n-    private GCDanglingArtifactsRequest() {\n+    private final List<String> indicesToDelete;\n+\n+    public GCDanglingArtifactsRequest() {\n+        this(List.of());\n+    }\n+\n+    public GCDanglingArtifactsRequest(List<String> indicesToDelete) {\n         super();\n+        this.indicesToDelete = indicesToDelete;\n     }\n \n     public GCDanglingArtifactsRequest(StreamInput in) throws IOException {\n         super(in);\n+        this.indicesToDelete = in.readStringList();\n+    }\n+\n+    public List<String> indicesToDelete() {\n+        return indicesToDelete;\n+    }\n+\n+    @Override\n+    public void writeTo(StreamOutput out) throws IOException {\n+        super.writeTo(out);\n+        out.writeStringCollection(indicesToDelete);\n     }\n }\n",
       "insertion_line": 1,
       "intent_verified": true,
       "file_operation": "MODIFIED"
     },
     {
-      "target_file": "server/src/main/java/org/elasticsearch/Version.java",
-      "mainline_file": "server/src/main/java/org/elasticsearch/Version.java",
-      "hunk_text": "diff --git a/server/src/main/java/org/elasticsearch/Version.java b/server/src/main/java/org/elasticsearch/Version.java\nindex e0b2f2f0c8..870820e136 100644\n--- a/server/src/main/java/org/elasticsearch/Version.java\n+++ b/server/src/main/java/org/elasticsearch/Version.java\n@@ -210,7 +210,9 @@ public class Version implements Comparable<Version> {\n     public static final Version V_6_1_0 = new Version(9_01_00_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);\n     public static final Version V_6_1_1 = new Version(9_01_01_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);\n \n-    public static final Version CURRENT = V_6_1_1;\n+    public static final Version V_6_2_0 = new Version(9_02_00_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);\n+\n+    public static final Version CURRENT = V_6_2_0;\n \n     private static final ImmutableOpenIntMap<Version> ID_TO_VERSION;\n     private static final ImmutableOpenMap<String, Version> STRING_TO_VERSION;\n",
+      "target_file": "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java",
+      "mainline_file": "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java b/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java\nindex 466ad54e85..94c4903f05 100644\n--- a/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java\n+++ b/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java\n@@ -94,6 +94,9 @@ public class TransportGCDanglingArtifacts extends AbstractDDLTransportAction<GCD\n                 }\n                 for (ObjectCursor<IndexMetadata> indexMetadata : metadata.indices().values()) {\n                     Index index = indexMetadata.value.getIndex();\n+                    if (gcDanglingArtifactsRequest.indicesToDelete().isEmpty() == false && gcDanglingArtifactsRequest.indicesToDelete().contains(index.getUUID()) == false) {\n+                        continue;\n+                    }\n                     if (allTableIndices.contains(index) == false) {\n                         danglingIndicesToDelete.add(index);\n                     }\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED"
+    },
+    {
+      "target_file": "server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java",
+      "mainline_file": "server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java",
+      "hunk_text": "diff --git a/server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java b/server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java\nindex 637adb3b7b..fe307348db 100644\n--- a/server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java\n+++ b/server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java\n@@ -42,7 +42,7 @@ public final class GCDanglingArtifactsPlan implements Plan {\n                               Row params,\n                               SubQueryResults subQueryResults) {\n         var listener = OneRowActionListener.oneIfAcknowledged(consumer);\n-        dependencies.client().execute(TransportGCDanglingArtifacts.ACTION, GCDanglingArtifactsRequest.INSTANCE)\n+        dependencies.client().execute(TransportGCDanglingArtifacts.ACTION, new GCDanglingArtifactsRequest())\n             .whenComplete(listener);\n     }\n }\n",
       "insertion_line": 1,
       "intent_verified": true,
       "file_operation": "MODIFIED"
@@ -39,13 +39,21 @@
       "insertion_line": 1,
       "intent_verified": true,
       "file_operation": "MODIFIED"
+    },
+    {
+      "target_file": "server/src/main/java/org/elasticsearch/Version.java",
+      "mainline_file": "server/src/main/java/org/elasticsearch/Version.java",
+      "hunk_text": "diff --git a/server/src/main/java/org/elasticsearch/Version.java b/server/src/main/java/org/elasticsearch/Version.java\nindex e0b2f2f0c8..e1bdb0bfcf 100644\n--- a/server/src/main/java/org/elasticsearch/Version.java\n+++ b/server/src/main/java/org/elasticsearch/Version.java\n@@ -210,6 +210,8 @@ public class Version implements Comparable<Version> {\n     public static final Version V_6_1_0 = new Version(9_01_00_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);\n     public static final Version V_6_1_1 = new Version(9_01_01_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);\n \n+    public static final Version V_6_1_1 = new Version(9_01_01_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);\n+\n     public static final Version CURRENT = V_6_1_1;\n \n     private static final ImmutableOpenIntMap<Version> ID_TO_VERSION;\n",
+      "insertion_line": 1,
+      "intent_verified": true,
+      "file_operation": "MODIFIED"
     }
   ],
   "adapted_test_hunks": [],
   "recovery_applied_directly": true,
   "recovery_agent_mode": true,
   "recovery_agent_status": "ok",
-  "recovery_agent_summary": "Recovery Agent (direct-apply): applied 6 edit(s) to 5 file(s); 0 file(s) marked no_change.",
+  "recovery_agent_summary": "Recovery Agent (direct-apply): applied 8 edit(s) to 6 file(s); 0 file(s) marked no_change.",
   "recovery_brief": {
     "version": 1,
     "primary_mainline_file": "",
@@ -135,9 +143,9 @@
   "recovery_plan_version": 1,
   "recovery_risk_notes": [],
   "token_usage": {
-    "input_tokens": 47167,
-    "output_tokens": 5491,
-    "total_tokens": 52658,
+    "input_tokens": 99619,
+    "output_tokens": 12144,
+    "total_tokens": 111763,
     "estimated": false,
     "sources": [
       "recovery_agent.direct_apply"

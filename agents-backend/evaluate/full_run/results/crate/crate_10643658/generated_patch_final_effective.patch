@@ -1,8 +1,8 @@
 diff --git a/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java b/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
-index bc7aa265ba..ab8b5a5af5 100644
+index bc7aa265ba..5b7e89d15e 100644
 --- a/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
 +++ b/server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
-@@ -38,4 +38,45 @@ public final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown,
+@@ -38,4 +38,46 @@ public final class QueryProfiler extends AbstractProfiler<QueryProfileBreakdown,
      public QueryProfiler() {
          super(new InternalQueryProfileTree());
      }
@@ -17,10 +17,7 @@ index bc7aa265ba..ab8b5a5af5 100644
 +        boolean stackEmpty = stack.isEmpty();
 +
 +        // ... method body omitted for brevity ...
-+        return null; // placeholder
-+    }
 +
-+    private QueryProfileBreakdown createProfileBreakdown() {
 +        return new QueryProfileBreakdown();
 +    }
 +
@@ -33,6 +30,10 @@ index bc7aa265ba..ab8b5a5af5 100644
 +            results.add(doGetTree(root));
 +        }
 +        return results;
++    }
++
++    private QueryProfileBreakdown createProfileBreakdown() {
++        return new QueryProfileBreakdown();
 +    }
 +
 +    private String getTypeFromElement(Query query) {

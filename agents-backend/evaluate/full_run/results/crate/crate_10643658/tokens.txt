@@ -1,7 +1,7 @@
 {
-  "input_tokens": 12089,
-  "output_tokens": 962,
-  "total_tokens": 13051,
+  "input_tokens": 12142,
+  "output_tokens": 1003,
+  "total_tokens": 13145,
   "messages_with_usage": 2,
   "estimated_messages": 2,
   "tokenizer": {
@@ -12,8 +12,8 @@
   "by_node": {
     "context_analyzer": {
       "input_tokens": 696,
-      "output_tokens": 469,
-      "total_tokens": 1165,
+      "output_tokens": 450,
+      "total_tokens": 1146,
       "estimated_events": 0,
       "exact_events": 1,
       "sources": [
@@ -41,9 +41,9 @@
       ]
     },
     "recovery_agent": {
-      "input_tokens": 11331,
-      "output_tokens": 493,
-      "total_tokens": 11824,
+      "input_tokens": 11384,
+      "output_tokens": 553,
+      "total_tokens": 11937,
       "estimated_events": 0,
       "exact_events": 1,
       "sources": [
@@ -51,5 +51,5 @@
       ]
     }
   },
-  "finished_at": "2026-04-08T14:52:07.194914"
+  "finished_at": "2026-04-08T15:10:03.146120"
 }

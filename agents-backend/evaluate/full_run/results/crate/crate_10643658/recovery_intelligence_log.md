@@ -16,9 +16,9 @@
   "stagnation_break_reason": "",
   "strategy_history": [],
   "recovery_token_usage": {
-    "input_tokens": 11331,
-    "output_tokens": 493,
-    "total_tokens": 11824,
+    "input_tokens": 11384,
+    "output_tokens": 553,
+    "total_tokens": 11937,
     "estimated": false,
     "sources": [
       "recovery_agent.direct_apply"

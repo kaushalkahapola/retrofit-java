@@ -1,7 +1,7 @@
 {
-  "input_tokens": 47243,
-  "output_tokens": 5491,
-  "total_tokens": 52734,
+  "input_tokens": 99695,
+  "output_tokens": 12144,
+  "total_tokens": 111839,
   "messages_with_usage": 1,
   "estimated_messages": 3,
   "tokenizer": {
@@ -41,9 +41,9 @@
       ]
     },
     "recovery_agent": {
-      "input_tokens": 47167,
-      "output_tokens": 5491,
-      "total_tokens": 52658,
+      "input_tokens": 99619,
+      "output_tokens": 12144,
+      "total_tokens": 111763,
       "estimated_events": 0,
       "exact_events": 1,
       "sources": [
@@ -51,5 +51,5 @@
       ]
     }
   },
-  "finished_at": "2026-04-08T14:29:55.322175"
+  "finished_at": "2026-04-08T15:15:10.877418"
 }
