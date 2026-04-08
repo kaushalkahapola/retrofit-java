@@ -3,7 +3,7 @@ from .context_analyzer import context_analyzer_node
 from .structural_locator import structural_locator_node
 from .planning_agent import planning_agent_node
 from .file_editor import file_editor_node
-from .reasoning_architect import reasoning_architect_node
+from .recovery_agent import recovery_agent_node
 from .validation_agent import validation_agent
 
 # Legacy agents preserved for reference / gradual migration.

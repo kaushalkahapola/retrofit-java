@@ -27,7 +27,7 @@
 ### server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 
 - Developer hunks: 6
-- Generated hunks: 5
+- Generated hunks: 0
 
 #### Hunk 1
 
@@ -47,35 +47,21 @@ Developer
 
 Generated
 ```diff
-@@ -21,6 +21,10 @@
- 
- package io.crate.execution.engine.distribution;
- 
-+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-+
-+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-+
- import java.util.ArrayList;
- import java.util.Collection;
- import java.util.List;
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,9 +1,11 @@-@@ -21,6 +21,8 @@
-+@@ -21,6 +21,10 @@
-  
-  package io.crate.execution.engine.distribution;
-  
- +import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
- +
-++import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-++
-  import java.util.ArrayList;
-  import java.util.Collection;
-  import java.util.List;
-
+--- developer+++ generated@@ -1,9 +1 @@-@@ -21,6 +21,8 @@
+- 
+- package io.crate.execution.engine.distribution;
+- 
+-+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
+-+
+- import java.util.ArrayList;
+- import java.util.Collection;
+- import java.util.List;
++*No hunk*
 ```
 
 #### Hunk 2
@@ -96,26 +82,21 @@ Developer
 
 Generated
 ```diff
-@@ -40,6 +44,8 @@
- import io.crate.data.Row;
- import io.crate.data.RowConsumer;
- import io.crate.exceptions.SQLExceptions;
-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
-+import io.crate.execution.jobs.kill.KillResponse;
- import io.crate.execution.support.ActionExecutor;
- import io.crate.execution.support.NodeRequest;
- 
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,4 +1,4 @@-@@ -40,6 +42,8 @@
-+@@ -40,6 +44,8 @@
-  import io.crate.data.Row;
-  import io.crate.data.RowConsumer;
-  import io.crate.exceptions.SQLExceptions;
-
+--- developer+++ generated@@ -1,9 +1 @@-@@ -40,6 +42,8 @@
+- import io.crate.data.Row;
+- import io.crate.data.RowConsumer;
+- import io.crate.exceptions.SQLExceptions;
+-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
+-+import io.crate.execution.jobs.kill.KillResponse;
+- import io.crate.execution.support.ActionExecutor;
+- import io.crate.execution.support.NodeRequest;
+- 
++*No hunk*
 ```
 
 #### Hunk 3
@@ -137,32 +118,22 @@ Developer
 
 Generated
 ```diff
-@@ -75,6 +81,8 @@
- 
-     private volatile Throwable failure;
- 
-+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
-+    private final String localNodeId;
-     public DistributingConsumer(Executor responseExecutor,
-                                 UUID jobId,
-                                 MultiBucketBuilder multiBucketBuilder,
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,10 +1,9 @@-@@ -75,6 +79,9 @@
-+@@ -75,6 +81,8 @@
-  
-      private volatile Throwable failure;
-  
- +    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
- +    private final String localNodeId;
+--- developer+++ generated@@ -1,10 +1 @@-@@ -75,6 +79,9 @@
+- 
+-     private volatile Throwable failure;
+- 
+-+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
+-+    private final String localNodeId;
 -+
-      public DistributingConsumer(Executor responseExecutor,
-                                  UUID jobId,
-                                  MultiBucketBuilder multiBucketBuilder,
-
+-     public DistributingConsumer(Executor responseExecutor,
+-                                 UUID jobId,
+-                                 MultiBucketBuilder multiBucketBuilder,
++*No hunk*
 ```
 
 #### Hunk 4
@@ -183,26 +154,21 @@ Developer
 
 Generated
 ```diff
-@@ -83,6 +91,8 @@
-                                 int bucketIdx,
-                                 Collection<String> downstreamNodeIds,
-                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
-+                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                String localNodeId,
-                                 int pageSize) {
-         this.traceEnabled = LOGGER.isTraceEnabled();
-         this.responseExecutor = responseExecutor;
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,4 +1,4 @@-@@ -83,6 +90,8 @@
-+@@ -83,6 +91,8 @@
-                                  int bucketIdx,
-                                  Collection<String> downstreamNodeIds,
-                                  ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
-
+--- developer+++ generated@@ -1,9 +1 @@-@@ -83,6 +90,8 @@
+-                                 int bucketIdx,
+-                                 Collection<String> downstreamNodeIds,
+-                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
+-+                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
+-+                                String localNodeId,
+-                                 int pageSize) {
+-         this.traceEnabled = LOGGER.isTraceEnabled();
+-         this.responseExecutor = responseExecutor;
++*No hunk*
 ```
 
 #### Hunk 5
@@ -223,39 +189,21 @@ Developer
 
 Generated
 ```diff
-@@ -92,6 +102,12 @@
-         this.inputId = inputId;
-         this.bucketIdx = bucketIdx;
-         this.distributedResultAction = distributedResultAction;
-+        this.killNodeAction = killNodeAction;
-+        this.localNodeId = localNodeId;
-+        this.killNodeAction = killNodeAction;
-+        this.localNodeId = localNodeId;
-+        this.killNodeAction = killNodeAction;
-+        this.localNodeId = localNodeId;
-         this.pageSize = pageSize;
-         this.buckets = new StreamBucket[downstreamNodeIds.size()];
-         this.completionFuture = new CompletableFuture<>();
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,9 +1,13 @@-@@ -92,6 +101,8 @@
-+@@ -92,6 +102,12 @@
-          this.inputId = inputId;
-          this.bucketIdx = bucketIdx;
-          this.distributedResultAction = distributedResultAction;
- +        this.killNodeAction = killNodeAction;
- +        this.localNodeId = localNodeId;
-++        this.killNodeAction = killNodeAction;
-++        this.localNodeId = localNodeId;
-++        this.killNodeAction = killNodeAction;
-++        this.localNodeId = localNodeId;
-          this.pageSize = pageSize;
-          this.buckets = new StreamBucket[downstreamNodeIds.size()];
-          this.completionFuture = new CompletableFuture<>();
-
+--- developer+++ generated@@ -1,9 +1 @@-@@ -92,6 +101,8 @@
+-         this.inputId = inputId;
+-         this.bucketIdx = bucketIdx;
+-         this.distributedResultAction = distributedResultAction;
+-+        this.killNodeAction = killNodeAction;
+-+        this.localNodeId = localNodeId;
+-         this.pageSize = pageSize;
+-         this.buckets = new StreamBucket[downstreamNodeIds.size()];
+-         this.completionFuture = new CompletableFuture<>();
++*No hunk*
 ```
 
 #### Hunk 6
@@ -311,7 +259,7 @@ Developer -> Generated (Unified Diff)
 ### server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 
 - Developer hunks: 4
-- Generated hunks: 4
+- Generated hunks: 0
 
 #### Hunk 1
 
@@ -332,23 +280,22 @@ Developer
 
 Generated
 ```diff
-@@ -37,6 +37,9 @@
- import io.crate.execution.dsl.phases.ExecutionPhases;
- import io.crate.execution.dsl.phases.NodeOperation;
- import io.crate.execution.jobs.PageBucketReceiver;
-+import io.crate.execution.jobs.kill.KillJobsNodeAction;
-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
-+import io.crate.execution.jobs.kill.KillResponse;
- import io.crate.execution.support.ActionExecutor;
- import io.crate.execution.support.NodeRequest;
- import io.crate.planner.distribution.DistributionInfo;
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,10 +1 @@-@@ -37,6 +37,9 @@
+- import io.crate.execution.dsl.phases.ExecutionPhases;
+- import io.crate.execution.dsl.phases.NodeOperation;
+- import io.crate.execution.jobs.PageBucketReceiver;
+-+import io.crate.execution.jobs.kill.KillJobsNodeAction;
+-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
+-+import io.crate.execution.jobs.kill.KillResponse;
+- import io.crate.execution.support.ActionExecutor;
+- import io.crate.execution.support.NodeRequest;
+- import io.crate.planner.distribution.DistributionInfo;
++*No hunk*
 ```
 
 #### Hunk 2
@@ -368,21 +315,20 @@ Developer
 
 Generated
 ```diff
-@@ -49,6 +52,7 @@
-     private final ClusterService clusterService;
-     private final Executor responseExecutor;
-     private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
-+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
- 
-     @Inject
-     public DistributingConsumerFactory(ClusterService clusterService,
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
-(No textual difference)
-
+--- developer+++ generated@@ -1,8 +1 @@-@@ -49,6 +52,7 @@
+-     private final ClusterService clusterService;
+-     private final Executor responseExecutor;
+-     private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
+-+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
+- 
+-     @Inject
+-     public DistributingConsumerFactory(ClusterService clusterService,
++*No hunk*
 ```
 
 #### Hunk 3
@@ -402,31 +348,20 @@ Developer
 
 Generated
 ```diff
-@@ -57,6 +61,8 @@
-         this.clusterService = clusterService;
-         this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
-         this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
-+        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);
-+
-     }
- 
-     public DistributingConsumer create(NodeOperation nodeOperation,
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,8 +1,9 @@-@@ -57,6 +61,7 @@
-+@@ -57,6 +61,8 @@
-          this.clusterService = clusterService;
-          this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
-          this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
- +        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);
-++
-      }
-  
-      public DistributingConsumer create(NodeOperation nodeOperation,
-
+--- developer+++ generated@@ -1,8 +1 @@-@@ -57,6 +61,7 @@
+-         this.clusterService = clusterService;
+-         this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
+-         this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
+-+        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);
+-     }
+- 
+-     public DistributingConsumer create(NodeOperation nodeOperation,
++*No hunk*
 ```
 
 #### Hunk 4
@@ -447,26 +382,21 @@ Developer
 
 Generated
 ```diff
-@@ -110,6 +116,8 @@
-             bucketIdx,
-             nodeOperation.downstreamNodes(),
-             distributedResultAction,
-+            killNodeAction,
-+            clusterService.localNode().getId(),
-             pageSize
-         );
-     }
-
+*No hunk*
 ```
 
 Developer -> Generated (Unified Diff)
 ```diff
---- developer+++ generated@@ -1,4 +1,4 @@-@@ -110,6 +115,8 @@
-+@@ -110,6 +116,8 @@
-              bucketIdx,
-              nodeOperation.downstreamNodes(),
-              distributedResultAction,
-
+--- developer+++ generated@@ -1,9 +1 @@-@@ -110,6 +115,8 @@
+-             bucketIdx,
+-             nodeOperation.downstreamNodes(),
+-             distributedResultAction,
+-+            killNodeAction,
+-+            clusterService.localNode().getId(),
+-             pageSize
+-         );
+-     }
++*No hunk*
 ```
 
 
@@ -692,201 +622,11 @@ Developer -> Generated (Unified Diff)
 
 ## Full Generated Patch (Agent-Only, code-only)
 ```diff
-diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-index 12171a4a54..c33511e4c9 100644
---- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-@@ -21,6 +21,10 @@
- 
- package io.crate.execution.engine.distribution;
- 
-+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-+
-+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-+
- import java.util.ArrayList;
- import java.util.Collection;
- import java.util.List;
-@@ -40,6 +44,8 @@ import io.crate.data.Paging;
- import io.crate.data.Row;
- import io.crate.data.RowConsumer;
- import io.crate.exceptions.SQLExceptions;
-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
-+import io.crate.execution.jobs.kill.KillResponse;
- import io.crate.execution.support.ActionExecutor;
- import io.crate.execution.support.NodeRequest;
- 
-@@ -75,6 +81,8 @@ public class DistributingConsumer implements RowConsumer {
- 
-     private volatile Throwable failure;
- 
-+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
-+    private final String localNodeId;
-     public DistributingConsumer(Executor responseExecutor,
-                                 UUID jobId,
-                                 MultiBucketBuilder multiBucketBuilder,
-@@ -83,6 +91,8 @@ public class DistributingConsumer implements RowConsumer {
-                                 int bucketIdx,
-                                 Collection<String> downstreamNodeIds,
-                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
-+                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                String localNodeId,
-                                 int pageSize) {
-         this.traceEnabled = LOGGER.isTraceEnabled();
-         this.responseExecutor = responseExecutor;
-@@ -92,6 +102,12 @@ public class DistributingConsumer implements RowConsumer {
-         this.inputId = inputId;
-         this.bucketIdx = bucketIdx;
-         this.distributedResultAction = distributedResultAction;
-+        this.killNodeAction = killNodeAction;
-+        this.localNodeId = localNodeId;
-+        this.killNodeAction = killNodeAction;
-+        this.localNodeId = localNodeId;
-+        this.killNodeAction = killNodeAction;
-+        this.localNodeId = localNodeId;
-         this.pageSize = pageSize;
-         this.buckets = new StreamBucket[downstreamNodeIds.size()];
-         this.completionFuture = new CompletableFuture<>();
-diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-index 3dc1921a76..2130479fdf 100644
---- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-@@ -37,6 +37,9 @@ import io.crate.data.breaker.RamAccounting;
- import io.crate.execution.dsl.phases.ExecutionPhases;
- import io.crate.execution.dsl.phases.NodeOperation;
- import io.crate.execution.jobs.PageBucketReceiver;
-+import io.crate.execution.jobs.kill.KillJobsNodeAction;
-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
-+import io.crate.execution.jobs.kill.KillResponse;
- import io.crate.execution.support.ActionExecutor;
- import io.crate.execution.support.NodeRequest;
- import io.crate.planner.distribution.DistributionInfo;
-@@ -49,6 +52,7 @@ public class DistributingConsumerFactory {
-     private final ClusterService clusterService;
-     private final Executor responseExecutor;
-     private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
-+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
- 
-     @Inject
-     public DistributingConsumerFactory(ClusterService clusterService,
-@@ -57,6 +61,8 @@ public class DistributingConsumerFactory {
-         this.clusterService = clusterService;
-         this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
-         this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
-+        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);
-+
-     }
- 
-     public DistributingConsumer create(NodeOperation nodeOperation,
-@@ -110,6 +116,8 @@ public class DistributingConsumerFactory {
-             bucketIdx,
-             nodeOperation.downstreamNodes(),
-             distributedResultAction,
-+            killNodeAction,
-+            clusterService.localNode().getId(),
-             pageSize
-         );
-     }
 
 ```
 
 ## Full Generated Patch (Final Effective, code-only)
 ```diff
-diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-index 12171a4a54..c33511e4c9 100644
---- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-@@ -21,6 +21,10 @@
- 
- package io.crate.execution.engine.distribution;
- 
-+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-+
-+import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
-+
- import java.util.ArrayList;
- import java.util.Collection;
- import java.util.List;
-@@ -40,6 +44,8 @@ import io.crate.data.Paging;
- import io.crate.data.Row;
- import io.crate.data.RowConsumer;
- import io.crate.exceptions.SQLExceptions;
-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
-+import io.crate.execution.jobs.kill.KillResponse;
- import io.crate.execution.support.ActionExecutor;
- import io.crate.execution.support.NodeRequest;
- 
-@@ -75,6 +81,8 @@ public class DistributingConsumer implements RowConsumer {
- 
-     private volatile Throwable failure;
- 
-+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
-+    private final String localNodeId;
-     public DistributingConsumer(Executor responseExecutor,
-                                 UUID jobId,
-                                 MultiBucketBuilder multiBucketBuilder,
-@@ -83,6 +91,8 @@ public class DistributingConsumer implements RowConsumer {
-                                 int bucketIdx,
-                                 Collection<String> downstreamNodeIds,
-                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
-+                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                String localNodeId,
-                                 int pageSize) {
-         this.traceEnabled = LOGGER.isTraceEnabled();
-         this.responseExecutor = responseExecutor;
-@@ -92,6 +102,12 @@ public class DistributingConsumer implements RowConsumer {
-         this.inputId = inputId;
-         this.bucketIdx = bucketIdx;
-         this.distributedResultAction = distributedResultAction;
-+        this.killNodeAction = killNodeAction;
-+        this.localNodeId = localNodeId;
-+        this.killNodeAction = killNodeAction;
-+        this.localNodeId = localNodeId;
-+        this.killNodeAction = killNodeAction;
-+        this.localNodeId = localNodeId;
-         this.pageSize = pageSize;
-         this.buckets = new StreamBucket[downstreamNodeIds.size()];
-         this.completionFuture = new CompletableFuture<>();
-diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-index 3dc1921a76..2130479fdf 100644
---- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-+++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-@@ -37,6 +37,9 @@ import io.crate.data.breaker.RamAccounting;
- import io.crate.execution.dsl.phases.ExecutionPhases;
- import io.crate.execution.dsl.phases.NodeOperation;
- import io.crate.execution.jobs.PageBucketReceiver;
-+import io.crate.execution.jobs.kill.KillJobsNodeAction;
-+import io.crate.execution.jobs.kill.KillJobsNodeRequest;
-+import io.crate.execution.jobs.kill.KillResponse;
- import io.crate.execution.support.ActionExecutor;
- import io.crate.execution.support.NodeRequest;
- import io.crate.planner.distribution.DistributionInfo;
-@@ -49,6 +52,7 @@ public class DistributingConsumerFactory {
-     private final ClusterService clusterService;
-     private final Executor responseExecutor;
-     private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
-+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
- 
-     @Inject
-     public DistributingConsumerFactory(ClusterService clusterService,
-@@ -57,6 +61,8 @@ public class DistributingConsumerFactory {
-         this.clusterService = clusterService;
-         this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
-         this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
-+        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);
-+
-     }
- 
-     public DistributingConsumer create(NodeOperation nodeOperation,
-@@ -110,6 +116,8 @@ public class DistributingConsumerFactory {
-             bucketIdx,
-             nodeOperation.downstreamNodes(),
-             distributedResultAction,
-+            killNodeAction,
-+            clusterService.localNode().getId(),
-             pageSize
-         );
-     }
 
 ```
 ## Full Developer Backport Patch (full commit diff)

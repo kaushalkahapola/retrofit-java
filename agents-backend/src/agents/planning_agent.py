@@ -3247,6 +3247,71 @@ async def planning_agent_node(state: AgentState, config) -> dict:
         elif retry_files and "<all>" not in retry_files:
             next_force_type_v_files = sorted(retry_files)
 
+    complex_case_mode = bool(state.get("complex_case_mode") or False)
+    plan_mode_evidence = state.get("plan_mode_evidence") or {}
+    execution_contract: dict[str, Any] = {}
+    if complex_case_mode:
+        contract_files: list[dict[str, Any]] = []
+        for mainline_file, entries in dict(plan).items():
+            if not isinstance(entries, list) or not entries:
+                continue
+            normalized_ops = []
+            for idx, entry in enumerate(entries):
+                if not isinstance(entry, dict):
+                    continue
+                normalized_ops.append(
+                    {
+                        "op_id": str(
+                            entry.get("op_id")
+                            or f"{str(mainline_file).replace('/', '_')}_{idx}"
+                        ),
+                        "edit_type": str(entry.get("edit_type") or "replace"),
+                        "old_string": str(entry.get("old_string") or ""),
+                        "new_string": str(entry.get("new_string") or ""),
+                        "verified": bool(entry.get("verified", False)),
+                        "verification_result": str(
+                            entry.get("verification_result") or ""
+                        ),
+                        "hunk_index": entry.get("hunk_index"),
+                        "notes": str(entry.get("notes") or ""),
+                        "target_file": str(entry.get("target_file") or ""),
+                    }
+                )
+            if not normalized_ops:
+                continue
+            target_file = str(
+                (entries[0].get("target_file") if isinstance(entries[0], dict) else "")
+                or mainline_file
+            )
+            # Keep target_file on each operation as a stable contract field.
+            for op in normalized_ops:
+                op["target_file"] = str(
+                    (
+                        entries[0].get("target_file")
+                        if isinstance(entries[0], dict)
+                        else ""
+                    )
+                    or mainline_file
+                )
+            contract_files.append(
+                {
+                    "mainline_file": str(mainline_file),
+                    "target_file": str(target_file),
+                    "operations": normalized_ops,
+                }
+            )
+
+        execution_contract = {
+            "mode": "complex",
+            "reason": str(state.get("complex_case_reason") or ""),
+            "files": contract_files,
+            "evidence": plan_mode_evidence
+            if isinstance(plan_mode_evidence, dict)
+            else {},
+            "plan_signature": plan_sig,
+            "validation_attempt": validation_attempts,
+        }
+
     return {
         "messages": [
             HumanMessage(
@@ -3254,6 +3319,7 @@ async def planning_agent_node(state: AgentState, config) -> dict:
             )
         ],
         "hunk_generation_plan": dict(plan),
+        "execution_contract": execution_contract,
         "last_plan_signature": plan_sig,
         "validation_repeated_plan_detected": repeated_plan_detected,
         "force_type_v_until_success": bool(force_type_v),

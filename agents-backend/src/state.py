@@ -328,3 +328,16 @@ class AgentState(TypedDict):
     agent_token_usage: NotRequired[
         dict[str, dict[str, Any]]
     ]  # Per-node token accounting (exact or estimated)
+
+    # --- Apply mode flag for dumb vs plan-based recovery ---
+    apply_mode: NotRequired[
+        str
+    ]  # "dumb" (initial attempt, no planning) | "plan" (recovery path, use plan)
+
+    # --- Recovery agent path ---
+    recovery_agent_summary: NotRequired[
+        str
+    ]  # Short summary of latest recovery planning outcome
+    recovery_agent_status: NotRequired[
+        str
+    ]  # Optional terminal status from recovery agent (e.g. no_fix_found)

@@ -1,0 +1,18 @@
+{
+  "hunk_generation_plan": {},
+  "last_plan_signature": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "validation_repeated_plan_detected": false,
+  "recovery_agent_status": "ok",
+  "recovery_agent_summary": "Recovery Agent complete: planned 0 operation(s) across 0 file(s). Stagnation: repeated_tool_call_streak:4:submit_recovery_plan:{\"server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java\":[{\"edit_type\":\"insert_after\",\"hunk_index\":0,\"new_string\":\"import io.cr.",
+  "validation_failed_stage": null,
+  "token_usage": {
+    "input_tokens": 166931,
+    "output_tokens": 19931,
+    "total_tokens": 186862,
+    "estimated": false,
+    "sources": [
+      "recovery_agent.loop.iter_1",
+      "recovery_agent.loop.iter_2"
+    ]
+  }
+}

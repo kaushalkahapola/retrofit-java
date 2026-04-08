@@ -409,9 +409,7 @@ def _build_fallback_plan_entries(
 
             if edit_type == "insert_after":
                 # Last non-blank context line before the additions
-                anchor = next(
-                    (c for c in reversed(before_adds) if c.strip()), ""
-                )
+                anchor = next((c for c in reversed(before_adds) if c.strip()), "")
             else:
                 # First non-blank context line after the additions
                 anchor = next((c for c in after_adds if c.strip()), "")
@@ -2342,6 +2340,44 @@ async def file_editor_node(state: AgentState, config) -> dict:
 
     mapped_target_context: dict = state.get("mapped_target_context") or {}
     hunk_generation_plan: dict = state.get("hunk_generation_plan") or {}
+    complex_case_mode = bool(state.get("complex_case_mode") or False)
+    execution_contract = state.get("execution_contract") or {}
+    complex_contract_enforced = bool(
+        complex_case_mode
+        and isinstance(execution_contract, dict)
+        and isinstance(execution_contract.get("files"), list)
+        and execution_contract.get("files")
+    )
+    if complex_contract_enforced:
+        contract_plan: dict[str, list[dict[str, Any]]] = {}
+        for file_entry in execution_contract.get("files") or []:
+            if not isinstance(file_entry, dict):
+                continue
+            mainline_file = str(file_entry.get("mainline_file") or "").strip()
+            target_file = str(file_entry.get("target_file") or "").strip()
+            ops = file_entry.get("operations") or []
+            if not mainline_file or not isinstance(ops, list) or not ops:
+                continue
+            normalized_ops: list[dict[str, Any]] = []
+            for op in ops:
+                if not isinstance(op, dict):
+                    continue
+                normalized_ops.append(
+                    {
+                        "hunk_index": op.get("hunk_index", 0),
+                        "target_file": target_file or str(op.get("target_file") or ""),
+                        "edit_type": str(op.get("edit_type") or "replace"),
+                        "old_string": str(op.get("old_string") or ""),
+                        "new_string": str(op.get("new_string") or ""),
+                        "verified": bool(op.get("verified", False)),
+                        "verification_result": str(op.get("verification_result") or ""),
+                        "notes": str(op.get("notes") or "") + "|execution_contract",
+                    }
+                )
+            if normalized_ops:
+                contract_plan[mainline_file] = normalized_ops
+        if contract_plan:
+            hunk_generation_plan = contract_plan
     surgical_plans = _normalize_surgical_plan_map(state.get("surgical_plans") or {})
     reasoning_iterations = int(state.get("reasoning_iterations") or 0)
     patch_complexity = str(state.get("patch_complexity") or "REWRITE").strip().upper()
@@ -2390,9 +2426,38 @@ async def file_editor_node(state: AgentState, config) -> dict:
         print(msg)
         return {"messages": [HumanMessage(content=msg)]}
 
+    # For STRUCTURAL/REWRITE patches without a plan:
+    # Fail fast so recovery_agent runs (or we exit cleanly if recovery already failed).
+    # This also covers the retry case where recovery_agent returned an empty plan —
+    # we must NOT fall through to ReAct, which would butcher the files.
+    if (
+        patch_complexity not in ("TRIVIAL", "")
+        and not hunk_generation_plan
+    ):
+        stage = "dumb apply" if validation_attempts == 0 else "retry apply"
+        msg = (
+            f"Agent 3: Skipping {stage} for {patch_complexity} patch without plan. "
+            "STRUCTURAL/REWRITE patches require semantic planning. "
+            "Failing fast (no ReAct fallback to avoid corrupting files)."
+        )
+        print(msg)
+        return {
+            "messages": [HumanMessage(content=msg)],
+            "adapted_file_edits": [],
+            "adapted_code_hunks": [],
+            "adapted_test_hunks": [],
+            "validation_passed": False,
+            "validation_error_context": "Dumb apply skipped for STRUCTURAL/REWRITE patch. Recovery agent needed.",
+        }
+
     if validation_attempts > 0 and error_context:
         print(
             f"  Agent 3: Retry #{validation_attempts} - deterministic re-application with failure context."
+        )
+    if complex_contract_enforced:
+        print(
+            "  Agent 3: Complex contract mode active; enforcing deterministic "
+            "contract-only execution (no ReAct escalation)."
         )
     if surgical_plans:
         print(
@@ -2570,6 +2635,37 @@ async def file_editor_node(state: AgentState, config) -> dict:
         # Get plan entries for this file
         plan_entries: list[dict[str, Any]] = hunk_generation_plan.get(mainline_file, [])
         if not plan_entries and not surgical_ops_for_file:
+            # DEFENSE-IN-DEPTH: for STRUCTURAL/REWRITE patches, do NOT build
+            # a mainline-text-derived deterministic fallback. The mainline
+            # `-` lines are not guaranteed to exist verbatim in the target
+            # (different versions, different surrounding code), so every
+            # str_replace with an old_string copied from mainline is a
+            # guaranteed miss — and ReAct then wastes its budget chasing
+            # anchors that don't exist. The recovery agent's coverage gate
+            # should already have prevented this case; if we reach here, it
+            # means the plan genuinely has no entry for a STRUCTURAL file,
+            # which is a planner bug we want to surface loudly, not paper
+            # over with broken mainline-derived edits.
+            if patch_complexity in ("STRUCTURAL", "REWRITE"):
+                print(
+                    f"  Agent 3: Refusing to build mainline-text fallback for "
+                    f"{mainline_file} (complexity={patch_complexity}). "
+                    "Recovery agent must produce an explicit plan for this file. "
+                    "Skipping — will re-route through recovery on next retry."
+                )
+                generation_checklist.append(
+                    {
+                        "mainline_file": mainline_file,
+                        "target_file": target_file,
+                        "hunk_index": 0,
+                        "status": "failed",
+                        "reason": "missing_plan_for_structural_file",
+                        "todo_steps": ["recovery_replan"],
+                        "completed_steps": [],
+                    }
+                )
+                continue
+
             fallback_raw_hunks = raw_hunks_by_file.get(mainline_file, [])
             plan_entries = _build_fallback_plan_entries(
                 raw_hunks=fallback_raw_hunks,
@@ -2650,7 +2746,11 @@ async def file_editor_node(state: AgentState, config) -> dict:
         if force_type_v_for_file:
             execution_types.add("TYPE_V")
         # Try deterministic path first for TYPE_IV when planner produced verified anchors.
-        first_pass_dumb_mode = validation_attempts == 0
+        # Dumb mode is only safe for TRIVIAL patches. STRUCTURAL/REWRITE require planning.
+        first_pass_dumb_mode = (
+            validation_attempts == 0
+            and patch_complexity in ("TRIVIAL", "")
+        )
 
         if adaptation_type == "TYPE_IV" and all(
             bool((e or {}).get("verified", False)) for e in (plan_entries or [])
@@ -2660,6 +2760,9 @@ async def file_editor_node(state: AgentState, config) -> dict:
             deterministic_only = False
         if first_pass_dumb_mode:
             deterministic_only = True
+        if complex_contract_enforced:
+            deterministic_only = True
+            execution_types = set()
         print(
             f"    Agent 3: Classified {target_file} as {adaptation_type} "
             f"({'deterministic' if deterministic_only else 'reactive'} path)"
@@ -2813,7 +2916,7 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     _react_recovery = validation_attempts > 0 or bool(
                         state.get("evaluation_full_workflow")
                     )
-                    if _react_recovery:
+                    if _react_recovery and not complex_contract_enforced:
                         print(
                             f"    Agent 3: PLAN_PREFLIGHT_FAILED {target_file}: {_pr.reason} "
                             "— falling back to ReAct (stale anchors after build failure or eval mode)."
@@ -2876,7 +2979,9 @@ async def file_editor_node(state: AgentState, config) -> dict:
                     # Apply verified entries deterministically BEFORE ReAct so the LLM
                     # doesn't need to re-derive them (and doesn't accidentally skip them).
                     verified_entries = [
-                        e for e in plan_entries if bool((e or {}).get("verified", False))
+                        e
+                        for e in plan_entries
+                        if bool((e or {}).get("verified", False))
                     ]
                     if verified_entries:
                         _pre_ok, _pre_reason = _apply_plan_entries_deterministically(
@@ -2930,6 +3035,11 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         "Escalating to smart ReAct refinement."
                     )
                     _git_reset_file(target_repo_path, target_file)
+                    if complex_contract_enforced:
+                        task_entry["status"] = "failed"
+                        task_entry["reason"] = "generation_contract_failed"
+                        task_entry["error"] = str(apply_reason)[:1000]
+                        continue
                     if first_pass_dumb_mode:
                         print(
                             "    Agent 3: Strict exact mode rejected adaptive fallback; "
@@ -2965,6 +3075,12 @@ async def file_editor_node(state: AgentState, config) -> dict:
                         _git_reset_file(target_repo_path, target_file)
                         continue
             else:
+                if complex_contract_enforced:
+                    task_entry["status"] = "failed"
+                    task_entry["reason"] = "generation_contract_failed"
+                    task_entry["error"] = "react_disallowed_in_complex_contract_mode"
+                    _git_reset_file(target_repo_path, target_file)
+                    continue
                 used_react = True
                 agent_metrics["react_escalations"] += 1
                 react_ok, react_reason = await _run_react_edit_pass(
