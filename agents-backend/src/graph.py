@@ -44,9 +44,10 @@ from agents import (
 )
 from state import AgentState
 
-# Maximum number of "Prove Red, Make Green" retry loops before giving up.
-# With dumb run + recovery cycle, max 2 recovery attempts before admitting defeat.
-MAX_VALIDATION_ATTEMPTS = 2
+# Maximum number of validation attempts before giving up.
+# Set to 3 so that when Phase 3 bails out with "no adapted hunks" (attempt 1),
+# recovery_agent still gets a real post-build retry (attempt 2 → attempt 3).
+MAX_VALIDATION_ATTEMPTS = 3
 
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,8 @@
 {
-  "input_tokens": 41354,
-  "output_tokens": 11760,
-  "total_tokens": 53114,
-  "messages_with_usage": 1,
+  "input_tokens": 740860,
+  "output_tokens": 8967,
+  "total_tokens": 749827,
+  "messages_with_usage": 2,
   "estimated_messages": 3,
   "tokenizer": {
     "model": "gpt-4.1",
@@ -41,15 +41,16 @@
       ]
     },
     "recovery_agent": {
-      "input_tokens": 41278,
-      "output_tokens": 11760,
-      "total_tokens": 53038,
+      "input_tokens": 740784,
+      "output_tokens": 8967,
+      "total_tokens": 749751,
       "estimated_events": 0,
-      "exact_events": 1,
+      "exact_events": 2,
       "sources": [
+        "node.token_usage",
         "node.token_usage"
       ]
     }
   },
-  "finished_at": "2026-04-08T15:04:41.403166"
+  "finished_at": "2026-04-08T16:40:14.463418"
 }

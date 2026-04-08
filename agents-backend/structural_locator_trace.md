@@ -4,87 +4,61 @@
 - **Root Cause**: Deterministic inference: target branch diverges from mainline; adapt hunks with exact target context.
 
 ## Hunk Segregation
-- Code files: 6
+- Code files: 3
 - Test files: 0
 
 ## Code File Mappings
 
-### `server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java`
+### `server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java`
+
+**Hunks in this file**: 6
+
+**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java`
+
+**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
+
+| Hunk Idx | Role | Mainline Method | Target Method | Lines |
+|---|---|---|---|---|
+| 1 | declaration | `<import>` | `<import>` | 22–22 |
+| 2 | declaration | `<import>` | `<import>` | 40–40 |
+| 3 | declaration | `<class_declaration>` | `<class_declaration>` | 76–76 |
+  - JavaStructureLocator recovered target_method for hunk 4: failure (java_structure_locator:field_declaration)
+| 4 | propagation | `hunk_4` | `failure` | 83–83 |
+  - JavaStructureLocator recovered target_method for hunk 5: failure (java_structure_locator:field_declaration)
+| 5 | propagation | `hunk_5` | `failure` | 92–92 |
+  - JavaStructureLocator recovered target_method for hunk 6: forwardResults (java_structure_locator:method)
+| 6 | core_fix | `hunk_6` | `forwardResults` | 222–222 |
+### `server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java`
 
 **Hunks in this file**: 4
 
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java`
+**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 35–35 |
-  - JavaStructureLocator recovered target_method for hunk 2: currentState (java_structure_locator:field_declaration)
-| 2 | guard | `hunk_2` | `currentState` | 196–196 |
-  - JavaStructureLocator recovered target_method for hunk 3: deleteTempIndices (java_structure_locator:method)
-| 3 | guard | `hunk_3` | `deleteTempIndices` | 211–211 |
-| 4 | core_fix | `deleteTempIndices` | `deleteTempIndices` | 283–283 |
-### `server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java`
+| 1 | declaration | `<import>` | `<import>` | 37–37 |
+| 2 | declaration | `<class_declaration>` | `<class_declaration>` | 49–49 |
+  - JavaStructureLocator recovered target_method for hunk 3: responseExecutor (java_structure_locator:field_declaration)
+| 3 | core_fix | `hunk_3` | `responseExecutor` | 57–57 |
+  - JavaStructureLocator recovered target_method for hunk 4: responseExecutor (java_structure_locator:field_declaration)
+| 4 | core_fix | `hunk_4` | `responseExecutor` | 110–110 |
+### `server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java`
 
-**Hunks in this file**: 1
+**Hunks in this file**: 3
 
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | declaration | `<class_declaration>` | `<class_declaration>` | 31–31 |
-### `server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java`
+**Git Resolution**: Found `server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java`
 
 **Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
 
 | Hunk Idx | Role | Mainline Method | Target Method | Lines |
 |---|---|---|---|---|
-  - JavaStructureLocator recovered target_method for hunk 1: executor (java_structure_locator:field_declaration)
-| 1 | guard | `hunk_1` | `executor` | 95–95 |
-### `server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-  - JavaStructureLocator recovered target_method for hunk 1: type (java_structure_locator:method)
-| 1 | core_fix | `hunk_1` | `type` | 45–45 |
-### `server/src/main/java/org/elasticsearch/Version.java`
-
-**Hunks in this file**: 1
-
-**Git Resolution**: Found `server/src/main/java/org/elasticsearch/Version.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-  - JavaStructureLocator recovered target_method for hunk 1: V_6_0_1 (java_structure_locator:field_declaration)
-| 1 | core_fix | `hunk_1` | `V_6_0_1` | 206–206 |
-### `server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java`
-
-**Hunks in this file**: 2
-
-**Git Resolution**: Found `server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java`
-
-**Deterministic Mode**: raw-diff anchor mapping succeeded (no LLM call).
-
-| Hunk Idx | Role | Mainline Method | Target Method | Lines |
-|---|---|---|---|---|
-| 1 | declaration | `<import>` | `<import>` | 19–19 |
-  - JavaStructureLocator recovered target_method for hunk 2: resizedIndexUUID (java_structure_locator:field_declaration)
-| 2 | guard | `hunk_2` | `resizedIndexUUID` | 123–123 |
+| 1 | declaration | `<import>` | `<import>` | 25–25 |
+  - JavaStructureLocator recovered target_method for hunk 2: backoffPolicy (java_structure_locator:field_declaration)
+| 2 | core_fix | `hunk_2` | `backoffPolicy` | 113–113 |
+  - JavaStructureLocator recovered target_method for hunk 3: nodeOperation (java_structure_locator:method)
+| 3 | guard | `hunk_3` | `nodeOperation` | 207–207 |
 ## Test File Mappings
 
 
