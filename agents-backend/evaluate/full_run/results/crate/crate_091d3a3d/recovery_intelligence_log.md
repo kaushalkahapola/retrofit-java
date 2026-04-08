@@ -1,0 +1,32 @@
+# Recovery Intelligence
+
+{
+  "recovered_drift_type": "unknown",
+  "connected_files_discovered": [
+    "server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java",
+    "server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java",
+    "server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java",
+    "server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java",
+    "server/src/main/java/org/elasticsearch/Version.java",
+    "server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java"
+  ],
+  "side_files_suggested": [],
+  "side_file_edits_count": 0,
+  "obligation_coverage": {
+    "total": 6,
+    "covered": 0,
+    "ratio": 0.0
+  },
+  "retries_to_success": 2,
+  "stagnation_break_reason": "",
+  "strategy_history": [],
+  "recovery_token_usage": {
+    "input_tokens": 47167,
+    "output_tokens": 5491,
+    "total_tokens": 52658,
+    "estimated": false,
+    "sources": [
+      "recovery_agent.direct_apply"
+    ]
+  }
+}
