@@ -928,6 +928,12 @@ class RecoveryPlanToolkit:
         self._recovery_done: bool = False
         # Whether the self-review phase has been entered (first recovery_done call).
         self._self_review_phase: bool = False
+        # Failure tracking: rel_path → list of failed old_string snippets (≤120 chars each).
+        # Used to trigger automatic "here is the actual file content" injections.
+        self._failed_edit_tracker: dict[str, list[str]] = {}
+        # Files for which we have already injected ACTUAL_FILE_CONTENT context so we
+        # don't flood the model with repeated injections for the same file.
+        self._context_injected_files: set[str] = set()
         # Lazy hunk-generator toolkit (for str_replace primitives).
         self._hunk_toolkit = None
 
@@ -1439,6 +1445,12 @@ class RecoveryPlanToolkit:
                         )
             except Exception:
                 pass  # best-effort hint; never block the error path
+
+            if reason and reason.startswith("not_found"):
+                self._failed_edit_tracker.setdefault(rel, []).append(
+                    (old_string or "")[:120]
+                )
+
             return (
                 f"FAILED: {msg} (reason={reason})."
                 + suggestion
@@ -1545,42 +1557,77 @@ class RecoveryPlanToolkit:
                 + "\nFix: call apply_edit for each, or mark_no_change with a reason."
             )
 
-        if not self._self_review_phase:
-            # First recovery_done: enter self-review phase instead of exiting.
-            # The loop controller will inject a review prompt.
-            self._self_review_phase = True
-            print(
-                f"[Recovery] recovery_done (self-review gate): {len(self._applied_edits)} "
-                f"edit(s) applied. Entering self-review phase."
+        def _build_missing_block_error(missing_report: dict, *, final: bool) -> str:
+            """Return an ERROR string describing what is still absent and providing
+            the actual current content of the first affected file so the LLM can
+            copy a correct old_string without a read_file call."""
+            missing_lines: list[str] = []
+            for mf, items in sorted(missing_report.items()):
+                missing_lines.append(f"\n  [{mf}]")
+                for item in items[:8]:
+                    missing_lines.append(f"    MISSING: {item}")
+
+            # Provide live content of the first affected file as an anchor aid.
+            context_hint = ""
+            for mf in list(missing_report.keys())[:1]:
+                full_path = os.path.join(self.target_repo_path, mf)
+                try:
+                    with open(full_path, "r", encoding="utf-8", errors="replace") as _f:
+                        _lines = _f.readlines()
+                    shown = "".join(
+                        f"{i + 1}: {ln}" for i, ln in enumerate(_lines[:250])
+                    )
+                    context_hint = (
+                        f"\n\nCurrent on-disk content of {mf} "
+                        f"(lines 1-{min(250, len(_lines))}):\n"
+                        f"```java\n{shown}\n```\n"
+                        "old_string MUST be copied VERBATIM from the lines above — "
+                        "NOT from the mainline patch context lines."
+                    )
+                except Exception:
+                    pass
+
+            prefix = (
+                "ERROR: recovery_done BLOCKED (final check) — "
+                if final
+                else "ERROR: recovery_done BLOCKED — "
+            )
+            return (
+                prefix
+                + "the following required additions are still absent:\n"
+                + "".join(missing_lines)
+                + context_hint
+                + "\n\nApply the missing code with apply_edit, then call recovery_done again."
             )
 
-            # Compute which patch additions are still missing from target files.
+        if not self._self_review_phase:
+            self._self_review_phase = True
+            # Deterministic verification BEFORE allowing exit.
             missing_report = self._compute_missing_patch_additions(edited)
             if missing_report:
-                missing_lines = []
-                for mf, items in sorted(missing_report.items()):
-                    missing_lines.append(f"\n  [{mf}]")
-                    for item in items[:8]:
-                        missing_lines.append(f"    MISSING: {item}")
-                missing_hint = (
-                    "\n\nWARNING — the following mainline additions appear absent from "
-                    "the target files. Fix these before calling recovery_done again:"
-                    + "".join(missing_lines)
+                print(
+                    f"[Recovery] recovery_done BLOCKED (missing additions): "
+                    f"{len(missing_report)} file(s) with absent lines."
                 )
-            else:
-                missing_hint = ""
-
-            return (
-                f"SELF_REVIEW: {len(self._applied_edits)} edit(s) applied to "
-                f"{sorted(edited)} file(s). "
-                "Now verify each edited file — use grep or get_class_context for targeted checks "
-                "(avoid re-reading whole files you already have in context):\n"
-                "1. Every mainline intent is implemented (no missing methods, fields, or imports).\n"
-                "2. No placeholder comments ('omitted for brevity', etc.) remain.\n"
-                "3. No surrounding code was accidentally destroyed.\n"
-                "When review is complete, call recovery_done again to finalize."
-                + missing_hint
+                return _build_missing_block_error(missing_report, final=False)
+            # Nothing missing — proceed to second (final) call.
+            print(
+                f"[Recovery] recovery_done (first check passed): {len(self._applied_edits)} "
+                f"edit(s) applied. All additions present — ready to finalise."
             )
+            return (
+                f"VERIFIED: {len(self._applied_edits)} edit(s) applied to "
+                f"{sorted(edited)} file(s). All required additions confirmed present.\n"
+                "Call recovery_done once more to commit and exit."
+            )
+
+        # Second call: final verification then exit.
+        missing_report = self._compute_missing_patch_additions(edited)
+        if missing_report:
+            print(
+                f"[Recovery] recovery_done BLOCKED (final check): still missing additions."
+            )
+            return _build_missing_block_error(missing_report, final=True)
 
         self._recovery_done = True
         print(
@@ -3955,6 +4002,62 @@ async def _run_parallel_tool_loop(
             # submit_calls path already called _append_round above; nothing more to do here.
             pass
 
+        # ── Automatic context injection for repeated apply_edit failures ─────────
+        # When the LLM fails ≥2 times on the same file and has not yet received
+        # an injected content block for it, read the actual on-disk content and
+        # provide it so the LLM can build a correct old_string anchor.
+        if toolkit is not None and hasattr(toolkit, "_failed_edit_tracker"):
+            for _rel_file, _failed_anchors in list(
+                toolkit._failed_edit_tracker.items()
+            ):
+                if (
+                    len(_failed_anchors) >= 2
+                    and _rel_file not in toolkit._context_injected_files
+                ):
+                    _full_path = os.path.join(
+                        toolkit.target_repo_path, _rel_file
+                    )
+                    try:
+                        with open(
+                            _full_path, "r", encoding="utf-8", errors="replace"
+                        ) as _cf:
+                            _flines = _cf.readlines()
+                        _preview = "".join(
+                            f"{i + 1}: {ln}"
+                            for i, ln in enumerate(_flines[:250])
+                        )
+                        _injection = (
+                            f"<ACTUAL_FILE_CONTENT file='{_rel_file}'>\n"
+                            f"Your apply_edit calls for '{_rel_file}' FAILED "
+                            f"{len(_failed_anchors)} time(s). You are likely copying "
+                            f"old_string from the mainline patch context lines instead "
+                            f"of the ACTUAL target file content.\n\n"
+                            f"Here is the COMPLETE CURRENT ON-DISK CONTENT of "
+                            f"'{_rel_file}' (lines 1-{min(250, len(_flines))}):\n\n"
+                            f"```java\n{_preview}\n```\n\n"
+                            f"MANDATORY RULES:\n"
+                            f"1. old_string MUST be copied VERBATIM from the numbered "
+                            f"lines above (strip the number prefix).\n"
+                            f"2. The target is an OLDER codebase — its constructor, "
+                            f"method signatures, and field lists DIFFER from mainline.\n"
+                            f"3. For constructor or method changes: find the actual "
+                            f"parameter list in the lines above and anchor to what IS "
+                            f"present, not what the mainline patch shows.\n"
+                            f"</ACTUAL_FILE_CONTENT>"
+                        )
+                        round_tail_messages.append(HumanMessage(content=_injection))
+                        toolkit._context_injected_files.add(_rel_file)
+                        print(
+                            f"[Recovery] injected ACTUAL_FILE_CONTENT for {_rel_file} "
+                            f"after {len(_failed_anchors)} failed apply_edit attempt(s) "
+                            f"(round {round_num})"
+                        )
+                    except Exception as _cie:
+                        print(
+                            f"[Recovery] could not inject content for "
+                            f"{_rel_file}: {_cie}"
+                        )
+
         # After responding to all tool calls, check if investigation budget is exhausted.
         # Skip force_submit if the last action was a rejected submit — the rejection
         # tool message + <fix_and_resubmit> directive already tell the model what to do,
@@ -3963,14 +4066,42 @@ async def _run_parallel_tool_loop(
             print(
                 f"[Recovery] Round {round_num} >= max_investigation_rounds, injecting force_submit"
             )
-            round_tail_messages.append(
-                HumanMessage(
-                    content=(
-                        "<force_submit>You have used all investigation rounds. "
-                        "You must now submit your final plan via submit_recovery_plan. "
-                        "Do not call any other tools.</force_submit>"
+            # Build a state-aware message: if there are still unresolved files, give
+            # targeted context rather than a blind nudge; otherwise ask for recovery_done.
+            _force_parts: list[str] = []
+            if toolkit is not None and hasattr(toolkit, "_compute_missing_patch_additions"):
+                _applied_fs = {e["target_file"] for e in toolkit._applied_edits}
+                _missing_r = toolkit._compute_missing_patch_additions(_applied_fs)
+                _failed_fs = {
+                    f
+                    for f, fails in toolkit._failed_edit_tracker.items()
+                    if len(fails) >= 1
+                }
+                _actionable = (set(_missing_r.keys()) | _failed_fs) - _applied_fs
+                if _actionable:
+                    _force_parts.append(
+                        "<force_submit>Investigation rounds exhausted. "
+                        "The following files still have missing or failed edits — "
+                        "make ONE final attempt for each using the file content "
+                        "shown above (or call read_file if not yet shown), "
+                        "then call recovery_done:\n"
                     )
+                    for _af in sorted(_actionable):
+                        _force_parts.append(f"  - {_af}\n")
+                    _force_parts.append("</force_submit>")
+                else:
+                    _force_parts.append(
+                        "<force_submit>All required edits appear to be applied. "
+                        "Call recovery_done now to finalise.</force_submit>"
+                    )
+            else:
+                _force_parts.append(
+                    "<force_submit>You have used all investigation rounds. "
+                    "Call recovery_done now to finalise. "
+                    "Do not call any other tools.</force_submit>"
                 )
+            round_tail_messages.append(
+                HumanMessage(content="".join(_force_parts))
             )
         # Reset for next round (cleared whether we injected fix_and_resubmit or not)
         last_submit_rejected = False
@@ -4647,14 +4778,18 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
     force_full_prompt = _should_force_full_recovery_prompt(state)
     # Default to compact prompt (≤8k chars) to keep per-round LLM context bounded.
     # Full 35k prompt only when explicitly requested via env var or forced by category.
-    use_full_prompt = _env_truthy("RECOVERY_FULL_PROMPT") or (
-        force_full_prompt and not _env_truthy("RECOVERY_COMPACT_PROMPT")
-    )
+    # Always use the full system prompt — it contains the failure context,
+    # recovery brief, and obligations that the LLM needs to act correctly
+    # without spending rounds re-reading files.  The compact prompt strips
+    # all of this and was the cause of wasted investigation rounds.
+    # Opt out with RECOVERY_COMPACT_PROMPT=1 only if token budget is critical.
+    use_full_prompt = not _env_truthy("RECOVERY_COMPACT_PROMPT")
     compact_mode = not use_full_prompt
 
     if use_full_prompt:
         print(
-            "Recovery Agent: using full system prompt (RECOVERY_FULL_PROMPT or forced)."
+            "Recovery Agent: using full system prompt (always-on — "
+            "provides failure context + recovery brief to reduce wasted rounds)."
         )
         system_prompt = _RECOVERY_SYSTEM.format(
             failure_context=failure_context,
@@ -4863,17 +4998,48 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
             if patch_files
             else "  (see recovery brief)"
         )
+        # Build dev-aux exclusion note: files handled by the validator automatically.
+        # Telling the LLM not to touch them prevents wasted rounds.
+        _dev_aux_excl = ""
+        _dev_patch = str(state.get("developer_patch_diff") or "")
+        if _dev_patch:
+            try:
+                _dev_aux_files = [
+                    _normalize_rel_path(m.group(2))
+                    for m in __import__("re").finditer(
+                        r"^diff --git a/([^\s]+) b/([^\s]+)",
+                        _dev_patch,
+                        __import__("re").M,
+                    )
+                    if _normalize_rel_path(m.group(2)) not in patch_files
+                ]
+                if _dev_aux_files:
+                    _dev_aux_excl = (
+                        "\n\n<dev_aux_files>\n"
+                        "DO NOT call apply_edit or read_file on these files — "
+                        "the validator applies them automatically:\n"
+                        + "\n".join(f"  - {_f}" for _f in _dev_aux_files[:10])
+                        + "\n</dev_aux_files>"
+                    )
+            except Exception:
+                pass
+
         task_xml = (
             "<task>\n"
-            "DIRECT-APPLY MODE (default):\n"
-            "1. Use deterministic_recovery_brief and impact_obligations from the system prompt.\n"
-            "2. For each required file, use grep/get_class_context/read_file to locate exact target text.\n"
-            "   Prefer agenttool(role, objective, target_file) for heavy investigation.\n"
+            "DIRECT-APPLY MODE:\n"
+            "1. The preloaded <target_files> above contain the ACTUAL target code.\n"
+            "   old_string anchors MUST be copied VERBATIM from those numbered lines —\n"
+            "   NOT from the mainline patch context lines (the target is an OLDER codebase\n"
+            "   and its constructors/signatures DIFFER from mainline).\n"
+            "2. Use grep/get_class_context if a file is not in <target_files>.\n"
             "3. Apply edits with apply_edit(target_file, old_string, new_string, edit_type).\n"
-            "   old_string MUST come from the actual TARGET file content, not from mainline patch lines.\n"
+            "   One edit at a time. If apply_edit FAILS, re-read the actual file content\n"
+            "   and try again with a correct verbatim anchor.\n"
             "4. Call mark_no_change(target_file, reason) for files where no edit is needed.\n"
             "5. Call recovery_done(summary) once ALL required files are edited or marked.\n\n"
-            "Required files:\n" + file_checklist + "\n</task>"
+            "Required files:\n" + file_checklist
+            + _dev_aux_excl
+            + "\n</task>"
         )
 
     initial_message = "\n\n".join(
@@ -4957,12 +5123,18 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
     all_tools = toolkit.get_tools(include_submit=False)  # exclude submit_recovery_plan
     print("Recovery Agent: starting direct-apply loop (apply_edit + recovery_done)...")
     try:
+        _complexity = str(state.get("patch_complexity") or "").upper()
+        _n_patch_files = len(patch_files)
+        _max_rounds = 18 if (
+            _complexity in {"STRUCTURAL", "REWRITE"}
+            or _n_patch_files >= 3
+        ) else 12
         direct_messages, direct_term = await _run_parallel_tool_loop(
             llm=llm,
             tools=all_tools,
             initial_messages=da_messages,
             preloaded_cache=preloaded_cache,
-            max_investigation_rounds=12,
+            max_investigation_rounds=_max_rounds,
             toolkit=toolkit,
         )
         final_messages = direct_messages

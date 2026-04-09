@@ -1,4 +1,4 @@
-run_id=20260409T101748701708
+run_id=20260409T140554884609
 
 # Recovery Intelligence
 
@@ -21,9 +21,9 @@ run_id=20260409T101748701708
   "stagnation_break_reason": "",
   "strategy_history": [],
   "recovery_token_usage": {
-    "input_tokens": 47400,
-    "output_tokens": 16087,
-    "total_tokens": 63487,
+    "input_tokens": 43778,
+    "output_tokens": 1018,
+    "total_tokens": 44796,
     "estimated": false,
     "sources": [
       "recovery_agent.direct_apply"
