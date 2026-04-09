@@ -1,12 +1,12 @@
 {
-  "run_id": "20260409T085829625555",
-  "input_tokens": 104204,
-  "output_tokens": 36479,
-  "total_tokens": 140683,
+  "run_id": "20260409T145650530508",
+  "input_tokens": 54011,
+  "output_tokens": 864,
+  "total_tokens": 54875,
   "messages_with_usage": 1,
-  "estimated_messages": 3,
+  "estimated_messages": 2,
   "tokenizer": {
-    "model": "xai/grok-4.1-fast-reasoning",
+    "model": "gpt-5-mini",
     "library": "tiktoken",
     "available": true
   },
@@ -32,25 +32,15 @@
       ]
     },
     "recovery_agent": {
-      "input_tokens": 104152,
-      "output_tokens": 36479,
-      "total_tokens": 140631,
+      "input_tokens": 53979,
+      "output_tokens": 864,
+      "total_tokens": 54843,
       "estimated_events": 0,
       "exact_events": 1,
       "sources": [
         "node.token_usage"
       ]
-    },
-    "hunk_generator": {
-      "input_tokens": 20,
-      "output_tokens": 0,
-      "total_tokens": 20,
-      "estimated_events": 1,
-      "exact_events": 0,
-      "sources": [
-        "estimated_from_message_chars"
-      ]
     }
   },
-  "finished_at": "2026-04-09T09:05:32.734894"
+  "finished_at": "2026-04-09T15:02:56.124337"
 }

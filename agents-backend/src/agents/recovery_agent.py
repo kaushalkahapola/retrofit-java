@@ -107,6 +107,9 @@ The TARGET repository is older and has different code structure, constructors, f
 5. After calling recovery_done the first time you will be asked to self-review. Use grep or
    get_class_context to verify intent coverage, then call recovery_done again to finalize.
 6. Use apply_edit and recovery_done — do NOT call submit_recovery_plan.
+7. Use `grep` intelligently with regex patterns (e.g. `countdown.*MaybeContinue`) instead of long exact strings. Minor formatting differences will cause exact matches to fail.
+8. When examining large files, use `read_file` with `start_line` and `max_lines` based on grep line numbers, instead of always reading from the beginning.
+9. You have full access to the `bash` tool. Use it for advanced exploration, checking files, or finding context (e.g. using `sed -n '100,150p' File.java`, `find`, `rg`, `ls`).
 </rules>
 
 <analysis_steps>
@@ -1318,12 +1321,15 @@ class RecoveryPlanToolkit:
                 s = s.replace("\\t", "\t")
             # Unescape HTML entities the LLM sometimes emits (e.g. &lt; for <)
             import html as _html
+
             if "&" in s:
                 s = _html.unescape(s)
             return s
 
         old_string = _decode_llm_escapes(old_string)
+        old_string = _strip_diff_markers_from_lines(old_string)
         new_string = _decode_llm_escapes(new_string)
+        new_string = _strip_diff_markers_from_lines(new_string)
 
         # Guard: reject LLM placeholder bodies that would corrupt the file.
         _PLACEHOLDER_PATTERNS = [
@@ -1446,6 +1452,114 @@ class RecoveryPlanToolkit:
             except Exception:
                 pass  # best-effort hint; never block the error path
 
+            if msg and msg.startswith("AMBIGUOUS:"):
+                count = 0
+                import re as _re_amb
+
+                m = _re_amb.search(r"AMBIGUOUS:\s+(\d+)", msg)
+                if m:
+                    count = int(m.group(1))
+
+                occurrences = []
+                try:
+                    full_path = os.path.join(self.target_repo_path, rel)
+                    with open(
+                        full_path, "r", encoding="utf-8", errors="replace"
+                    ) as _af:
+                        _content = _af.read()
+                    _search_start = 0
+                    while True:
+                        _idx = _content.find(resolved_old or old_string, _search_start)
+                        if _idx < 0:
+                            break
+                        _ln = _content.count("\n", 0, _idx) + 1
+                        occurrences.append((_ln, _idx))
+                        _search_start = _idx + 1
+                except Exception:
+                    pass
+
+                disambiguated = False
+                if occurrences and rel:
+                    mapped_ln = None
+                    _mc = (getattr(self, "state", {}) or {}).get(
+                        "mapped_target_context"
+                    )
+                    if isinstance(_mc, dict):
+                        for _mf_entries in _mc.values():
+                            if not isinstance(_mf_entries, dict):
+                                continue
+                            for _hid, _hmap in _mf_entries.items():
+                                if not isinstance(_hmap, dict):
+                                    continue
+                                if (
+                                    _normalize_rel_path(
+                                        str(_hmap.get("target_file") or "")
+                                    )
+                                    == rel
+                                ):
+                                    _ln = int(
+                                        _hmap.get("target_line_start")
+                                        or _hmap.get("line")
+                                        or 0
+                                    )
+                                    if _ln > 0:
+                                        mapped_ln = _ln
+                                        break
+                            if mapped_ln:
+                                break
+
+                    if mapped_ln:
+                        best_line = min(
+                            occurrences, key=lambda p: abs(p[0] - mapped_ln)
+                        )
+                        best_offset = best_line[1]
+                        try:
+                            _updated = (
+                                _content[:best_offset]
+                                + (resolved_new or new_string)
+                                + _content[
+                                    best_offset + len(resolved_old or old_string) :
+                                ]
+                            )
+                            with open(full_path, "w", encoding="utf-8") as _af:
+                                _af.write(_updated)
+                            approx_line = best_line[0]
+                            self._applied_edits.append(
+                                {
+                                    "target_file": rel,
+                                    "edit_type": edit_type,
+                                    "old_string": (resolved_old or old_string),
+                                    "new_string": (resolved_new or new_string),
+                                    "resolution": "auto_disambiguated",
+                                    "message": f"SUCCESS: auto-disambiguated to line ~{approx_line}",
+                                }
+                            )
+                            if (
+                                hasattr(self, "_preloaded_cache")
+                                and self._preloaded_cache
+                                and rel in self._preloaded_cache
+                            ):
+                                self._preloaded_cache[rel] = _updated
+                            print(
+                                f"[Recovery] apply_edit AUTO-DISAMBIGUATED: {rel} (line ~{approx_line}, mapped_ln={mapped_ln})"
+                            )
+                            return f"SUCCESS: auto-disambiguated to line ~{approx_line} (closest to structural mapping {mapped_ln}). (resolution=auto_disambiguated)"
+                        except Exception as _de:
+                            print(
+                                f"[Recovery] auto-disambiguate failed for {rel}: {_de}"
+                            )
+
+                msg_amb = (
+                    f"FAILED: AMBIGUOUS: {count} occurrences of old_string found in '{rel}'. "
+                    "Extend old_string with more surrounding context lines to make it unique. "
+                    "Include at least 3 lines before and after the target section."
+                )
+                print(f"[Recovery] apply_edit AMBIGUOUS: {rel} ({count} occurrences)")
+                self._failed_edit_tracker.setdefault(rel, []).append(
+                    f"AMBIGUOUS:{(old_string or '')[:80]}"
+                )
+                return msg_amb
+
             if reason and reason.startswith("not_found"):
                 self._failed_edit_tracker.setdefault(rel, []).append(
                     (old_string or "")[:120]
@@ -1485,6 +1599,136 @@ class RecoveryPlanToolkit:
                 pass  # non-fatal; stale cache is better than a crash
         print(f"[Recovery] apply_edit OK: {rel} ({reason})")
         return f"SUCCESS: {msg} (resolution={reason})"
+
+    def edit_by_lines(
+        self,
+        target_file: str,
+        start_line: int,
+        end_line: int,
+        new_string: str,
+    ) -> str:
+        """
+        Replace lines `start_line` through `end_line` (1-indexed, inclusive) with `new_string`.
+        This avoids whitespace/formatting mismatch failures in apply_edit.
+        To INSERT without deleting, use start_line = end_line = line_number_to_insert_after, and
+        start your new_string with the original line content.
+        """
+        rel = _normalize_rel_path(target_file)
+        if not rel:
+            return "ERROR: target_file is required"
+        try:
+            start = int(start_line)
+            end = int(end_line)
+        except ValueError:
+            return "ERROR: start_line and end_line must be integers"
+
+        if start < 1 or end < 1 or start > end:
+            return "ERROR: invalid start_line / end_line. Must be 1-indexed and start_line <= end_line."
+
+        # Read file
+        content = _read_file(self.target_repo_path, rel)
+        if not content:
+            return f"ERROR: File {rel} not found or empty."
+
+        lines = content.splitlines(keepends=True)
+        if start > len(lines):
+            return f"ERROR: start_line {start} is beyond EOF ({len(lines)} lines)"
+
+        # Replace
+        before = "".join(lines[: start - 1])
+        after = "".join(lines[end:])
+
+        # Ensure new_string ends with newline if original had it, and file doesn't collapse
+        new_s = str(new_string or "")
+        if new_s and not new_s.endswith("\n"):
+            new_s += "\n"
+
+        new_content = before + new_s + after
+
+        # Write back
+        full_path = _resolve_path(self.target_repo_path, rel)
+        try:
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(new_content)
+        except Exception as e:
+            return f"ERROR writing file: {e}"
+
+        # Record edit for deduplication / tracking
+        self._applied_edits.append(
+            {
+                "target_file": rel,
+                "start_line": start,
+                "end_line": end,
+                "new_string": new_s,
+                "tool": "edit_by_lines",
+            }
+        )
+
+        self._direct_no_change_files.discard(rel)
+        if (
+            hasattr(self, "_preloaded_cache")
+            and self._preloaded_cache is not None
+            and rel in self._preloaded_cache
+        ):
+            self._preloaded_cache[rel] = new_content
+
+        print(f"[Recovery] edit_by_lines OK: {rel} ({start}-{end})")
+        return f"SUCCESS: replaced lines {start}-{end} in {rel}."
+
+    def append_method(
+        self,
+        target_file: str,
+        new_code: str,
+    ) -> str:
+        """
+        Append new methods or fields to the END of a class body (just before the final '}').
+        This is much safer than `apply_edit` for large insertions where anchor matching might fail.
+        """
+        rel = _normalize_rel_path(target_file)
+        if not rel:
+            return "ERROR: target_file is required"
+        if not new_code or not new_code.strip():
+            return "ERROR: new_code is required"
+
+        content = _read_file(self.target_repo_path, rel)
+        if not content:
+            return f"ERROR: File {rel} not found or empty."
+
+        # Find the last closing brace
+        last_brace_idx = content.rfind("}")
+        if last_brace_idx == -1:
+            return "ERROR: Could not find closing brace '}' in file."
+
+        new_s = str(new_code)
+        if not new_s.endswith("\n"):
+            new_s += "\n"
+        if not new_s.startswith("\n"):
+            new_s = "\n" + new_s
+
+        new_content = content[:last_brace_idx] + new_s + content[last_brace_idx:]
+
+        full_path = _resolve_path(self.target_repo_path, rel)
+        try:
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(new_content)
+        except Exception as e:
+            return f"ERROR writing file: {e}"
+
+        # Record edit
+        self._applied_edits.append(
+            {"target_file": rel, "new_string": new_code, "tool": "append_method"}
+        )
+
+        self._direct_no_change_files.discard(rel)
+        if (
+            hasattr(self, "_preloaded_cache")
+            and self._preloaded_cache is not None
+            and rel in self._preloaded_cache
+        ):
+            self._preloaded_cache[rel] = new_content
+
+        print(f"[Recovery] append_method OK: {rel}")
+        return f"SUCCESS: appended code before final closing brace in {rel}."
 
     def mark_no_change(self, target_file: str, reason: str = "") -> str:
         """
@@ -1548,12 +1792,30 @@ class RecoveryPlanToolkit:
         # explicitly marked no_change.
         edited = {e["target_file"] for e in self._applied_edits}
         covered = edited | self._direct_no_change_files
-        missing = [f for f in (self._required_patch_files or []) if f not in covered]
-        if missing:
+        truly_missing: list[str] = []
+        auto_covered: list[str] = []
+        for f in self._required_patch_files or []:
+            if f in covered:
+                continue
+            # Auto-check: if _compute_missing_patch_additions shows no missing
+            # lines for this file, all required changes are present — treat as
+            # implicitly covered (no edit needed).
+            _auto_report = self._compute_missing_patch_additions({f})
+            if not _auto_report.get(f):
+                # No missing additions → file is already correct
+                auto_covered.append(f)
+                self._direct_no_change_files.add(f)
+                print(
+                    f"[Recovery] auto-covered {f}: all required additions already present"
+                )
+            else:
+                truly_missing.append(f)
+
+        if truly_missing:
             return (
                 "ERROR: cannot finish — these required files have neither "
                 "an applied edit nor a no_change mark:\n  - "
-                + "\n  - ".join(missing)
+                + "\n  - ".join(truly_missing)
                 + "\nFix: call apply_edit for each, or mark_no_change with a reason."
             )
 
@@ -1700,18 +1962,22 @@ class RecoveryPlanToolkit:
         return missing
 
     # -------- read/search tools --------
-    def read_file(self, file_path: str, max_lines: int = 400) -> str:
+    def read_file(
+        self, file_path: str, start_line: int = 1, max_lines: int = 400
+    ) -> str:
         rel = _normalize_rel_path(file_path)
         content = _read_file(self.target_repo_path, rel)
         if not content:
             return f"ERROR: cannot read file '{rel}'"
         lines = content.splitlines()
+        start = max(1, start_line)
         cap = max(1, min(int(max_lines or 400), 1200))
         out = [f"[read_file] {rel} total={len(lines)}"]
-        for i, line in enumerate(lines[:cap], start=1):
-            out.append(f"{i:5d}: {line}")
-        if len(lines) > cap:
-            out.append(f"... truncated ({len(lines) - cap} more lines)")
+        end_idx = min(start - 1 + cap, len(lines))
+        for i in range(start - 1, end_idx):
+            out.append(f"{i + 1:5d}: {lines[i]}")
+        if len(lines) > end_idx:
+            out.append(f"... truncated ({len(lines) - end_idx} more lines)")
         return "\n".join(out)
 
     def glob(self, pattern: str, max_results: int = 200) -> str:
@@ -1759,8 +2025,18 @@ class RecoveryPlanToolkit:
                 )
             except FileNotFoundError:
                 # ripgrep not installed — fall back to grep
+                # Standard grep --include only matches basenames, so if 'inc' is a full path, just search that path directly
+                search_path = "."
+                grep_args = ["grep", "-rn"]
+                if "/" in inc and not any(c in inc for c in "*?[]"):
+                    search_path = inc
+                else:
+                    grep_args.append("--include=" + os.path.basename(inc))
+
+                grep_args.extend([pat, search_path])
+
                 res = subprocess.run(
-                    ["grep", "-rn", "--include=" + inc, pat, "."],
+                    grep_args,
                     cwd=self.target_repo_path,
                     capture_output=True,
                     text=True,
@@ -2080,18 +2356,22 @@ Do NOT submit any recovery plan. Stay concise."""
         except Exception as e:
             return {"error": str(e)}
 
-    def read_mainline_file(self, file_path: str, max_lines: int = 250) -> str:
+    def read_mainline_file(
+        self, file_path: str, start_line: int = 1, max_lines: int = 250
+    ) -> str:
         rel = _normalize_rel_path(file_path)
         text = _read_file(self.mainline_repo_path, rel)
         if not text:
             return f"ERROR: cannot read mainline file '{rel}'"
         lines = text.splitlines()
+        start = max(1, start_line)
         cap = max(1, min(int(max_lines or 250), 800))
         out = [f"[read_mainline_file] {rel} total={len(lines)}"]
-        for i, ln in enumerate(lines[:cap], start=1):
-            out.append(f"{i:5d}: {ln}")
-        if len(lines) > cap:
-            out.append(f"... truncated ({len(lines) - cap} more lines)")
+        end_idx = min(start - 1 + cap, len(lines))
+        for i in range(start - 1, end_idx):
+            out.append(f"{i + 1:5d}: {lines[i]}")
+        if len(lines) > end_idx:
+            out.append(f"... truncated ({len(lines) - end_idx} more lines)")
         return "\n".join(out)
 
     # -------- plan sink --------
@@ -2857,6 +3137,26 @@ Do NOT submit any recovery plan. Stay concise."""
                 ),
             ),
             StructuredTool.from_function(
+                func=self.edit_by_lines,
+                name="edit_by_lines",
+                description=(
+                    "USE THIS IF apply_edit FAILS OR FOR LARGE EDITS. "
+                    "Replace lines `start_line` through `end_line` (1-indexed, inclusive) with `new_string`. "
+                    "This avoids whitespace/formatting mismatch failures entirely. "
+                    "To INSERT without deleting, use start_line = end_line = line_number_to_insert_after, "
+                    "and start your new_string with the original line content."
+                ),
+            ),
+            StructuredTool.from_function(
+                func=self.append_method,
+                name="append_method",
+                description=(
+                    "USE THIS FOR ADDING NEW METHODS/FIELDS. "
+                    "Append new code to the very end of a class body (just before the final '}'). "
+                    "This is much safer than `apply_edit` for large insertions."
+                ),
+            ),
+            StructuredTool.from_function(
                 func=self.mark_no_change,
                 name="mark_no_change",
                 description=(
@@ -3244,6 +3544,36 @@ def _sanitize_for_content_policy(text: str, max_len: int = 5000) -> str:
     return t
 
 
+def _strip_diff_markers_from_lines(s: str) -> str:
+    """Strip leading '+' / '-' diff markers from lines in old_string / new_string.
+
+    LLMs frequently copy-paste diff context verbatim, including the +/- prefix
+    characters.  This causes every multi-line match to fail because the literal
+    dash or plus is not present in the actual file.
+
+    We only strip when the marker is followed by a space (canonical diff format)
+    to avoid false-positives on legitimate Java code starting with unary operators.
+    """
+    if not s:
+        return s
+    # Fast exit: if neither pattern is present, don't bother splitting
+    if (
+        "\n- " not in s
+        and "\n+ " not in s
+        and not s.startswith("- ")
+        and not s.startswith("+ ")
+    ):
+        return s
+    lines = s.split("\n")
+    out = []
+    for line in lines:
+        if len(line) >= 2 and line[0] in ("+", "-") and line[1] == " ":
+            out.append(line[1:])  # strip only the single marker char
+        else:
+            out.append(line)
+    return "\n".join(out)
+
+
 def _build_compact_recovery_system_prompt(
     *,
     failure_context: str,
@@ -3428,6 +3758,7 @@ async def _run_parallel_tool_loop(
     last_submit_rejected = False
     rejection_retry_bonus_used = 0
     last_submit_args_sig: str = ""
+    consecutive_read_calls: int = 0
 
     # Rolling context window state
     # initial_messages = [SystemMessage, HumanMessage(task)] — never mutated
@@ -3926,6 +4257,42 @@ async def _run_parallel_tool_loop(
                 )
                 return _current_messages(), "applied_directly"
 
+            # Track consecutive read/grep calls (analysis paralysis)
+            all_read = bool(investigate_calls)
+            for tc in investigate_calls:
+                name = str(tc.get("name") or "")
+                if name not in (
+                    "read_file",
+                    "grep",
+                    "get_class_context",
+                    "glob",
+                    "bash",
+                    "batch_tools",
+                ):
+                    all_read = False
+                    break
+
+            if all_read and not submit_calls:
+                consecutive_read_calls += 1
+            else:
+                consecutive_read_calls = 0
+
+            if consecutive_read_calls >= 3 and round_num < max_investigation_rounds:
+                stagnation_hint = (
+                    "<stagnation_warning>\n"
+                    "You have spent several rounds only reading files without making any edits. "
+                    "If you are struggling to format a large `apply_edit` block with exact whitespace, "
+                    "USE the `edit_by_lines` tool to replace the exact line numbers instead, or "
+                    "`append_method` if you are adding new methods to the end of a class.\n"
+                    "Stop reading and start editing!\n"
+                    "</stagnation_warning>"
+                )
+                round_tail_messages.append(HumanMessage(content=stagnation_hint))
+                print(
+                    f"[Recovery] Injected analysis paralysis warning at round {round_num}"
+                )
+                consecutive_read_calls = 0  # reset to avoid spamming every round
+
             # Stagnation guard: if the model keeps repeating identical calls,
             # force plan submission early instead of burning rounds/tokens.
             for tc in investigate_calls:
@@ -4014,35 +4381,92 @@ async def _run_parallel_tool_loop(
                     len(_failed_anchors) >= 2
                     and _rel_file not in toolkit._context_injected_files
                 ):
-                    _full_path = os.path.join(
-                        toolkit.target_repo_path, _rel_file
-                    )
+                    _full_path = os.path.join(toolkit.target_repo_path, _rel_file)
                     try:
                         with open(
                             _full_path, "r", encoding="utf-8", errors="replace"
                         ) as _cf:
                             _flines = _cf.readlines()
+                        # Build grep-based relevant sections for the failed anchors
+                        _relevant_sections: list[str] = []
+                        _seen_ranges: set[tuple[int, int]] = set()
+                        for _failed_anchor in _failed_anchors[:3]:
+                            # Extract meaningful keywords (>5 chars, identifier-like)
+                            import re as _re_inj
+
+                            _keywords = [
+                                w
+                                for w in _re_inj.findall(
+                                    r"[A-Za-z_][A-Za-z0-9_]{4,}", _failed_anchor
+                                )
+                                if w
+                                not in {
+                                    "import",
+                                    "public",
+                                    "private",
+                                    "static",
+                                    "void",
+                                    "class",
+                                    "return",
+                                    "throws",
+                                    "extends",
+                                    "implements",
+                                    "String",
+                                    "boolean",
+                                    "false",
+                                    "true",
+                                    "null",
+                                }
+                            ][:3]
+                            for _kw in _keywords:
+                                for _li, _line in enumerate(_flines):
+                                    if _kw in _line:
+                                        _rs = max(0, _li - 6)
+                                        _re2 = min(len(_flines), _li + 12)
+                                        _rkey = (_rs, _re2)
+                                        if _rkey not in _seen_ranges:
+                                            _seen_ranges.add(_rkey)
+                                            _sec = "".join(
+                                                f"    {_rs + _ri + 1}: {_flines[_rs + _ri]}"
+                                                for _ri in range(_re2 - _rs)
+                                            )
+                                            _relevant_sections.append(
+                                                f"  Lines {_rs + 1}-{_re2} "
+                                                f"(contains '{_kw}'):\n{_sec}"
+                                            )
+                                        break  # one hit per keyword
+
+                        _rel_sec_block = ""
+                        if _relevant_sections:
+                            _rel_sec_block = (
+                                "\n\nKeyword-matched sections from failed old_string "
+                                "attempts (most likely candidates for old_string):\n"
+                                + "\n".join(_relevant_sections[:4])
+                            )
+
                         _preview = "".join(
                             f"{i + 1}: {ln}"
-                            for i, ln in enumerate(_flines[:250])
+                            for i, ln in enumerate(_flines[:500])  # increased from 250
                         )
+
                         _injection = (
                             f"<ACTUAL_FILE_CONTENT file='{_rel_file}'>\n"
                             f"Your apply_edit calls for '{_rel_file}' FAILED "
-                            f"{len(_failed_anchors)} time(s). You are likely copying "
-                            f"old_string from the mainline patch context lines instead "
-                            f"of the ACTUAL target file content.\n\n"
-                            f"Here is the COMPLETE CURRENT ON-DISK CONTENT of "
-                            f"'{_rel_file}' (lines 1-{min(250, len(_flines))}):\n\n"
-                            f"```java\n{_preview}\n```\n\n"
-                            f"MANDATORY RULES:\n"
-                            f"1. old_string MUST be copied VERBATIM from the numbered "
-                            f"lines above (strip the number prefix).\n"
-                            f"2. The target is an OLDER codebase — its constructor, "
-                            f"method signatures, and field lists DIFFER from mainline.\n"
-                            f"3. For constructor or method changes: find the actual "
-                            f"parameter list in the lines above and anchor to what IS "
-                            f"present, not what the mainline patch shows.\n"
+                            f"{len(_failed_anchors)} time(s).\n\n"
+                            f"IMPORTANT: The target is an OLDER codebase. A symbol like "
+                            f"`countdownAndMaybeContinue` from the mainline patch may NOT "
+                            f"exist in the target. Instead, look for DIFFERENT code at "
+                            f"the same semantic location (same method, similar context).\n\n"
+                            f"Complete on-disk content of '{_rel_file}' "
+                            f"(lines 1-{min(500, len(_flines))}):\n\n"
+                            f"```java\n{_preview}\n```"
+                            f"{_rel_sec_block}\n\n"
+                            f"RULES:\n"
+                            f"1. old_string MUST be copied VERBATIM from the lines above.\n"
+                            f"2. If a mainline symbol does not appear in the file, look for "
+                            f"   semantically equivalent code at the mapped line from "
+                            f"   <per_hunk_target_mappings> in the system message.\n"
+                            f"3. Constructor/method signatures in the TARGET differ from mainline.\n"
                             f"</ACTUAL_FILE_CONTENT>"
                         )
                         round_tail_messages.append(HumanMessage(content=_injection))
@@ -4069,7 +4493,9 @@ async def _run_parallel_tool_loop(
             # Build a state-aware message: if there are still unresolved files, give
             # targeted context rather than a blind nudge; otherwise ask for recovery_done.
             _force_parts: list[str] = []
-            if toolkit is not None and hasattr(toolkit, "_compute_missing_patch_additions"):
+            if toolkit is not None and hasattr(
+                toolkit, "_compute_missing_patch_additions"
+            ):
                 _applied_fs = {e["target_file"] for e in toolkit._applied_edits}
                 _missing_r = toolkit._compute_missing_patch_additions(_applied_fs)
                 _failed_fs = {
@@ -4100,9 +4526,7 @@ async def _run_parallel_tool_loop(
                     "Call recovery_done now to finalise. "
                     "Do not call any other tools.</force_submit>"
                 )
-            round_tail_messages.append(
-                HumanMessage(content="".join(_force_parts))
-            )
+            round_tail_messages.append(HumanMessage(content="".join(_force_parts)))
         # Reset for next round (cleared whether we injected fix_and_resubmit or not)
         last_submit_rejected = False
 
@@ -4665,6 +5089,143 @@ async def _run_recovery_redesign(
     return "formatter_submit_rejected", latest_plan_text, all_messages
 
 
+def _build_per_hunk_guidance(
+    mapped_target_context: dict | None,
+    target_repo_path: str,
+    patch_diff: str,
+) -> str:
+    """Build a rich block that, for EACH mapped hunk, shows:
+
+    * The mainline change intent  (+/- lines from the patch hunk)
+    * The ACTUAL target-file content at the structurally-mapped location
+
+    This is the critical bridge between the mainline patch and the target:
+    the LLM must understand that the code to replace in the TARGET may look
+    completely different from the mainline '-' lines.  Without this context
+    it keeps searching for symbols that don't exist in the target.
+    """
+    if not mapped_target_context:
+        return ""
+
+    # Parse raw hunks from the mainline patch (one list per file)
+    raw_hunks_by_file: dict[str, list[str]] = {}
+    try:
+        from utils.patch_analyzer import PatchAnalyzer as _PA
+
+        _raw = _PA().extract_raw_hunks(patch_diff)
+        raw_hunks_by_file = {_normalize_rel_path(k): v for k, v in _raw.items()}
+    except Exception:
+        pass
+
+    parts: list[str] = []
+
+    for mainline_file, hunk_map in mapped_target_context.items():
+        if not isinstance(hunk_map, dict):
+            continue
+        norm_mf = _normalize_rel_path(str(mainline_file or ""))
+        file_raw_hunks: list[str] = raw_hunks_by_file.get(norm_mf, [])
+
+        for hunk_id, mapping in hunk_map.items():
+            if not isinstance(mapping, dict):
+                continue
+            target_file = _normalize_rel_path(
+                str(mapping.get("target_file") or mainline_file)
+            )
+            mapped_line_raw = (
+                mapping.get("target_line_start")
+                or mapping.get("line_start")
+                or mapping.get("line")
+            )
+            if not mapped_line_raw:
+                continue
+            try:
+                mapped_line = int(mapped_line_raw)
+            except Exception:
+                continue
+
+            # Resolve hunk index (handles "<import>", "hunk_1", "1", etc.)
+            hunk_idx: int | None = None
+            hunk_id_str = str(hunk_id)
+            if hunk_id_str == "<import>" or "import" in hunk_id_str.lower():
+                hunk_idx = 0
+            else:
+                import re as _re_hg
+
+                _m = _re_hg.search(r"(\d+)", hunk_id_str)
+                if _m:
+                    hunk_idx = int(_m.group(1)) - 1  # 0-based
+
+            raw_hunk = (
+                file_raw_hunks[hunk_idx]
+                if hunk_idx is not None and 0 <= hunk_idx < len(file_raw_hunks)
+                else ""
+            )
+
+            # Extract removed / added lines from hunk
+            removed_lines: list[str] = []
+            added_lines: list[str] = []
+            for ln in (raw_hunk or "").splitlines():
+                if ln.startswith("---") or ln.startswith("+++") or ln.startswith("@@"):
+                    continue
+                if ln.startswith("-"):
+                    removed_lines.append(ln[1:])
+                elif ln.startswith("+"):
+                    added_lines.append(ln[1:])
+
+            # Nothing useful in this hunk (e.g. pure context)
+            if not removed_lines and not added_lines:
+                continue
+
+            # Read target file around mapped location
+            target_abs = os.path.join(target_repo_path, target_file)
+            try:
+                with open(target_abs, "r", encoding="utf-8", errors="replace") as _f:
+                    _tlines = _f.readlines()
+                radius = max(18, len(removed_lines) + 10)
+                start = max(0, mapped_line - radius - 1)
+                end = min(len(_tlines), mapped_line + radius)
+                target_excerpt = "".join(
+                    f"    {start + i + 1}: {ln}"
+                    for i, ln in enumerate(_tlines[start:end])
+                )
+            except Exception:
+                continue
+
+            removed_display = "\n".join(f"  - {l.rstrip()}" for l in removed_lines[:12])
+            added_display = "\n".join(f"  + {l.rstrip()}" for l in added_lines[:15])
+
+            parts.append(
+                f'<hunk_guidance id="{hunk_id}" target="{target_file}" at_line="{mapped_line}">\n'
+                f"Mainline removes these lines (DO NOT use as old_string — "
+                f"the target has DIFFERENT code here):\n"
+                f"{removed_display}\n\n"
+                f"Mainline adds:\n"
+                f"{added_display}\n\n"
+                f"ACTUAL TARGET FILE content at the mapped location "
+                f"(lines {start + 1}–{end}) — use these lines for old_string:\n"
+                f"```java\n{target_excerpt}```\n"
+                f"Find the section in the target above that is semantically equivalent "
+                f"to the mainline removed lines.  That section may look completely "
+                f"different.  Use THOSE target lines as old_string and replace with "
+                f"the adapted added lines.\n"
+                f"</hunk_guidance>"
+            )
+
+    if not parts:
+        return ""
+
+    return (
+        "<per_hunk_target_mappings>\n"
+        "CRITICAL: For each hunk below the target code at the STRUCTURALLY MAPPED "
+        "location is shown.  The target is an OLDER codebase — its code at each "
+        "location may look COMPLETELY DIFFERENT from the mainline '-' lines.\n"
+        "old_string MUST come from the 'ACTUAL TARGET FILE content' block inside "
+        "each <hunk_guidance>, NOT from the 'Mainline removes' block.\n\n"
+        + "\n\n".join(parts)
+        + "\n</per_hunk_target_mappings>"
+    )
+
+
 async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
     """Plan-only recovery agent with explicit bounded while-loop."""
     print("Recovery Agent (Claude-Code style): Starting master loop...")
@@ -5037,9 +5598,7 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
             "   and try again with a correct verbatim anchor.\n"
             "4. Call mark_no_change(target_file, reason) for files where no edit is needed.\n"
             "5. Call recovery_done(summary) once ALL required files are edited or marked.\n\n"
-            "Required files:\n" + file_checklist
-            + _dev_aux_excl
-            + "\n</task>"
+            "Required files:\n" + file_checklist + _dev_aux_excl + "\n</task>"
         )
 
     initial_message = "\n\n".join(
@@ -5101,7 +5660,19 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
             + "\n\n".join(preloaded_file_parts)
             + "\n</target_files>"
         )
-    if per_hunk_parts:
+
+    # Per-hunk guidance: shows mainline intent AND actual target code at each
+    # mapped location.  This is essential when the target has structurally
+    # different code from what the mainline patch removes (e.g. the target
+    # has `failure = t;` where mainline has `countdownAndMaybeContinue(...)`).
+    _phg = _build_per_hunk_guidance(
+        mapped_target_context=mapped_target_context,
+        target_repo_path=target_repo_path,
+        patch_diff=patch_diff,
+    )
+    if _phg:
+        da_initial_parts.append(_phg)
+    elif per_hunk_parts:
         da_initial_parts.append(
             "<hunk_snippets>\n"
             "Exact target code at each location mapped by Structural Locator. "
@@ -5109,6 +5680,7 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
             + "\n\n".join(per_hunk_parts)
             + "\n</hunk_snippets>"
         )
+
     da_initial_parts.append(
         f"<mainline_patch>\n{_truncate(patch_diff, 6000)}\n</mainline_patch>"
     )
@@ -5125,10 +5697,11 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
     try:
         _complexity = str(state.get("patch_complexity") or "").upper()
         _n_patch_files = len(patch_files)
-        _max_rounds = 18 if (
-            _complexity in {"STRUCTURAL", "REWRITE"}
-            or _n_patch_files >= 3
-        ) else 12
+        _max_rounds = (
+            18
+            if (_complexity in {"STRUCTURAL", "REWRITE"} or _n_patch_files >= 3)
+            else 12
+        )
         direct_messages, direct_term = await _run_parallel_tool_loop(
             llm=llm,
             tools=all_tools,
@@ -5177,7 +5750,11 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
         da_summary = (
             f"Recovery Agent (direct-apply): {len(applied_edits)} edit(s) applied "
             f"to {len(edited_files)} file(s)"
-            + (f"; {len(no_change_files)} file(s) marked no_change" if no_change_files else "")
+            + (
+                f"; {len(no_change_files)} file(s) marked no_change"
+                if no_change_files
+                else ""
+            )
             + ". Files modified on disk — routing to validation."
         )
         return {

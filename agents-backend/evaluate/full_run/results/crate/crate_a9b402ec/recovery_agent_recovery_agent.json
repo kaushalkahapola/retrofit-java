@@ -1,0 +1,160 @@
+{
+  "recovery_applied_directly": true,
+  "recovery_agent_status": "ok",
+  "recovery_agent_summary": "Recovery Agent (partial direct-apply): 10 edit(s) applied to 1 file(s); recovery_done not reached (reason=no_tool_calls).",
+  "recovery_agent_mode": true,
+  "recovery_brief": {
+    "version": 1,
+    "primary_mainline_file": "",
+    "primary_target_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+    "failed_symbol": "",
+    "diagnosis": {
+      "kind": "unknown",
+      "confidence": 0.0,
+      "target_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+      "failed_symbol": "",
+      "candidate_files": [],
+      "candidate_methods": [],
+      "old_signature": "",
+      "new_signature": "",
+      "param_diff": [],
+      "side_files": [],
+      "parent_class": "",
+      "parent_file": "",
+      "suggested_strategy": "escalate_to_full_react",
+      "evidence": [
+        "No deterministic diagnosis found. Build error: Build failed: Build failed; deterministic parser could not identify a narrower category."
+      ]
+    },
+    "rulebook_decision": {
+      "action": "full_react",
+      "confidence": 0.3,
+      "override_target_file": "",
+      "override_target_method": "",
+      "additional_files": [],
+      "target_signature": "",
+      "param_adaptation_notes": "",
+      "new_anchor_file": "",
+      "new_anchor_line": 0,
+      "investigation_summary": "No deterministic diagnosis found. Build error: Build failed: Build failed; deterministic parser could not identify a narrower category."
+    },
+    "api_drift_map": {},
+    "structured_failure": {
+      "raw_error": "--- Building code for dea4f45 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/retrofit-java/temp_repo_storage/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      [jar]\n[INFO] crate-jmx-monitoring                                               [jar]\n[INFO] jlink-jdk                                                        [jlink]\n[INFO] crate-app                                                          [jar]\n[INFO] crate-benchmarks                                                   [jar]\n[INFO] \n[INFO] Using the MultiThreadedBuilder implementation with a thread count of 12\n[INFO] \n[INFO] ---------------------------< io.crate:crate >---------------------------\n[INFO] Building crate 5.7.3                                              [1/24]\n[INFO]   from pom.xml\n[INFO] --------------------------------[ pom ]---------------------------------\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate ---\n[INFO] Deleting /repo/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate ---\n[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireMavenVersion passed\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='21.0.2' ]\n[INFO] Begin to install JDK 21.0.2\n[INFO] Download OpenJDK21U-jdk_x64_linux_hotspot_21.0.10_7.tar.gz from https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.10%2B7/OpenJDK21U-jdk_x64_linux_hotspot_21.0.10_7.tar.gz\n[INFO] Extract OpenJDK21U-jdk_x64_linux_hotspot_21.0.10_7.tar.gz\n[INFO] JDK installed: /root/.m2/jdks/jdk-21.0.10+7\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/target/jacoco.exec\n[INFO] \n[INFO] --- forbiddenapis:3.6:check (default) @ crate ---\n[INFO] Skipping execution for packaging \"pom\"\n[INFO] \n[INFO] --- install:3.1.1:install (default-install) @ crate ---\n[INFO] Installing /repo/pom.xml to /root/.m2/repository/io/crate/crate/5.7.3/crate-5.7.3.pom\n[INFO] \n[INFO] ---------------------< io.crate:crate-libs-shared >---------------------\n[INFO] Building crate-libs-shared 5.7.3                                  [2/24]\n[INFO] \n[INFO]   from libs/shared/pom.xml\n[INFO] \n[INFO] ---------------------< io.crate:crate-libs-guice >----------------------\n[INFO] \n[INFO] Building crate-libs-guice 5.7.3                                   [3/24]\n[INFO] ---------------------< io.crate:crate-libs-pgwire >---------------------\n[INFO] Building crate-libs-pgwire 5.7.3                                  [4/24]\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO]   from libs/pgwire/pom.xml\n[INFO]   from libs/guice/pom.xml\n[INFO] -------------------------< io.crate:jlink-jdk >-------------------------\n[INFO] Building jlink-jdk 5.7.3                                          [5/24]\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO] --------------------------------[ jar ]---------------------------------\n[INFO]   from jlink-jdk/pom.xml\n[INFO] -------------------------------[ jlink ]--------------------------------\n[WARNING] *****************************************************************\n[WARNING] * Your build is requesting parallel execution, but this         *\n[WARNING] * project contains the following plugin(s) that have goals not  *\n[WARNING] * marked as thread-safe to support parallel execution.          *\n[WARNING] * While this /may/ work fine, please look for plugin updates    *\n[WARNING] * and/or request plugins be made thread-safe.                   *\n[WARNING] * If reporting an issue, report it against the plugin in        *\n[WARNING] * question, not against Apache Maven.                           *\n[WARNING] *****************************************************************\n[WARNING] The following plugins are not marked as thread-safe in jlink-jdk:\n[WARNING]   org.apache.maven.plugins:maven-jlink-plugin:3.1.0\n[WARNING] \n[WARNING] Enable debug to see precisely which goals are not marked as thread-safe.\n[WARNING] *****************************************************************\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ jlink-jdk ---\n[INFO] Deleting /repo/jlink-jdk/target\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-guice ---\n[INFO] Deleting /repo/libs/guice/target\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- clean:3.3.2:clean (default-clean) @ crate-libs-shared ---\n[INFO] Deleting /repo/libs/pgwire/target\n[INFO] Deleting /repo/libs/shared/target\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-pgwire ---\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-shared ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-shared ---\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ crate-libs-guice ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ crate-libs-guice ---\n[INFO] \n[INFO] --- enforcer:3.4.1:enforce (enforce-maven) @ jlink-jdk ---\n[INFO] \n[INFO] --- checkstyle:3.3.1:check (validate) @ jlink-jdk ---\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ jlink-jdk ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='21.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-21.0.10+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ jlink-jdk ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/jlink-jdk/target/jacoco.exec\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ jlink-jdk ---\n[INFO] skip non existing resourceDirectory /repo/jlink-jdk/src/main/resources\n[INFO] \n[INFO] --- compiler:3.11.0:compile (default-compile) @ jlink-jdk ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-21.0.10+7]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- resources:3.3.1:testResources (default-testResources) @ jlink-jdk ---\n[INFO] skip non existing resourceDirectory /repo/jlink-jdk/src/test/resources\n[INFO] \n[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ jlink-jdk ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-21.0.10+7]\n[INFO] No sources to compile\n[INFO] \n[INFO] --- surefire:3.2.2:test (default-test) @ jlink-jdk ---\n[INFO] Tests are skipped.\n[INFO] \n[INFO] --- jlink:3.1.0:jlink (default-jlink) @ jlink-jdk ---\n[INFO] Toolchain in maven-jlink-plugin: jlink [ /root/.m2/jdks/jdk-21.0.10+7/bin/jlink ]\n[INFO] Starting audit...\nAudit done.\n[INFO] You have 0 Checkstyle violations.\n[INFO] \n[INFO] --- toolchains:4.5.0:toolchain (default) @ crate-libs-pgwire ---\n[INFO] Required toolchain: jdk [ vendor='temurin' version='21.0.2' ]\n[INFO] Found matching toolchain for toolchainType jdk: JDK[/root/.m2/jdks/jdk-21.0.10+7]\n[INFO] \n[INFO] --- jacoco:0.8.12:prepare-agent (default-prepare-agent) @ crate-libs-pgwire ---\n[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/repo/libs/pgwire/target/jacoco.exec\n[INFO] \n[INFO] --- antlr4:4.13.1:antlr4 (antlr) @ crate-libs-pgwire ---\n[INFO] ANTLR 4: Processing source directory /repo/libs/pgwire/src/main/antlr\n[INFO] Processing grammar: io/crate/protocols/postgres/antlr/PgArray.g4\n[INFO] \n[INFO] --- resources:3.3.1:resources (default-resources) @ crate-libs-pgwire ---\n[INFO] skip non existing resourceDirectory /repo/libs/pgwire/src/main/resources\n[INFO] \n[INFO] --- compiler:3.11.0:compile (default-compile) @ crate-libs-pgwire ---\n[INFO] Toolchain in maven-compiler-plugin: JDK[/root/.m2/jdks/jdk-21.0.10+7]\n[INFO] Changes detected - recompiling the module! :source\n[INF",
+      "failed_locations": [
+        {
+          "file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "line": 115
+        },
+        {
+          "file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "line": 134
+        },
+        {
+          "file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "line": 178
+        },
+        {
+          "file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "line": 115
+        },
+        {
+          "file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "line": 134
+        },
+        {
+          "file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "line": 178
+        }
+      ],
+      "symbol_errors": [],
+      "signature_errors": [],
+      "failed_hunk_targets": [
+        {
+          "target_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "mainline_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "error_line": 115
+        },
+        {
+          "target_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "mainline_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "error_line": 134
+        },
+        {
+          "target_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "mainline_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "error_line": 178
+        },
+        {
+          "target_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "mainline_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "error_line": 115
+        },
+        {
+          "target_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "mainline_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "error_line": 134
+        },
+        {
+          "target_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "mainline_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+          "error_line": 178
+        }
+      ],
+      "primary_failed_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+      "primary_failed_symbol": "",
+      "symbol_to_file_candidates": [],
+      "method_mismatch_details": []
+    }
+  },
+  "recovery_obligations": [
+    {
+      "obligation_id": "failed_location:server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java:",
+      "kind": "failed_location",
+      "required_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+      "symbol": "",
+      "source": "validation_error_context_structured.failed_locations",
+      "status": "pending"
+    },
+    {
+      "obligation_id": "failed_hunk_target:server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java:",
+      "kind": "failed_hunk_target",
+      "required_file": "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java",
+      "symbol": "",
+      "source": "validation_error_context_structured.failed_hunk_targets",
+      "status": "pending"
+    },
+    {
+      "obligation_id": "patch_file:server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java:",
+      "kind": "patch_file",
+      "required_file": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+      "symbol": "",
+      "source": "patch_diff",
+      "status": "pending",
+      "_verification": "must_insert:['snapshotsInProgress']"
+    }
+  ],
+  "recovery_investigation": [],
+  "recovery_decisions": [],
+  "recovery_scope_files": [
+    "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+    "server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java"
+  ],
+  "recovery_strategy_history": [],
+  "recovery_plan_text": "Direct-apply loop terminated: no_tool_calls. edits=10, done=False",
+  "recovery_plan_version": 1,
+  "recovery_risk_notes": [],
+  "hunk_generation_plan": {},
+  "last_plan_signature": "",
+  "validation_repeated_plan_detected": false,
+  "validation_failed_stage": null,
+  "token_usage": {
+    "input_tokens": 28969,
+    "output_tokens": 946,
+    "total_tokens": 29915,
+    "estimated": false,
+    "sources": [
+      "recovery_agent.direct_apply"
+    ]
+  }
+}
