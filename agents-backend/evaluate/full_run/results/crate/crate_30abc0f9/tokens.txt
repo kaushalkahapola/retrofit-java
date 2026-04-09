@@ -1,11 +1,11 @@
 {
-  "input_tokens": 369387,
-  "output_tokens": 2640,
-  "total_tokens": 372027,
+  "input_tokens": 40656,
+  "output_tokens": 15898,
+  "total_tokens": 56554,
   "messages_with_usage": 1,
   "estimated_messages": 3,
   "tokenizer": {
-    "model": "google/gemma-4-31b-it",
+    "model": "xai/grok-4.1-fast-reasoning",
     "library": "tiktoken",
     "available": true
   },
@@ -41,9 +41,9 @@
       ]
     },
     "recovery_agent": {
-      "input_tokens": 369311,
-      "output_tokens": 2640,
-      "total_tokens": 371951,
+      "input_tokens": 40580,
+      "output_tokens": 15898,
+      "total_tokens": 56478,
       "estimated_events": 0,
       "exact_events": 1,
       "sources": [
@@ -51,5 +51,5 @@
       ]
     }
   },
-  "finished_at": "2026-04-08T20:21:51.474147"
+  "finished_at": "2026-04-09T05:53:42.611308"
 }

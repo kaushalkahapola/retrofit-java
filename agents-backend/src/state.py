@@ -369,3 +369,6 @@ class AgentState(TypedDict):
     recovery_agent_mode: NotRequired[
         bool
     ]  # True while in recovery agent execution context
+    recovery_plan_text: NotRequired[
+        str
+    ]  # Natural-language adaptation plan produced by redesigned recovery agent

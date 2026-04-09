@@ -468,6 +468,65 @@ def _extract_added_methods_from_patch(patch_diff: str, rel_path: str) -> list[st
     return [m for m in added if m not in removed]
 
 
+def _find_callsite_obligations(
+    patch_diff: str,
+    symbol: str,
+    defining_file: str,
+    target_repo_path: str,
+    seen: set[str],
+) -> list[dict[str, Any]]:
+    """Return new obligations for files that CALL `symbol` in the patch's + lines.
+
+    When a method like `broadcastKill` is newly introduced in `defining_file`,
+    the patch may also add CALL SITES of that method in other files.  Those
+    files need to be edited too — but a plain per-file obligation won't tell
+    the agent *what* to add.  This function creates a `callsite` obligation
+    for each such file so the recovery agent knows to look there.
+    """
+    result: list[dict[str, Any]] = []
+    if not patch_diff or not symbol:
+        return result
+
+    # Parse + lines per file from the diff
+    current: str = ""
+    files_calling: set[str] = set()
+    for raw_line in patch_diff.splitlines():
+        if raw_line.startswith("diff --git "):
+            parts = raw_line.split(" b/", 1)
+            current = _normalize_rel_path(parts[1].strip()) if len(parts) > 1 else ""
+            continue
+        if raw_line.startswith("+++ ") or raw_line.startswith("--- "):
+            continue
+        if current and current != defining_file and raw_line.startswith("+"):
+            # Check if the added line calls the symbol
+            added_content = raw_line[1:]
+            if f"{symbol}(" in added_content or f"{symbol} " in added_content:
+                files_calling.add(current)
+
+    for calling_file in sorted(files_calling):
+        oid = f"callsite:{calling_file}:{symbol}"
+        if oid in seen:
+            continue
+        # Also check: is the call site already in the target?
+        target_content = _read_file(target_repo_path, calling_file) or ""
+        already_present = f"{symbol}(" in target_content or f"{symbol} " in target_content
+        result.append({
+            "obligation_id": oid,
+            "kind": "callsite",
+            "required_file": calling_file,
+            "symbol": symbol,
+            "source": f"callsite_of:{defining_file}",
+            "status": "pending",
+            "_verification": "callsite_already_present" if already_present else "callsite_must_add",
+        })
+        if not already_present:
+            print(
+                f"[Recovery] callsite obligation: {calling_file} must call {symbol}() "
+                f"(introduced by patch in {defining_file})"
+            )
+    return result
+
+
 def _verify_and_remap_obligations(
     state: AgentState,
     obligations: list[dict[str, Any]],
@@ -487,6 +546,8 @@ def _verify_and_remap_obligations(
         return obligations
 
     remapped: list[dict[str, Any]] = []
+    # Track callsite obligation IDs already added to avoid duplicates
+    callsite_seen: set[str] = set()
     for ob in obligations:
         if not isinstance(ob, dict):
             remapped.append(ob)
@@ -564,6 +625,18 @@ def _verify_and_remap_obligations(
                     f"[Recovery] {must_insert} introduced by patch (absent from target as expected) "
                     f"— obligation tagged must_insert"
                 )
+                # Propagate: for every file in the patch that calls these new
+                # methods (appears in + lines), add a callsite obligation so the
+                # recovery agent knows it must also update those files.
+                for new_sym in must_insert:
+                    callsite_obs = _find_callsite_obligations(
+                        patch_diff, new_sym, rel, target_repo_path, callsite_seen
+                    )
+                    for cs_ob in callsite_obs:
+                        cs_oid = str(cs_ob.get("obligation_id") or "")
+                        if cs_oid and cs_oid not in callsite_seen:
+                            callsite_seen.add(cs_oid)
+                            remapped.append(cs_ob)
             else:
                 # Method not found anywhere — keep obligation as-is but flag it
                 ob2 = dict(ob)
@@ -1008,6 +1081,26 @@ class RecoveryPlanToolkit:
                 "Read the file first and copy a unique nearby line into old_string."
             )
 
+        # Guard: normalize literal escape sequences that the LLM sometimes
+        # double-encodes (writes \\n in JSON output → Python receives the
+        # 2-char sequence backslash + n).  Only normalize when the string
+        # has NO actual newline characters — that unambiguously signals the
+        # model intended multi-line code but accidentally double-escaped.
+        # Strings that already contain real newlines are left unchanged to
+        # avoid corrupting Java string literals (\n inside "...") that
+        # legitimately contain backslash-n sequences.
+        def _decode_llm_escapes(s: str) -> str:
+            if not s:
+                return s
+            if "\n" not in s and "\\n" in s:
+                s = s.replace("\\n", "\n")
+            if "\t" not in s and "\\t" in s:
+                s = s.replace("\\t", "\t")
+            return s
+
+        old_string = _decode_llm_escapes(old_string)
+        new_string = _decode_llm_escapes(new_string)
+
         # Guard: reject LLM placeholder bodies that would corrupt the file.
         _PLACEHOLDER_PATTERNS = [
             "omitted for brevity",
@@ -1228,6 +1321,23 @@ class RecoveryPlanToolkit:
                 f"[Recovery] recovery_done (self-review gate): {len(self._applied_edits)} "
                 f"edit(s) applied. Entering self-review phase."
             )
+
+            # Compute which patch additions are still missing from target files.
+            missing_report = self._compute_missing_patch_additions(edited)
+            if missing_report:
+                missing_lines = []
+                for mf, items in sorted(missing_report.items()):
+                    missing_lines.append(f"\n  [{mf}]")
+                    for item in items[:8]:
+                        missing_lines.append(f"    MISSING: {item}")
+                missing_hint = (
+                    "\n\nWARNING — the following mainline additions appear absent from "
+                    "the target files. Fix these before calling recovery_done again:"
+                    + "".join(missing_lines)
+                )
+            else:
+                missing_hint = ""
+
             return (
                 f"SELF_REVIEW: {len(self._applied_edits)} edit(s) applied to "
                 f"{sorted(edited)} file(s). "
@@ -1237,6 +1347,7 @@ class RecoveryPlanToolkit:
                 "2. No placeholder comments ('omitted for brevity', etc.) remain.\n"
                 "3. No surrounding code was accidentally destroyed.\n"
                 "When review is complete, call recovery_done again to finalize."
+                + missing_hint
             )
 
         self._recovery_done = True
@@ -1248,6 +1359,60 @@ class RecoveryPlanToolkit:
             f"SUCCESS: recovery complete. {len(self._applied_edits)} edit(s) applied. "
             f"You may stop calling tools now."
         )
+
+    def _compute_missing_patch_additions(
+        self, edited_files: set[str]
+    ) -> dict[str, list[str]]:
+        """Check which meaningful mainline patch additions are still absent from
+        the target files after all edits have been applied.
+
+        Returns a dict mapping rel_path → list of missing line snippets.
+        Only reports lines that are substantive (methods, fields, imports,
+        call sites) — skips blank lines, comments, and trivial tokens.
+        """
+        patch_diff = str(self.state.get("patch_diff") or "")
+        if not patch_diff:
+            return {}
+
+        # Parse + lines per file from the patch diff
+        added_by_file: dict[str, list[str]] = {}
+        current_file: str = ""
+        for raw_line in patch_diff.splitlines():
+            if raw_line.startswith("diff --git "):
+                # Extract b-side file path: "diff --git a/... b/..."
+                parts = raw_line.split(" b/", 1)
+                current_file = _normalize_rel_path(parts[1].strip()) if len(parts) > 1 else ""
+                continue
+            if raw_line.startswith("+++ ") or raw_line.startswith("--- "):
+                continue
+            if current_file and raw_line.startswith("+"):
+                content = raw_line[1:]  # strip leading +
+                stripped = content.strip()
+                # Only keep substantive lines (skip blanks, pure-comment lines,
+                # and very short tokens like lone braces)
+                if len(stripped) < 10:
+                    continue
+                if stripped.startswith("//") or stripped.startswith("*") or stripped.startswith("/*"):
+                    continue
+                added_by_file.setdefault(current_file, []).append(stripped)
+
+        missing: dict[str, list[str]] = {}
+        for rel, added_lines in added_by_file.items():
+            if rel not in edited_files:
+                # File wasn't edited — skip (may be intentional no_change)
+                continue
+            target_content = _read_file(self.target_repo_path, rel) or ""
+            absent = []
+            for line in added_lines:
+                # Use a substring of the line as the needle (strip leading
+                # whitespace already done above; use first 60 chars to avoid
+                # false negatives from line-wrapping differences)
+                needle = line[:80]
+                if needle not in target_content:
+                    absent.append(line)
+            if absent:
+                missing[rel] = absent
+        return missing
 
     # -------- read/search tools --------
     def read_file(self, file_path: str, max_lines: int = 400) -> str:
@@ -2587,15 +2752,30 @@ def _build_compact_recovery_system_prompt(
     recovery_brief: str,
     recovery_obligations: str,
 ) -> str:
+    """Compact system prompt (≤8k chars) used by default to keep per-round context bounded.
+
+    Describes the direct-apply workflow (apply_edit + recovery_done), which is the primary
+    path. submit_recovery_plan is excluded from tools when this prompt is active.
+    """
     return _sanitize_for_content_policy(
         (
-            "You are a Java backport recovery planner.\n"
-            "Goal: produce a minimal valid recovery submission.\n"
-            "Rules:\n"
-            "- Ground every old_string in target code (use tools).\n"
-            "- Provide obligation decisions for all obligations.\n"
-            "- Avoid broad edits; prefer minimal safe changes.\n"
-            "- Output only via submit_recovery_plan tool.\n\n"
+            "You are a Java backport recovery agent.\n"
+            "Goal: directly apply all required edits to the target files, then call recovery_done.\n\n"
+            "PRIMARY WORKFLOW (use these tools in order):\n"
+            "1. apply_edit(target_file, old_string, new_string, edit_type)\n"
+            "   — Applies ONE edit at a time. old_string MUST come from the actual TARGET file.\n"
+            "   — Returns SUCCESS or FAILED with a hint. Iterate based on the response.\n"
+            "   — Use grep or get_class_context to locate exact text if unsure.\n"
+            "2. mark_no_change(target_file, reason)\n"
+            "   — Only when target already has the equivalent code or change is inapplicable.\n"
+            "3. recovery_done(summary)\n"
+            "   — Call EXACTLY ONCE when every required file has been edited or marked.\n\n"
+            "RULES:\n"
+            "- MAINLINE ≠ TARGET. old_string must come from target code, not mainline patch lines.\n"
+            "- Prefer short anchors (1-3 lines) — long anchors are the #1 cause of failure.\n"
+            "- Make minimal, semantically correct edits only.\n"
+            "- Prefer agenttool(role, objective, target_file) for heavy investigation — "
+            "it runs in an isolated context and returns compact JSON evidence.\n\n"
             "deterministic_recovery_brief:\n"
             f"{recovery_brief}\n\n"
             "impact_obligations:\n"
@@ -2603,9 +2783,9 @@ def _build_compact_recovery_system_prompt(
             "retry_scope:\n"
             f"{retry_scope}\n\n"
             "failure_excerpt:\n"
-            f"{_truncate(failure_context, 2500)}\n"
+            f"{_truncate(failure_context, 2000)}\n"
         ),
-        10000,
+        8000,
     )
 
 
@@ -2701,6 +2881,25 @@ def _cleanup_unused_java_imports(
     return removed
 
 
+def _build_progress_ledger(
+    round_summaries: list[str],
+    applied_edit_sigs: dict[str, int],
+) -> HumanMessage | None:
+    """Build a compact progress ledger HumanMessage from round summaries.
+
+    Purely deterministic — no LLM calls. Returns None if nothing to summarize.
+    """
+    if not round_summaries and not applied_edit_sigs:
+        return None
+    lines = ["<progress_ledger>"]
+    lines.extend(round_summaries)
+    if applied_edit_sigs:
+        files_edited = sorted({sig.split("|")[0] for sig in applied_edit_sigs})
+        lines.append(f"Applied edits so far in: {', '.join(files_edited)}")
+    lines.append("</progress_ledger>")
+    return HumanMessage(content="\n".join(lines))
+
+
 async def _run_parallel_tool_loop(
     llm,
     tools: list,
@@ -2710,30 +2909,109 @@ async def _run_parallel_tool_loop(
     toolkit: Any = None,
 ) -> tuple[list, str]:
     """
-    Parallel batch tool execution loop.
+    Parallel batch tool execution loop with rolling context window.
 
-    Replaces create_react_agent's serial ReAct (one tool call → LLM → next tool call)
-    with a batched pattern:
-      1. Call LLM once → get ALL tool calls it needs in one response
-      2. Execute all tool calls in parallel (deduplicating identical ones)
-      3. Return all results to LLM in a single batch
-      4. Repeat up to max_investigation_rounds times
-      5. After max rounds, force submit_recovery_plan
-
-    For read_file calls on preloaded files, the cache is returned immediately
-    (full content, no max_lines truncation) without hitting the tool.
+    Key design principles to prevent LLM timeouts:
+    1. ROLLING WINDOW: only the last 2 AI+Tool round pairs enter each LLM call.
+       Older rounds are summarized in a compact progress ledger (pure Python, no LLM).
+    2. TOOL RESULT PRUNING: results >4k chars are truncated before entering history.
+    3. EDIT DEDUP: identical apply_edit calls are short-circuited without hitting disk.
+    4. TIMEOUT RETRY: on timeout, shrink the window further and retry once.
+    5. Parallel tool execution within each round (batch pattern).
 
     Returns (final_messages, termination_reason).
     """
     tool_map = {t.name: t for t in tools}
     bound_llm = llm.bind_tools(tools)
     base_llm = llm  # keep original for temperature bumps on repeated rejection
-    messages = list(initial_messages)
     loop = asyncio.get_event_loop()
     recent_tool_calls: list[tuple[str, Any]] = []
     last_submit_rejected = False
     rejection_retry_bonus_used = 0
     last_submit_args_sig: str = ""
+
+    # Rolling context window state
+    # initial_messages = [SystemMessage, HumanMessage(task)] — never mutated
+    # recent_rounds: list of (AIMessage, [ToolMessage...]) pairs, capped at 2
+    # ledger_summaries: plain text lines summarizing evicted rounds
+    # applied_edit_sigs: hash → round_num for dedup of apply_edit calls
+    recent_rounds: list[tuple[Any, list[Any]]] = []
+    ledger_summaries: list[str] = []
+    applied_edit_sigs: dict[str, int] = {}  # sig -> round_num first applied
+    # Extra messages appended AFTER recent_rounds (remap hints, directives)
+    # These are per-round ephemeral injections cleared each round
+    round_tail_messages: list[Any] = []
+
+    _TOOL_RESULT_MAX_CHARS = 4000  # truncate tool results before storing in history
+
+    def _current_messages() -> list[Any]:
+        """Reconstruct the live message list from rolling window state."""
+        msgs = list(initial_messages)
+        ledger = _build_progress_ledger(ledger_summaries, applied_edit_sigs)
+        if ledger:
+            msgs.append(ledger)
+        for ai_msg, tool_msgs in recent_rounds:
+            msgs.append(ai_msg)
+            msgs.extend(tool_msgs)
+        msgs.extend(round_tail_messages)
+        return msgs
+
+    def _summarize_tool_call(name: str, args: dict, content: str, round_num: int) -> str:
+        """Build a one-line ledger entry for an evicted tool call."""
+        if name == "apply_edit":
+            tf = str(args.get("target_file") or "")
+            status = "SUCCESS" if "SUCCESS" in content else ("SKIPPED" if "skipped" in content.lower() else "FAILED")
+            return f"R{round_num}: apply_edit({tf}) → {status}"
+        if name in {"read_file", "get_class_context"}:
+            fp = str(args.get("file_path") or args.get("class_name") or "")
+            nlines = content.count("\n")
+            return f"R{round_num}: {name}({fp}) → {nlines} lines"
+        if name == "recovery_done":
+            return f"R{round_num}: recovery_done → accepted"
+        if name == "mark_no_change":
+            tf = str(args.get("target_file") or "")
+            return f"R{round_num}: mark_no_change({tf})"
+        # generic
+        snippet = content[:80].replace("\n", " ")
+        return f"R{round_num}: {name}(...) → {snippet}"
+
+    def _evict_oldest_round() -> None:
+        """Move the oldest round from recent_rounds into ledger_summaries."""
+        if not recent_rounds:
+            return
+        ai_msg, tool_msgs = recent_rounds.pop(0)
+        tool_calls = list(getattr(ai_msg, "tool_calls", None) or [])
+        # Pair each tool call with its result message
+        tc_by_id = {str(tc.get("id") or ""): tc for tc in tool_calls}
+        for tm in tool_msgs:
+            tc_id = str(getattr(tm, "tool_call_id", "") or "")
+            tc = tc_by_id.get(tc_id, {})
+            name = str(tc.get("name") or getattr(tm, "name", "") or "")
+            args = dict((tc.get("args") or {}))
+            content = str(getattr(tm, "content", "") or "")
+            # Use the already-parsed round from the ai_msg metadata if available
+            rnum = getattr(ai_msg, "_round_num", "?")
+            ledger_summaries.append(_summarize_tool_call(name, args, content, rnum))
+
+    def _append_round(ai_msg: Any, tool_msgs: list[Any], round_num: int) -> None:
+        """Add a completed round to the window, evicting oldest if at capacity."""
+        ai_msg._round_num = round_num  # tag for ledger
+        # Truncate tool message content before storing
+        truncated_tool_msgs = []
+        for tm in tool_msgs:
+            content = str(getattr(tm, "content", "") or "")
+            if len(content) > _TOOL_RESULT_MAX_CHARS:
+                content = content[:_TOOL_RESULT_MAX_CHARS] + f"\n…[truncated at {_TOOL_RESULT_MAX_CHARS} chars; use grep/read_file for more]"
+                tm = ToolMessage(
+                    content=content,
+                    tool_call_id=str(getattr(tm, "tool_call_id", "") or ""),
+                    name=str(getattr(tm, "name", "") or ""),
+                )
+            truncated_tool_msgs.append(tm)
+        recent_rounds.append((ai_msg, truncated_tool_msgs))
+        # Keep at most 2 recent rounds
+        while len(recent_rounds) > 2:
+            _evict_oldest_round()
 
     async def execute_one(tc: dict) -> tuple[str, str]:
         name = str(tc.get("name") or "")
@@ -2754,13 +3032,39 @@ async def _run_parallel_tool_loop(
                     f'<cached_file path="{rel}">\n{numbered}\n</cached_file>',
                 )
 
+        # Dedup apply_edit: skip if identical (file, old_string, new_string) already applied
+        if name == "apply_edit":
+            tf = str(args.get("target_file") or "")
+            old_s = str(args.get("old_string") or "")
+            new_s = str(args.get("new_string") or "")
+            sig = hashlib.sha256(
+                f"{tf}|{old_s}|{new_s}".encode("utf-8")
+            ).hexdigest()[:16]
+            full_sig = f"{tf}|{sig}"
+            if full_sig in applied_edit_sigs:
+                prev_round = applied_edit_sigs[full_sig]
+                return (
+                    call_id,
+                    f'{{"status":"skipped","reason":"identical edit already applied in round {prev_round} — move on to the next required file"}}',
+                )
+
         tool = tool_map.get(name)
         if not tool:
             return call_id, f"ERROR: unknown tool {name!r}"
         try:
             _tool, _args = tool, args
             result = await loop.run_in_executor(None, lambda: _tool.invoke(_args))
-            return call_id, str(result)
+            result_str = str(result)
+            # Register successful apply_edit for dedup
+            if name == "apply_edit" and "SUCCESS" in result_str:
+                tf = str(args.get("target_file") or "")
+                old_s = str(args.get("old_string") or "")
+                new_s = str(args.get("new_string") or "")
+                sig = hashlib.sha256(
+                    f"{tf}|{old_s}|{new_s}".encode("utf-8")
+                ).hexdigest()[:16]
+                applied_edit_sigs[f"{tf}|{sig}"] = round_num
+            return call_id, result_str
         except Exception as exc:
             return call_id, f"ERROR executing {name}: {exc}"
 
@@ -2778,15 +3082,32 @@ async def _run_parallel_tool_loop(
         if round_num > max_investigation_rounds + 1:
             break
         print(f"[Recovery] === Round {round_num} ===")
-        try:
-            response = await asyncio.wait_for(
-                bound_llm.ainvoke(messages),
-                timeout=180.0,  # 3 min hard cap per LLM call
+
+        async def _invoke_with_retry(shrink: bool = False) -> Any:
+            """Invoke LLM with 180s timeout; on failure retry once with shrunk window."""
+            _msgs = _current_messages()
+            if shrink and len(recent_rounds) > 1:
+                # Drop oldest recent round to further reduce context
+                _evict_oldest_round()
+                _msgs = _current_messages()
+            return await asyncio.wait_for(
+                bound_llm.ainvoke(_msgs),
+                timeout=300.0,  # 3 min per call — healthy Gemma response is <60s
             )
+
+        try:
+            response = await _invoke_with_retry(shrink=False)
         except asyncio.TimeoutError:
-            print(f"[Recovery] LLM call timed out in round {round_num}; aborting.")
-            return messages, "llm_timeout"
-        messages = messages + [response]
+            print(f"[Recovery] LLM call timed out in round {round_num}; retrying once with shrunk context…")
+            try:
+                response = await _invoke_with_retry(shrink=True)
+            except asyncio.TimeoutError:
+                print(f"[Recovery] LLM retry also timed out in round {round_num}; aborting.")
+                return _current_messages(), "llm_timeout"
+
+        # LLM has seen the tail messages from the previous round — clear them now
+        # so they don't accumulate across rounds (they will be ledger-summarized instead).
+        round_tail_messages.clear()
 
         # Log response text content
         resp_text = getattr(response, "content", "") or ""
@@ -2801,7 +3122,7 @@ async def _run_parallel_tool_loop(
         tool_calls = list(getattr(response, "tool_calls", None) or [])
         if not tool_calls:
             print("[Recovery] No tool calls in response; exiting")
-            return messages, "no_tool_calls"
+            return _current_messages(), "no_tool_calls"
 
         # Log tool calls
         for tc in tool_calls:
@@ -2863,19 +3184,21 @@ async def _run_parallel_tool_loop(
                 submit_args_sig = ""
             results = await asyncio.gather(*[execute_one(tc) for tc in submit_calls])
             result_map = dict(results)
+            submit_tool_msgs: list[ToolMessage] = []
             for tc in submit_calls:
                 content = result_map.get(str(tc.get("id") or ""), "")
                 full_content = str(content)
                 print(f"[Recovery] submit_recovery_plan → {full_content[:1500]}")
                 if len(full_content) > 1500:
                     print(f"[Recovery] submit_recovery_plan (continued) → {full_content[1500:3000]}")
-                messages = messages + [
+                submit_tool_msgs.append(
                     ToolMessage(
                         content=content,
                         tool_call_id=str(tc.get("id") or ""),
                         name=str(tc.get("name") or ""),
                     )
-                ]
+                )
+            _append_round(response, submit_tool_msgs, round_num)
             # Only return "submitted" if at least one submit reached SUCCESS.
             # PARTIAL responses mean the accumulator absorbed ops but coverage
             # is still incomplete — we must keep looping so the model can
@@ -2885,7 +3208,7 @@ async def _run_parallel_tool_loop(
                 return not s.startswith("ERROR") and not s.startswith("PARTIAL")
             any_success = any(_is_success(content) for _, content in results)
             if any_success:
-                return messages, "submitted"
+                return _current_messages(), "submitted"
             # Submit was rejected — let the LLM see the error and retry
             # (fall through to the round-limit check below)
             last_submit_rejected = True
@@ -2943,7 +3266,7 @@ async def _run_parallel_tool_loop(
                     "these blocks, not from <mainline_patch> or the original "
                     "<hunk_snippets>.\n\n" + "\n\n".join(remap_blocks) + "\n</remap_hints>"
                 )
-                messages = messages + [HumanMessage(content=remap_xml)]
+                round_tail_messages.append(HumanMessage(content=remap_xml))
                 print(
                     f"[Recovery] injected remap_hints for {len(remap_blocks)} "
                     f"failing op(s): {sorted(seen_hints)}"
@@ -3023,7 +3346,7 @@ async def _run_parallel_tool_loop(
                     )
                 except Exception as exc:
                     print(f"[Recovery] failed to bump temperature: {exc}")
-            messages = messages + [HumanMessage(content=base_directive)]
+            round_tail_messages.append(HumanMessage(content=base_directive))
 
         # Execute investigate_calls (must always respond to every tool_call_id)
         if investigate_calls:
@@ -3049,7 +3372,7 @@ async def _run_parallel_tool_loop(
                 tag = "ERR" if is_err else "ok"
                 print(f"[Recovery] tool_result[{tag}] {tool_name}: {snippet}")
 
-            # Append ToolMessages for all original calls (duplicates reuse the result)
+            # Collect ToolMessages for all original calls (duplicates reuse the result)
             tool_messages: list[ToolMessage] = []
             for tc in investigate_calls:
                 sig = _tool_signature(str(tc.get("name") or ""), tc.get("args") or {})
@@ -3061,7 +3384,8 @@ async def _run_parallel_tool_loop(
                         name=str(tc.get("name") or ""),
                     )
                 )
-            messages = messages + tool_messages
+            # Commit this round into the rolling window (truncates results, evicts old)
+            _append_round(response, tool_messages, round_num)
             print(
                 f"[Recovery] Round {round_num}: executed {len(unique_calls)} unique call(s) ({len(investigate_calls)} total)"
             )
@@ -3076,7 +3400,7 @@ async def _run_parallel_tool_loop(
                     f"applied={len(toolkit._applied_edits)} "
                     f"no_change={len(toolkit._direct_no_change_files)}"
                 )
-                return messages, "applied_directly"
+                return _current_messages(), "applied_directly"
 
             # Stagnation guard: if the model keeps repeating identical calls,
             # force plan submission early instead of burning rounds/tokens.
@@ -3090,10 +3414,7 @@ async def _run_parallel_tool_loop(
             stagnating, reason = _detect_stagnation(recent_tool_calls[-12:], limit=5)
             if stagnating and round_num < max_investigation_rounds:
                 print(f"[Recovery] Stagnation detected; injecting nudge: {reason}")
-                # Inject a hint to break the loop instead of killing remaining rounds.
-                # Setting max_investigation_rounds = round_num would force-submit
-                # immediately, cutting off a capable model before it can self-correct.
-                messages = messages + [
+                round_tail_messages.append(
                     HumanMessage(
                         content=(
                             "<stagnation_warning>You have called the same tool with the "
@@ -3104,7 +3425,7 @@ async def _run_parallel_tool_loop(
                             "Do NOT repeat the failing call.</stagnation_warning>"
                         )
                     )
-                ]
+                )
 
             # Special case: if the last tool result was a size-cap rejection
             # and the model is repeating the same call, inject a concrete
@@ -3114,12 +3435,12 @@ async def _run_parallel_tool_loop(
                 if "too broad" in last_result or "too large" in last_result:
                     # Check if the same apply_edit was already rejected last round
                     last_calls = recent_tool_calls[-6:]
-                    apply_edit_sigs = [
+                    _ae_sigs = [
                         json.dumps(args, sort_keys=True)
                         for name, args in last_calls
                         if name == "apply_edit"
                     ]
-                    if len(apply_edit_sigs) >= 2 and len(set(apply_edit_sigs)) == 1:
+                    if len(_ae_sigs) >= 2 and len(set(_ae_sigs)) == 1:
                         # Same exact oversized call repeated — give targeted guidance
                         try:
                             bad_args = last_calls[-1][1]
@@ -3145,11 +3466,15 @@ async def _run_parallel_tool_loop(
                         if split_line:
                             hint += f'Example split point (around line {half}): "{split_line.strip()[:80]}"\n'
                         hint += "</decompose_hint>"
-                        messages = messages + [HumanMessage(content=hint)]
+                        round_tail_messages.append(HumanMessage(content=hint))
                         print(
                             f"[Recovery] injected decompose_hint after repeated size-cap rejection "
                             f"(round {round_num})"
                         )
+
+        elif submit_calls:
+            # submit_calls path already called _append_round above; nothing more to do here.
+            pass
 
         # After responding to all tool calls, check if investigation budget is exhausted.
         # Skip force_submit if the last action was a rejected submit — the rejection
@@ -3159,7 +3484,7 @@ async def _run_parallel_tool_loop(
             print(
                 f"[Recovery] Round {round_num} >= max_investigation_rounds, injecting force_submit"
             )
-            messages = messages + [
+            round_tail_messages.append(
                 HumanMessage(
                     content=(
                         "<force_submit>You have used all investigation rounds. "
@@ -3167,12 +3492,428 @@ async def _run_parallel_tool_loop(
                         "Do not call any other tools.</force_submit>"
                     )
                 )
-            ]
+            )
         # Reset for next round (cleared whether we injected fix_and_resubmit or not)
         last_submit_rejected = False
 
     print("[Recovery] Exited loop: max_rounds_exceeded")
-    return messages, "max_rounds_exceeded"
+    return _current_messages(), "max_rounds_exceeded"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# REDESIGNED RECOVERY FLOW (3-phase: investigate → plan → format)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Why: the old apply_edit-driven loop burned 10+ LLM rounds on a single patch,
+# each round re-reading the full message history → Gemma-4 timed out and tokens
+# were wasted. The redesign splits recovery into three bounded phases:
+#
+#   Phase 1 — Investigation (≤2 rounds, READ-ONLY tools)
+#     The LLM sees ALL context up-front (patch, preloaded files, dependency
+#     graph, obligations) and issues every tool call it needs in ONE response.
+#     Tools run in parallel. Results returned in one batch. A second round is
+#     allowed only if the LLM explicitly requests more context.
+#
+#   Phase 2 — Plan generation (1 LLM call, NO tools)
+#     The LLM writes a natural-language adaptation plan with per-file unified
+#     diff blocks. This text is saved as `recovery_plan_text` artifact.
+#
+#   Phase 3 — Format conversion (1 LLM call, submit_recovery_plan forced)
+#     A fresh LLM call converts the plan text into strict edit_ops JSON via
+#     submit_recovery_plan, feeding the existing hunk_generator pipeline.
+#
+# Total LLM calls per recovery: ≤4 (vs ~13 in the old loop).
+
+_RECOVERY_INVESTIGATION_SYSTEM = """You are a Java backport recovery INVESTIGATOR.
+
+Your job: in ONE response, issue ALL the tool calls you need to fully understand how to adapt the mainline patch to the target repository.
+
+You will see up-front:
+- The mainline patch diff
+- All target files referenced by the patch (PRELOADED — do NOT read_file them again)
+- The dependency graph for those files
+- Obligations listing what must be covered
+- A deterministic recovery brief
+
+PROTOCOL:
+1. Read the context carefully.
+2. In ONE assistant response, call `batch_tools` with EVERY tool invocation you need (grep, read_file for files NOT in the preloaded set, get_class_context, find_symbol_locations, read_mainline_file, etc.).
+3. Do NOT call tools one at a time — batch them.
+4. If the preloaded context is already sufficient, respond with exactly: `INVESTIGATION_COMPLETE` and nothing else.
+5. After you see the tool results, either issue MORE batched calls (only if truly needed) OR respond with `INVESTIGATION_COMPLETE`.
+
+Hard limit: 2 rounds of investigation. Use them wisely.
+
+Available read-only tools: batch_tools, read_file, read_mainline_file, grep, glob, get_class_context, get_dependency_graph, find_symbol_locations, find_method_match, summarize_failure.
+
+Do NOT edit files. Do NOT produce the plan yet — that comes after investigation.
+"""
+
+_RECOVERY_PLAN_SYSTEM = """You are a Java backport recovery PLANNER.
+
+Using ONLY the investigation context gathered above, produce a complete adaptation plan.
+
+OUTPUT FORMAT (strict):
+
+# Adaptation Plan
+
+## Intent
+<1-2 sentences: what the patch does semantically>
+
+## Per-file changes
+
+### <target_file_path>
+<1-3 sentences: what needs to change in this file and why>
+
+```diff
+<old-code-block>
+---
+<new-code-block>
+```
+
+<repeat the ### block for each target file that needs changes>
+
+## No-change files
+- <target_file>: <reason it needs no change in target>
+- <repeat>
+
+## Risk notes
+- <concerns, dropped hunks, uncertainty>
+
+RULES:
+- Every old-code-block MUST be VERBATIM text copied from the target file content shown earlier. NOT from the mainline patch `-` lines.
+- Prefer SHORT anchors (1-5 lines).
+- One diff block per distinct edit. Multiple edits per file are allowed — repeat the ``` diff ``` block.
+- Use `---` as the separator between old and new code inside each diff block.
+- If a required file needs no change, list it under "No-change files" with a reason instead of a diff block.
+- Do NOT call any tools. Just write the plan as markdown text.
+"""
+
+_RECOVERY_FORMATTER_SYSTEM = """You are a format-conversion agent. You will receive a natural-language recovery plan with diff blocks, and you MUST convert it into a strict edit_ops JSON by calling `submit_recovery_plan` exactly once.
+
+You have NO other tools. You MUST call submit_recovery_plan. Do not produce any other output.
+
+Schema for submit_recovery_plan:
+{
+  "edit_ops": {
+    "<MAINLINE file path>": [
+      {
+        "hunk_index": <int, 0-based>,
+        "target_file": "<TARGET file path>",
+        "edit_type": "replace",
+        "old_string": "<VERBATIM old code from the diff block>",
+        "new_string": "<VERBATIM new code from the diff block>",
+        "notes": "<brief reason>"
+      }
+    ]
+  },
+  "obligation_decisions": [
+    {"obligation_id": "<id>", "status": "edited" | "verified_no_change", "reason": "<brief>", "evidence": ["<short>"]}
+  ],
+  "investigation_evidence": [
+    {"kind": "note", "details": "<brief>"}
+  ],
+  "risk_notes": ["<risk>"]
+}
+
+RULES:
+- One edit_ops entry per diff block in the plan. Keep old_string and new_string VERBATIM as they appear in the diff (do not re-indent, do not normalize whitespace).
+- For every file listed under "No-change files" in the plan, emit an obligation_decision with status="verified_no_change".
+- For every file with diff blocks, emit an obligation_decision with status="edited".
+- mainline_file key in edit_ops should equal target_file unless the plan explicitly says otherwise.
+- edit_type is always "replace" unless the diff clearly adds new code with no old anchor (then use "insert_after" and put the preceding line in old_string).
+- hunk_index starts at 0 and increments per file.
+
+Call submit_recovery_plan now.
+"""
+
+
+async def _run_recovery_redesign(
+    llm,
+    toolkit: Any,
+    preloaded_context_xml: str,
+    patch_diff: str,
+    recovery_brief_json: str,
+    recovery_obligations_json: str,
+    dependency_graph_text: str,
+    max_investigation_rounds: int = 2,
+) -> tuple[str, str, list[Any]]:
+    """Run the 3-phase redesigned recovery flow.
+
+    Returns (term_reason, plan_text, all_messages_for_token_accounting).
+    """
+    all_messages: list[Any] = []  # for token accounting only
+
+    # ── PHASE 1: INVESTIGATION (read-only tools, ≤2 rounds) ────────────────
+    read_only_tool_names = {
+        "batch_tools", "read_file", "read_mainline_file", "grep", "glob",
+        "get_class_context", "get_dependency_graph", "find_symbol_locations",
+        "find_method_match", "summarize_failure",
+    }
+    all_tools = toolkit.get_tools(include_submit=False)
+    investigation_tools = [t for t in all_tools if t.name in read_only_tool_names]
+    tool_map = {t.name: t for t in investigation_tools}
+    inv_bound_llm = llm.bind_tools(investigation_tools)
+
+    investigation_context_parts: list[str] = []
+    investigation_context_parts.append(preloaded_context_xml)
+    if dependency_graph_text:
+        investigation_context_parts.append(
+            f"<dependency_graph>\n{_truncate(dependency_graph_text, 6000)}\n</dependency_graph>"
+        )
+    investigation_context_parts.append(
+        f"<mainline_patch>\n{_truncate(patch_diff, 6000)}\n</mainline_patch>"
+    )
+    investigation_context_parts.append(
+        f"<recovery_brief>\n{_truncate(recovery_brief_json, 4000)}\n</recovery_brief>"
+    )
+    investigation_context_parts.append(
+        f"<obligations>\n{_truncate(recovery_obligations_json, 4000)}\n</obligations>"
+    )
+    investigation_context_parts.append(
+        "Now issue ALL the tool calls you need in ONE response via batch_tools. "
+        "If the preloaded context is sufficient, reply with exactly INVESTIGATION_COMPLETE."
+    )
+    initial_user_message = "\n\n".join(investigation_context_parts)
+
+    inv_messages: list[Any] = [
+        SystemMessage(content=_RECOVERY_INVESTIGATION_SYSTEM),
+        HumanMessage(content=initial_user_message),
+    ]
+
+    loop = asyncio.get_event_loop()
+
+    async def _execute_tool_call(tc: dict) -> tuple[str, str]:
+        name = str(tc.get("name") or "")
+        args = dict(tc.get("args") or {})
+        call_id = str(tc.get("id") or "")
+        tool = tool_map.get(name)
+        if not tool:
+            return call_id, f"ERROR: unknown tool {name!r} (investigation phase is read-only)"
+        try:
+            result = await loop.run_in_executor(None, lambda: tool.invoke(args))
+            result_str = str(result)
+            # Cap each tool result at 8k chars — the LLM gets the full batch in one shot
+            if len(result_str) > 8000:
+                result_str = result_str[:8000] + "\n…[truncated — request narrower scope if needed]"
+            return call_id, result_str
+        except Exception as exc:
+            return call_id, f"ERROR executing {name}: {exc}"
+
+    investigation_complete = False
+    for inv_round in range(max_investigation_rounds):
+        print(f"[Recovery-Redesign] === Investigation round {inv_round} ===")
+        try:
+            response = await asyncio.wait_for(
+                inv_bound_llm.ainvoke(inv_messages),
+                timeout=180.0,
+            )
+        except asyncio.TimeoutError:
+            print(f"[Recovery-Redesign] investigation round {inv_round} timed out")
+            return "llm_timeout", "", inv_messages
+
+        inv_messages.append(response)
+        resp_text = str(getattr(response, "content", "") or "")
+        if isinstance(getattr(response, "content", None), list):
+            resp_text = " ".join(
+                str(p.get("text") or "") if isinstance(p, dict) else str(p)
+                for p in response.content
+            )
+
+        tool_calls = list(getattr(response, "tool_calls", None) or [])
+        if "INVESTIGATION_COMPLETE" in resp_text.upper() and not tool_calls:
+            print(f"[Recovery-Redesign] LLM signaled INVESTIGATION_COMPLETE in round {inv_round}")
+            investigation_complete = True
+            break
+
+        if not tool_calls:
+            print(f"[Recovery-Redesign] no tool calls in round {inv_round}, assuming investigation done")
+            investigation_complete = True
+            break
+
+        # Execute all tool calls in parallel (this is the core "batch" behavior)
+        print(f"[Recovery-Redesign] round {inv_round}: executing {len(tool_calls)} tool call(s) in parallel")
+        results = await asyncio.gather(*[_execute_tool_call(tc) for tc in tool_calls])
+        result_map = dict(results)
+        for tc in tool_calls:
+            content = result_map.get(str(tc.get("id") or ""), "")
+            inv_messages.append(
+                ToolMessage(
+                    content=content,
+                    tool_call_id=str(tc.get("id") or ""),
+                    name=str(tc.get("name") or ""),
+                )
+            )
+        # On the last allowed round, nudge the LLM to wrap up
+        if inv_round == max_investigation_rounds - 1:
+            inv_messages.append(
+                HumanMessage(
+                    content="No more investigation rounds available. Reply with INVESTIGATION_COMPLETE now."
+                )
+            )
+
+    all_messages.extend(inv_messages)
+
+    # ── PHASE 2: PLAN GENERATION (no tools) ────────────────────────────────
+    print("[Recovery-Redesign] === Phase 2: plan generation ===")
+    # Build a compact context summary from investigation: all ToolMessages + final AIMessage text
+    investigation_summary_parts: list[str] = [preloaded_context_xml]
+    if dependency_graph_text:
+        investigation_summary_parts.append(
+            f"<dependency_graph>\n{_truncate(dependency_graph_text, 4000)}\n</dependency_graph>"
+        )
+    investigation_summary_parts.append(
+        f"<mainline_patch>\n{_truncate(patch_diff, 6000)}\n</mainline_patch>"
+    )
+    investigation_summary_parts.append(
+        f"<obligations>\n{_truncate(recovery_obligations_json, 3000)}\n</obligations>"
+    )
+    # Include tool results
+    investigation_summary_parts.append("<investigation_findings>")
+    for m in inv_messages:
+        if isinstance(m, ToolMessage):
+            name = str(getattr(m, "name", "") or "")
+            content = str(getattr(m, "content", "") or "")
+            investigation_summary_parts.append(
+                f'<finding tool="{name}">\n{_truncate(content, 4000)}\n</finding>'
+            )
+    investigation_summary_parts.append("</investigation_findings>")
+    investigation_summary = "\n\n".join(investigation_summary_parts)
+
+    plan_messages: list[Any] = [
+        SystemMessage(content=_RECOVERY_PLAN_SYSTEM),
+        HumanMessage(content=investigation_summary),
+    ]
+    try:
+        plan_response = await asyncio.wait_for(
+            llm.ainvoke(plan_messages),  # no tools bound
+            timeout=180.0,
+        )
+    except asyncio.TimeoutError:
+        print("[Recovery-Redesign] plan generation timed out")
+        return "llm_timeout", "", all_messages
+
+    plan_text = str(getattr(plan_response, "content", "") or "")
+    if isinstance(getattr(plan_response, "content", None), list):
+        plan_text = "\n".join(
+            str(p.get("text") or "") if isinstance(p, dict) else str(p)
+            for p in plan_response.content
+        )
+    plan_messages.append(plan_response)
+    all_messages.extend(plan_messages)
+    print(f"[Recovery-Redesign] plan generated, {len(plan_text)} chars")
+
+    if not plan_text.strip():
+        return "empty_plan", "", all_messages
+
+    # ── PHASE 3: FORMAT CONVERSION (Python parser — no LLM) ─────────────────
+    # Parse the markdown plan deterministically. The plan has a well-defined
+    # format with ### <file> headings and ```diff ... --- ... ``` blocks.
+    # No LLM call needed — this never times out.
+    print("[Recovery-Redesign] === Phase 3: format conversion (Python parser) ===")
+    edit_ops: dict[str, list[dict]] = {}
+    obligation_decisions: list[dict] = []
+    risk_notes: list[str] = []
+
+    def _parse_plan(text: str) -> None:
+        import re as _re
+        # Extract per-file sections (### <file>)
+        file_section_re = _re.compile(r"^### (.+)$", _re.MULTILINE)
+        diff_block_re = _re.compile(r"```diff\n(.*?)```", _re.DOTALL)
+
+        sections = list(file_section_re.finditer(text))
+        for i, sec_match in enumerate(sections):
+            file_path = sec_match.group(1).strip()
+            sec_start = sec_match.end()
+            sec_end = sections[i + 1].start() if i + 1 < len(sections) else len(text)
+            section_body = text[sec_start:sec_end]
+
+            diffs = list(diff_block_re.finditer(section_body))
+            if not diffs:
+                # No diff block — file is a no-change
+                obligation_decisions.append({
+                    "obligation_id": file_path,
+                    "status": "verified_no_change",
+                    "reason": "No diff block in plan",
+                    "evidence": [],
+                })
+                continue
+
+            file_edits = edit_ops.setdefault(file_path, [])
+            for hunk_idx, dm in enumerate(diffs):
+                diff_body = dm.group(1)
+                # Split on the separator line `---`
+                sep = "\n---\n"
+                if sep in diff_body:
+                    old_part, new_part = diff_body.split(sep, 1)
+                else:
+                    # Try alternative: single `---` line anywhere
+                    parts = _re.split(r"(?m)^---$", diff_body, maxsplit=1)
+                    if len(parts) == 2:
+                        old_part, new_part = parts
+                    else:
+                        # Can't parse — treat as note
+                        print(f"[Recovery-Redesign] cannot parse diff block in {file_path} hunk {hunk_idx}")
+                        continue
+
+                old_string = old_part.rstrip("\n")
+                new_string = new_part.lstrip("\n").rstrip("\n")
+                file_edits.append({
+                    "hunk_index": hunk_idx,
+                    "target_file": file_path,
+                    "edit_type": "replace",
+                    "old_string": old_string,
+                    "new_string": new_string,
+                    "verified": False,
+                    "verification_result": "parsed_from_plan",
+                    "notes": f"Parsed from recovery plan, section {file_path}",
+                })
+            obligation_decisions.append({
+                "obligation_id": file_path,
+                "status": "edited",
+                "reason": f"{len(file_edits)} edit(s) extracted from plan",
+                "evidence": [f"hunk {h['hunk_index']}" for h in file_edits],
+            })
+
+        # Extract risk notes
+        risk_section = _re.search(r"## Risk notes\n(.*?)(?=\n## |\Z)", text, _re.DOTALL)
+        if risk_section:
+            for line in risk_section.group(1).splitlines():
+                line = line.strip().lstrip("- ").strip()
+                if line:
+                    risk_notes.append(line)
+
+    _parse_plan(plan_text)
+    total_edits = sum(len(v) for v in edit_ops.values())
+    print(f"[Recovery-Redesign] parsed {total_edits} edit(s) across {len(edit_ops)} file(s)")
+
+    if not edit_ops:
+        print("[Recovery-Redesign] plan parser found no edit_ops — treating as no-change")
+        return "formatter_no_tool_calls", plan_text, all_messages
+
+    # Call submit_recovery_plan directly in Python (no LLM round-trip)
+    submit_tool = None
+    for t in toolkit.get_tools(include_submit=True):
+        if t.name == "submit_recovery_plan":
+            submit_tool = t
+            break
+    if submit_tool is None:
+        return "formatter_missing_submit_tool", plan_text, all_messages
+
+    try:
+        submit_result = str(submit_tool.invoke({
+            "edit_ops": edit_ops,
+            "obligation_decisions": obligation_decisions,
+            "investigation_evidence": [{"kind": "note", "details": "Parsed from plan text"}],
+            "risk_notes": risk_notes,
+        }))
+    except Exception as exc:
+        submit_result = f"ERROR executing submit_recovery_plan: {exc}"
+    print(f"[Recovery-Redesign] submit_recovery_plan → {submit_result[:500]}")
+
+    if submit_result.startswith("ERROR"):
+        return "formatter_submit_rejected", plan_text, all_messages
+    return "submitted", plan_text, all_messages
 
 
 async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
@@ -3282,26 +4023,28 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
         12000,
     )
 
-    system_prompt = _RECOVERY_SYSTEM.format(
-        failure_context=failure_context,
-        agent_eligible_files=agent_eligible_files_str,
-        retry_scope=retry_scope,
-        existing_plan=existing_plan,
-        attempt_artifacts=attempt_artifacts,
-        recovery_brief=recovery_brief_json,
-        recovery_obligations=recovery_obligations_json,
-    )
-    system_prompt = _sanitize_for_content_policy(system_prompt, 35000)
-
     force_full_prompt = _should_force_full_recovery_prompt(state)
-    compact_mode = _env_truthy("RECOVERY_COMPACT_PROMPT") or (
-        _default_compact_mode_for_provider() and not force_full_prompt
+    # Default to compact prompt (≤8k chars) to keep per-round LLM context bounded.
+    # Full 35k prompt only when explicitly requested via env var or forced by category.
+    use_full_prompt = _env_truthy("RECOVERY_FULL_PROMPT") or (
+        force_full_prompt and not _env_truthy("RECOVERY_COMPACT_PROMPT")
     )
-    if force_full_prompt and not _env_truthy("RECOVERY_COMPACT_PROMPT"):
-        print(
-            "Recovery Agent: forcing full prompt mode for structural/empty-generation retry."
+    compact_mode = not use_full_prompt
+
+    if use_full_prompt:
+        print("Recovery Agent: using full system prompt (RECOVERY_FULL_PROMPT or forced).")
+        system_prompt = _RECOVERY_SYSTEM.format(
+            failure_context=failure_context,
+            agent_eligible_files=agent_eligible_files_str,
+            retry_scope=retry_scope,
+            existing_plan=existing_plan,
+            attempt_artifacts=attempt_artifacts,
+            recovery_brief=recovery_brief_json,
+            recovery_obligations=recovery_obligations_json,
         )
-    if compact_mode:
+        system_prompt = _sanitize_for_content_policy(system_prompt, 35000)
+    else:
+        print("Recovery Agent: using compact system prompt (default — keeps per-round context bounded).")
         system_prompt = _build_compact_recovery_system_prompt(
             failure_context=failure_context,
             retry_scope=retry_scope,
@@ -3492,13 +4235,20 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
     )
 
     if compact_mode:
+        file_checklist = "\n".join(f"  - {f}" for f in patch_files) if patch_files else "  (see recovery brief)"
         task_xml = (
             "<task>\n"
-            "COMPACT MODE:\n"
-            "- Use deterministic brief + obligations only.\n"
-            "- Use tools to fetch exact target anchors as needed.\n"
-            "- Submit wrapper payload with obligation decisions.\n"
-            "</task>"
+            "DIRECT-APPLY MODE (default):\n"
+            "1. Use deterministic_recovery_brief and impact_obligations from the system prompt.\n"
+            "2. For each required file, use grep/get_class_context/read_file to locate exact target text.\n"
+            "   Prefer agenttool(role, objective, target_file) for heavy investigation.\n"
+            "3. Apply edits with apply_edit(target_file, old_string, new_string, edit_type).\n"
+            "   old_string MUST come from the actual TARGET file content, not from mainline patch lines.\n"
+            "4. Call mark_no_change(target_file, reason) for files where no edit is needed.\n"
+            "5. Call recovery_done(summary) once ALL required files are edited or marked.\n\n"
+            "Required files:\n"
+            + file_checklist
+            + "\n</task>"
         )
 
     initial_message = "\n\n".join(
@@ -3510,199 +4260,71 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
     ]
     stagnation_reason = ""
     recovery_strategy_history = list(state.get("recovery_strategy_history") or [])
+    recovery_plan_text = ""
 
-    # Always use the direct-apply path (apply_edit / recovery_done) rather than
-    # submit_recovery_plan. Investigation tools (grep, read_file, get_class_context,
-    # find_symbol_locations, get_dependency_graph) are kept available even when files
-    # are preloaded so the agent can discover structural differences — e.g. methods
-    # that moved to a superclass in the target branch.
-    # submit_recovery_plan is always excluded: the direct-apply path is the contract.
-    exclude_tools = {"submit_recovery_plan"}
-    max_inv_rounds = 20  # allow many apply_edit + investigation rounds
+    # ── Fetch dependency graph up-front (deterministic, before any LLM call) ─
+    print("Recovery Agent: fetching dependency graph for patch files...")
+    dep_graph_text = ""
+    if patch_files:
+        try:
+            dep_result = toolkit.get_dependency_graph(patch_files, explore_neighbors=True)
+            dep_graph_text = json.dumps(dep_result, ensure_ascii=False, indent=2)
+        except Exception as _dge:
+            dep_graph_text = f"dependency graph unavailable: {_dge}"
+        print(f"Recovery Agent: dependency graph: {len(dep_graph_text)} chars")
 
-    print("Recovery Agent: starting parallel batch tool loop...")
-    print(
-        f"Recovery Agent: all_files_preloaded={all_patch_files_preloaded}, "
-        f"max_inv_rounds={max_inv_rounds}, "
-        f"submit_only={all_patch_files_preloaded}"
-    )
+    # ── Build preloaded context XML for the redesign ─────────────────────────
+    preloaded_context_xml = (
+        "<preloaded_target_files>\n"
+        "These are the ACTUAL TARGET files (older codebase). "
+        "Lines are shown with numbers. Do NOT include line number prefixes in old_string anchors.\n\n"
+        + "\n\n".join(preloaded_file_parts)
+        + "\n</preloaded_target_files>"
+    ) if preloaded_file_parts else "<preloaded_target_files>(none)</preloaded_target_files>"
+
+    if per_hunk_parts:
+        preloaded_context_xml += (
+            "\n\n<hunk_snippets>\n"
+            "Exact target code at each location found by Structural Locator — precise old_string sources.\n\n"
+            + "\n\n".join(per_hunk_parts)
+            + "\n</hunk_snippets>"
+        )
+
+    # ── RUN REDESIGNED 3-PHASE RECOVERY ──────────────────────────────────────
+    print("Recovery Agent: starting 3-phase redesign (investigate → plan → format)...")
     try:
-        final_messages, term_reason = await _run_parallel_tool_loop(
+        term_reason, recovery_plan_text, final_messages = await _run_recovery_redesign(
             llm=llm,
-            tools=toolkit.get_tools(exclude_names=exclude_tools),
-            initial_messages=messages,
-            preloaded_cache=preloaded_cache,
-            max_investigation_rounds=max_inv_rounds,
             toolkit=toolkit,
+            preloaded_context_xml=preloaded_context_xml,
+            patch_diff=patch_diff,
+            recovery_brief_json=recovery_brief_json,
+            recovery_obligations_json=recovery_obligations_json,
+            dependency_graph_text=dep_graph_text,
+            max_investigation_rounds=2,
         )
     except Exception as exc:
         if _is_content_filter_error(exc):
-            content_filter_retry_count += 1
-            if content_filter_retry_count > max_content_filter_retries:
-                stagnation_reason = "content_filter_exhausted"
-                final_messages = messages
-                term_reason = "content_filter_exhausted"
-            else:
-                print(
-                    "Recovery Agent: provider content filter triggered; "
-                    "switching to compact prompt mode and retrying."
-                )
-                compact_mode = True
-                system_prompt = _build_compact_recovery_system_prompt(
-                    failure_context=failure_context,
-                    retry_scope=retry_scope,
-                    recovery_brief=recovery_brief_json,
-                    recovery_obligations=recovery_obligations_json,
-                )
-                compact_messages: list[Any] = [
-                    HumanMessage(
-                        content=_sanitize_for_content_policy(
-                            str(getattr(m, "content", "") or ""),
-                            2500,
-                        )
-                    )
-                    for m in messages
-                    if isinstance(m, HumanMessage)
-                ] or [
-                    HumanMessage(
-                        content=(
-                            "Use deterministic brief and obligations. "
-                            "Produce minimal wrapper submission with obligation decisions."
-                        )
-                    )
-                ]
-                compact_llm = get_llm(temperature=0.0)
-                compact_messages = [
-                    SystemMessage(content=system_prompt)
-                ] + compact_messages
-                try:
-                    final_messages, term_reason = await _run_parallel_tool_loop(
-                        llm=compact_llm,
-                        tools=toolkit.get_tools(),
-                        initial_messages=compact_messages,
-                        preloaded_cache=preloaded_cache,
-                        max_investigation_rounds=1,
-                        toolkit=toolkit,
-                    )
-                except Exception:
-                    stagnation_reason = "content_filter_exhausted"
-                    final_messages = compact_messages
-                    term_reason = "content_filter_exhausted"
+            stagnation_reason = "content_filter_exhausted"
+            final_messages = []
+            term_reason = "content_filter_exhausted"
         else:
             raise
 
-    print(f"Recovery Agent: loop finished, reason={term_reason}")
+    # ── Save the plan text as an artifact for reference ───────────────────────
+    if recovery_plan_text:
+        try:
+            import pathlib
+            _eval_dir = pathlib.Path(target_repo_path).parent / "recovery_plans"
+            _eval_dir.mkdir(parents=True, exist_ok=True)
+            _commit = str(state.get("mainline_commit") or "unknown")[:12]
+            _plan_file = _eval_dir / f"recovery_plan_{_commit}.md"
+            _plan_file.write_text(recovery_plan_text, encoding="utf-8")
+            print(f"[Recovery] plan artifact saved: {_plan_file}")
+        except Exception as _save_exc:
+            print(f"[Recovery] could not save plan artifact: {_save_exc}")
 
-    # ── DIRECT-APPLY SHORT-CIRCUIT ─────────────────────────────────────
-    # If the recovery agent used apply_edit tools to mutate files on disk,
-    # synthesize adapted_code_hunks from git diff and hand off straight to
-    # validation. This bypasses the entire submit_recovery_plan + hunk_generator
-    # pipeline.
-    applied_edits = list(getattr(toolkit, "_applied_edits", []) or [])
-    if applied_edits:
-        from agents.file_editor import _git_diff_file, _git_reset_file
-        modified_files = []
-        seen = set()
-        for e in applied_edits:
-            tf = str(e.get("target_file") or "")
-            if tf and tf not in seen:
-                seen.add(tf)
-                modified_files.append(tf)
-
-        # Strip orphaned Java imports that became unused after the edits.
-        # Only clean actually-modified files (not mark_no_change files) to
-        # avoid dropping imports the developer intentionally kept.
-        # The mainline patch is the authority: if an import appears in the
-        # mainline post-state (i.e. it was NOT removed by the patch), don't
-        # drop it here even if the usage scan says it's unused — our scan
-        # is imperfect (e.g. annotation processors, wildcard-like usages).
-        _patch_removed_imports: set[str] = set()
-        for _line in patch_diff.splitlines():
-            if _line.startswith("-") and not _line.startswith("---"):
-                _m = re.search(r"^-\s*import\s+[\w.]+\.(\w+)\s*;", _line)
-                if _m:
-                    _patch_removed_imports.add(_m.group(1))
-        files_to_clean = list(modified_files)
-        for tf in files_to_clean:
-            if tf.endswith(".java"):
-                try:
-                    # Always pass the concrete set so the cleanup only removes
-                    # imports the mainline patch explicitly deleted. If the
-                    # patch deleted no imports, _patch_removed_imports is an
-                    # empty set and restrict_to=set() removes nothing — safe.
-                    removed = _cleanup_unused_java_imports(
-                        target_repo_path, tf,
-                        restrict_to=_patch_removed_imports,
-                    )
-                    if removed:
-                        print(
-                            f"[Recovery] cleaned {len(removed)} unused import(s) "
-                            f"from {tf}: {removed}"
-                        )
-                except Exception as exc:
-                    print(f"[Recovery] import cleanup crashed for {tf}: {exc}")
-
-        # Capture diffs FIRST (while files are still mutated), THEN reset the
-        # files to HEAD so validation's git apply step can re-apply cleanly.
-        # The validation pipeline expects to apply hunks against pristine HEAD
-        # state, not against already-mutated files.
-        adapted_code_hunks: list[dict[str, Any]] = []
-        for tf in modified_files:
-            diff_text = _git_diff_file(target_repo_path, tf)
-            if not diff_text:
-                print(f"[Recovery] direct-apply: no diff for {tf} (already reverted?)")
-                continue
-            adapted_code_hunks.append(
-                {
-                    "target_file": tf,
-                    "mainline_file": tf,
-                    "hunk_text": diff_text,
-                    "insertion_line": 1,
-                    "intent_verified": True,
-                    "file_operation": "MODIFIED",
-                }
-            )
-        # Reset all modified files to HEAD so validation can re-apply.
-        for tf in modified_files:
-            try:
-                ok = _git_reset_file(target_repo_path, tf)
-                print(f"[Recovery] reset {tf} → {'ok' if ok else 'FAILED'}")
-            except Exception as exc:
-                print(f"[Recovery] reset {tf} crashed: {exc}")
-
-        # Token accounting (still need it before return)
-        agg = aggregate_usage_from_messages(final_messages)
-        if agg.get("input_tokens") or agg.get("output_tokens"):
-            add_usage(
-                token_usage,
-                int(agg.get("input_tokens", 0) or 0),
-                int(agg.get("output_tokens", 0) or 0),
-                "recovery_agent.direct_apply",
-            )
-
-        no_change_files = sorted(getattr(toolkit, "_direct_no_change_files", set()))
-        summary = (
-            f"Recovery Agent (direct-apply): applied {len(applied_edits)} edit(s) "
-            f"to {len(adapted_code_hunks)} file(s); "
-            f"{len(no_change_files)} file(s) marked no_change."
-        )
-        print(f"[Recovery] direct-apply handoff: {summary}")
-        return {
-            "messages": [HumanMessage(content=summary)],
-            "adapted_code_hunks": adapted_code_hunks,
-            "adapted_test_hunks": [],
-            "recovery_applied_directly": True,
-            "recovery_agent_mode": True,
-            "recovery_agent_status": "ok",
-            "recovery_agent_summary": summary,
-            "recovery_brief": deterministic_recovery_brief,
-            "recovery_obligations": recovery_obligations,
-            "recovery_scope_files": recovery_scope_files,
-            "recovery_strategy_history": recovery_strategy_history,
-            "recovery_plan_version": 1,
-            "recovery_risk_notes": [],
-            "token_usage": token_usage,
-        }
+    print(f"Recovery Agent: 3-phase redesign finished, reason={term_reason}")
 
     # Token accounting
     agg = aggregate_usage_from_messages(final_messages)
@@ -3711,7 +4333,7 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
             token_usage,
             int(agg.get("input_tokens", 0) or 0),
             int(agg.get("output_tokens", 0) or 0),
-            "recovery_agent.parallel_loop",
+            "recovery_agent.redesign",
         )
 
     # Map termination reason to stagnation_reason expected by downstream code
@@ -3725,7 +4347,12 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
                     "invalid obligation decision status" in submit_rejection.lower()
                 ):
                     stagnation_reason = "submit_rejected_missing_or_invalid_decisions"
-        elif term_reason in ("max_rounds_exceeded", "no_tool_calls"):
+        elif term_reason in (
+            "max_rounds_exceeded", "no_tool_calls",
+            "formatter_no_tool_calls", "formatter_wrong_tool",
+            "formatter_submit_rejected", "formatter_missing_submit_tool",
+            "empty_plan",
+        ):
             stagnation_reason = term_reason
         elif term_reason == "content_filter_exhausted":
             stagnation_reason = "content_filter_exhausted"
@@ -3804,6 +4431,7 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
         "recovery_decisions": submitted_decisions,
         "recovery_scope_files": recovery_scope_files,
         "recovery_strategy_history": recovery_strategy_history,
+        "recovery_plan_text": recovery_plan_text,  # natural-language plan artifact
         "recovery_plan_version": 1,
         "recovery_agent_status": (
             "no_fix_found"
