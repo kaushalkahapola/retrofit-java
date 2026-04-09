@@ -71,6 +71,10 @@ RUN_MODE_PHASE1 = "phase1"
 RUN_MODE_PHASE2 = "phase2"
 
 
+def _new_run_id() -> str:
+    return datetime.now().strftime("%Y%m%dT%H%M%S%f")
+
+
 def ensure_dirs() -> None:
     os.makedirs(RESULTS_DIR, exist_ok=True)
     os.makedirs(PHASE0_CACHE_DIR, exist_ok=True)
@@ -1272,14 +1276,16 @@ def load_agent_state(
         return None
 
 
-def save_pipeline_log(project, patch_id, phase_name, log_content):
+def save_pipeline_log(project, patch_id, phase_name, log_content, run_id: str = ""):
     project_dir = os.path.join(RESULTS_DIR, project, patch_id)
     os.makedirs(project_dir, exist_ok=True)
 
     log_file = os.path.join(project_dir, f"{phase_name}_log.md")
 
+    prefix = f"run_id={run_id}\n\n" if str(run_id or "").strip() else ""
+
     with open(log_file, "w", encoding="utf-8") as f:
-        f.write(log_content)
+        f.write(prefix + str(log_content or ""))
 
     return log_file
 
@@ -1567,7 +1573,9 @@ async def run_full_pipeline(
     run_mode: str = RUN_MODE_FULL,
     force_phase: bool = False,
 ):
+    run_id = _new_run_id()
     results = {
+        "run_id": run_id,
         "project": project,
         "patch_id": patch_id,
         "mainline_commit": mainline_commit,
@@ -1582,6 +1590,7 @@ async def run_full_pipeline(
     runtime_log_path = os.path.join(patch_dir, "log.txt")
     runtime_tokens_path = os.path.join(patch_dir, "tokens.txt")
     token_totals = {
+        "run_id": run_id,
         "input_tokens": 0,
         "output_tokens": 0,
         "total_tokens": 0,
@@ -1751,6 +1760,7 @@ async def run_full_pipeline(
     # Reset per-patch runtime log at start.
     with open(runtime_log_path, "w", encoding="utf-8") as lf:
         lf.write(
+            f"run_id={run_id}\n"
             f"patch_id={patch_id}\n"
             f"project={project}\n"
             f"mainline_commit={mainline_commit}\n"
@@ -1814,6 +1824,7 @@ async def run_full_pipeline(
             f"- Overlap Java files: {pair_consistency.get('overlap_java_files', [])}\n"
             f"- Overlap ratio (mainline): {pair_consistency.get('overlap_ratio_mainline', 0)}\n\n"
             f"## Mainline Patch\n```diff\n{patch_output}\n```\n",
+            run_id=run_id,
         )
 
         base_inputs = {
@@ -1991,6 +2002,7 @@ async def run_full_pipeline(
                     f"- Cache file: {_phase0_cache_file(project, backport_commit, mainline_commit)}\n"
                     "- Decision: ignored\n"
                     f"- Reason: {reuse_reason}\n",
+                    run_id=run_id,
                 )
                 phase0_cache = None
 
@@ -2015,6 +2027,7 @@ async def run_full_pipeline(
                 f"- Cache file: {_phase0_cache_file(project, backport_commit, mainline_commit)}\n"
                 f"- Reused targets: {phase0_cache.get('phase_0_test_targets', {})}\n"
                 f"- Reused baseline mode: {(phase0_cache.get('phase_0_baseline_test_result') or {}).get('mode', 'unknown')}\n",
+                run_id=run_id,
             )
 
             if phase0_cached_success:
@@ -2034,6 +2047,7 @@ async def run_full_pipeline(
                         phase_outputs={},
                         phase0_cache=phase0_cache,
                     ),
+                    run_id=run_id,
                 )
 
                 results["phases"] = {
@@ -2224,6 +2238,7 @@ async def run_full_pipeline(
             f"```diff\n{final_generated_patch_diff}\n```\n"
             "## Full Developer Backport Patch (full commit diff)\n"
             f"```diff\n{developer_patch_diff}\n```\n",
+            run_id=run_id,
         )
 
         transition_eval = _extract_transition_eval_from_outputs(dict(phase_outputs))
@@ -2282,7 +2297,13 @@ async def run_full_pipeline(
         except Exception as e:
             trace_lines.append(f"\nError generating trace: {e}")
 
-        save_pipeline_log(project, patch_id, "full_trace", "\n".join(trace_lines))
+        save_pipeline_log(
+            project,
+            patch_id,
+            "full_trace",
+            "\n".join(trace_lines),
+            run_id=run_id,
+        )
 
         save_pipeline_log(
             project,
@@ -2294,6 +2315,7 @@ async def run_full_pipeline(
                 phase_outputs=dict(phase_outputs),
                 phase0_cache=phase0_cache,
             ),
+            run_id=run_id,
         )
 
         recovery_intelligence = _build_recovery_intelligence_report(dict(phase_outputs))
@@ -2304,6 +2326,7 @@ async def run_full_pipeline(
             "recovery_intelligence",
             "# Recovery Intelligence\n\n"
             + json.dumps(recovery_intelligence, indent=2, default=str),
+            run_id=run_id,
         )
 
         results["phases"] = dict(phase_outputs)

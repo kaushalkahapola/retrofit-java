@@ -370,7 +370,9 @@ def _build_recovery_obligations(state: AgentState) -> list[dict[str, Any]]:
     # the build fails because tests still use the old signature.
     # We read patch_path (the raw full patch file) since patch_diff may be
     # stripped of test changes by the evaluation harness.
-    failure_category = str(state.get("validation_failure_category") or "").strip().lower()
+    failure_category = (
+        str(state.get("validation_failure_category") or "").strip().lower()
+    )
     if failure_category in {"empty_generation", "context_mismatch"}:
         patch_path = str(state.get("patch_path") or "")
         if patch_path and os.path.isfile(patch_path):
@@ -378,6 +380,7 @@ def _build_recovery_obligations(state: AgentState) -> list[dict[str, Any]]:
                 with open(patch_path, "r", encoding="utf-8", errors="replace") as _fh:
                     full_patch = _fh.read()
                 from utils.patch_analyzer import PatchAnalyzer as _PA2
+
                 full_hunks = _PA2().extract_raw_hunks(full_patch)
                 for f in full_hunks.keys():
                     nf = _normalize_rel_path(str(f or ""))
@@ -422,8 +425,9 @@ def _extract_modified_methods_from_patch(patch_diff: str, rel_path: str) -> list
                         methods.append(name)
             continue
         # Scan both + and - lines for method declarations being added/modified
-        if (line.startswith("+") and not line.startswith("+++")) or \
-           (line.startswith("-") and not line.startswith("---")):
+        if (line.startswith("+") and not line.startswith("+++")) or (
+            line.startswith("-") and not line.startswith("---")
+        ):
             mm = _METHOD_RE.search(line)
             if mm:
                 name = str(mm.group(1) or "")
@@ -509,16 +513,22 @@ def _find_callsite_obligations(
             continue
         # Also check: is the call site already in the target?
         target_content = _read_file(target_repo_path, calling_file) or ""
-        already_present = f"{symbol}(" in target_content or f"{symbol} " in target_content
-        result.append({
-            "obligation_id": oid,
-            "kind": "callsite",
-            "required_file": calling_file,
-            "symbol": symbol,
-            "source": f"callsite_of:{defining_file}",
-            "status": "pending",
-            "_verification": "callsite_already_present" if already_present else "callsite_must_add",
-        })
+        already_present = (
+            f"{symbol}(" in target_content or f"{symbol} " in target_content
+        )
+        result.append(
+            {
+                "obligation_id": oid,
+                "kind": "callsite",
+                "required_file": calling_file,
+                "symbol": symbol,
+                "source": f"callsite_of:{defining_file}",
+                "status": "pending",
+                "_verification": "callsite_already_present"
+                if already_present
+                else "callsite_must_add",
+            }
+        )
         if not already_present:
             print(
                 f"[Recovery] callsite obligation: {calling_file} must call {symbol}() "
@@ -580,7 +590,8 @@ def _verify_and_remap_obligations(
 
         # Check which methods are absent from the target file
         absent_methods = [
-            m for m in methods_in_patch
+            m
+            for m in methods_in_patch
             if not re.search(rf"\b{re.escape(m)}\b", target_content)
         ]
         if not absent_methods:
@@ -600,8 +611,15 @@ def _verify_and_remap_obligations(
         search_method = absent_methods[0]
         try:
             grep_res = subprocess.run(
-                ["rg", "-n", "--no-heading", "-g", "*.java",
-                 rf"(?:public|private|protected)\s+\S+\s+{re.escape(search_method)}\s*\(", "."],
+                [
+                    "rg",
+                    "-n",
+                    "--no-heading",
+                    "-g",
+                    "*.java",
+                    rf"(?:public|private|protected)\s+\S+\s+{re.escape(search_method)}\s*\(",
+                    ".",
+                ],
                 cwd=target_repo_path,
                 capture_output=True,
                 text=True,
@@ -640,9 +658,13 @@ def _verify_and_remap_obligations(
             else:
                 # Method not found anywhere — keep obligation as-is but flag it
                 ob2 = dict(ob)
-                ob2["_verification"] = f"absent_methods_not_found_in_repo:{absent_methods}"
+                ob2["_verification"] = (
+                    f"absent_methods_not_found_in_repo:{absent_methods}"
+                )
                 remapped.append(ob2)
-                print(f"[Recovery] {search_method} not found anywhere in target repo — keeping obligation as-is")
+                print(
+                    f"[Recovery] {search_method} not found anywhere in target repo — keeping obligation as-is"
+                )
             continue
 
         # Find the best candidate: prefer files in the same package directory
@@ -666,7 +688,9 @@ def _verify_and_remap_obligations(
         if best_match:
             ob2 = dict(ob)
             ob2["required_file"] = _normalize_rel_path(best_match)
-            ob2["_verification"] = f"remapped_from:{rel}:absent_methods:{absent_methods}"
+            ob2["_verification"] = (
+                f"remapped_from:{rel}:absent_methods:{absent_methods}"
+            )
             ob2["_original_required_file"] = rel
             print(
                 f"[Recovery] REMAP obligation {rel} → {ob2['required_file']} "
@@ -877,6 +901,10 @@ class RecoveryPlanToolkit:
         self._submitted_decisions: list[dict[str, Any]] = []
         self._submitted_investigation: list[dict[str, Any]] = []
         self._submitted_risk_notes: list[str] = []
+        # Incremental decision accumulator keyed by obligation_id (or fallback key).
+        # This prevents later submit calls from losing earlier verified_no_change/
+        # blocked decisions, which are needed for hunk-level waiver coverage.
+        self._accumulated_decisions: dict[str, dict[str, Any]] = {}
         self._todo: list[dict[str, str]] = []
         self._todo_counter = 0
         # Number of submit_recovery_plan calls that have been REJECTED so far.
@@ -912,6 +940,190 @@ class RecoveryPlanToolkit:
             if oid:
                 ids.add(oid)
         return ids
+
+    def _candidate_hunk_indices(self, value: Any) -> set[int]:
+        """Return compatible hunk indices (supports 0/1-based drift)."""
+        out: set[int] = set()
+        try:
+            idx = int(value)
+        except Exception:
+            return out
+        if idx <= 0:
+            out.add(1)
+            return out
+        out.add(idx)
+        out.add(idx + 1)
+        return out
+
+    def _mapped_line_for(self, target_file: str, hunk_index: Any) -> int | None:
+        """Find mapped start line for (target_file, hunk_index), if available."""
+        tf = _normalize_rel_path(target_file)
+        if not tf:
+            return None
+        idx_candidates = self._candidate_hunk_indices(hunk_index)
+        if not idx_candidates:
+            return None
+
+        mapped_ctx = self.state.get("mapped_target_context") or {}
+        if not isinstance(mapped_ctx, dict):
+            return None
+
+        for entries in mapped_ctx.values():
+            if not isinstance(entries, list):
+                continue
+            for m in entries:
+                if not isinstance(m, dict):
+                    continue
+                mtf = _normalize_rel_path(str(m.get("target_file") or ""))
+                if mtf != tf:
+                    continue
+                try:
+                    midx = int(m.get("hunk_index"))
+                except Exception:
+                    continue
+                if midx not in idx_candidates:
+                    continue
+                try:
+                    line = int(m.get("start_line") or m.get("target_line_start") or 0)
+                except Exception:
+                    line = 0
+                if line > 0:
+                    return line
+        return None
+
+    def _anchor_match_lines(self, file_text: str, anchor: str) -> list[int]:
+        """Return 1-based line numbers where anchor starts in file_text."""
+        txt = str(file_text or "")
+        anc = str(anchor or "")
+        if not txt or not anc:
+            return []
+        hits: list[int] = []
+        start = 0
+        while True:
+            idx = txt.find(anc, start)
+            if idx < 0:
+                break
+            hits.append(txt.count("\n", 0, idx) + 1)
+            start = idx + 1
+        return hits
+
+    def _required_hunk_targets(self) -> list[dict[str, Any]]:
+        """Build required hunk targets from patch diff + locator mappings."""
+        patch_diff = str(self.state.get("patch_diff") or "")
+        if not patch_diff:
+            return []
+        try:
+            from utils.patch_analyzer import PatchAnalyzer as _PA
+
+            raw_hunks = _PA().extract_raw_hunks(patch_diff)
+        except Exception:
+            return []
+
+        mapped_ctx = self.state.get("mapped_target_context") or {}
+        out: list[dict[str, Any]] = []
+        seen: set[tuple[str, int]] = set()
+
+        for mainline_file, hunks in raw_hunks.items():
+            mf = _normalize_rel_path(str(mainline_file or ""))
+            if not mf or not isinstance(hunks, list):
+                continue
+            entries = mapped_ctx.get(mf) if isinstance(mapped_ctx, dict) else []
+            mapped_by_idx: dict[int, dict[str, Any]] = {}
+            if isinstance(entries, list):
+                for m in entries:
+                    if not isinstance(m, dict):
+                        continue
+                    try:
+                        midx = int(m.get("hunk_index"))
+                    except Exception:
+                        continue
+                    mapped_by_idx[midx] = m
+
+            for pos, _ in enumerate(hunks, start=1):
+                m = mapped_by_idx.get(pos) or mapped_by_idx.get(pos - 1)
+                tf = _normalize_rel_path(str((m or {}).get("target_file") or mf))
+                if not tf:
+                    continue
+                key = (tf, pos)
+                if key in seen:
+                    continue
+                seen.add(key)
+                line = 0
+                try:
+                    line = int(
+                        (m or {}).get("start_line")
+                        or (m or {}).get("target_line_start")
+                        or 0
+                    )
+                except Exception:
+                    line = 0
+                out.append(
+                    {
+                        "mainline_file": mf,
+                        "target_file": tf,
+                        "hunk_index": pos,
+                        "mapped_line": line if line > 0 else None,
+                    }
+                )
+        return out
+
+    def _decision_file_and_hunk(
+        self, decision: dict[str, Any]
+    ) -> tuple[str, int | None]:
+        tf = _normalize_rel_path(
+            str(decision.get("required_file") or decision.get("target_file") or "")
+        )
+        hidx: int | None = None
+        try:
+            if decision.get("hunk_index") is not None:
+                hidx = int(decision.get("hunk_index"))
+                if hidx <= 0:
+                    hidx = 1
+        except Exception:
+            hidx = None
+
+        oid = str(decision.get("obligation_id") or "")
+        if not tf and oid.startswith("patch_file:"):
+            body = oid[len("patch_file:") :]
+            tf = _normalize_rel_path(body.split(":", 1)[0])
+        return tf, hidx
+
+    def _hunks_waived_by_decisions(
+        self, decisions: list[dict[str, Any]]
+    ) -> set[tuple[str, int]]:
+        """Return waived (target_file, hunk_index) pairs from no-change decisions."""
+        waived: set[tuple[str, int]] = set()
+        required = self._required_hunk_targets()
+        if not required:
+            return waived
+        req_by_file: dict[str, list[int]] = {}
+        for r in required:
+            tf = _normalize_rel_path(str(r.get("target_file") or ""))
+            try:
+                hi = int(r.get("hunk_index") or 0)
+            except Exception:
+                hi = 0
+            if tf and hi > 0:
+                req_by_file.setdefault(tf, []).append(hi)
+
+        for d in decisions or []:
+            if not isinstance(d, dict):
+                continue
+            st = str(d.get("status") or "").strip().lower()
+            if st not in {"verified_no_change", "blocked"}:
+                continue
+            if not str(d.get("reason") or "").strip():
+                continue
+            tf, hidx = self._decision_file_and_hunk(d)
+            if not tf:
+                continue
+            if hidx is None:
+                for hi in req_by_file.get(tf, []):
+                    waived.add((tf, hi))
+                continue
+            for cand in self._candidate_hunk_indices(hidx):
+                waived.add((tf, cand))
+        return waived
 
     def _parse_wrapper_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         investigation = payload.get("investigation_evidence") or []
@@ -1044,6 +1256,7 @@ class RecoveryPlanToolkit:
     def _get_hunk_toolkit(self):
         if self._hunk_toolkit is None:
             from agents.hunk_generator_tools import HunkGeneratorToolkit
+
             self._hunk_toolkit = HunkGeneratorToolkit(self.target_repo_path)
         return self._hunk_toolkit
 
@@ -1069,6 +1282,7 @@ class RecoveryPlanToolkit:
         marked no_change), call recovery_done().
         """
         from agents.file_editor import _apply_edit_deterministically
+
         rel = _normalize_rel_path(target_file)
         if not rel:
             return "ERROR: target_file is required"
@@ -1096,6 +1310,10 @@ class RecoveryPlanToolkit:
                 s = s.replace("\\n", "\n")
             if "\t" not in s and "\\t" in s:
                 s = s.replace("\\t", "\t")
+            # Unescape HTML entities the LLM sometimes emits (e.g. &lt; for <)
+            import html as _html
+            if "&" in s:
+                s = _html.unescape(s)
             return s
 
         old_string = _decode_llm_escapes(old_string)
@@ -1198,8 +1416,12 @@ class RecoveryPlanToolkit:
                             if other_rel == rel or other_rel in cache:
                                 continue
                             try:
-                                abs_other = os.path.join(self.target_repo_path, other_rel)
-                                with open(abs_other, "r", encoding="utf-8", errors="replace") as _fh:
+                                abs_other = os.path.join(
+                                    self.target_repo_path, other_rel
+                                )
+                                with open(
+                                    abs_other, "r", encoding="utf-8", errors="replace"
+                                ) as _fh:
                                     if key in _fh.read():
                                         candidates.append(other_rel)
                             except Exception:
@@ -1238,7 +1460,11 @@ class RecoveryPlanToolkit:
         self._direct_no_change_files.discard(rel)
         # Fix: refresh preloaded_cache so subsequent read_file calls in the same
         # loop see the post-edit content rather than the stale pre-edit snapshot.
-        if hasattr(self, "_preloaded_cache") and self._preloaded_cache is not None and rel in self._preloaded_cache:
+        if (
+            hasattr(self, "_preloaded_cache")
+            and self._preloaded_cache is not None
+            and rel in self._preloaded_cache
+        ):
             abs_path = os.path.join(self.target_repo_path, rel)
             try:
                 with open(abs_path, "r", encoding="utf-8", errors="replace") as _fh:
@@ -1262,7 +1488,11 @@ class RecoveryPlanToolkit:
         # mark_no_change is almost certainly wrong. Force the model to verify
         # by reading the file before it can override.
         try:
-            patch_diff = str((self.state or {}).get("patch_diff") or "") if hasattr(self, "state") else ""
+            patch_diff = (
+                str((self.state or {}).get("patch_diff") or "")
+                if hasattr(self, "state")
+                else ""
+            )
         except Exception:
             patch_diff = ""
         if patch_diff:
@@ -1270,7 +1500,11 @@ class RecoveryPlanToolkit:
             in_file = False
             basename = rel.rsplit("/", 1)[-1]
             for line in patch_diff.splitlines():
-                if line.startswith("diff --git") or line.startswith("+++ ") or line.startswith("--- "):
+                if (
+                    line.startswith("diff --git")
+                    or line.startswith("+++ ")
+                    or line.startswith("--- ")
+                ):
                     in_file = (rel in line) or (basename in line)
                     continue
                 if in_file and line.startswith("+") and not line.startswith("+++"):
@@ -1302,9 +1536,7 @@ class RecoveryPlanToolkit:
         # explicitly marked no_change.
         edited = {e["target_file"] for e in self._applied_edits}
         covered = edited | self._direct_no_change_files
-        missing = [
-            f for f in (self._required_patch_files or []) if f not in covered
-        ]
+        missing = [f for f in (self._required_patch_files or []) if f not in covered]
         if missing:
             return (
                 "ERROR: cannot finish — these required files have neither "
@@ -1381,7 +1613,9 @@ class RecoveryPlanToolkit:
             if raw_line.startswith("diff --git "):
                 # Extract b-side file path: "diff --git a/... b/..."
                 parts = raw_line.split(" b/", 1)
-                current_file = _normalize_rel_path(parts[1].strip()) if len(parts) > 1 else ""
+                current_file = (
+                    _normalize_rel_path(parts[1].strip()) if len(parts) > 1 else ""
+                )
                 continue
             if raw_line.startswith("+++ ") or raw_line.startswith("--- "):
                 continue
@@ -1392,7 +1626,11 @@ class RecoveryPlanToolkit:
                 # and very short tokens like lone braces)
                 if len(stripped) < 10:
                     continue
-                if stripped.startswith("//") or stripped.startswith("*") or stripped.startswith("/*"):
+                if (
+                    stripped.startswith("//")
+                    or stripped.startswith("*")
+                    or stripped.startswith("/*")
+                ):
                     continue
                 added_by_file.setdefault(current_file, []).append(stripped)
 
@@ -1527,8 +1765,14 @@ class RecoveryPlanToolkit:
             return "ERROR: tasks must be a non-empty list"
 
         _KNOWN_TOOLS = {
-            "read_file", "read_mainline_file", "grep", "glob", "bash",
-            "get_class_context", "summarize_failure", "todoread",
+            "read_file",
+            "read_mainline_file",
+            "grep",
+            "glob",
+            "bash",
+            "get_class_context",
+            "summarize_failure",
+            "todoread",
         }
 
         max_tasks = 8
@@ -1814,7 +2058,9 @@ Do NOT submit any recovery plan. Stay concise."""
     ) -> str:
         """Accept either wrapper fields directly OR a single `plan` dict."""
         # LLM may call with wrapper fields as top-level args (most common)
-        if plan is None and (edit_ops is not None or investigation_evidence is not None):
+        if plan is None and (
+            edit_ops is not None or investigation_evidence is not None
+        ):
             plan = {}
             if investigation_evidence is not None:
                 plan["investigation_evidence"] = investigation_evidence
@@ -1859,12 +2105,15 @@ Do NOT submit any recovery plan. Stay concise."""
         # Empty edit_ops is OK if the model is sending decisions/no-change
         # claims for files already in the accumulator. We'll evaluate
         # coverage below using accumulator + verified_no_change decisions.
-        if not plan and not self._accumulated_plan and not (
-            wrapper_payload.get("obligation_decisions")
+        if (
+            not plan
+            and not self._accumulated_plan
+            and not (wrapper_payload.get("obligation_decisions"))
         ):
             return "ERROR: plan must be an object keyed by mainline file."
 
         required_ids = self._required_obligation_ids()
+        required_hunk_targets = self._required_hunk_targets()
 
         allowed_edit_types = {"replace", "insert_before", "insert_after", "delete"}
         cleaned: dict[str, list[dict[str, Any]]] = {}
@@ -1876,6 +2125,7 @@ Do NOT submit any recovery plan. Stay concise."""
         import os as _os  # local import to avoid broad changes at module top
 
         _target_file_cache: dict[str, str] = {}
+        _TARGET_HUNK_LINE_WINDOW = 80
 
         def _load_target(rel: str) -> str | None:
             if not rel:
@@ -1892,6 +2142,27 @@ Do NOT submit any recovery plan. Stay concise."""
             return txt
 
         anchor_errors: list[str] = []
+
+        # Merge decision payload incrementally across submit calls so coverage,
+        # obligation checks, and hunk waivers remain stable in accumulator mode.
+        decisions_now = list(wrapper_payload.get("obligation_decisions") or [])
+
+        def _decision_key(d: dict[str, Any]) -> str:
+            oid = str(d.get("obligation_id") or "").strip()
+            if oid:
+                return f"oid:{oid}"
+            tf, hi = self._decision_file_and_hunk(d)
+            if tf and hi is not None:
+                return f"tfh:{tf}:{hi}"
+            if tf:
+                return f"tf:{tf}"
+            return f"anon:{hashlib.sha256(json.dumps(d, sort_keys=True, default=str).encode('utf-8')).hexdigest()[:16]}"
+
+        for d in decisions_now:
+            if not isinstance(d, dict):
+                continue
+            self._accumulated_decisions[_decision_key(d)] = d
+        decisions_all = list(self._accumulated_decisions.values())
         # Per-key diagnostics: how many ops the model submitted under each
         # mainline_file key, and why each one was dropped. Surfaced in
         # rejection errors so the model knows what to fix instead of guessing.
@@ -1949,7 +2220,9 @@ Do NOT submit any recovery plan. Stay concise."""
                     low_value_holdback.append(
                         {
                             "hunk_index": int(op.get("hunk_index", idx) or idx),
-                            "target_file": _normalize_rel_path(str(op.get("target_file") or "")),
+                            "target_file": _normalize_rel_path(
+                                str(op.get("target_file") or "")
+                            ),
                             "edit_type": edit_type,
                             "old_string": old_string,
                             "new_string": new_string,
@@ -1957,7 +2230,8 @@ Do NOT submit any recovery plan. Stay concise."""
                             "verification_result": str(
                                 op.get("verification_result") or "submitted_unchecked"
                             ),
-                            "notes": str(op.get("notes") or "") + " [low-value-restored]",
+                            "notes": str(op.get("notes") or "")
+                            + " [low-value-restored]",
                         }
                     )
                     continue
@@ -1973,6 +2247,7 @@ Do NOT submit any recovery plan. Stay concise."""
                 # Fallback: strip line-number prefixes that appear when LLM copies
                 # from numbered <target_files> display (e.g. "   42: actual code").
                 import re as _re
+
                 _LINE_NUM_RE = _re.compile(r"^[ \t]*\d+:[ \t]?", _re.MULTILINE)
                 if _LINE_NUM_RE.search(old_string):
                     stripped = _LINE_NUM_RE.sub("", old_string)
@@ -2015,7 +2290,9 @@ Do NOT submit any recovery plan. Stay concise."""
                             verbatim = "".join(target_lines[s : s + n])
                             # Strip the trailing newline only if the original
                             # anchor didn't end with one
-                            if not old_string.endswith("\n") and verbatim.endswith("\n"):
+                            if not old_string.endswith("\n") and verbatim.endswith(
+                                "\n"
+                            ):
                                 verbatim = verbatim[:-1]
                             if verbatim in tf_content:
                                 old_string = verbatim
@@ -2046,6 +2323,52 @@ Do NOT submit any recovery plan. Stay concise."""
                         f"{target_file}#op[{idx}]: target file could not be read from disk"
                     )
                     continue
+
+                # Hunk-line proximity gate (when locator mapping exists):
+                # Require anchors for a specific hunk to match close to the mapped
+                # target line, otherwise this is likely the wrong block in same file.
+                mapped_line = None
+                try:
+                    mapped_line = self._mapped_line_for(
+                        target_file, op.get("hunk_index")
+                    )
+                except Exception:
+                    mapped_line = None
+                if (
+                    target_file
+                    and tf_content
+                    and mapped_line
+                    and int(mapped_line) > 0
+                    and op.get("hunk_index") is not None
+                ):
+                    op_old = str(op.get("old_string") or "")
+                    is_import_anchor = (
+                        all(
+                            (ln.strip().startswith("import ") or not ln.strip())
+                            for ln in op_old.splitlines()
+                        )
+                        if op_old.strip()
+                        else False
+                    )
+                    if not is_import_anchor:
+                        starts = self._anchor_match_lines(tf_content, old_string)
+                        if starts:
+                            nearest = min(
+                                starts, key=lambda ln: abs(int(ln) - int(mapped_line))
+                            )
+                            # Only reject if there are multiple matches and ALL are out of window
+                            # If there's exactly 1 match, it's unambiguous regardless of distance.
+                            if (
+                                len(starts) > 1
+                                and abs(int(nearest) - int(mapped_line))
+                                > _TARGET_HUNK_LINE_WINDOW
+                            ):
+                                anchor_errors.append(
+                                    f"{target_file}#op[{idx}]: anchor matches {len(starts)} times, "
+                                    f"nearest is line {nearest}, too far from mapped hunk line {mapped_line} "
+                                    f"(window=±{_TARGET_HUNK_LINE_WINDOW})"
+                                )
+                                continue
 
                 entries.append(
                     {
@@ -2101,10 +2424,9 @@ Do NOT submit any recovery plan. Stay concise."""
         # doesn't need any edits in the target" — accepting them prevents
         # the loop from forever demanding ops for files that need none.
         # Also persist them across calls so a decisions-only call counts.
-        decisions_now = wrapper_payload.get("obligation_decisions") or []
         if not hasattr(self, "_accumulated_no_change"):
             self._accumulated_no_change: set[str] = set()
-        for d in decisions_now:
+        for d in decisions_all:
             if not isinstance(d, dict):
                 continue
             st = str(d.get("status") or "").strip().lower()
@@ -2113,7 +2435,11 @@ Do NOT submit any recovery plan. Stay concise."""
                 oid = str(d.get("obligation_id") or "")
                 tf = str(d.get("target_file") or "")
                 if not tf and oid.startswith("patch_file:"):
-                    tf = oid.split(":", 2)[1] if ":" in oid[len("patch_file:"):] else oid[len("patch_file:"):]
+                    tf = (
+                        oid.split(":", 2)[1]
+                        if ":" in oid[len("patch_file:") :]
+                        else oid[len("patch_file:") :]
+                    )
                     tf = tf.rstrip(":")
                 tf = _normalize_rel_path(tf)
                 if tf:
@@ -2123,22 +2449,59 @@ Do NOT submit any recovery plan. Stay concise."""
             f for f in (self._required_patch_files or []) if f not in accum_touched
         ]
 
+        # HUNK-LEVEL COVERAGE: touching file is not enough; each required hunk
+        # must be represented by accepted ops or explicit waived decisions.
+        accum_hunks_covered: set[tuple[str, int]] = set()
+        for ops in self._accumulated_plan.values():
+            for op in ops:
+                tf = _normalize_rel_path(str(op.get("target_file") or ""))
+                if not tf:
+                    continue
+                try:
+                    hi = int(op.get("hunk_index") or 0)
+                except Exception:
+                    hi = 0
+                if hi <= 0:
+                    continue
+                for cand in self._candidate_hunk_indices(hi):
+                    accum_hunks_covered.add((tf, cand))
+
+        waived_hunks = self._hunks_waived_by_decisions(decisions_all)
+        missing_hunks_accum: list[tuple[str, int]] = []
+        for req in required_hunk_targets:
+            tf = _normalize_rel_path(str(req.get("target_file") or ""))
+            try:
+                hi = int(req.get("hunk_index") or 0)
+            except Exception:
+                hi = 0
+            if not tf or hi <= 0:
+                continue
+            key = (tf, hi)
+            if key in accum_hunks_covered or key in waived_hunks:
+                continue
+            missing_hunks_accum.append(key)
+
         # Anchor errors: accept the surviving ops into the accumulator (already
         # done above) and tell the model which ops failed so it can retry just
         # those. Do NOT reject the whole call — partial progress is progress.
-        if anchor_errors and missing_files_accum:
+        if anchor_errors and (missing_files_accum or missing_hunks_accum):
             # Only emit the anchor-failure error if we're still incomplete.
             # If accumulator already covers everything, fall through to success.
             self._submission_rejection_count += 1
             err_lines = "\n  - ".join(anchor_errors[:10])
             still_missing = "\n  - ".join(missing_files_accum)
+            still_missing_hunks = ", ".join(
+                [f"{f}#h{h}" for f, h in missing_hunks_accum[:12]]
+            )
             return (
                 "PARTIAL: some ops accepted into accumulator, but anchor "
                 "verification failed for others AND coverage is still incomplete.\n"
                 f"Accumulator now covers: {sorted(accum_touched)}\n"
                 f"Still missing files:\n  - {still_missing}\n"
+                f"Still missing hunks: {still_missing_hunks}\n"
                 "Anchor failures (fix old_string to match target VERBATIM):\n  - "
-                + err_lines + "\n"
+                + err_lines
+                + "\n"
                 "Next call: submit ops ONLY for the still-missing files, "
                 "and/or resubmit corrected versions of the anchor-failed ops. "
                 "You do NOT need to resubmit ops that were already accepted."
@@ -2147,7 +2510,7 @@ Do NOT submit any recovery plan. Stay concise."""
         # Coverage check: accumulator must touch ALL required patch files.
         if self._required_patch_files:
             missing_files = missing_files_accum
-            if missing_files:
+            if missing_files or missing_hunks_accum:
                 self._submission_rejection_count += 1
                 # Do NOT wipe the accumulator — we want to keep progress.
                 # Per-file diagnostic: for files the model tried this call,
@@ -2163,17 +2526,30 @@ Do NOT submit any recovery plan. Stay concise."""
                         )
                     else:
                         reason_str = (
-                            "; ".join(reasons[:5]) if reasons else "all dropped silently"
+                            "; ".join(reasons[:5])
+                            if reasons
+                            else "all dropped silently"
                         )
                         diag_lines.append(
                             f"  - {mf}: submitted {submitted} op(s), all dropped → {reason_str}"
                         )
                 already = sorted(accum_touched) or ["(none)"]
+                hunk_diag = ""
+                if missing_hunks_accum:
+                    preview = ", ".join(
+                        [f"{f}#h{h}" for f, h in missing_hunks_accum[:12]]
+                    )
+                    hunk_diag = (
+                        "\nMissing required hunk coverage (file-level touch is insufficient):\n"
+                        f"  - {preview}"
+                    )
                 return (
                     "PARTIAL: plan is incomplete but accumulator preserved.\n"
                     f"Already accepted: {already}\n"
                     "Still missing edits for:\n"
-                    + "\n".join(diag_lines) + "\n"
+                    + "\n".join(diag_lines)
+                    + hunk_diag
+                    + "\n"
                     "Next call: submit ops ONLY for the still-missing files. "
                     "Each op MUST have non-empty `old_string`, non-empty `new_string` "
                     "(unless edit_type='delete'), and `target_file` set to the file path. "
@@ -2183,7 +2559,7 @@ Do NOT submit any recovery plan. Stay concise."""
 
         if not cleaned and not self._accumulated_plan:
             if required_ids:
-                decisions = wrapper_payload.get("obligation_decisions") or []
+                decisions = list(self._accumulated_decisions.values())
                 all_verified = True
                 for d in decisions:
                     if not isinstance(d, dict):
@@ -2217,7 +2593,7 @@ Do NOT submit any recovery plan. Stay concise."""
                 )
             return "ERROR: plan had no valid operation entries."
 
-        decisions = list(wrapper_payload.get("obligation_decisions") or [])
+        decisions = list(decisions_all)
         decision_ids = {
             str(d.get("obligation_id") or "").strip()
             for d in decisions
@@ -2257,6 +2633,11 @@ Do NOT submit any recovery plan. Stay concise."""
                     # Make sure the wrapper carries the augmented decisions.
                     wrapper_payload = dict(wrapper_payload or {})
                     wrapper_payload["obligation_decisions"] = decisions
+                    # Keep accumulator coherent with any auto-filled decisions.
+                    for d in decisions:
+                        if isinstance(d, dict):
+                            self._accumulated_decisions[_decision_key(d)] = d
+                    decisions_all = list(self._accumulated_decisions.values())
                 else:
                     self._submission_rejection_count += 1
                     self._submitted_plan = {}
@@ -2297,9 +2678,7 @@ Do NOT submit any recovery plan. Stay concise."""
         final_op_count = sum(len(v) for v in final_plan.values())
         self._submitted_plan = final_plan
         self._submitted_wrapper = dict(wrapper_payload or {})
-        self._submitted_decisions = list(
-            wrapper_payload.get("obligation_decisions") or []
-        )
+        self._submitted_decisions = list(self._accumulated_decisions.values())
         self._apply_decision_based_scope(self._submitted_decisions)
         self._submitted_investigation = list(
             wrapper_payload.get("investigation_evidence") or []
@@ -2364,8 +2743,8 @@ Do NOT submit any recovery plan. Stay concise."""
                     "Run multiple independent tool tasks in parallel in a single call. "
                     "Use this to reduce round-trips and token overhead. "
                     "Supported tools: read_file, read_mainline_file, grep, glob, bash, get_class_context, summarize_failure, todoread. "
-                    "Each task must be {\"tool\": \"<name>\", \"args\": {...}} "
-                    "OR shorthand {\"<tool_name>\": {<args>}}."
+                    'Each task must be {"tool": "<name>", "args": {...}} '
+                    'OR shorthand {"<tool_name>": {<args>}}.'
                 ),
             ),
             StructuredTool.from_function(
@@ -2668,6 +3047,79 @@ def _extract_submit_rejection(messages: list[Any]) -> str:
     return ""
 
 
+def _extract_partial_feedback(submit_result: str) -> dict[str, list[str]]:
+    """Parse structured hints from PARTIAL submit_recovery_plan output."""
+    text = str(submit_result or "")
+    missing_files: list[str] = []
+    missing_hunks: list[str] = []
+    anchor_failures: list[str] = []
+
+    # Still missing files:
+    #   - path
+    m_files = re.search(
+        r"Still missing files:\n(.*?)(?:\n[A-Z][^\n]*:|\Z)", text, re.DOTALL
+    )
+    if m_files:
+        for ln in m_files.group(1).splitlines():
+            s = ln.strip()
+            if s.startswith("-"):
+                val = s[1:].strip()
+                if val:
+                    missing_files.append(val)
+
+    # Still missing hunks: file#h1, file#h2
+    for ln in text.splitlines():
+        s = ln.strip()
+        if s.startswith("Still missing hunks:"):
+            tail = s.split(":", 1)[1].strip()
+            if tail:
+                parts = [p.strip() for p in tail.split(",") if p.strip()]
+                missing_hunks.extend(parts)
+
+    # Missing required hunk coverage (alternate PARTIAL format)
+    m_hunks_alt = re.search(
+        r"Missing required hunk coverage \(file-level touch is insufficient\):\n(.*?)(?:\n[A-Z][^\n]*:|\Z)",
+        text,
+        re.DOTALL,
+    )
+    if m_hunks_alt:
+        for ln in m_hunks_alt.group(1).splitlines():
+            s = ln.strip()
+            if s.startswith("-"):
+                val = s[1:].strip()
+                if val:
+                    for part in [p.strip() for p in val.split(",") if p.strip()]:
+                        missing_hunks.append(part)
+
+    # Anchor failures (fix old_string to match target VERBATIM):
+    #   - ...
+    m_anchor = re.search(
+        r"Anchor failures .*?:\n(.*?)(?:\nNext call:|\Z)", text, re.DOTALL
+    )
+    if m_anchor:
+        for ln in m_anchor.group(1).splitlines():
+            s = ln.strip()
+            if s.startswith("-"):
+                val = s[1:].strip()
+                if val:
+                    anchor_failures.append(val)
+
+    def _dedupe_keep_order(items: list[str]) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for it in items:
+            if it not in seen:
+                seen.add(it)
+                out.append(it)
+        return out
+
+    return {
+        "missing_files": _dedupe_keep_order(missing_files),
+        "missing_hunks": _dedupe_keep_order(missing_hunks),
+        "anchor_failures": _dedupe_keep_order(anchor_failures),
+    }
+
+
 def _ai_tool_calls_fully_resolved(messages: list[Any], ai_index: int) -> bool:
     msg = messages[ai_index]
     tool_calls = getattr(msg, "tool_calls", None) or []
@@ -2956,11 +3408,17 @@ async def _run_parallel_tool_loop(
         msgs.extend(round_tail_messages)
         return msgs
 
-    def _summarize_tool_call(name: str, args: dict, content: str, round_num: int) -> str:
+    def _summarize_tool_call(
+        name: str, args: dict, content: str, round_num: int
+    ) -> str:
         """Build a one-line ledger entry for an evicted tool call."""
         if name == "apply_edit":
             tf = str(args.get("target_file") or "")
-            status = "SUCCESS" if "SUCCESS" in content else ("SKIPPED" if "skipped" in content.lower() else "FAILED")
+            status = (
+                "SUCCESS"
+                if "SUCCESS" in content
+                else ("SKIPPED" if "skipped" in content.lower() else "FAILED")
+            )
             return f"R{round_num}: apply_edit({tf}) → {status}"
         if name in {"read_file", "get_class_context"}:
             fp = str(args.get("file_path") or args.get("class_name") or "")
@@ -3001,7 +3459,10 @@ async def _run_parallel_tool_loop(
         for tm in tool_msgs:
             content = str(getattr(tm, "content", "") or "")
             if len(content) > _TOOL_RESULT_MAX_CHARS:
-                content = content[:_TOOL_RESULT_MAX_CHARS] + f"\n…[truncated at {_TOOL_RESULT_MAX_CHARS} chars; use grep/read_file for more]"
+                content = (
+                    content[:_TOOL_RESULT_MAX_CHARS]
+                    + f"\n…[truncated at {_TOOL_RESULT_MAX_CHARS} chars; use grep/read_file for more]"
+                )
                 tm = ToolMessage(
                     content=content,
                     tool_call_id=str(getattr(tm, "tool_call_id", "") or ""),
@@ -3037,9 +3498,9 @@ async def _run_parallel_tool_loop(
             tf = str(args.get("target_file") or "")
             old_s = str(args.get("old_string") or "")
             new_s = str(args.get("new_string") or "")
-            sig = hashlib.sha256(
-                f"{tf}|{old_s}|{new_s}".encode("utf-8")
-            ).hexdigest()[:16]
+            sig = hashlib.sha256(f"{tf}|{old_s}|{new_s}".encode("utf-8")).hexdigest()[
+                :16
+            ]
             full_sig = f"{tf}|{sig}"
             if full_sig in applied_edit_sigs:
                 prev_round = applied_edit_sigs[full_sig]
@@ -3064,6 +3525,11 @@ async def _run_parallel_tool_loop(
                     f"{tf}|{old_s}|{new_s}".encode("utf-8")
                 ).hexdigest()[:16]
                 applied_edit_sigs[f"{tf}|{sig}"] = round_num
+                # Invalidate preloaded_cache so subsequent read_file calls
+                # return the updated on-disk content, not the stale cached version.
+                rel_tf = _normalize_rel_path(tf)
+                if rel_tf in preloaded_cache:
+                    del preloaded_cache[rel_tf]
             return call_id, result_str
         except Exception as exc:
             return call_id, f"ERROR executing {name}: {exc}"
@@ -3074,9 +3540,7 @@ async def _run_parallel_tool_loop(
     while True:
         round_num += 1
         if round_num > absolute_round_cap:
-            print(
-                f"[Recovery] absolute round cap ({absolute_round_cap}) reached"
-            )
+            print(f"[Recovery] absolute round cap ({absolute_round_cap}) reached")
             break
         # Soft cap: stop when we've used budget AND no rejection is pending
         if round_num > max_investigation_rounds + 1:
@@ -3098,11 +3562,15 @@ async def _run_parallel_tool_loop(
         try:
             response = await _invoke_with_retry(shrink=False)
         except asyncio.TimeoutError:
-            print(f"[Recovery] LLM call timed out in round {round_num}; retrying once with shrunk context…")
+            print(
+                f"[Recovery] LLM call timed out in round {round_num}; retrying once with shrunk context…"
+            )
             try:
                 response = await _invoke_with_retry(shrink=True)
             except asyncio.TimeoutError:
-                print(f"[Recovery] LLM retry also timed out in round {round_num}; aborting.")
+                print(
+                    f"[Recovery] LLM retry also timed out in round {round_num}; aborting."
+                )
                 return _current_messages(), "llm_timeout"
 
         # LLM has seen the tail messages from the previous round — clear them now
@@ -3133,7 +3601,9 @@ async def _run_parallel_tool_loop(
             print(f"[Recovery] tool_call: {name}({args_summary})")
             if name == "submit_recovery_plan" and len(args_full) > 300:
                 # Log edit_ops keys to see which files are included
-                edit_ops = args.get("edit_ops") or args.get("plan", {}).get("edit_ops") or {}
+                edit_ops = (
+                    args.get("edit_ops") or args.get("plan", {}).get("edit_ops") or {}
+                )
                 print(f"[Recovery] submit edit_ops keys: {list(edit_ops.keys())}")
 
         # If the LLM called submit_recovery_plan, execute it and return
@@ -3190,7 +3660,9 @@ async def _run_parallel_tool_loop(
                 full_content = str(content)
                 print(f"[Recovery] submit_recovery_plan → {full_content[:1500]}")
                 if len(full_content) > 1500:
-                    print(f"[Recovery] submit_recovery_plan (continued) → {full_content[1500:3000]}")
+                    print(
+                        f"[Recovery] submit_recovery_plan (continued) → {full_content[1500:3000]}"
+                    )
                 submit_tool_msgs.append(
                     ToolMessage(
                         content=content,
@@ -3199,6 +3671,7 @@ async def _run_parallel_tool_loop(
                     )
                 )
             _append_round(response, submit_tool_msgs, round_num)
+
             # Only return "submitted" if at least one submit reached SUCCESS.
             # PARTIAL responses mean the accumulator absorbed ops but coverage
             # is still incomplete — we must keep looping so the model can
@@ -3206,6 +3679,7 @@ async def _run_parallel_tool_loop(
             def _is_success(c: str) -> bool:
                 s = str(c)
                 return not s.startswith("ERROR") and not s.startswith("PARTIAL")
+
             any_success = any(_is_success(content) for _, content in results)
             if any_success:
                 return _current_messages(), "submitted"
@@ -3219,6 +3693,7 @@ async def _run_parallel_tool_loop(
             # line so the model can copy verbatim text from the REAL target
             # location next round (the structural_locator's mapping was wrong).
             import re as _re_hint
+
             rejection_text = ""
             for _, _content in results:
                 if str(_content).startswith("ERROR"):
@@ -3264,7 +3739,9 @@ async def _run_parallel_tool_loop(
                     "target code lives. Below is the actual TARGET code at "
                     "those line numbers — copy old_string VERBATIM from "
                     "these blocks, not from <mainline_patch> or the original "
-                    "<hunk_snippets>.\n\n" + "\n\n".join(remap_blocks) + "\n</remap_hints>"
+                    "<hunk_snippets>.\n\n"
+                    + "\n\n".join(remap_blocks)
+                    + "\n</remap_hints>"
                 )
                 round_tail_messages.append(HumanMessage(content=remap_xml))
                 print(
@@ -3447,7 +3924,9 @@ async def _run_parallel_tool_loop(
                             old_str = str(bad_args.get("old_string") or "")
                             old_lines = old_str.splitlines()
                             half = len(old_lines) // 2
-                            split_line = old_lines[half] if half < len(old_lines) else ""
+                            split_line = (
+                                old_lines[half] if half < len(old_lines) else ""
+                            )
                         except Exception:
                             split_line = ""
                         hint = (
@@ -3582,10 +4061,12 @@ OUTPUT FORMAT (strict):
 
 RULES:
 - Every old-code-block MUST be VERBATIM text copied from the target file content shown earlier. NOT from the mainline patch `-` lines.
+- DO NOT USE ELLIPSIS (...) or placeholders to represent skipped code. The old-code-block must match the file content contiguous line for line.
 - Prefer SHORT anchors (1-5 lines).
 - One diff block per distinct edit. Multiple edits per file are allowed — repeat the ``` diff ``` block.
 - Use `---` as the separator between old and new code inside each diff block.
 - If a required file needs no change, list it under "No-change files" with a reason instead of a diff block.
+- Do NOT output duplicate diff blocks. Provide your adaptation plan exactly once. Do not write drafts followed by clean versions.
 - Do NOT call any tools. Just write the plan as markdown text.
 """
 
@@ -3637,6 +4118,7 @@ async def _run_recovery_redesign(
     recovery_obligations_json: str,
     dependency_graph_text: str,
     max_investigation_rounds: int = 2,
+    max_partial_retries: int = 2,
 ) -> tuple[str, str, list[Any]]:
     """Run the 3-phase redesigned recovery flow.
 
@@ -3646,17 +4128,23 @@ async def _run_recovery_redesign(
 
     # ── PHASE 1: INVESTIGATION (read-only tools, ≤2 rounds) ────────────────
     read_only_tool_names = {
-        "batch_tools", "read_file", "read_mainline_file", "grep", "glob",
-        "get_class_context", "get_dependency_graph", "find_symbol_locations",
-        "find_method_match", "summarize_failure",
+        "batch_tools",
+        "read_file",
+        "read_mainline_file",
+        "grep",
+        "glob",
+        "get_class_context",
+        "get_dependency_graph",
+        "find_symbol_locations",
+        "find_method_match",
+        "summarize_failure",
     }
     all_tools = toolkit.get_tools(include_submit=False)
     investigation_tools = [t for t in all_tools if t.name in read_only_tool_names]
     tool_map = {t.name: t for t in investigation_tools}
     inv_bound_llm = llm.bind_tools(investigation_tools)
 
-    investigation_context_parts: list[str] = []
-    investigation_context_parts.append(preloaded_context_xml)
+    investigation_context_parts: list[str] = [preloaded_context_xml]
     if dependency_graph_text:
         investigation_context_parts.append(
             f"<dependency_graph>\n{_truncate(dependency_graph_text, 6000)}\n</dependency_graph>"
@@ -3674,11 +4162,9 @@ async def _run_recovery_redesign(
         "Now issue ALL the tool calls you need in ONE response via batch_tools. "
         "If the preloaded context is sufficient, reply with exactly INVESTIGATION_COMPLETE."
     )
-    initial_user_message = "\n\n".join(investigation_context_parts)
-
     inv_messages: list[Any] = [
         SystemMessage(content=_RECOVERY_INVESTIGATION_SYSTEM),
-        HumanMessage(content=initial_user_message),
+        HumanMessage(content="\n\n".join(investigation_context_parts)),
     ]
 
     loop = asyncio.get_event_loop()
@@ -3689,18 +4175,22 @@ async def _run_recovery_redesign(
         call_id = str(tc.get("id") or "")
         tool = tool_map.get(name)
         if not tool:
-            return call_id, f"ERROR: unknown tool {name!r} (investigation phase is read-only)"
+            return (
+                call_id,
+                f"ERROR: unknown tool {name!r} (investigation phase is read-only)",
+            )
         try:
             result = await loop.run_in_executor(None, lambda: tool.invoke(args))
             result_str = str(result)
-            # Cap each tool result at 8k chars — the LLM gets the full batch in one shot
             if len(result_str) > 8000:
-                result_str = result_str[:8000] + "\n…[truncated — request narrower scope if needed]"
+                result_str = (
+                    result_str[:8000]
+                    + "\n…[truncated — request narrower scope if needed]"
+                )
             return call_id, result_str
         except Exception as exc:
             return call_id, f"ERROR executing {name}: {exc}"
 
-    investigation_complete = False
     for inv_round in range(max_investigation_rounds):
         print(f"[Recovery-Redesign] === Investigation round {inv_round} ===")
         try:
@@ -3722,17 +4212,19 @@ async def _run_recovery_redesign(
 
         tool_calls = list(getattr(response, "tool_calls", None) or [])
         if "INVESTIGATION_COMPLETE" in resp_text.upper() and not tool_calls:
-            print(f"[Recovery-Redesign] LLM signaled INVESTIGATION_COMPLETE in round {inv_round}")
-            investigation_complete = True
+            print(
+                f"[Recovery-Redesign] LLM signaled INVESTIGATION_COMPLETE in round {inv_round}"
+            )
             break
-
         if not tool_calls:
-            print(f"[Recovery-Redesign] no tool calls in round {inv_round}, assuming investigation done")
-            investigation_complete = True
+            print(
+                f"[Recovery-Redesign] no tool calls in round {inv_round}, assuming investigation done"
+            )
             break
 
-        # Execute all tool calls in parallel (this is the core "batch" behavior)
-        print(f"[Recovery-Redesign] round {inv_round}: executing {len(tool_calls)} tool call(s) in parallel")
+        print(
+            f"[Recovery-Redesign] round {inv_round}: executing {len(tool_calls)} tool call(s) in parallel"
+        )
         results = await asyncio.gather(*[_execute_tool_call(tc) for tc in tool_calls])
         result_map = dict(results)
         for tc in tool_calls:
@@ -3744,7 +4236,6 @@ async def _run_recovery_redesign(
                     name=str(tc.get("name") or ""),
                 )
             )
-        # On the last allowed round, nudge the LLM to wrap up
         if inv_round == max_investigation_rounds - 1:
             inv_messages.append(
                 HumanMessage(
@@ -3754,9 +4245,7 @@ async def _run_recovery_redesign(
 
     all_messages.extend(inv_messages)
 
-    # ── PHASE 2: PLAN GENERATION (no tools) ────────────────────────────────
-    print("[Recovery-Redesign] === Phase 2: plan generation ===")
-    # Build a compact context summary from investigation: all ToolMessages + final AIMessage text
+    # Shared base context for planning retries.
     investigation_summary_parts: list[str] = [preloaded_context_xml]
     if dependency_graph_text:
         investigation_summary_parts.append(
@@ -3768,7 +4257,6 @@ async def _run_recovery_redesign(
     investigation_summary_parts.append(
         f"<obligations>\n{_truncate(recovery_obligations_json, 3000)}\n</obligations>"
     )
-    # Include tool results
     investigation_summary_parts.append("<investigation_findings>")
     for m in inv_messages:
         if isinstance(m, ToolMessage):
@@ -3778,48 +4266,24 @@ async def _run_recovery_redesign(
                 f'<finding tool="{name}">\n{_truncate(content, 4000)}\n</finding>'
             )
     investigation_summary_parts.append("</investigation_findings>")
-    investigation_summary = "\n\n".join(investigation_summary_parts)
+    base_investigation_summary = "\n\n".join(investigation_summary_parts)
 
-    plan_messages: list[Any] = [
-        SystemMessage(content=_RECOVERY_PLAN_SYSTEM),
-        HumanMessage(content=investigation_summary),
-    ]
-    try:
-        plan_response = await asyncio.wait_for(
-            llm.ainvoke(plan_messages),  # no tools bound
-            timeout=180.0,
-        )
-    except asyncio.TimeoutError:
-        print("[Recovery-Redesign] plan generation timed out")
-        return "llm_timeout", "", all_messages
-
-    plan_text = str(getattr(plan_response, "content", "") or "")
-    if isinstance(getattr(plan_response, "content", None), list):
-        plan_text = "\n".join(
-            str(p.get("text") or "") if isinstance(p, dict) else str(p)
-            for p in plan_response.content
-        )
-    plan_messages.append(plan_response)
-    all_messages.extend(plan_messages)
-    print(f"[Recovery-Redesign] plan generated, {len(plan_text)} chars")
-
-    if not plan_text.strip():
-        return "empty_plan", "", all_messages
-
-    # ── PHASE 3: FORMAT CONVERSION (Python parser — no LLM) ─────────────────
-    # Parse the markdown plan deterministically. The plan has a well-defined
-    # format with ### <file> headings and ```diff ... --- ... ``` blocks.
-    # No LLM call needed — this never times out.
-    print("[Recovery-Redesign] === Phase 3: format conversion (Python parser) ===")
-    edit_ops: dict[str, list[dict]] = {}
-    obligation_decisions: list[dict] = []
-    risk_notes: list[str] = []
-
-    def _parse_plan(text: str) -> None:
+    def _parse_plan(
+        text: str,
+    ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]], list[str]]:
         import re as _re
-        # Extract per-file sections (### <file>)
+
+        # Handle cases where the LLM inserts formatting backticks around the '---' separator
+        text = _re.sub(r"```[ \t]*\n---\n(?:```[a-z]*[ \t]*\n)?", "\n---\n", text)
+
+        parsed_edit_ops: dict[str, list[dict[str, Any]]] = {}
+        parsed_decisions: list[dict[str, Any]] = []
+        parsed_risk_notes: list[str] = []
+
         file_section_re = _re.compile(r"^### (.+)$", _re.MULTILINE)
         diff_block_re = _re.compile(r"```diff\n(.*?)```", _re.DOTALL)
+
+        seen_edits: set[tuple[str, str, str]] = set()
 
         sections = list(file_section_re.finditer(text))
         for i, sec_match in enumerate(sections):
@@ -3830,90 +4294,244 @@ async def _run_recovery_redesign(
 
             diffs = list(diff_block_re.finditer(section_body))
             if not diffs:
-                # No diff block — file is a no-change
-                obligation_decisions.append({
-                    "obligation_id": file_path,
-                    "status": "verified_no_change",
-                    "reason": "No diff block in plan",
-                    "evidence": [],
-                })
+                parsed_decisions.append(
+                    {
+                        "obligation_id": file_path,
+                        "status": "verified_no_change",
+                        "reason": "No diff block in plan",
+                        "evidence": [],
+                    }
+                )
                 continue
 
-            file_edits = edit_ops.setdefault(file_path, [])
+            file_edits = parsed_edit_ops.setdefault(file_path, [])
             for hunk_idx, dm in enumerate(diffs):
                 diff_body = dm.group(1)
-                # Split on the separator line `---`
                 sep = "\n---\n"
                 if sep in diff_body:
                     old_part, new_part = diff_body.split(sep, 1)
                 else:
-                    # Try alternative: single `---` line anywhere
                     parts = _re.split(r"(?m)^---$", diff_body, maxsplit=1)
                     if len(parts) == 2:
                         old_part, new_part = parts
                     else:
-                        # Can't parse — treat as note
-                        print(f"[Recovery-Redesign] cannot parse diff block in {file_path} hunk {hunk_idx}")
+                        print(
+                            f"[Recovery-Redesign] cannot parse diff block in {file_path} hunk {hunk_idx}"
+                        )
                         continue
 
                 old_string = old_part.rstrip("\n")
                 new_string = new_part.lstrip("\n").rstrip("\n")
-                file_edits.append({
-                    "hunk_index": hunk_idx,
-                    "target_file": file_path,
-                    "edit_type": "replace",
-                    "old_string": old_string,
-                    "new_string": new_string,
-                    "verified": False,
-                    "verification_result": "parsed_from_plan",
-                    "notes": f"Parsed from recovery plan, section {file_path}",
-                })
-            obligation_decisions.append({
-                "obligation_id": file_path,
-                "status": "edited",
-                "reason": f"{len(file_edits)} edit(s) extracted from plan",
-                "evidence": [f"hunk {h['hunk_index']}" for h in file_edits],
-            })
+                edit_sig = (file_path, old_string, new_string)
+                if edit_sig in seen_edits:
+                    print(
+                        f"[Recovery-Redesign] Dropping duplicate diff block in {file_path}"
+                    )
+                    continue
+                seen_edits.add(edit_sig)
 
-        # Extract risk notes
+                file_edits.append(
+                    {
+                        "hunk_index": hunk_idx,
+                        "target_file": file_path,
+                        "edit_type": "replace",
+                        "old_string": old_string,
+                        "new_string": new_string,
+                        "verified": False,
+                        "verification_result": "parsed_from_plan",
+                        "notes": f"Parsed from recovery plan, section {file_path}",
+                    }
+                )
+
+            parsed_decisions.append(
+                {
+                    "obligation_id": file_path,
+                    "status": "edited",
+                    "reason": f"{len(file_edits)} edit(s) extracted from plan",
+                    "evidence": [f"hunk {h['hunk_index']}" for h in file_edits],
+                }
+            )
+
         risk_section = _re.search(r"## Risk notes\n(.*?)(?=\n## |\Z)", text, _re.DOTALL)
         if risk_section:
             for line in risk_section.group(1).splitlines():
-                line = line.strip().lstrip("- ").strip()
-                if line:
-                    risk_notes.append(line)
+                item = line.strip().lstrip("- ").strip()
+                if item:
+                    parsed_risk_notes.append(item)
 
-    _parse_plan(plan_text)
-    total_edits = sum(len(v) for v in edit_ops.values())
-    print(f"[Recovery-Redesign] parsed {total_edits} edit(s) across {len(edit_ops)} file(s)")
+        return parsed_edit_ops, parsed_decisions, parsed_risk_notes
 
-    if not edit_ops:
-        print("[Recovery-Redesign] plan parser found no edit_ops — treating as no-change")
-        return "formatter_no_tool_calls", plan_text, all_messages
-
-    # Call submit_recovery_plan directly in Python (no LLM round-trip)
     submit_tool = None
     for t in toolkit.get_tools(include_submit=True):
         if t.name == "submit_recovery_plan":
             submit_tool = t
             break
     if submit_tool is None:
-        return "formatter_missing_submit_tool", plan_text, all_messages
+        return "formatter_missing_submit_tool", "", all_messages
 
-    try:
-        submit_result = str(submit_tool.invoke({
-            "edit_ops": edit_ops,
-            "obligation_decisions": obligation_decisions,
-            "investigation_evidence": [{"kind": "note", "details": "Parsed from plan text"}],
-            "risk_notes": risk_notes,
-        }))
-    except Exception as exc:
-        submit_result = f"ERROR executing submit_recovery_plan: {exc}"
-    print(f"[Recovery-Redesign] submit_recovery_plan → {submit_result[:500]}")
+    latest_plan_text = ""
+    last_submit_result = ""
+    for redesign_iter in range(max_partial_retries + 1):
+        print(
+            f"[Recovery-Redesign] === Phase 2: plan generation (attempt {redesign_iter + 1}/{max_partial_retries + 1}) ==="
+        )
 
-    if submit_result.startswith("ERROR"):
-        return "formatter_submit_rejected", plan_text, all_messages
-    return "submitted", plan_text, all_messages
+        iteration_context = base_investigation_summary
+        if redesign_iter > 0:
+            feedback = _extract_partial_feedback(last_submit_result)
+            mf = feedback.get("missing_files") or []
+            mh = feedback.get("missing_hunks") or []
+            af = feedback.get("anchor_failures") or []
+            feedback_block = [
+                "<partial_feedback>",
+                "Previous submit_recovery_plan returned PARTIAL.",
+                "Carry forward prior accepted edits automatically (submit_recovery_plan accumulator).",
+                "Your next plan must include ONLY missing/failed edits.",
+                "Do NOT resubmit files/edits that were already accepted.",
+            ]
+            if mf:
+                feedback_block.append("Missing files:")
+                feedback_block.extend([f"- {x}" for x in mf[:20]])
+            if mh:
+                feedback_block.append("Missing hunks:")
+                feedback_block.extend([f"- {x}" for x in mh[:30]])
+            if af:
+                feedback_block.append(
+                    "Anchor failures to fix (copy old_string VERBATIM):"
+                )
+                feedback_block.extend([f"- {x}" for x in af[:30]])
+            feedback_block.append("</partial_feedback>")
+
+            # Inject the actual target file content for missing files so the LLM
+            # can copy verbatim anchors. This directly fixes anchor verification
+            # failures on targeted replan attempts.
+            missing_file_parts: list[str] = []
+            for rel in (mf or [])[:3]:  # cap at 3 files to keep prompt bounded
+                abs_path = os.path.join(
+                    toolkit.target_repo_path, _normalize_rel_path(rel)
+                )
+                try:
+                    with open(abs_path, "r", encoding="utf-8", errors="replace") as fh:
+                        fc = fh.read()
+                    # Generous limit for targeted replan (1-2 files)
+                    if len(fc) > 24000:
+                        fc = fc[:18000] + "\n...<truncated>...\n" + fc[-5000:]
+                    numbered = "\n".join(
+                        f"{i + 1:5d}: {ln}" for i, ln in enumerate(fc.splitlines())
+                    )
+                    missing_file_parts.append(
+                        f'<missing_target_file path="{rel}">\n{numbered}\n</missing_target_file>'
+                    )
+                except Exception:
+                    pass
+            if missing_file_parts:
+                feedback_block.insert(
+                    1,  # after the opening tag
+                    "CRITICAL: The following target files are shown with line numbers. "
+                    "Copy old_string VERBATIM from these files — do NOT use mainline `-` lines as anchors.",
+                )
+                feedback_block[-1:-1] = (
+                    missing_file_parts  # insert before </partial_feedback>
+                )
+
+            iteration_context = (
+                base_investigation_summary + "\n\n" + "\n".join(feedback_block)
+            )
+
+        plan_messages: list[Any] = [
+            SystemMessage(content=_RECOVERY_PLAN_SYSTEM),
+            HumanMessage(content=iteration_context),
+        ]
+        try:
+            # Bind max_tokens explicitly to prevent truncated plan output on
+            # targeted replans where the LLM may otherwise cut off mid-diff.
+            plan_llm = llm.bind(max_tokens=8192) if hasattr(llm, "bind") else llm
+            plan_response = await asyncio.wait_for(
+                plan_llm.ainvoke(plan_messages),
+                timeout=180.0,
+            )
+        except asyncio.TimeoutError:
+            print("[Recovery-Redesign] plan generation timed out")
+            return "llm_timeout", latest_plan_text, all_messages
+
+        plan_text = str(getattr(plan_response, "content", "") or "")
+        if isinstance(getattr(plan_response, "content", None), list):
+            plan_text = "\n".join(
+                str(p.get("text") or "") if isinstance(p, dict) else str(p)
+                for p in plan_response.content
+            )
+        latest_plan_text = plan_text
+        plan_messages.append(plan_response)
+        all_messages.extend(plan_messages)
+        print(f"[Recovery-Redesign] plan generated, {len(plan_text)} chars")
+
+        if not plan_text.strip():
+            return "empty_plan", latest_plan_text, all_messages
+
+        print("[Recovery-Redesign] === Phase 3: format conversion (Python parser) ===")
+        edit_ops, obligation_decisions, risk_notes = _parse_plan(plan_text)
+        total_edits = sum(len(v) for v in edit_ops.values())
+        print(
+            f"[Recovery-Redesign] parsed {total_edits} edit(s) across {len(edit_ops)} file(s)"
+        )
+        if not edit_ops:
+            print(
+                "[Recovery-Redesign] plan parser found no edit_ops — treating as no-change"
+            )
+            return "formatter_no_tool_calls", latest_plan_text, all_messages
+
+        try:
+            submit_result = str(
+                submit_tool.invoke(
+                    {
+                        "edit_ops": edit_ops,
+                        "obligation_decisions": obligation_decisions,
+                        "investigation_evidence": [
+                            {
+                                "kind": "note",
+                                "details": (
+                                    f"Parsed from plan text (redesign_attempt={redesign_iter + 1})"
+                                ),
+                            }
+                        ],
+                        "risk_notes": risk_notes,
+                    }
+                )
+            )
+        except Exception as exc:
+            submit_result = f"ERROR executing submit_recovery_plan: {exc}"
+        last_submit_result = submit_result
+        print(f"[Recovery-Redesign] submit_recovery_plan → {submit_result[:4000]}")
+
+        if submit_result.startswith("ERROR"):
+            return "formatter_submit_rejected", latest_plan_text, all_messages
+
+        if submit_result.startswith("PARTIAL"):
+            if redesign_iter < max_partial_retries:
+                print(
+                    "[Recovery-Redesign] PARTIAL submission; continuing targeted replanning."
+                )
+                continue
+            print(
+                "[Recovery-Redesign] PARTIAL submission after retry budget exhausted."
+            )
+            # Promote whatever the accumulator has so partial progress is not lost.
+            if toolkit._accumulated_plan:
+                toolkit._submitted_plan = dict(toolkit._accumulated_plan)
+                toolkit._submitted_decisions = list(
+                    toolkit._accumulated_decisions.values()
+                )
+                toolkit._submitted_status = {"status": "ok"}
+                print(
+                    f"[Recovery-Redesign] promoted accumulator ({len(toolkit._accumulated_plan)} file(s)) "
+                    "to submitted_plan so partial progress is not discarded."
+                )
+                return "partial_submitted", latest_plan_text, all_messages
+            return "formatter_submit_rejected", latest_plan_text, all_messages
+
+        return "submitted", latest_plan_text, all_messages
+
+    return "formatter_submit_rejected", latest_plan_text, all_messages
 
 
 async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
@@ -3941,6 +4559,9 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
     recovery_obligations = _verify_and_remap_obligations(
         state, recovery_obligations, target_repo_path
     )
+    # Persist obligations immediately so submit_recovery_plan can enforce
+    # obligation decisions against the same canonical set during this run.
+    state["recovery_obligations"] = recovery_obligations
     deterministic_recovery_brief = _build_deterministic_recovery_brief(state)
     recovery_scope_files = sorted(
         {
@@ -4032,7 +4653,9 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
     compact_mode = not use_full_prompt
 
     if use_full_prompt:
-        print("Recovery Agent: using full system prompt (RECOVERY_FULL_PROMPT or forced).")
+        print(
+            "Recovery Agent: using full system prompt (RECOVERY_FULL_PROMPT or forced)."
+        )
         system_prompt = _RECOVERY_SYSTEM.format(
             failure_context=failure_context,
             agent_eligible_files=agent_eligible_files_str,
@@ -4044,7 +4667,9 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
         )
         system_prompt = _sanitize_for_content_policy(system_prompt, 35000)
     else:
-        print("Recovery Agent: using compact system prompt (default — keeps per-round context bounded).")
+        print(
+            "Recovery Agent: using compact system prompt (default — keeps per-round context bounded)."
+        )
         system_prompt = _build_compact_recovery_system_prompt(
             failure_context=failure_context,
             retry_scope=retry_scope,
@@ -4226,16 +4851,18 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
         '       "path/to/MainlineFile.java": [\n'
         '         {"hunk_index":0,"target_file":"exact/target/path.java","edit_type":"replace",\n'
         '          "old_string":"EXACT target text","new_string":"replacement","notes":"why"}\n'
-        '       ]\n'
+        "       ]\n"
         "     },\n"
         '     "risk_notes": ["..."]\n'
-        "   }\n"
-        + coverage_section
-        + "\n</task>"
+        "   }\n" + coverage_section + "\n</task>"
     )
 
     if compact_mode:
-        file_checklist = "\n".join(f"  - {f}" for f in patch_files) if patch_files else "  (see recovery brief)"
+        file_checklist = (
+            "\n".join(f"  - {f}" for f in patch_files)
+            if patch_files
+            else "  (see recovery brief)"
+        )
         task_xml = (
             "<task>\n"
             "DIRECT-APPLY MODE (default):\n"
@@ -4246,9 +4873,7 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
             "   old_string MUST come from the actual TARGET file content, not from mainline patch lines.\n"
             "4. Call mark_no_change(target_file, reason) for files where no edit is needed.\n"
             "5. Call recovery_done(summary) once ALL required files are edited or marked.\n\n"
-            "Required files:\n"
-            + file_checklist
-            + "\n</task>"
+            "Required files:\n" + file_checklist + "\n</task>"
         )
 
     initial_message = "\n\n".join(
@@ -4267,7 +4892,9 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
     dep_graph_text = ""
     if patch_files:
         try:
-            dep_result = toolkit.get_dependency_graph(patch_files, explore_neighbors=True)
+            dep_result = toolkit.get_dependency_graph(
+                patch_files, explore_neighbors=True
+            )
             dep_graph_text = json.dumps(dep_result, ensure_ascii=False, indent=2)
         except Exception as _dge:
             dep_graph_text = f"dependency graph unavailable: {_dge}"
@@ -4275,12 +4902,16 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
 
     # ── Build preloaded context XML for the redesign ─────────────────────────
     preloaded_context_xml = (
-        "<preloaded_target_files>\n"
-        "These are the ACTUAL TARGET files (older codebase). "
-        "Lines are shown with numbers. Do NOT include line number prefixes in old_string anchors.\n\n"
-        + "\n\n".join(preloaded_file_parts)
-        + "\n</preloaded_target_files>"
-    ) if preloaded_file_parts else "<preloaded_target_files>(none)</preloaded_target_files>"
+        (
+            "<preloaded_target_files>\n"
+            "These are the ACTUAL TARGET files (older codebase). "
+            "Lines are shown with numbers. Do NOT include line number prefixes in old_string anchors.\n\n"
+            + "\n\n".join(preloaded_file_parts)
+            + "\n</preloaded_target_files>"
+        )
+        if preloaded_file_parts
+        else "<preloaded_target_files>(none)</preloaded_target_files>"
+    )
 
     if per_hunk_parts:
         preloaded_context_xml += (
@@ -4290,8 +4921,171 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
             + "\n</hunk_snippets>"
         )
 
-    # ── RUN REDESIGNED 3-PHASE RECOVERY ──────────────────────────────────────
-    print("Recovery Agent: starting 3-phase redesign (investigate → plan → format)...")
+    # ── PRIMARY: DIRECT-APPLY REACT LOOP ─────────────────────────────────────
+    # Build initial HumanMessage that includes the preloaded target files and
+    # the mainline patch so the LLM can copy old_string anchors directly from
+    # the shown file content without extra read_file calls.
+    da_initial_parts: list[str] = []
+    if preloaded_file_parts:
+        da_initial_parts.append(
+            "<target_files>\n"
+            "These are the ACTUAL TARGET repo files (older codebase, different from mainline).\n"
+            "Lines are numbered. old_string anchors MUST be copied verbatim from here — "
+            "do NOT use mainline patch `-` lines as anchors.\n\n"
+            + "\n\n".join(preloaded_file_parts)
+            + "\n</target_files>"
+        )
+    if per_hunk_parts:
+        da_initial_parts.append(
+            "<hunk_snippets>\n"
+            "Exact target code at each location mapped by Structural Locator. "
+            "Use these as precise old_string sources.\n\n"
+            + "\n\n".join(per_hunk_parts)
+            + "\n</hunk_snippets>"
+        )
+    da_initial_parts.append(
+        f"<mainline_patch>\n{_truncate(patch_diff, 6000)}\n</mainline_patch>"
+    )
+    da_initial_parts.append(task_xml)
+
+    da_initial_message = "\n\n".join(filter(None, da_initial_parts))
+    da_messages: list[Any] = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=da_initial_message),
+    ]
+
+    all_tools = toolkit.get_tools(include_submit=False)  # exclude submit_recovery_plan
+    print("Recovery Agent: starting direct-apply loop (apply_edit + recovery_done)...")
+    try:
+        direct_messages, direct_term = await _run_parallel_tool_loop(
+            llm=llm,
+            tools=all_tools,
+            initial_messages=da_messages,
+            preloaded_cache=preloaded_cache,
+            max_investigation_rounds=12,
+            toolkit=toolkit,
+        )
+        final_messages = direct_messages
+        term_reason = direct_term
+        recovery_plan_text = (
+            f"Direct-apply loop terminated: {direct_term}. "
+            f"edits={len(toolkit._applied_edits)}, done={toolkit._recovery_done}"
+        )
+    except Exception as exc:
+        if _is_content_filter_error(exc):
+            stagnation_reason = "content_filter_exhausted"
+            final_messages = []
+            term_reason = "content_filter_exhausted"
+            recovery_plan_text = ""
+        else:
+            raise
+
+    print(f"Recovery Agent: direct-apply loop finished, reason={term_reason}")
+
+    # ── DIRECT-APPLY SUCCESS PATH ─────────────────────────────────────────────
+    # If recovery_done was signalled (coverage satisfied), the files are already
+    # modified on disk. Route straight to validation (skip hunk_generator).
+    if getattr(toolkit, "_recovery_done", False):
+        applied_edits = list(toolkit._applied_edits)
+        no_change_files = sorted(toolkit._direct_no_change_files)
+        edited_files = sorted({e["target_file"] for e in applied_edits})
+        print(
+            f"Recovery Agent: direct-apply complete — {len(applied_edits)} edit(s) "
+            f"across {len(edited_files)} file(s). Routing to validation."
+        )
+        # Token accounting
+        agg = aggregate_usage_from_messages(final_messages)
+        if agg.get("input_tokens") or agg.get("output_tokens"):
+            add_usage(
+                token_usage,
+                int(agg.get("input_tokens", 0) or 0),
+                int(agg.get("output_tokens", 0) or 0),
+                "recovery_agent.direct_apply",
+            )
+        da_summary = (
+            f"Recovery Agent (direct-apply): {len(applied_edits)} edit(s) applied "
+            f"to {len(edited_files)} file(s)"
+            + (f"; {len(no_change_files)} file(s) marked no_change" if no_change_files else "")
+            + ". Files modified on disk — routing to validation."
+        )
+        return {
+            "messages": [HumanMessage(content=da_summary)],
+            "recovery_applied_directly": True,
+            "recovery_agent_status": "ok",
+            "recovery_agent_summary": da_summary,
+            "recovery_agent_mode": True,
+            "recovery_brief": deterministic_recovery_brief,
+            "recovery_obligations": recovery_obligations,
+            "recovery_investigation": [],
+            "recovery_decisions": [],
+            "recovery_scope_files": recovery_scope_files,
+            "recovery_strategy_history": recovery_strategy_history,
+            "recovery_plan_text": recovery_plan_text,
+            "recovery_plan_version": 1,
+            "recovery_risk_notes": [],
+            "hunk_generation_plan": {},
+            "last_plan_signature": "",
+            "validation_repeated_plan_detected": False,
+            "validation_failed_stage": state.get("validation_failed_stage"),
+            "token_usage": token_usage,
+        }
+
+    # ── PARTIAL DIRECT-APPLY: some edits on disk but recovery_done not reached ─
+    # If the LLM applied some edits without calling recovery_done, route to
+    # validation anyway — let it attempt compilation; on failure the recovery
+    # agent gets another shot (attempt 2) to complete the remaining edits.
+    if getattr(toolkit, "_applied_edits", None):
+        applied_edits = list(toolkit._applied_edits)
+        edited_files = sorted({e["target_file"] for e in applied_edits})
+        print(
+            f"Recovery Agent: direct-apply partial — {len(applied_edits)} edit(s), "
+            f"recovery_done not reached (reason={term_reason}). "
+            "Routing to validation with partial result."
+        )
+        agg = aggregate_usage_from_messages(final_messages)
+        if agg.get("input_tokens") or agg.get("output_tokens"):
+            add_usage(
+                token_usage,
+                int(agg.get("input_tokens", 0) or 0),
+                int(agg.get("output_tokens", 0) or 0),
+                "recovery_agent.direct_apply",
+            )
+        da_summary = (
+            f"Recovery Agent (partial direct-apply): {len(applied_edits)} edit(s) applied "
+            f"to {len(edited_files)} file(s); recovery_done not reached (reason={term_reason})."
+        )
+        return {
+            "messages": [HumanMessage(content=da_summary)],
+            "recovery_applied_directly": True,
+            "recovery_agent_status": "ok",
+            "recovery_agent_summary": da_summary,
+            "recovery_agent_mode": True,
+            "recovery_brief": deterministic_recovery_brief,
+            "recovery_obligations": recovery_obligations,
+            "recovery_investigation": [],
+            "recovery_decisions": [],
+            "recovery_scope_files": recovery_scope_files,
+            "recovery_strategy_history": recovery_strategy_history,
+            "recovery_plan_text": recovery_plan_text,
+            "recovery_plan_version": 1,
+            "recovery_risk_notes": [],
+            "hunk_generation_plan": {},
+            "last_plan_signature": "",
+            "validation_repeated_plan_detected": False,
+            "validation_failed_stage": state.get("validation_failed_stage"),
+            "token_usage": token_usage,
+        }
+
+    # ── FALLBACK: 3-PHASE REDESIGN ────────────────────────────────────────────
+    # Direct-apply loop exited without applying any edits. Fall back to the
+    # 3-phase (investigate → plan → format) approach.
+    print(
+        f"Recovery Agent: direct-apply loop ended with no edits (reason={term_reason}). "
+        "Falling back to 3-phase redesign..."
+    )
+    # Reset term_reason and recovery_plan_text for the redesign path
+    term_reason = "not_started"
+    recovery_plan_text = ""
     try:
         term_reason, recovery_plan_text, final_messages = await _run_recovery_redesign(
             llm=llm,
@@ -4315,6 +5109,7 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
     if recovery_plan_text:
         try:
             import pathlib
+
             _eval_dir = pathlib.Path(target_repo_path).parent / "recovery_plans"
             _eval_dir.mkdir(parents=True, exist_ok=True)
             _commit = str(state.get("mainline_commit") or "unknown")[:12]
@@ -4347,10 +5142,15 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
                     "invalid obligation decision status" in submit_rejection.lower()
                 ):
                     stagnation_reason = "submit_rejected_missing_or_invalid_decisions"
+        elif term_reason == "partial_submitted":
+            pass  # Accumulator promoted to submitted_plan; not a stagnation.
         elif term_reason in (
-            "max_rounds_exceeded", "no_tool_calls",
-            "formatter_no_tool_calls", "formatter_wrong_tool",
-            "formatter_submit_rejected", "formatter_missing_submit_tool",
+            "max_rounds_exceeded",
+            "no_tool_calls",
+            "formatter_no_tool_calls",
+            "formatter_wrong_tool",
+            "formatter_submit_rejected",
+            "formatter_missing_submit_tool",
             "empty_plan",
         ):
             stagnation_reason = term_reason
@@ -4425,6 +5225,8 @@ async def recovery_agent_node(state: AgentState, config) -> dict[str, Any]:
         "last_plan_signature": plan_sig,
         "validation_repeated_plan_detected": repeated,
         "recovery_agent_mode": True,
+        # Explicitly clear direct-apply flag — this path uses hunk_generator, not on-disk edits.
+        "recovery_applied_directly": False,
         "recovery_brief": deterministic_recovery_brief,
         "recovery_obligations": recovery_obligations,
         "recovery_investigation": submitted_investigation,

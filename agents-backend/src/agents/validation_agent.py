@@ -657,6 +657,10 @@ async def validation_agent(state: AgentState, config) -> dict:
     # Optional runtime toggles for constrained runs.
     skip_compilation_checks = state.get("skip_compilation_checks", False)
     apply_only_validation = state.get("apply_only_validation", False)
+    # When recovery applied edits directly on disk (via apply_edit tool), skip
+    # hunk application — code files are already modified. Developer aux hunks
+    # (test files) still need to be applied.
+    recovery_applied_directly = bool(state.get("recovery_applied_directly", False))
     effective_code_hunks = list(code_hunks) + list(developer_aux_hunks)
 
     # Build rename map for cross-class test transition matching
@@ -675,27 +679,35 @@ async def validation_agent(state: AgentState, config) -> dict:
         return {"validation_passed": False}
 
     if not code_hunks and not test_hunks:
-        msg = (
-            "Validation aborted: Phase 3 produced no adapted code/test hunks. "
-            "Regenerate hunks with target-grounded anchors."
-        )
-        print(f"  Agent 4: {msg}")
-        return {
-            "validation_passed": False,
-            "validation_attempts": attempts + 1,
-            "validation_error_context": msg,
-            "validation_failure_category": "empty_generation",
-            "validation_retry_files": [],
-            "validation_repeated_patch_detected": bool(
-                state.get("validation_repeated_patch_detected", False)
-            ),
-            "validation_repeated_plan_detected": bool(
-                state.get("validation_repeated_plan_detected", False)
-            ),
-            "force_type_v_until_success": force_type_v_latch,
-            "force_type_v_reason": force_type_v_reason,
-            "force_type_v_retry_files": force_type_v_retry_files,
-        }
+        if recovery_applied_directly:
+            # Code files already modified on disk by recovery agent.
+            # developer_aux_hunks (test files) may still need applying.
+            print(
+                "  Agent 4: Recovery applied directly — code files on disk. "
+                "Proceeding to build/test (developer aux hunks applied if present)."
+            )
+        else:
+            msg = (
+                "Validation aborted: Phase 3 produced no adapted code/test hunks. "
+                "Regenerate hunks with target-grounded anchors."
+            )
+            print(f"  Agent 4: {msg}")
+            return {
+                "validation_passed": False,
+                "validation_attempts": attempts + 1,
+                "validation_error_context": msg,
+                "validation_failure_category": "empty_generation",
+                "validation_retry_files": [],
+                "validation_repeated_patch_detected": bool(
+                    state.get("validation_repeated_patch_detected", False)
+                ),
+                "validation_repeated_plan_detected": bool(
+                    state.get("validation_repeated_plan_detected", False)
+                ),
+                "force_type_v_until_success": force_type_v_latch,
+                "force_type_v_reason": force_type_v_reason,
+                "force_type_v_retry_files": force_type_v_retry_files,
+            }
 
     incomplete_generation_items = []
     for item in generation_checklist:
@@ -810,55 +822,105 @@ async def validation_agent(state: AgentState, config) -> dict:
         trace.append(f"  - `Tool: {tool_name}` -> {out_str}")
 
     if evaluation_full_workflow:
-        print(
-            "  Agent 4: Evaluation full-workflow mode (apply -> build -> relevant tests)..."
-        )
-        res = toolkit.apply_adapted_hunks(effective_code_hunks, test_hunks)
-        log_step(
-            "apply_adapted_hunks",
-            {
-                "code_count": len(code_hunks),
-                "developer_aux_count": len(developer_aux_hunks),
-                "effective_code_count": len(effective_code_hunks),
-                "test_count": len(test_hunks),
-            },
-            res,
-        )
-
-        validation_results["hunk_application"] = {
-            "success": res["success"],
-            "raw": res["output"],
-        }
-
-        if not res["success"]:
-            analysis = await _analyze_failure("Hunk Application", res["output"], state)
-            failure_category, retry_files, diagnostics = _classify_apply_failure(
-                res.get("output", "")
+        if recovery_applied_directly:
+            print(
+                "  Agent 4: Evaluation full-workflow mode (recovery direct-apply — "
+                "skip code hunk application, apply dev-aux only, then build + tests)..."
             )
-            validation_results["hunk_application"]["agent_evaluation"] = analysis
-            validation_results["hunk_application"]["error_context"] = analysis
-            validation_results["hunk_application"]["diagnostics"] = {
-                "category": failure_category,
-                "retry_files": retry_files,
-                "issues": diagnostics,
-            }
-            trace.append(
-                f"\n**Final Status: HUNK APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
+            # Code files already on disk. Only apply developer_aux_hunks (test files).
+            aux_hunks_to_apply = list(developer_aux_hunks) + list(test_hunks)
+            if aux_hunks_to_apply:
+                res = toolkit.apply_adapted_hunks(aux_hunks_to_apply, [])
+                log_step(
+                    "apply_adapted_hunks (dev-aux only)",
+                    {"aux_count": len(aux_hunks_to_apply)},
+                    res,
+                )
+                validation_results["hunk_application"] = {
+                    "success": res["success"],
+                    "raw": res["output"],
+                }
+                if not res["success"]:
+                    analysis = await _analyze_failure(
+                        "Dev-Aux Hunk Application", res["output"], state
+                    )
+                    failure_category, retry_files, diagnostics = _classify_apply_failure(
+                        res.get("output", "")
+                    )
+                    validation_results["hunk_application"]["agent_evaluation"] = analysis
+                    validation_results["hunk_application"]["error_context"] = analysis
+                    trace.append(
+                        f"\n**Dev-Aux Hunk Application FAILED**\n\n{analysis}"
+                    )
+                    toolkit.write_trace("\n".join(trace), "validation_trace.md")
+                    toolkit.restore_repo_state()
+                    return {
+                        "validation_passed": False,
+                        "validation_attempts": attempts + 1,
+                        "validation_error_context": f"Dev-aux hunk application failed: {analysis}",
+                        "validation_results": validation_results,
+                        "regeneration_hint": analysis,
+                        "validation_failure_category": failure_category,
+                        "validation_retry_files": retry_files,
+                        "force_type_v_until_success": force_type_v_latch,
+                        "force_type_v_reason": force_type_v_reason,
+                        "force_type_v_retry_files": force_type_v_retry_files,
+                    }
+            else:
+                validation_results["hunk_application"] = {
+                    "success": True,
+                    "raw": "Skipped — recovery applied code files directly; no dev-aux hunks.",
+                }
+        else:
+            print(
+                "  Agent 4: Evaluation full-workflow mode (apply -> build -> relevant tests)..."
             )
-            toolkit.write_trace("\n".join(trace), "validation_trace.md")
-            toolkit.restore_repo_state()
-            return {
-                "validation_passed": False,
-                "validation_attempts": attempts + 1,
-                "validation_error_context": f"Hunk application failed: {analysis}",
-                "validation_results": validation_results,
-                "regeneration_hint": analysis,
-                "validation_failure_category": failure_category,
-                "validation_retry_files": retry_files,
-                "force_type_v_until_success": force_type_v_latch,
-                "force_type_v_reason": force_type_v_reason,
-                "force_type_v_retry_files": force_type_v_retry_files,
+            res = toolkit.apply_adapted_hunks(effective_code_hunks, test_hunks)
+            log_step(
+                "apply_adapted_hunks",
+                {
+                    "code_count": len(code_hunks),
+                    "developer_aux_count": len(developer_aux_hunks),
+                    "effective_code_count": len(effective_code_hunks),
+                    "test_count": len(test_hunks),
+                },
+                res,
+            )
+
+            validation_results["hunk_application"] = {
+                "success": res["success"],
+                "raw": res["output"],
             }
+
+            if not res["success"]:
+                analysis = await _analyze_failure("Hunk Application", res["output"], state)
+                failure_category, retry_files, diagnostics = _classify_apply_failure(
+                    res.get("output", "")
+                )
+                validation_results["hunk_application"]["agent_evaluation"] = analysis
+                validation_results["hunk_application"]["error_context"] = analysis
+                validation_results["hunk_application"]["diagnostics"] = {
+                    "category": failure_category,
+                    "retry_files": retry_files,
+                    "issues": diagnostics,
+                }
+                trace.append(
+                    f"\n**Final Status: HUNK APPLICATION FAILED**\n\n**Agent Analysis:**\n{analysis}"
+                )
+                toolkit.write_trace("\n".join(trace), "validation_trace.md")
+                toolkit.restore_repo_state()
+                return {
+                    "validation_passed": False,
+                    "validation_attempts": attempts + 1,
+                    "validation_error_context": f"Hunk application failed: {analysis}",
+                    "validation_results": validation_results,
+                    "regeneration_hint": analysis,
+                    "validation_failure_category": failure_category,
+                    "validation_retry_files": retry_files,
+                    "force_type_v_until_success": force_type_v_latch,
+                    "force_type_v_reason": force_type_v_reason,
+                    "force_type_v_retry_files": force_type_v_retry_files,
+                }
 
         build_res = toolkit.run_build_script()
         log_step("run_build_script", {}, build_res)

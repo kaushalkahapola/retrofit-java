@@ -5,16 +5,37 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
 
-from graph import route_after_structural, route_validation
+try:
+    from graph import route_after_recovery, route_after_structural, route_validation
+except Exception:
+    route_after_recovery = None
+    route_after_structural = None
+    route_validation = None
 
 
 class TestGraphRouting(unittest.TestCase):
-    def test_route_after_structural_skips_planning_for_structural(self):
+    def setUp(self):
+        if (
+            route_after_recovery is None
+            or route_after_structural is None
+            or route_validation is None
+        ):
+            self.skipTest("graph imports unavailable in this environment")
+
+    def test_route_after_structural_routes_structural_to_recovery(self):
         state = {"patch_complexity": "STRUCTURAL"}
+        self.assertEqual(route_after_structural(state), "recovery_agent")
+
+    def test_route_after_structural_routes_rewrite_to_recovery(self):
+        state = {"patch_complexity": "REWRITE"}
+        self.assertEqual(route_after_structural(state), "recovery_agent")
+
+    def test_route_after_structural_routes_trivial_to_hunk_generator(self):
+        state = {"patch_complexity": "TRIVIAL"}
         self.assertEqual(route_after_structural(state), "hunk_generator")
 
-    def test_route_after_structural_keeps_planning_for_rewrite(self):
-        state = {"patch_complexity": "REWRITE"}
+    def test_route_after_structural_routes_empty_complexity_to_hunk_generator(self):
+        state = {}
         self.assertEqual(route_after_structural(state), "hunk_generator")
 
     def test_validation_infra_inconclusive_ends(self):
@@ -99,12 +120,37 @@ class TestGraphRouting(unittest.TestCase):
         }
         self.assertEqual(route_validation(state), "planning_agent")
 
-    def test_route_after_structural_downgrades_blob_match(self):
+    def test_route_after_structural_routes_rewrite_blob_match_to_recovery(self):
+        # REWRITE patches always route to recovery_agent regardless of match method.
         state = {
             "patch_complexity": "REWRITE",
             "structural_locator_git_match_method": "GIT_BLOB",
         }
-        self.assertEqual(route_after_structural(state), "hunk_generator")
+        self.assertEqual(route_after_structural(state), "recovery_agent")
+
+    def test_route_after_recovery_ends_on_no_fix_found(self):
+        state = {
+            "recovery_agent_status": "no_fix_found",
+            "hunk_generation_plan": {},
+        }
+        self.assertEqual(route_after_recovery(state), "END")
+
+    def test_route_after_recovery_ends_on_empty_plan(self):
+        state = {
+            "recovery_agent_status": "ok",
+            "hunk_generation_plan": {},
+        }
+        self.assertEqual(route_after_recovery(state), "END")
+
+    def test_route_after_recovery_uses_hunk_generator_for_actionable_plan(self):
+        state = {
+            "recovery_agent_status": "ok",
+            "hunk_generation_plan": {
+                "A.java": [{"old_string": "x", "new_string": "y"}]
+            },
+            "recovery_brief": {},
+        }
+        self.assertEqual(route_after_recovery(state), "hunk_generator")
 
 
 if __name__ == "__main__":

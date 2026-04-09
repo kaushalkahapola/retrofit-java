@@ -8,10 +8,12 @@ Pipeline:
        '-- fast_path_success=False
               -> context_analyzer   (semantic blueprint; deterministic for TRIVIAL/STRUCTURAL)
               -> structural_locator (find target locations, no planning)
-              -> hunk_generator     (file_editor)
-                 |-- TRIVIAL patch: dumb mode (deterministic apply only)
-                 |-- STRUCTURAL/REWRITE patch: fails fast, no plan available
-              -> validation
+              -> [TRIVIAL]  hunk_generator (dumb apply)  -> validation
+              -> [STRUCTURAL/REWRITE]  recovery_agent (semantic planning)
+                 |-- produces plan -> hunk_generator -> validation
+                 |-- applies directly -> validation
+                 '-- no_fix_found   -> END
+              validation:
                  |-- passed          -> END
                  |-- failed, attempts < MAX_VALIDATION_ATTEMPTS -> recovery_agent
                  '-- failed, attempts >= MAX_VALIDATION_ATTEMPTS -> END
@@ -19,17 +21,17 @@ Pipeline:
 Flow breakdown:
 1. Context Analyzer: extract blueprint (deterministic for TRIVIAL/STRUCTURAL)
 2. Structural Locator: find target locations (no planning)
-3. File Editor (dumb mode for TRIVIAL only):
-   - TRIVIAL patches: try deterministic apply of mainline edits verbatim
-   - STRUCTURAL/REWRITE patches: fail fast (require planning, will trigger recovery_agent)
+3. Routing by complexity:
+   - TRIVIAL: File Editor dumb mode (deterministic apply of mainline edits verbatim)
+   - STRUCTURAL/REWRITE: recovery_agent directly (semantic planning, skips doomed dumb pass)
 4. Validation: test the result
-5. Recovery Agent (if validation fails):
+5. Recovery Agent (STRUCTURAL first pass OR after validation failure):
    - Full ReAct pass with semantic analysis + planning
    - Creates structured plan from scratch
    - File Editor applies recovery plan deterministically (max 2 retries)
 
-Key insight: Dumb mode only works for simple patches (TRIVIAL). Complex patches
-(STRUCTURAL/REWRITE) trigger recovery_agent immediately, which does full planning.
+Key insight: STRUCTURAL/REWRITE patches skip hunk_generator on the first pass to
+preserve all MAX_VALIDATION_ATTEMPTS for meaningful recovery attempts.
 """
 
 from langgraph.graph import END, START, StateGraph
@@ -88,10 +90,18 @@ def route_after_structural(state: AgentState) -> str:
     """
     Route after structural locator.
 
-    Always go directly to Agent 3 (file editor) for an initial
-    deterministic "dumb apply" pass. Planning/reasoning are reserved for
-    post-validation retries with concrete failure diagnostics.
+    TRIVIAL patches go to hunk_generator for a deterministic dumb apply.
+    STRUCTURAL/REWRITE patches skip hunk_generator (which would fail fast
+    with no plan anyway) and route directly to recovery_agent for semantic
+    planning. This preserves all 3 validation attempts for complex patches.
     """
+    complexity = str(state.get("patch_complexity") or "").upper()
+    if complexity in ("STRUCTURAL", "REWRITE"):
+        print(
+            f"Router: {complexity} patch -> skipping hunk_generator, "
+            "routing directly to recovery_agent (preserves validation attempts)."
+        )
+        return "recovery_agent"
     print("Router: structural mapping complete -> hunk_generator (initial pass).")
     return "hunk_generator"
 
@@ -164,6 +174,7 @@ def route_after_recovery(state: AgentState) -> str:
       - DIRECT-APPLY: if recovery_agent already mutated files on disk via
         apply_edit and produced adapted_code_hunks, skip hunk_generator and
         go straight to validation.
+      - If recovery reports no_fix_found or no actionable plan, stop.
       - If deterministic brief indicates file remap / logic moved, re-run locator.
       - Otherwise apply planned edits in file editor.
     """
@@ -173,6 +184,24 @@ def route_after_recovery(state: AgentState) -> str:
             "Routing straight to validation (skipping hunk_generator)."
         )
         return "validation"
+
+    recovery_status = str(state.get("recovery_agent_status") or "").strip().lower()
+    if recovery_status == "no_fix_found":
+        print("Router: Recovery reported no_fix_found. Stopping retries and exiting.")
+        return "END"
+
+    # If recovery did not produce actionable edits, do not route to file editor
+    # with an empty plan (STRUCTURAL/REWRITE will fail-fast there).
+    plan = state.get("hunk_generation_plan") or {}
+    has_actionable_plan = bool(
+        isinstance(plan, dict) and any(isinstance(v, list) and v for v in plan.values())
+    )
+    if not has_actionable_plan:
+        print(
+            "Router: Recovery did not produce actionable plan. "
+            "Stopping retries and exiting."
+        )
+        return "END"
 
     brief = state.get("recovery_brief") or {}
     diag = brief.get("diagnosis") if isinstance(brief, dict) else {}
@@ -229,9 +258,16 @@ workflow.add_conditional_edges(
     },
 )
 
-# Linear pipeline: Agent 1 -> Agent 2 -> Agent 3
+# Linear pipeline: Agent 1 -> Agent 2 -> Agent 3 (or recovery for complex patches)
 workflow.add_edge("context_analyzer", "structural_locator")
-workflow.add_edge("structural_locator", "hunk_generator")
+workflow.add_conditional_edges(
+    "structural_locator",
+    route_after_structural,
+    {
+        "hunk_generator": "hunk_generator",
+        "recovery_agent": "recovery_agent",
+    },
+)
 workflow.add_edge("hunk_generator", "validation")
 workflow.add_conditional_edges(
     "recovery_agent",
@@ -240,6 +276,7 @@ workflow.add_conditional_edges(
         "structural_locator": "structural_locator",
         "hunk_generator": "hunk_generator",
         "validation": "validation",
+        "END": END,
     },
 )
 

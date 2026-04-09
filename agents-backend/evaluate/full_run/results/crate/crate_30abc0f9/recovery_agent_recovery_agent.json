@@ -1,104 +1,7 @@
 {
-  "hunk_generation_plan": {
-    "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java": [
-      {
-        "hunk_index": 0,
-        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-        "edit_type": "replace",
-        "old_string": "            if (LOGGER.isTraceEnabled()) {\n                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n            }\n            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());",
-        "new_string": "            if (LOGGER.isTraceEnabled()) {\n                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n            }\n            String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";\n            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);",
-        "verified": true,
-        "verification_result": "parsed_from_plan",
-        "notes": "Parsed from recovery plan, section server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java|recovery_agent"
-      },
-      {
-        "hunk_index": 1,
-        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-        "edit_type": "replace",
-        "old_string": "    private class NodeOperationRunnable extends CompletableFuture<DistributedResultResponse> {\n        private final DistributedResultRequest request;\n        private final Iterator<TimeValue> retryDelay;\n\n        NodeOperationRunnable(DistributedResultRequest request, Iterator<TimeValue> retryDelay) {\n            this.request = request;\n            this.retryDelay = retryDelay;\n        }\n\n        public CompletableFuture<DistributedResultResponse> run() {\n            return nodeOperation(request, retryDelay).whenComplete((r, f) -> {\n                if (f == null) {\n                    complete(r);\n                } else {\n                    completeExceptionally(f);\n                }\n            });\n        }\n    }\n}",
-        "new_string": "    private class NodeOperationRunnable extends CompletableFuture<DistributedResultResponse> {\n        private final DistributedResultRequest request;\n        private final Iterator<TimeValue> retryDelay;\n\n        NodeOperationRunnable(DistributedResultRequest request, Iterator<TimeValue> retryDelay) {\n            this.request = request;\n            this.retryDelay = retryDelay;\n        }\n\n        public CompletableFuture<DistributedResultResponse> run() {\n            return nodeOperation(request, retryDelay).whenComplete((r, f) -> {\n                if (f == null) {\n                    complete(r);\n                } else {\n                    completeExceptionally(f);\n                }\n            });\n        }\n    }\n\n    /**\n     * Sends KILL request to all nodes (excluding sender node).\n     */\n    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                     UUID jobId,\n                                     String localNodeId,\n                                     String reason) {\n        List<String> excludedNodeIds = Collections.singletonList(localNodeId);\n\n        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n            excludedNodeIds,\n            List.of(jobId),\n            Role.CRATE_USER.name(),\n            reason\n        );\n        killNodeAction\n            .execute(killRequest)\n            .whenComplete((_, t) -> {\n                if (t != null) {\n                    LOGGER.debug(\"Could not kill \" + jobId, t);\n                }\n            });\n    }\n}",
-        "verified": true,
-        "verification_result": "parsed_from_plan",
-        "notes": "Parsed from recovery plan, section server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java|recovery_agent"
-      }
-    ],
-    "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java": [
-      {
-        "hunk_index": 0,
-        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-        "edit_type": "replace",
-        "old_string": "    private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;",
-        "new_string": "    private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;\n    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;",
-        "verified": true,
-        "verification_result": "parsed_from_plan",
-        "notes": "Parsed from recovery plan, section server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java|recovery_agent"
-      },
-      {
-        "hunk_index": 1,
-        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-        "edit_type": "replace",
-        "old_string": "        this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);\n        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);\n    }",
-        "new_string": "        this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);\n        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);\n        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);\n    }",
-        "verified": true,
-        "verification_result": "parsed_from_plan",
-        "notes": "Parsed from recovery plan, section server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java|recovery_agent"
-      },
-      {
-        "hunk_index": 2,
-        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-        "edit_type": "replace",
-        "old_string": "        return new DistributingConsumer(\n            responseExecutor,\n            jobId,\n            multiBucketBuilder,\n            nodeOperation.downstreamExecutionPhaseId(),\n            phaseInputId,\n            bucketIdx,\n            nodeOperation.downstreamNodes(),\n            distributedResultAction,\n            pageSize\n        );",
-        "new_string": "        return new DistributingConsumer(\n            responseExecutor,\n            jobId,\n            multiBucketBuilder,\n            nodeOperation.downstreamExecutionPhaseId(),\n            phaseInputId,\n            bucketIdx,\n            nodeOperation.downstreamNodes(),\n            distributedResultAction,\n            killNodeAction,\n            clusterService.localNode().getId(),\n            pageSize,\n            threadPool\n        );",
-        "verified": true,
-        "verification_result": "parsed_from_plan",
-        "notes": "Parsed from recovery plan, section server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java|recovery_agent"
-      }
-    ],
-    "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java": [
-      {
-        "hunk_index": 0,
-        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-        "edit_type": "replace",
-        "old_string": "import io.crate.execution.support.ActionExecutor;\nimport io.crate.execution.support.NodeRequest;",
-        "new_string": "import io.crate.execution.support.ActionExecutor;\nimport io.crate.execution.support.NodeRequest;\n\nimport static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;\n\nimport io.crate.execution.jobs.kill.KillJobsNodeRequest;\nimport io.crate.execution.jobs.kill.KillResponse;\n\nimport org.elasticsearch.threadpool.ThreadPool;",
-        "verified": true,
-        "verification_result": "parsed_from_plan",
-        "notes": "Parsed from recovery plan, section server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java|recovery_agent"
-      },
-      {
-        "hunk_index": 1,
-        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-        "edit_type": "replace",
-        "old_string": "    private volatile Throwable failure;\n\n    public DistributingConsumer(Executor responseExecutor,",
-        "new_string": "    private volatile Throwable failure;\n\n    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\n    private final String localNodeId;\n    private final ThreadPool threadPool;\n\n    public DistributingConsumer(Executor responseExecutor,",
-        "verified": true,
-        "verification_result": "parsed_from_plan",
-        "notes": "Parsed from recovery plan, section server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java|recovery_agent"
-      },
-      {
-        "hunk_index": 2,
-        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-        "edit_type": "replace",
-        "old_string": "                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;",
-        "new_string": "                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                String localNodeId,\n                                int pageSize,\n                                ThreadPool threadPool) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.killNodeAction = killNodeAction;\n        this.localNodeId = localNodeId;",
-        "verified": true,
-        "verification_result": "parsed_from_plan",
-        "notes": "Parsed from recovery plan, section server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java|recovery_agent"
-      },
-      {
-        "hunk_index": 3,
-        "target_file": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-        "edit_type": "replace",
-        "old_string": "                // The NodeDisconnectJobMonitorService takes care of node disconnects, so we don't have to manage\n                // that scenario.\n                it.close();\n                completionFuture.complete(null);\n            }\n        }\n    }",
-        "new_string": "                // The NodeDisconnectJobMonitorService takes care of node disconnects, so we don't have to manage\n                // that scenario.\n                if (failure != null) {\n                    String reason = \"An error was encountered: \" + failure;\n                    broadcastKill(killNodeAction, jobId, localNodeId, reason);\n                    completionFuture.completeExceptionally(failure);\n                } else {\n                    completionFuture.complete(null);\n                }\n                it.close();\n            }\n        }\n    }",
-        "verified": true,
-        "verification_result": "parsed_from_plan",
-        "notes": "Parsed from recovery plan, section server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java|recovery_agent"
-      }
-    ]
-  },
-  "last_plan_signature": "c6146b13bd1aede2741ad4474f1e127ba1336aec3d0b431bcf1b7c11c1dbeb81",
-  "validation_repeated_plan_detected": false,
+  "recovery_applied_directly": true,
+  "recovery_agent_status": "ok",
+  "recovery_agent_summary": "Recovery Agent (direct-apply): 17 edit(s) applied to 3 file(s). Files modified on disk \u2014 routing to validation.",
   "recovery_agent_mode": true,
   "recovery_brief": {
     "version": 1,
@@ -120,7 +23,7 @@
       "parent_file": "",
       "suggested_strategy": "escalate_to_full_react",
       "evidence": [
-        "No deterministic diagnosis found. Build error: Validation aborted: Phase 3 produced no adapted code/test hunks. Regenerate hunks with target-grounded anchors."
+        "No deterministic diagnosis found. Build error: "
       ]
     },
     "rulebook_decision": {},
@@ -163,69 +66,28 @@
       "_verification": "callsite_must_add"
     }
   ],
-  "recovery_investigation": [
-    {
-      "kind": "note",
-      "details": "Parsed from plan text"
-    }
-  ],
-  "recovery_decisions": [
-    {
-      "obligation_id": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
-      "status": "edited",
-      "reason": "2 edit(s) extracted from plan",
-      "evidence": [
-        "hunk 0",
-        "hunk 1"
-      ]
-    },
-    {
-      "obligation_id": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
-      "status": "edited",
-      "reason": "3 edit(s) extracted from plan",
-      "evidence": [
-        "hunk 0",
-        "hunk 1",
-        "hunk 2"
-      ]
-    },
-    {
-      "obligation_id": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-      "status": "edited",
-      "reason": "4 edit(s) extracted from plan",
-      "evidence": [
-        "hunk 0",
-        "hunk 1",
-        "hunk 2",
-        "hunk 3"
-      ]
-    }
-  ],
+  "recovery_investigation": [],
+  "recovery_decisions": [],
   "recovery_scope_files": [
     "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
     "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
     "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java"
   ],
   "recovery_strategy_history": [],
-  "recovery_plan_text": "# Adaptation Plan\n\n## Intent\nThe patch factors out repeated job-killing logic into a static `broadcastKill` method in `TransportDistributedResultAction` that sends kill requests to all nodes except the local one, and uses it both when no root task is found and when a `DistributingConsumer` receives failures from all downstreams after sending data/failures, propagating the failure upwards via `completeExceptionally` to unblock upstream operations and prevent stuck distributed queries.\n\n## Per-file changes\n\n### server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java\nReplace the inline kill-job logic in `retryOrFailureResponse` with a call to the new `broadcastKill` method to reuse the extracted logic. Add the new public static `broadcastKill` method after the `NodeOperationRunnable` inner class to centralize the node-excluding kill request dispatching with logging.\n\n```diff\n            if (LOGGER.isTraceEnabled()) {\n                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n            }\n            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());\n---\n            if (LOGGER.isTraceEnabled()) {\n                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n            }\n            String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";\n            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n```\n\n```diff\n    private class NodeOperationRunnable extends CompletableFuture<DistributedResultResponse> {\n        private final DistributedResultRequest request;\n        private final Iterator<TimeValue> retryDelay;\n\n        NodeOperationRunnable(DistributedResultRequest request, Iterator<TimeValue> retryDelay) {\n            this.request = request;\n            this.retryDelay = retryDelay;\n        }\n\n        public CompletableFuture<DistributedResultResponse> run() {\n            return nodeOperation(request, retryDelay).whenComplete((r, f) -> {\n                if (f == null) {\n                    complete(r);\n                } else {\n                    completeExceptionally(f);\n                }\n            });\n        }\n    }\n}\n---\n    private class NodeOperationRunnable extends CompletableFuture<DistributedResultResponse> {\n        private final DistributedResultRequest request;\n        private final Iterator<TimeValue> retryDelay;\n\n        NodeOperationRunnable(DistributedResultRequest request, Iterator<TimeValue> retryDelay) {\n            this.request = request;\n            this.retryDelay = retryDelay;\n        }\n\n        public CompletableFuture<DistributedResultResponse> run() {\n            return nodeOperation(request, retryDelay).whenComplete((r, f) -> {\n                if (f == null) {\n                    complete(r);\n                } else {\n                    completeExceptionally(f);\n                }\n            });\n        }\n    }\n\n    /**\n     * Sends KILL request to all nodes (excluding sender node).\n     */\n    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                     UUID jobId,\n                                     String localNodeId,\n                                     String reason) {\n        List<String> excludedNodeIds = Collections.singletonList(localNodeId);\n\n        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n            excludedNodeIds,\n            List.of(jobId),\n            Role.CRATE_USER.name(),\n            reason\n        );\n        killNodeAction\n            .execute(killRequest)\n            .whenComplete((_, t) -> {\n                if (t != null) {\n                    LOGGER.debug(\"Could not kill \" + jobId, t);\n                }\n            });\n    }\n}\n```\n\n### server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java\nAdd a `killNodeAction` field mirroring the style of `distributedResultAction` and initialize it in the constructor using `KillJobsNodeAction.INSTANCE`. Update the `create` method to pass `killNodeAction`, the local node ID, and `threadPool` to the `DistributingConsumer` constructor.\n\n```diff\n    private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;\n---\n    private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;\n    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\n```\n\n```diff\n        this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);\n        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);\n    }\n---\n        this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);\n        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);\n        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);\n    }\n```\n\n```diff\n        return new DistributingConsumer(\n            responseExecutor,\n            jobId,\n            multiBucketBuilder,\n            nodeOperation.downstreamExecutionPhaseId(),\n            phaseInputId,\n            bucketIdx,\n            nodeOperation.downstreamNodes(),\n            distributedResultAction,\n            pageSize\n        );\n---\n        return new DistributingConsumer(\n            responseExecutor,\n            jobId,\n            multiBucketBuilder,\n            nodeOperation.downstreamExecutionPhaseId(),\n            phaseInputId,\n            bucketIdx,\n            nodeOperation.downstreamNodes(),\n            distributedResultAction,\n            killNodeAction,\n            clusterService.localNode().getId(),\n            pageSize,\n            threadPool\n        );\n```\n\n### server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java\nAdd required imports, fields for `killNodeAction`, `localNodeId`, and `threadPool`, and update the constructor to accept and assign them. Modify the terminal `else` branch in `countdownAndMaybeContinue` to invoke `broadcastKill` if a failure occurred (e.g., downstream response error), close the iterator, and complete exceptionally to propagate failure and kill the job cluster-wide.\n\n```diff\nimport io.crate.execution.support.ActionExecutor;\nimport io.crate.execution.support.NodeRequest;\n---\nimport io.crate.execution.support.ActionExecutor;\nimport io.crate.execution.support.NodeRequest;\n\nimport static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;\n\nimport io.crate.execution.jobs.kill.KillJobsNodeRequest;\nimport io.crate.execution.jobs.kill.KillResponse;\n\nimport org.elasticsearch.threadpool.ThreadPool;\n```\n\n```diff\n    private volatile Throwable failure;\n\n    public DistributingConsumer(Executor responseExecutor,\n---\n    private volatile Throwable failure;\n\n    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\n    private final String localNodeId;\n    private final ThreadPool threadPool;\n\n    public DistributingConsumer(Executor responseExecutor,\n```\n\n```diff\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n---\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                String localNodeId,\n                                int pageSize,\n                                ThreadPool threadPool) {\n        this.traceEnabled = LOGGER.isTraceEnabled();\n        this.responseExecutor = responseExecutor;\n        this.jobId = jobId;\n        this.multiBucketBuilder = multiBucketBuilder;\n        this.targetPhaseId = targetPhaseId;\n        this.inputId = inputId;\n        this.bucketIdx = bucketIdx;\n        this.distributedResultAction = distributedResultAction;\n        this.killNodeAction = killNodeAction;\n        this.localNodeId = localNodeId;\n```\n\n```diff\n                // The NodeDisconnectJobMonitorService takes care of node disconnects, so we don't have to manage\n                // that scenario.\n                it.close();\n                completionFuture.complete(null);\n            }\n        }\n    }\n---\n                // The NodeDisconnectJobMonitorService takes care of node disconnects, so we don't have to manage\n                // that scenario.\n                if (failure != null) {\n                    String reason = \"An error was encountered: \" + failure;\n                    broadcastKill(killNodeAction, jobId, localNodeId, reason);\n                    completionFuture.completeExceptionally(failure);\n                } else {\n                    completionFuture.complete(null);\n                }\n                it.close();\n            }\n        }\n    }\n```\n\n## No-change files\nNone\n\n## Risk notes\n- `ThreadPool` field added to `DistributingConsumer` per mainline constructor but unused in visible changes; may be for future/backoff scheduling\u2014remove if compilation succeeds without usage.\n- Behavior change: previously completed successfully despite downstream failures (downstreams handle); now propagates `completeExceptionally` and cluster-kills, which may cause more aggressive job termination.\n- `broadcastKill` excludes local node correctly but repeated calls (e.g., multiple failures) may log spam; no deduping.\n- Assumes `KillJobsNodeAction.INSTANCE` exists and `Role.CRATE_USER` valid; constructor param order matches mainline exactly for compatibility.\n- No dropped hunks; semantic adaptation of failure terminal logic as line numbers/context differ between mainline/target.",
+  "recovery_plan_text": "Direct-apply loop terminated: applied_directly. edits=17, done=True",
   "recovery_plan_version": 1,
-  "recovery_agent_status": "ok",
-  "recovery_agent_summary": "Recovery Agent complete: planned 9 operation(s) across 3 file(s).",
+  "recovery_risk_notes": [],
+  "hunk_generation_plan": {},
+  "last_plan_signature": "",
+  "validation_repeated_plan_detected": false,
   "validation_failed_stage": null,
-  "recovery_risk_notes": [
-    "`ThreadPool` field added to `DistributingConsumer` per mainline constructor but unused in visible changes; may be for future/backoff scheduling\u2014remove if compilation succeeds without usage.",
-    "Behavior change: previously completed successfully despite downstream failures (downstreams handle); now propagates `completeExceptionally` and cluster-kills, which may cause more aggressive job termination.",
-    "`broadcastKill` excludes local node correctly but repeated calls (e.g., multiple failures) may log spam; no deduping.",
-    "Assumes `KillJobsNodeAction.INSTANCE` exists and `Role.CRATE_USER` valid; constructor param order matches mainline exactly for compatibility.",
-    "No dropped hunks; semantic adaptation of failure terminal logic as line numbers/context differ between mainline/target."
-  ],
   "token_usage": {
-    "input_tokens": 40580,
-    "output_tokens": 15898,
-    "total_tokens": 56478,
+    "input_tokens": 30833,
+    "output_tokens": 4989,
+    "total_tokens": 35822,
     "estimated": false,
     "sources": [
-      "recovery_agent.redesign"
+      "recovery_agent.direct_apply"
     ]
   }
 }

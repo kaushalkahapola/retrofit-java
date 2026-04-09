@@ -81,6 +81,20 @@ _FRAMEWORK_CHAIN_SYMBOLS = {
 }
 
 
+def _should_use_mainline_fast_path(state: AgentState) -> bool:
+    """Disable mainline fast-path while executing recovery plans.
+
+    In recovery mode, re-applying mainline hunks can produce partial/wrong-context
+    edits and bypass the adapted recovery plan. Keep it off whenever recovery is
+    active or a recovery plan artifact exists.
+    """
+    if bool(state.get("recovery_agent_mode")):
+        return False
+    if bool(state.get("recovery_plan_text")):
+        return False
+    return True
+
+
 def _is_framework_chain_symbol(symbol: str) -> bool:
     return str(symbol or "").strip() in _FRAMEWORK_CHAIN_SYMBOLS
 
@@ -613,6 +627,22 @@ def _apply_edit_deterministically(
     except Exception as exc:
         return False, f"read_error:{exc}", "", "", "read_failed"
 
+    def _is_present(text: str, cand: str) -> bool:
+        cand = cand.replace("\r\n", "\n").replace("\r", "\n")
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        if not cand: return False
+        if cand in text: return True
+        cand_lines = [l.strip() for l in cand.splitlines()]
+        text_lines = [l.strip() for l in text.splitlines()]
+        n = len(cand_lines)
+        for i in range(len(text_lines) - n + 1):
+            if text_lines[i:i+n] == cand_lines:
+                return True
+        return False
+
+    if edit_type == "replace" and new_string and _is_present(content, new_string) and not _is_present(content, old_string):
+        return True, "already_applied_idempotent", old_string, new_string, "idempotent"
+
     def _resolve_old(content_text: str, candidate: str) -> tuple[str, str]:
         content_text = (content_text or "").replace("\r\n", "\n").replace("\r", "\n")
         candidate = (candidate or "").replace("\r\n", "\n").replace("\r", "\n")
@@ -706,7 +736,7 @@ def _apply_edit_deterministically(
                     for j in range(n):
                         if window[j].strip() == cand_lines[j].strip():
                             matched += 1
-                    if n > 0 and matched * 2 >= n:
+                    if n > 0 and matched >= (n if n <= 3 else n - 1):  # Exact for small, 1 mismatch for large
                         return (
                             "\n".join(window),
                             "multiline_anchor_reconstructed",
@@ -2859,11 +2889,17 @@ async def file_editor_node(state: AgentState, config) -> dict:
         # deterministic str_replace / ReAct can try to adapt (e.g. missing APIs).
         # Logical fast path: attempt to apply the original mainline hunk directly.
         # This is non-cheating because it only uses the source branch patch.
-        _mfp = try_mainline_fast_path(
-            target_repo_path=target_repo_path or "",
-            target_file=target_file,
-            mainline_patch_diff=str(state.get("patch_diff") or ""),
-        )
+        if not _should_use_mainline_fast_path(state):
+            _mfp = {
+                "applied": False,
+                "reason": "mainline_fast_path_disabled_in_recovery",
+            }
+        else:
+            _mfp = try_mainline_fast_path(
+                target_repo_path=target_repo_path or "",
+                target_file=target_file,
+                mainline_patch_diff=str(state.get("patch_diff") or ""),
+            )
         if _mfp.get("applied"):
             agent_metrics["mainline_fast_path_hits"] += 1
             print(
